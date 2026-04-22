@@ -66,25 +66,26 @@ CREATE POLICY "user_clips_policy" ON clips FOR ALL USING (user_id = auth.uid());
 2. Click **Create Service**.
 3. Select **Continuously deploy from a repository** and click **Setup Cloud Build**.
 4. Connect your GitHub repository and select the `main` branch.
-5. In the Build Configuration, select **Dockerfile**. Set the source location to `/backend/Dockerfile`.
-6. Click **Save**.
+5. In the Build Configuration, select **Cloud Build configuration file (yaml or json)**.
+6. Set the location to `backend/cloudbuild-api.yaml` and click **Save**.
 7. Set the service name to `shortclipr-api` and region to `us-central1`.
 8. Under **Authentication**, choose **Allow unauthenticated invocations**.
 9. Expand **Container, Networking, Security**.
    - Under **Variables & Secrets**, add all your backend environment variables (from your `.env`) as Environment Variables or reference them from Secret Manager.
-10. Click **Create**. Cloud Run will build and deploy your API.
+10. Click **Create**. Cloud Run will build and deploy your API using the configuration file.
 
 ### 3.2 Deploy Worker Service
 The worker processes jobs in the background and should not be publicly accessible.
 1. Go back to the **Cloud Run** services list and click **Create Service**.
-2. Repeat the GitHub connection steps (steps 3-6 above).
-3. Set the service name to `shortclipr-worker`.
-4. Under **Authentication**, choose **Require authentication**.
-5. Expand **Container, Networking, Security**.
-   - Under **Settings**, change the **Container Command** to `python` and **Container Arguments** to `-m app.queue.consumer`.
-   - Set **Minimum instances** to `1`.
+2. Repeat the GitHub connection steps (steps 3-4 above).
+3. In the Build Configuration, select **Cloud Build configuration file (yaml or json)**.
+4. Set the location to `backend/cloudbuild-worker.yaml` and click **Save**.
+5. Set the service name to `shortclipr-worker` and region to `us-central1`.
+6. Under **Authentication**, choose **Require authentication**.
+7. Expand **Container, Networking, Security**.
    - Add your environment variables exactly as you did for the API.
-6. Click **Create**.
+   *(Note: You do not need to configure the Container Command/Arguments here manually, as they are now handled automatically by the `cloudbuild-worker.yaml` file!)*
+8. Click **Create**.
 
 ---
 
