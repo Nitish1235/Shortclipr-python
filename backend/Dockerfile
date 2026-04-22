@@ -26,8 +26,8 @@ RUN addgroup --system shortclipr && adduser --system --ingroup shortclipr shortc
 USER shortclipr
 
 # ── API mode (default): uvicorn FastAPI server ──────────────────────────────
-# Override CMD in worker service deployment: ["python", "-m", "app.queue.consumer"]
+# Override CMD in worker service deployment via cloudbuild-worker.yaml
 ENV PORT=8080
 EXPOSE 8080
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 2

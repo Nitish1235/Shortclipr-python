@@ -135,6 +135,26 @@ async def _process_job(payload: dict) -> None:
             )
 
 
+# ── Health Check Server (Cloud Run requirement) ────────────────
+
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import os
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+    def log_message(self, format, *args):
+        pass
+
+def start_health_server():
+    port = int(os.environ.get("PORT", 8080))
+    httpd = HTTPServer(('', port), HealthCheckHandler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    logger.info(f"Health check server listening on port {port}")
+
 # ── Entry point ────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -142,4 +162,5 @@ if __name__ == "__main__":
         level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+    start_health_server()
     asyncio.run(run_worker())
