@@ -57,7 +57,19 @@ CREATE POLICY "user_clips_policy" ON clips FOR ALL USING (user_id = auth.uid());
 
 ---
 
-## 3. Backend Deployment (Cloud Run Console)
+## 3. Artifact Registry Setup (Required for Cloud Build)
+
+Before deploying the backend, you must create a Docker repository to store your container images:
+1. Navigate to **Artifact Registry** in the Google Cloud Console.
+2. Click **+ CREATE REPOSITORY**.
+3. **Name**: `cloud-run-source-deploy`
+4. **Format**: Docker
+5. **Location**: Region `us-central1` (or your preferred region, matching your `cloudbuild.yaml`).
+6. Click **Create**.
+
+---
+
+## 4. Backend Deployment (Cloud Run Console)
 
 *Assumption: Your code is hosted on GitHub.*
 

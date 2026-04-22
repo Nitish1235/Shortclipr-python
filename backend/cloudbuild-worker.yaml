@@ -19,12 +19,9 @@ steps:
       - '--region'
       - 'us-central1'
       - '--no-allow-unauthenticated'
-      - '--command'
-      - 'python'
-      - '--args'
-      - '-m,app.queue.consumer'
-      - '--min-instances'
-      - '1'
+      - '--command=python'
+      - '--args=-m,app.queue.consumer'
+      - '--min-instances=1'
 
 images:
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA'
