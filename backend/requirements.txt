@@ -1,0 +1,34 @@
+## Core Framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.8.0
+pydantic-settings==2.4.0
+
+## Auth
+python-jose[cryptography]==3.3.0
+httpx==0.27.2
+
+## Database
+supabase==2.7.4
+
+## Queue
+upstash-redis==1.1.0
+
+## AI / Transcription
+openai==1.47.0
+youtube-transcript-api==0.6.3
+
+## Video Processing
+ffmpeg-python==0.2.0
+
+## Google Cloud
+google-cloud-storage==2.18.2
+
+## Async utilities
+asyncio==3.4.3
+
+## Face detection (optional — for auto-reframe)
+opencv-python-headless==4.10.0.84
+
+## Logging
+structlog==24.4.0

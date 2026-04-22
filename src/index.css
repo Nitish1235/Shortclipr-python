@@ -1,0 +1,210 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@400;600;800&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0B1A10;
+  --bg-dark: #050D08;
+  --lime: #84CC16;
+  --green: #22C55E;
+  --yellow: #EAB308;
+  --text: #F0F4F0;
+  --muted: #8ca391;
+  font-family: 'Inter', sans-serif;
+}
+
+html { scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--text); overflow-x: hidden; position: relative; }
+
+/* CRT Scanline Overlay */
+body::after {
+  content: " "; display: block; position: fixed; top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  z-index: 999; background-size: 100% 4px, 3px 100%; pointer-events: none; opacity: 0.4;
+}
+
+h1,h2,h3,h4, .mono { font-family: 'Space Mono', monospace; }
+
+/* NAV */
+nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 5%; background: var(--bg-dark); border-bottom: 2px solid var(--lime);
+}
+.logo { font-family: 'Space Mono', monospace; font-size: 1.5rem; font-weight: 700; color: var(--lime); text-decoration: none; display: flex; align-items: center; gap: 10px; }
+.logo-icon { width: 32px; height: 32px; background: var(--lime); color: var(--bg-dark); display: flex; align-items: center; justify-content: center; border-radius: 4px; }
+.nav-btn {
+  background: transparent; color: var(--lime); border: 2px solid var(--lime);
+  padding: 8px 16px; font-family: 'Space Mono', monospace; cursor: pointer; text-transform: uppercase; font-weight: 700;
+  box-shadow: 2px 2px 0 var(--lime); transition: all 0.1s;
+}
+.nav-btn:active { transform: translate(2px, 2px); box-shadow: 0 0 0 transparent; }
+
+/* HERO */
+.hero {
+  padding: 100px 5% 80px; display: flex; flex-direction: column; align-items: center; text-align: center;
+  position: relative; overflow: hidden;
+}
+.terminal-badge {
+  background: var(--bg-dark); border: 1px solid var(--lime); color: var(--lime);
+  font-family: 'Space Mono', monospace; font-size: 0.8rem; padding: 4px 12px;
+  display: inline-block; margin-bottom: 30px; text-transform: uppercase;
+  box-shadow: 0 0 10px rgba(132, 204, 22, 0.3);
+}
+
+h1 {
+  font-size: clamp(2.5rem, 6vw, 4.5rem); font-weight: 700; line-height: 1.1; margin-bottom: 24px;
+  text-shadow: 2px 2px 0 var(--green), -1px -1px 0 #ff00ff; letter-spacing: -1px;
+}
+.sub { font-size: 1.1rem; color: var(--muted); max-width: 600px; margin: 0 auto 40px; line-height: 1.6; }
+
+/* Input Terminal */
+.input-term {
+  width: 100%; max-width: 650px; background: var(--bg-dark);
+  border: 3px solid var(--lime); padding: 5px; margin-bottom: 24px;
+  position: relative;
+}
+.term-header { background: var(--lime); color: var(--bg-dark); font-family: 'Space Mono', monospace; font-weight: 700; font-size: 0.8rem; padding: 4px 8px; text-align: left; text-transform: uppercase; display: flex; justify-content: space-between; }
+.term-body { padding: 16px; display: flex; align-items: center; gap: 10px; }
+.prompt { color: var(--lime); font-family: 'Space Mono', monospace; font-weight: 700; font-size: 1.2rem; }
+.input-term input {
+  flex: 1; background: transparent; border: none; outline: none;
+  font-family: 'Space Mono', monospace; font-size: 1.1rem; color: var(--text); padding: 8px 0;
+}
+.input-term input::placeholder { color: #3f5e46; }
+.btn-term {
+  background: var(--lime); color: var(--bg-dark); border: none; padding: 12px 24px;
+  font-family: 'Space Mono', monospace; font-weight: 700; font-size: 1rem; cursor: pointer; text-transform: uppercase;
+}
+.btn-term:hover { background: var(--green); }
+
+/* Duration Tapes */
+.tape-selector { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-bottom: 40px; }
+.tape {
+  border: 2px solid var(--muted); background: var(--bg-dark); padding: 10px 20px;
+  font-family: 'Space Mono', monospace; color: var(--muted); cursor: pointer;
+  position: relative; text-transform: uppercase; font-size: 0.9rem; font-weight: 700;
+  transition: all 0.2s;
+}
+.tape.active {
+  border-color: var(--yellow); color: var(--yellow);
+  box-shadow: 0 0 15px rgba(234, 179, 8, 0.2);
+}
+.tape::before { content: "● ●"; display: block; text-align: center; font-size: 0.6rem; letter-spacing: 10px; margin-bottom: 4px; }
+
+/* SECTIONS */
+section:not(.hero) { padding: 80px 5%; border-top: 2px dashed #1a3322; }
+.sec-title {
+  text-align: center; font-size: 2.5rem; text-transform: uppercase; margin-bottom: 40px;
+  color: var(--lime); text-shadow: 2px 2px 0 #000;
+}
+
+/* CARDS */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; max-width: 1100px; margin: 0 auto; }
+.retro-card {
+  background: var(--bg-dark); border: 2px solid var(--lime); padding: 30px;
+  position: relative; box-shadow: 8px 8px 0 rgba(132, 204, 22, 0.2); transition: transform 0.2s;
+}
+.retro-card:hover { transform: translate(-4px, -4px); box-shadow: 12px 12px 0 rgba(132, 204, 22, 0.3); }
+.card-icon { font-size: 2.5rem; margin-bottom: 20px; display: block; filter: grayscale(1) sepia(1) hue-rotate(60deg) saturate(3); }
+.retro-card h3 { font-size: 1.2rem; color: var(--yellow); margin-bottom: 12px; text-transform: uppercase; }
+.retro-card p { font-family: 'Space Mono', monospace; font-size: 0.9rem; line-height: 1.6; color: var(--muted); }
+
+/* MEASUREMENTS (ADDED FOR SHOWCASE) */
+.showcase-grid { display: grid; gap: 30px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); max-width: 1100px; margin: 0 auto; }
+.showcase-card { text-align: center; background: var(--bg-dark); border: 1px solid var(--lime); padding: 20px; box-shadow: 4px 4px 0 rgba(132, 204, 22, 0.3); }
+.video-placeholder { aspect-ratio: 9/16; width: 100%; max-width: 250px; margin: 0 auto 20px; background: #000; border: 2px solid var(--muted); position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.video-placeholder::after { content: 'REC ●'; position: absolute; top: 10px; right: 10px; color: red; font-family: 'Space Mono', monospace; font-size: 0.8rem; font-weight: 700; animation: blinker 1s linear infinite; }
+.mock-caption { position: absolute; bottom: 30px; left: 10px; right: 10px; text-align: center; color: white; font-family: 'Inter', sans-serif; font-weight: 800; font-size: 1.2rem; text-shadow: 2px 2px 0 #000; text-transform: uppercase; }
+.mock-caption span { background: rgba(0,0,0,0.5); padding: 2px 6px; }
+
+/* PRICING */
+.pr-card { text-align: center; border-color: var(--muted); box-shadow: 8px 8px 0 rgba(140, 163, 145, 0.2); }
+.pr-card.pro { border-color: var(--lime); box-shadow: 8px 8px 0 rgba(132, 204, 22, 0.2); }
+.price { font-size: 3rem; color: var(--text); margin: 20px 0; font-family: 'Space Mono', monospace; font-weight: 700; }
+.price span { font-size: 1rem; color: var(--muted); }
+.pr-card ul { text-align: left; list-style: none; margin-bottom: 30px; font-family: 'Space Mono', monospace; font-size: 0.9rem; color: var(--text); }
+.pr-card li { margin-bottom: 10px; display: flex; gap: 10px; align-items: flex-start; }
+.pr-card li::before { content: '>'; color: var(--lime); font-weight: 700; }
+
+.btn-full { width: 100%; border: 2px solid var(--lime); background: transparent; color: var(--lime); padding: 12px; font-family: 'Space Mono', monospace; font-weight: 700; font-size: 1rem; cursor: pointer; text-transform: uppercase; transition: all 0.2s; }
+.btn-full:hover, .pr-card.pro .btn-full { background: var(--lime); color: var(--bg-dark); }
+
+/* FOOTER */
+footer { padding: 40px 5%; background: var(--bg-dark); border-top: 4px solid var(--lime); color: var(--muted); font-family: 'Space Mono', monospace; text-align: center; font-size: 0.8rem; }
+.blink { animation: blinker 1s linear infinite; }
+@keyframes blinker { 50% { opacity: 0; } }
+
+/* CONFIG DASHBOARD UI */
+.config-wrapper {
+  max-width: 650px; width: 100%; margin: 0 auto 24px;
+  background: var(--bg-dark); border: 3px solid var(--lime);
+  position: relative;
+}
+.config-preview-card {
+  margin: 16px auto; 
+  background: #1a1a1a; 
+  border-radius: 12px;
+  display: flex; flex-direction: column;
+  max-width: 320px; 
+  padding: 12px; 
+  box-sizing: border-box;
+}
+.config-thumbnail-wrapper {
+  position: relative; width: 100%; aspect-ratio: 16/9; background: #000;
+  border-radius: 8px; overflow: hidden; margin-bottom: 12px;
+}
+.config-thumbnail {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.play-btn-overlay {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.6); width: 56px; height: 56px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
+.play-btn-overlay::after {
+  content: ''; display: block;
+  border-top: 10px solid transparent; border-bottom: 10px solid transparent;
+  border-left: 16px solid white; margin-left: 4px;
+}
+.config-duration-badge {
+  position: absolute; bottom: 8px; right: 8px;
+  background: rgba(0,0,0,0.85); color: #fff; border-radius: 4px;
+  font-family: 'Inter', sans-serif; font-size: 0.75em; padding: 2px 5px; font-weight: 500;
+}
+.config-details {
+  padding: 0; display: flex; flex-direction: column; text-align: left;
+}
+.config-title {
+  font-family: 'Inter', sans-serif; font-size: 1rem; font-weight: 600;
+  color: #fff; margin-bottom: 4px; line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  white-space: normal; overflow: hidden; text-overflow: ellipsis;
+}
+.config-channel {
+  font-family: 'Inter', sans-serif; font-size: 0.8rem; color: #aaa;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.config-options {
+  padding: 0 16px 16px; display: flex; flex-direction: column; gap: 12px; text-align: left;
+}
+.config-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  background: rgba(132, 204, 22, 0.05); padding: 8px 12px; border: 1px solid rgba(132, 204, 22, 0.2);
+}
+.config-label {
+  font-family: 'Space Mono', monospace; font-size: 0.75rem; color: var(--text); text-transform: uppercase;
+}
+.retro-select {
+  background: var(--bg-dark); color: var(--lime); border: 1px solid var(--lime);
+  font-family: 'Space Mono', monospace; font-size: 0.8rem; font-weight: 700;
+  padding: 6px 10px; outline: none; cursor: pointer; text-transform: uppercase;
+  min-width: 140px;
+}
+.retro-select:focus {
+  box-shadow: 0 0 10px rgba(132, 204, 22, 0.3);
+}
+
+@media (max-width: 768px) {
+  .term-body { flex-direction: column; align-items: stretch; }
+  h1 { font-size: 2.5rem; }
+}

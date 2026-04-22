@@ -1,0 +1,43 @@
+export default function Logo({ size = 40, className = "" }) {
+  return (
+    <svg 
+      width={size} 
+      height={size} 
+      viewBox="0 0 100 100" 
+      fill="none" 
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <style>
+        {`
+          @keyframes owlBlink {
+            0%, 90%, 96%, 100% { transform: scaleY(1); }
+            93% { transform: scaleY(0.1); }
+          }
+          .eye-left { transform-origin: 35px 45px; animation: owlBlink 4.5s infinite ease-in-out; }
+          .eye-right { transform-origin: 65px 45px; animation: owlBlink 4.5s infinite ease-in-out; }
+        `}
+      </style>
+      
+      <rect width="100" height="100" rx="22" fill="#050d08" stroke="#84cc16" strokeWidth="4"/>
+      
+      <g transform="translate(5, 5) scale(0.9)">
+        <path d="M50 20 C 30 20 20 40 20 60 C 20 80 40 80 50 80 C 60 80 80 80 80 60 C 80 40 70 20 50 20 Z" stroke="#a855f7" strokeWidth="5" fill="none"/>
+        
+        <g className="eye-left">
+          <circle cx="35" cy="45" r="10" stroke="#84cc16" strokeWidth="5"/>
+          <circle cx="35" cy="45" r="3" fill="#fff"/>
+        </g>
+        
+        <g className="eye-right">
+          <circle cx="65" cy="45" r="10" stroke="#84cc16" strokeWidth="5"/>
+          <circle cx="65" cy="45" r="3" fill="#fff"/>
+        </g>
+
+        <path d="M45 55 L50 65 L55 55 Z" stroke="#a855f7" strokeWidth="4"/>
+        <path d="M30 25 L20 10 L40 20 M70 25 L80 10 L60 20" stroke="#a855f7" strokeWidth="5" fill="none"/>
+        <line x1="15" y1="80" x2="85" y2="80" stroke="#84cc16" strokeWidth="8" strokeLinecap="round"/>
+      </g>
+    </svg>
+  )
+}
