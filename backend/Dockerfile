@@ -20,6 +20,7 @@ COPY --from=builder /install /usr/local
 
 # Copy source code
 COPY app/ app/
+COPY migrations/ migrations/
 
 # Non-root user for security
 RUN addgroup --system shortclipr && adduser --system --ingroup shortclipr shortclipr

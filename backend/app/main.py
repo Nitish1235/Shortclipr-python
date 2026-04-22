@@ -19,7 +19,7 @@ from app.api import editor
 from app.core.config import get_settings
 
 # Import migration runner
-from backend.migrations.add_editor_config import run_migration as migration_script  # noqa: E401,F401
+from migrations.add_editor_config import run_migration as migration_script  # noqa: E401,F401
 
 settings = get_settings()
 
