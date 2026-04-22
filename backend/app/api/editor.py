@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Body, HTTPException, Depends
 from app.db import supabase as db
-from app.core.auth import get_current_user  # assume existing auth dependency
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/editor", tags=["editor"])
 

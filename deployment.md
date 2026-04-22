@@ -101,14 +101,33 @@ The worker processes jobs in the background and should not be publicly accessibl
 
 ---
 
-## 4. Frontend Deployment (Vercel/Netlify Dashboard)
+## 4. Frontend Deployment (Cloud Run Console)
 
-Deploying a Vite React app is easiest via Vercel or Netlify.
-1. Log into [Vercel](https://vercel.com/) or [Netlify](https://netlify.com/).
-2. Click **Add New Project** and import your GitHub repository.
-3. The platform will auto-detect Vite. The build command should be `npm run build` and output directory `dist`.
-4. Add your frontend environment variables (`VITE_API_URL` pointing to your new Cloud Run API URL, `VITE_GOOGLE_CLIENT_ID`, etc.).
-5. Click **Deploy**.
+We deploy the React frontend to Cloud Run using a lightweight Nginx container to serve the static files.
+
+1. In Google Cloud Console, navigate to **Cloud Run**.
+2. Click **Create Service**.
+3. Select **Continuously deploy from a repository** and click **Setup Cloud Build**.
+4. Connect your GitHub repository and select the `main` branch.
+5. In the Build Configuration, select **Cloud Build configuration file (yaml or json)**.
+6. Set the location to `cloudbuild-frontend.yaml` and click **Save**.
+7. Set the service name to `shortclipr-frontend` and region to `us-central1`.
+8. Under **Authentication**, choose **Allow unauthenticated invocations**.
+9. Expand **Container, Networking, Security**.
+   - Unlike the backend, the frontend compiles environment variables directly into the static bundle at build-time. We must pass these to Cloud Build.
+10. Click **Create** (this first build might fail if you haven't set the variables yet—that's normal).
+
+### 4.1 Configuring Frontend Build Variables
+Because Vite requires environment variables during the Docker build process, you must add them as **Substitution Variables** in the Cloud Build trigger, NOT just in the Cloud Run service variables.
+
+1. Go to **Cloud Build > Triggers**.
+2. Click the `shortclipr-frontend` trigger to edit it.
+3. Scroll down to **Advanced > Substitution variables**.
+4. Add the following variables (exactly as written, including the leading underscore):
+   - `_VITE_API_URL` : `https://<YOUR-API-CLOUD-RUN-URL>`
+   - `_VITE_GOOGLE_CLIENT_ID` : `your-google-client-id.apps.googleusercontent.com`
+   - `_VITE_DODO_MODE` : `test` (or `live`)
+5. Click **Save** and then click **Run** to rebuild the frontend with your real variables injected.
 
 ---
 
