@@ -33,6 +33,11 @@ _ANDROID_CONTEXT = {
         "gl": "US",
     }
 }
+_ANDROID_HEADERS = {
+    "User-Agent": "com.google.android.youtube/17.31.35 (Linux; U; Android 11) gzip",
+    "X-Youtube-Client-Name": "3",
+    "X-Youtube-Client-Version": "17.31.35",
+}
 
 _IOS_CONTEXT = {
     "client": {
@@ -42,6 +47,11 @@ _IOS_CONTEXT = {
         "hl": "en",
         "gl": "US",
     }
+}
+_IOS_HEADERS = {
+    "User-Agent": "com.google.ios.youtube/17.33.2 (iPhone14,3; U; CPU iOS 15_6 like Mac OS X)",
+    "X-Youtube-Client-Name": "2",
+    "X-Youtube-Client-Version": "17.33.2",
 }
 
 _TV_EMBEDDED_CONTEXT = {
@@ -55,6 +65,9 @@ _TV_EMBEDDED_CONTEXT = {
         "embedUrl": "https://www.youtube.com",
     },
 }
+_TV_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36",
+}
 
 _WEB_CONTEXT = {
     "client": {
@@ -63,6 +76,19 @@ _WEB_CONTEXT = {
         "hl": "en",
         "gl": "US",
     }
+}
+_WEB_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "X-Youtube-Client-Name": "1",
+    "X-Youtube-Client-Version": "2.20240410.01.00",
+}
+
+# Mapping context to headers
+CLIENT_HEADERS = {
+    id(_ANDROID_CONTEXT): _ANDROID_HEADERS,
+    id(_IOS_CONTEXT): _IOS_HEADERS,
+    id(_TV_EMBEDDED_CONTEXT): _TV_HEADERS,
+    id(_WEB_CONTEXT): _WEB_HEADERS,
 }
 
 PLAYER_ENDPOINT = f"{settings.INNERTUBE_API_BASE}/player"
@@ -90,9 +116,19 @@ async def _call_player_api(
         "racyCheckOk": True,
     }
     params = {"key": settings.INNERTUBE_API_KEY, "prettyPrint": "false"}
+    
+    # Get official headers for this client
+    headers = CLIENT_HEADERS.get(id(context), _WEB_HEADERS).copy()
+    headers["Content-Type"] = "application/json"
+    headers["X-Goog-Api-Format-Version"] = "2"
 
     async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(PLAYER_ENDPOINT, json=payload, params=params)
+        resp = await client.post(
+            PLAYER_ENDPOINT, 
+            json=payload, 
+            params=params, 
+            headers=headers
+        )
         resp.raise_for_status()
         return resp.json()
 

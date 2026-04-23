@@ -25,7 +25,13 @@ import httpx
 from openai import AsyncOpenAI
 
 from app.core.config import get_settings
-from app.pipeline.stream import _ANDROID_CONTEXT, _IOS_CONTEXT, _TV_EMBEDDED_CONTEXT, _WEB_CONTEXT
+from app.pipeline.stream import (
+    CLIENT_HEADERS,
+    _ANDROID_CONTEXT,
+    _IOS_CONTEXT,
+    _TV_EMBEDDED_CONTEXT,
+    _WEB_CONTEXT,
+)
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -161,8 +167,18 @@ async def _call_player_for_captions(video_id: str, context: dict) -> dict:
     params = {"key": settings.INNERTUBE_API_KEY, "prettyPrint": "false"}
     endpoint = f"{settings.INNERTUBE_API_BASE}/player"
 
+    # Get official headers for this client
+    headers = CLIENT_HEADERS.get(id(context), {}).copy()
+    headers["Content-Type"] = "application/json"
+    headers["X-Goog-Api-Format-Version"] = "2"
+
     async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(endpoint, json=payload, params=params)
+        resp = await client.post(
+            endpoint, 
+            json=payload, 
+            params=params, 
+            headers=headers
+        )
         resp.raise_for_status()
         return resp.json()
 
