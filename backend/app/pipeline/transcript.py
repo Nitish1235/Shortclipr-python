@@ -63,8 +63,8 @@ async def _fetch_innertube_captions(video_id: str, language: str = "en") -> list
     preferred_lang = lang_map.get(language)
 
     player_data = None
-    # Try TV first as it is the most reliable for bypassing PoToken blocks
-    for label in ["TV", "WEB_EMBED", "MWEB"]:
+    # Try IOS first as it is currently the most successful stealth identity
+    for label in ["IOS", "TV", "WEB_EMBED"]:
         try:
             data = await call_player_api(video_id, label)
             captions = data.get("captions", {})

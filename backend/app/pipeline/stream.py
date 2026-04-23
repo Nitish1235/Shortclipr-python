@@ -1,10 +1,11 @@
 """
 stream.py — Step 3 of the ShortClipr pipeline.
-Harden implementation with TVHTML5 client (PoToken Bypass).
+Stealth InnerTube implementation with Full Error Logging.
 """
 
 import logging
 import re
+import json
 from typing import Literal
 
 import httpx
@@ -15,10 +16,30 @@ from app.core.redis import cache_stream_url, get_cached_stream_url
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# ── InnerTube Client Registry ─────────────────────────────────
-# The TV client is the most reliable for bypassing PoToken requirements.
+# ── Stealth Client Registry ───────────────────────────────────
 
 CLIENTS = {
+    "IOS": {
+        "context": {
+            "client": {
+                "clientName": "IOS",
+                "clientVersion": "19.29.1",
+                "deviceModel": "iPhone16,2",
+                "osName": "iOS",
+                "osVersion": "17.5.1",
+                "hl": "en",
+                "gl": "US",
+                "userInterfaceTheme": "DARK",
+                "timeZoneOffsetMins": 0,
+            }
+        },
+        "headers": {
+            "User-Agent": "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X; en_US)",
+            "X-Youtube-Client-Name": "2",
+            "X-Youtube-Client-Version": "19.29.1",
+        },
+        "api_key": "AIzaSyA8eiZmM1FaSbwzBlGmbW3ILtKBNJI41zQ"
+    },
     "TV": {
         "context": {
             "client": {
@@ -33,48 +54,11 @@ CLIENTS = {
             "X-Youtube-Client-Name": "7",
             "X-Youtube-Client-Version": "7.20230405.08.01",
         },
-        "api_key": "AIzaSyDCU8hByM-4DrUqRUYnGn-3llEO78bcxq8" # TV-specific API key
-    },
-    "WEB_EMBED": {
-        "context": {
-            "client": {
-                "clientName": "WEB_EMBEDDED_PLAYER",
-                "clientVersion": "1.20230301.09.00",
-                "hl": "en",
-                "gl": "US",
-            },
-            "thirdParty": {"embedUrl": "https://www.youtube.com"}
-        },
-        "headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
-            "X-Youtube-Client-Name": "56",
-            "X-Youtube-Client-Version": "1.20230301.09.00",
-            "Referer": "https://www.youtube.com/embed/",
-        },
-        "api_key": "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
-    },
-    "MWEB": {
-        "context": {
-            "client": {
-                "clientName": "MWEB",
-                "clientVersion": "2.20230301.09.00",
-                "hl": "en",
-                "gl": "US",
-            }
-        },
-        "headers": {
-            "User-Agent": "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Mobile Safari/537.36",
-            "X-Youtube-Client-Name": "2",
-            "X-Youtube-Client-Version": "2.20230301.09.00",
-            "Referer": "https://m.youtube.com/",
-        },
-        "api_key": "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+        "api_key": "AIzaSyDCU8hByM-4DrUqRUYnGn-3llEO78bcxq8"
     }
 }
 
 PLAYER_ENDPOINT = f"{settings.INNERTUBE_API_BASE}/player"
-
-# ── Core InnerTube request ─────────────────────────────────────
 
 async def get_visitor_data():
     try:
@@ -84,7 +68,6 @@ async def get_visitor_data():
             if match: return match.group(1)
     except: pass
     return None
-
 
 async def call_player_api(video_id: str, client_name: str, send_params: bool = False) -> dict:
     config = CLIENTS.get(client_name)
@@ -100,7 +83,9 @@ async def call_player_api(video_id: str, client_name: str, send_params: bool = F
                 "referer": f"https://www.youtube.com/watch?v={video_id}",
                 "signatureTimestamp": 20000
             }
-        }
+        },
+        "contentCheckOk": True,
+        "racyCheckOk": True
     }
     if visitor_data:
         payload["context"]["client"]["visitorData"] = visitor_data
@@ -119,12 +104,11 @@ async def call_player_api(video_id: str, client_name: str, send_params: bool = F
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(PLAYER_ENDPOINT, json=payload, params=params, headers=headers)
         if resp.status_code != 200:
-            logger.error(f"InnerTube {client_name} failed ({resp.status_code}): {resp.text[:200]}")
-        resp.raise_for_status()
+            # CRITICAL: Log the full error to understand the block
+            logger.error(f"InnerTube {client_name} FAILED ({resp.status_code})")
+            logger.error(f"Full Error Response: {resp.text}")
+            resp.raise_for_status()
         return resp.json()
-
-
-# ── Stream URL resolution ──────────────────────────────────────
 
 async def get_stream_url(video_id: str, quality: str = "720p") -> str:
     cache_key = f"{video_id}:{quality}"
@@ -134,18 +118,15 @@ async def get_stream_url(video_id: str, quality: str = "720p") -> str:
     await cache_stream_url(cache_key, url)
     return url
 
-
 async def _resolve_stream_url(video_id: str, quality: str) -> str:
     target_height = int(quality.replace("p", ""))
-    # TV is now #1 because it bypasses PoToken
-    for label in ["TV", "WEB_EMBED", "MWEB"]:
+    for label in ["IOS", "TV"]:
         try:
             data = await call_player_api(video_id, label, send_params=True)
             url = _pick_best_stream(data, target_height)
             if url: return url
         except: continue
     raise RuntimeError(f"Could not resolve stream URL for {video_id}")
-
 
 def _pick_best_stream(data: dict, target_height: int) -> str | None:
     sd = data.get("streamingData", {})
@@ -156,13 +137,12 @@ def _pick_best_stream(data: dict, target_height: int) -> str | None:
         if s.get("height") == target_height: return s["url"]
     return video_streams[0]["url"]
 
-
 async def get_audio_stream_url(video_id: str) -> str:
     cache_key = f"{video_id}:audio"
     cached = await get_cached_stream_url(cache_key)
     if cached: return cached
     url = None
-    for label in ["TV", "WEB_EMBED", "MWEB"]:
+    for label in ["IOS", "TV"]:
         try:
             data = await call_player_api(video_id, label, send_params=True)
             url = _pick_best_audio_stream(data)
@@ -172,7 +152,6 @@ async def get_audio_stream_url(video_id: str) -> str:
     await cache_stream_url(cache_key, url)
     return url
 
-
 def _pick_best_audio_stream(data: dict) -> str | None:
     sd = data.get("streamingData", {})
     formats = sd.get("adaptiveFormats", [])
@@ -181,23 +160,20 @@ def _pick_best_audio_stream(data: dict) -> str | None:
     audio_streams.sort(key=lambda x: int(x.get("bitrate", 0)), reverse=True)
     return audio_streams[0]["url"]
 
-
 async def get_video_metadata(video_id: str) -> dict:
-    for label in ["TV", "WEB_EMBED"]:
+    for label in ["IOS", "TV"]:
         try:
             data = await call_player_api(video_id, label)
             details = data.get("videoDetails", {})
             if details:
                 return {"title": details.get("title", ""), "channel": details.get("author", ""), "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg", "duration": int(details.get("lengthSeconds", 0)), "video_id": video_id}
         except: continue
-    # Final oEmbed fallback
     url = f"https://www.youtube.com/oembed?url=https://youtu.be/{video_id}&format=json"
     async with httpx.AsyncClient(timeout=8) as client:
         resp = await client.get(url)
         resp.raise_for_status()
         d = resp.json()
     return {"title": d.get("title", ""), "channel": d.get("author_name", ""), "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg", "duration": 0, "video_id": video_id}
-
 
 def extract_video_id(url: str) -> str | None:
     patterns = [r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", r"youtu\.be\/([0-9A-Za-z_-]{11})", r"embed\/([0-9A-Za-z_-]{11})", r"shorts\/([0-9A-Za-z_-]{11})"]
