@@ -14,7 +14,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 # Existing routers
 from app.api import auth, jobs, payments, social, webhooks, youtube
 # New editor router
-from app.api import editor
+from app.api import editor, testing
 from app.core.config import get_settings
 
 
@@ -69,6 +69,8 @@ app.include_router(webhooks.router)
 app.include_router(social.router)
 # Include the new editor router
 app.include_router(editor.router)
+# Include the testing lab
+app.include_router(testing.router)
 
 # ── Health check (Cloud Run readiness probe) ───────────────────
 @app.get("/health", tags=["system"])

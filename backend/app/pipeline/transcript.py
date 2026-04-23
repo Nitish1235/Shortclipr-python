@@ -63,8 +63,8 @@ async def _fetch_innertube_captions(video_id: str, language: str = "en") -> list
     preferred_lang = lang_map.get(language)
 
     player_data = None
-    # Try TV first (as it worked for metadata), then IOS, then MWEB
-    for label in ["TV", "IOS", "MWEB"]:
+    # Try Golden Identities: ANDROID_VR first, then TV, then IOS
+    for label in ["ANDROID_VR", "TV", "IOS", "MWEB"]:
         try:
             data = await call_player_api(video_id, label)
             captions = data.get("captions", {})

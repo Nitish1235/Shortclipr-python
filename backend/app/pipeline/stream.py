@@ -1,10 +1,11 @@
 """
 stream.py — Step 3 of the ShortClipr pipeline.
-Hardened InnerTube implementation (Fixed IOS + Working TV).
+Includes "Golden Identity" clients (TV, ANDROID_VR, IOS) for testing.
 """
 
 import logging
 import re
+import json
 from typing import Literal
 
 import httpx
@@ -15,7 +16,7 @@ from app.core.redis import cache_stream_url, get_cached_stream_url
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# ── Stealth Client Registry ───────────────────────────────────
+# ── Golden Identity Registry ───────────────────────────────────
 
 CLIENTS = {
     "TV": {
@@ -33,6 +34,22 @@ CLIENTS = {
             "X-Youtube-Client-Version": "7.20230405.08.01",
         },
         "api_key": "AIzaSyDCU8hByM-4DrUqRUYnGn-3llEO78bcxq8"
+    },
+    "ANDROID_VR": {
+        "context": {
+            "client": {
+                "clientName": "ANDROID_VR",
+                "clientVersion": "1.28.63",
+                "hl": "en",
+                "gl": "US",
+            }
+        },
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (Linux; Android 10; Quest 2) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/15.0.0.0.22 SamsungBrowser/4.0 Chrome/89.0.4389.90 Mobile Safari/537.36",
+            "X-Youtube-Client-Name": "28",
+            "X-Youtube-Client-Version": "1.28.63",
+        },
+        "api_key": "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w"
     },
     "IOS": {
         "context": {
@@ -132,8 +149,7 @@ async def get_stream_url(video_id: str, quality: str = "720p") -> str:
 
 async def _resolve_stream_url(video_id: str, quality: str) -> str:
     target_height = int(quality.replace("p", ""))
-    # TV first because it worked in metadata!
-    for label in ["TV", "IOS", "MWEB"]:
+    for label in ["ANDROID_VR", "TV", "IOS", "MWEB"]:
         try:
             data = await call_player_api(video_id, label, send_params=True)
             url = _pick_best_stream(data, target_height)
@@ -155,7 +171,7 @@ async def get_audio_stream_url(video_id: str) -> str:
     cached = await get_cached_stream_url(cache_key)
     if cached: return cached
     url = None
-    for label in ["TV", "IOS", "MWEB"]:
+    for label in ["ANDROID_VR", "TV", "IOS", "MWEB"]:
         try:
             data = await call_player_api(video_id, label, send_params=True)
             url = _pick_best_audio_stream(data)
@@ -174,7 +190,7 @@ def _pick_best_audio_stream(data: dict) -> str | None:
     return audio_streams[0]["url"]
 
 async def get_video_metadata(video_id: str) -> dict:
-    for label in ["TV", "IOS", "MWEB"]:
+    for label in ["ANDROID_VR", "TV", "IOS"]:
         try:
             data = await call_player_api(video_id, label)
             details = data.get("videoDetails", {})
