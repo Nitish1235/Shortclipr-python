@@ -18,8 +18,14 @@ from app.pipeline.ai_clipper import ClipTimestamp
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Semaphore prevents overwhelming FFmpeg or the network
-_EXTRACTION_SEMAPHORE = asyncio.Semaphore(settings.MAX_CONCURRENT_CLIPS)
+# Lazy semaphore — created on first use inside an async context
+_EXTRACTION_SEMAPHORE: asyncio.Semaphore | None = None
+
+def _get_semaphore() -> asyncio.Semaphore:
+    global _EXTRACTION_SEMAPHORE
+    if _EXTRACTION_SEMAPHORE is None:
+        _EXTRACTION_SEMAPHORE = asyncio.Semaphore(settings.MAX_CONCURRENT_CLIPS)
+    return _EXTRACTION_SEMAPHORE
 
 
 # ── Single clip extraction ─────────────────────────────────────
@@ -58,7 +64,7 @@ async def extract_clip(
         str(output_path),
     ]
 
-    async with _EXTRACTION_SEMAPHORE:
+    async with _get_semaphore():
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.DEVNULL,

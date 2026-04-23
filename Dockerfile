@@ -30,12 +30,11 @@ RUN rm -rf /usr/share/nginx/html/*
 # Copy built assets from builder
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy nginx configuration
+# Copy nginx configuration (port 8080 hardcoded)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Cloud Run requirement: bind to PORT
+# Cloud Run requirement
 ENV PORT=8080
 EXPOSE 8080
 
-# Replace the ${PORT} placeholder with the actual Cloud Run PORT environment variable, then start Nginx
-CMD sh -c "sed -i 's/${PORT}/'$PORT'/g' /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
+CMD ["nginx", "-g", "daemon off;"]
