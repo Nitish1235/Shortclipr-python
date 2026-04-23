@@ -15,7 +15,7 @@ import myjdapi
 from app.pipeline.stream import call_player_api, CLIENTS, extract_video_id, _pick_best_stream, _pick_best_audio_stream
 from app.pipeline.transcript import _fetch_innertube_captions
 
-router = APIRouter(prefix="/testing", tags=["testing"])
+router = APIRouter(tags=["testing"])
 logger = logging.getLogger(__name__)
 executor = ThreadPoolExecutor(max_workers=5)
 
@@ -28,7 +28,7 @@ class TestRequest(BaseModel):
     url_or_id: str
     client: str  # e.g. "ANDROID_VR", "TV", "IOS", "MWEB"
 
-@router.get("", response_class=HTMLResponse)
+@router.get("/testing", response_class=HTMLResponse)
 async def testing_ui():
     """Serves a simple, high-tech HTML/JS tester UI."""
     return """
@@ -111,7 +111,7 @@ async def testing_ui():
     </html>
     """
 
-@router.post("/debug")
+@router.post("/testing/debug")
 async def debug_innertube(req: TestRequest):
     """Performs a full InnerTube audit for a specific client."""
     video_id = extract_video_id(req.url_or_id) or req.url_or_id
@@ -159,7 +159,7 @@ async def debug_innertube(req: TestRequest):
 
     return report
 
-@router.get("/2", response_class=HTMLResponse)
+@router.get("/testing2", response_class=HTMLResponse)
 async def testing2_ui():
     """Serves the JDownloader Heavy-Lifter UI."""
     return """
@@ -210,7 +210,7 @@ async def testing2_ui():
                 results.innerText = "Requesting decryption...";
 
                 try {
-                    const res = await fetch('/testing/2/solve', {
+                    const res = await fetch('/testing2/solve', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ url_or_id: url, client: "JDOWNLOADER" })
@@ -274,7 +274,7 @@ def video_id_in_link(target_url, link_data):
     tid = extract_video_id(target_url)
     return tid and tid in (link_data.get("name", "") + link_data.get("url", ""))
 
-@router.post("/2/solve")
+@router.post("/testing2/solve")
 async def solve_jd(req: TestRequest):
     """Endpoint to trigger JDownloader resolution."""
     loop = asyncio.get_event_loop()
