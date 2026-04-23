@@ -21,10 +21,8 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
 
     # ── Supabase ───────────────────────────────────────────────
-    SUPABASE_URL: str = ""
-    SUPABASE_ANON_KEY: str = ""
-    SUPABASE_SERVICE_KEY: str = ""
-    SUPABASE_DB_URL: str = ""  # asyncpg-compatible postgres:// URL
+    SUPABASE_DB_URL: str = ""  # postgresql://postgres:password@db.<project>.supabase.co:5432/postgres
+
 
     # ── Upstash Redis ──────────────────────────────────────────
     UPSTASH_REDIS_URL: str = ""

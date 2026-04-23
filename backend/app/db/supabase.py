@@ -1,35 +1,60 @@
 """
-Async Supabase client wrapper.
-Provides:
-  - Job CRUD operations
-  - Clip insert + retrieve
-  - Real-time progress broadcast (via Supabase REST update — frontend
-    subscribes to table changes via Supabase Realtime channel)
-  - User plan enforcement queries
+db.py — Direct PostgreSQL database layer using asyncpg.
+
+Uses only SUPABASE_DB_URL (postgresql:// connection string).
+No Supabase client SDK required — Supabase Realtime still fires
+because it listens to WAL (database writes), not the client library.
 """
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any
-from supabase import AClient, acreate_client
+
+import asyncpg
 
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# ── Singleton client ──────────────────────────────────────────
-_client: AClient | None = None
+# ── Connection pool singleton ─────────────────────────────────
+_pool: asyncpg.Pool | None = None
 
 
-async def get_client() -> AClient:
-    global _client
-    if _client is None:
-        _client = await acreate_client(
-            settings.SUPABASE_URL,
-            settings.SUPABASE_SERVICE_KEY,  # service key for worker operations
+async def get_pool() -> asyncpg.Pool:
+    global _pool
+    if _pool is None:
+        _pool = await asyncpg.create_pool(
+            dsn=settings.SUPABASE_DB_URL,
+            min_size=1,
+            max_size=10,
+            command_timeout=30,
         )
-    return _client
+    return _pool
+
+
+# ── Helpers ───────────────────────────────────────────────────
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+async def _execute(query: str, *args) -> str:
+    pool = await get_pool()
+    return await pool.execute(query, *args)
+
+
+async def _fetch(query: str, *args) -> list[dict]:
+    pool = await get_pool()
+    rows = await pool.fetch(query, *args)
+    return [dict(r) for r in rows]
+
+
+async def _fetchrow(query: str, *args) -> dict | None:
+    pool = await get_pool()
+    row = await pool.fetchrow(query, *args)
+    return dict(row) if row else None
 
 
 # ── Job operations ────────────────────────────────────────────
@@ -41,106 +66,124 @@ async def update_job_progress(
     status: str = "processing",
     extra: dict | None = None,
 ) -> None:
-    """
-    Update job row — triggers Supabase Realtime event to frontend.
-    Called after every pipeline step so the UI stays live.
-    """
-    client = await get_client()
-    payload: dict[str, Any] = {
-        "status": status,
-        "progress": progress,
-        "current_step": current_step,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-    if extra:
-        payload.update(extra)
-    await client.table("jobs").update(payload).eq("job_id", job_id).execute()
+    """Update job row — triggers Supabase Realtime event to frontend."""
+    await _execute(
+        """
+        UPDATE jobs
+        SET status=$1, progress=$2, current_step=$3, updated_at=$4
+        WHERE job_id=$5
+        """,
+        status, progress, current_step, _now(), job_id,
+    )
     logger.info(f"Job {job_id} → {progress}% [{current_step}]")
 
 
 async def fail_job(job_id: str, error_message: str) -> None:
-    client = await get_client()
-    await client.table("jobs").update({
-        "status": "failed",
-        "progress": 0,
-        "error_message": error_message[:1000],
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }).eq("job_id", job_id).execute()
+    await _execute(
+        """
+        UPDATE jobs
+        SET status='failed', progress=0, error_message=$1, updated_at=$2
+        WHERE job_id=$3
+        """,
+        error_message[:1000], _now(), job_id,
+    )
 
 
 async def complete_job(job_id: str, clip_count: int) -> None:
-    client = await get_client()
-    await client.table("jobs").update({
-        "status": "completed",
-        "progress": 100,
-        "current_step": "Done",
-        "clip_count": clip_count,
-        "completed_at": datetime.now(timezone.utc).isoformat(),
-    }).eq("job_id", job_id).execute()
+    await _execute(
+        """
+        UPDATE jobs
+        SET status='completed', progress=100, current_step='Done',
+            clip_count=$1, completed_at=$2, updated_at=$2
+        WHERE job_id=$3
+        """,
+        clip_count, _now(), job_id,
+    )
 
 
 async def get_job(job_id: str) -> dict | None:
-    client = await get_client()
-    result = await client.table("jobs").select("*").eq("job_id", job_id).single().execute()
-    return result.data
+    return await _fetchrow("SELECT * FROM jobs WHERE job_id=$1", job_id)
 
 
 async def update_job_metadata(job_id: str, video_title: str, video_duration: int) -> None:
-    client = await get_client()
-    await client.table("jobs").update({
-        "video_title": video_title,
-        "video_duration": video_duration,
-    }).eq("job_id", job_id).execute()
+    await _execute(
+        "UPDATE jobs SET video_title=$1, video_duration=$2 WHERE job_id=$3",
+        video_title, video_duration, job_id,
+    )
 
 
 # ── Clip operations ───────────────────────────────────────────
 
 async def insert_clip(clip_data: dict) -> dict:
     """
-    Insert a single clip record immediately after upload.
-    This triggers a Supabase Realtime INSERT event →
-    frontend renders the clip card as it arrives.
+    Insert clip row immediately after upload.
+    Triggers Supabase Realtime INSERT event → frontend card appears.
     """
-    client = await get_client()
-    result = await client.table("clips").insert(clip_data).execute()
-    return result.data[0]
+    cols = list(clip_data.keys())
+    placeholders = ", ".join(f"${i+1}" for i in range(len(cols)))
+    col_names = ", ".join(cols)
+    values = [clip_data[c] for c in cols]
+
+    row = await _fetchrow(
+        f"INSERT INTO clips ({col_names}) VALUES ({placeholders}) RETURNING *",
+        *values,
+    )
+    return row or {}
 
 
 async def get_clips_for_job(job_id: str) -> list[dict]:
-    client = await get_client()
-    result = (
-        await client.table("clips")
-        .select("*")
-        .eq("job_id", job_id)
-        .order("viral_score", desc=True)
-        .execute()
+    return await _fetch(
+        "SELECT * FROM clips WHERE job_id=$1 ORDER BY viral_score DESC",
+        job_id,
     )
-    return result.data
 
 
 # ── User operations ───────────────────────────────────────────
 
 async def get_user(user_id: str) -> dict | None:
-    client = await get_client()
-    result = await client.table("users").select("*").eq("id", user_id).single().execute()
-    return result.data
+    return await _fetchrow("SELECT * FROM users WHERE id=$1", user_id)
+
+
+async def get_user_by_email(email: str) -> dict | None:
+    return await _fetchrow("SELECT * FROM users WHERE email=$1", email)
+
+
+async def upsert_user(user_data: dict) -> dict:
+    """Insert or update user on Google login."""
+    existing = await get_user_by_email(user_data["email"])
+    if existing:
+        await _execute(
+            """
+            UPDATE users
+            SET full_name=$1, avatar_url=$2, google_sub=$3
+            WHERE email=$4
+            """,
+            user_data["full_name"], user_data["avatar_url"],
+            user_data["google_sub"], user_data["email"],
+        )
+        return await get_user_by_email(user_data["email"])
+    else:
+        cols = list(user_data.keys())
+        placeholders = ", ".join(f"${i+1}" for i in range(len(cols)))
+        col_names = ", ".join(cols)
+        values = [user_data[c] for c in cols]
+        return await _fetchrow(
+            f"INSERT INTO users ({col_names}) VALUES ({placeholders}) RETURNING *",
+            *values,
+        )
 
 
 async def increment_credits_used(user_id: str) -> None:
-    """Called after each job completes — enforces plan limits."""
-    client = await get_client()
-    await client.rpc("increment_credits_used", {"uid": user_id}).execute()
+    await _execute(
+        "UPDATE users SET credits_used = credits_used + 1 WHERE id=$1",
+        user_id,
+    )
 
 
 async def check_user_can_process(user_id: str) -> tuple[bool, str]:
-    """
-    Returns (allowed, reason).
-    Enforced server-side — never rely on frontend checks alone.
-    """
     user = await get_user(user_id)
     if not user:
         return False, "User not found"
     if user["credits_used"] >= user["credits_limit"]:
-        plan = user["plan"]
-        return False, f"Monthly limit reached for {plan} plan. Upgrade to continue."
+        return False, f"Monthly limit reached for {user['plan']} plan. Upgrade to continue."
     return True, "ok"

@@ -162,5 +162,8 @@ if __name__ == "__main__":
         level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+    # Silence noisy httpx logs from Upstash polling (every 1s = thousands of lines/hour)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     start_health_server()
     asyncio.run(run_worker())

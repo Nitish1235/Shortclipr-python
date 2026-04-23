@@ -55,41 +55,19 @@ async def google_auth(body: GoogleAuthRequest):
     full_name = google_data.get("name", "")
     avatar_url = google_data.get("picture", "")
 
-    # Upsert user in Supabase (creates on first login, updates avatar/name otherwise)
-    client = await db.get_client()
-
-    # Check if user exists by email
-    existing = (
-        await client.table("users")
-        .select("*")
-        .eq("email", email)
-        .execute()
-    )
-
-    if existing.data:
-        user = existing.data[0]
-        # Update profile fields in case they changed
-        await client.table("users").update({
-            "full_name": full_name,
-            "avatar_url": avatar_url,
-            "google_sub": google_sub,
-        }).eq("id", user["id"]).execute()
-    else:
-        # New user — create with free plan defaults
-        import uuid
-        user_id = str(uuid.uuid4())
-        result = await client.table("users").insert({
-            "id": user_id,
-            "email": email,
-            "full_name": full_name,
-            "avatar_url": avatar_url,
-            "google_sub": google_sub,
-            "plan": "free",
-            "credits_used": 0,
-            "credits_limit": PLAN_CREDITS["free"],
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }).execute()
-        user = result.data[0]
+    # Upsert user in database
+    import uuid
+    user = await db.upsert_user({
+        "id": str(uuid.uuid4()),  # ignored on update
+        "email": email,
+        "full_name": full_name,
+        "avatar_url": avatar_url,
+        "google_sub": google_sub,
+        "plan": "free",
+        "credits_used": 0,
+        "credits_limit": PLAN_CREDITS["free"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
 
     # Issue our JWT
     token = create_access_token({
