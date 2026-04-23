@@ -63,8 +63,8 @@ async def _fetch_innertube_captions(video_id: str, language: str = "en") -> list
     preferred_lang = lang_map.get(language)
 
     player_data = None
-    # Try IOS first as it is currently the most successful stealth identity
-    for label in ["IOS", "TV", "WEB_EMBED"]:
+    # Try TV first (as it worked for metadata), then IOS, then MWEB
+    for label in ["TV", "IOS", "MWEB"]:
         try:
             data = await call_player_api(video_id, label)
             captions = data.get("captions", {})

@@ -1,11 +1,10 @@
 """
 stream.py — Step 3 of the ShortClipr pipeline.
-Stealth InnerTube implementation with Full Error Logging.
+Hardened InnerTube implementation (Fixed IOS + Working TV).
 """
 
 import logging
 import re
-import json
 from typing import Literal
 
 import httpx
@@ -19,27 +18,6 @@ settings = get_settings()
 # ── Stealth Client Registry ───────────────────────────────────
 
 CLIENTS = {
-    "IOS": {
-        "context": {
-            "client": {
-                "clientName": "IOS",
-                "clientVersion": "19.29.1",
-                "deviceModel": "iPhone16,2",
-                "osName": "iOS",
-                "osVersion": "17.5.1",
-                "hl": "en",
-                "gl": "US",
-                "userInterfaceTheme": "DARK",
-                "timeZoneOffsetMins": 0,
-            }
-        },
-        "headers": {
-            "User-Agent": "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X; en_US)",
-            "X-Youtube-Client-Name": "2",
-            "X-Youtube-Client-Version": "19.29.1",
-        },
-        "api_key": "AIzaSyA8eiZmM1FaSbwzBlGmbW3ILtKBNJI41zQ"
-    },
     "TV": {
         "context": {
             "client": {
@@ -55,6 +33,42 @@ CLIENTS = {
             "X-Youtube-Client-Version": "7.20230405.08.01",
         },
         "api_key": "AIzaSyDCU8hByM-4DrUqRUYnGn-3llEO78bcxq8"
+    },
+    "IOS": {
+        "context": {
+            "client": {
+                "clientName": "IOS",
+                "clientVersion": "19.29.1",
+                "deviceModel": "iPhone16,2",
+                "osName": "iOS",
+                "osVersion": "17.5.1",
+                "hl": "en",
+                "gl": "US",
+            }
+        },
+        "headers": {
+            "User-Agent": "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X; en_US)",
+            "X-Youtube-Client-Name": "2",
+            "X-Youtube-Client-Version": "19.29.1",
+        },
+        "api_key": "AIzaSyA8eiZmM1FaSbwzBlGmbW3ILtKBNJI41zQ"
+    },
+    "MWEB": {
+        "context": {
+            "client": {
+                "clientName": "MWEB",
+                "clientVersion": "2.20230301.09.00",
+                "hl": "en",
+                "gl": "US",
+            }
+        },
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Mobile Safari/537.36",
+            "X-Youtube-Client-Name": "2",
+            "X-Youtube-Client-Version": "2.20230301.09.00",
+            "Referer": "https://m.youtube.com/",
+        },
+        "api_key": "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
     }
 }
 
@@ -104,9 +118,7 @@ async def call_player_api(video_id: str, client_name: str, send_params: bool = F
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(PLAYER_ENDPOINT, json=payload, params=params, headers=headers)
         if resp.status_code != 200:
-            # CRITICAL: Log the full error to understand the block
-            logger.error(f"InnerTube {client_name} FAILED ({resp.status_code})")
-            logger.error(f"Full Error Response: {resp.text}")
+            logger.error(f"InnerTube {client_name} FAILED ({resp.status_code}): {resp.text[:200]}")
             resp.raise_for_status()
         return resp.json()
 
@@ -120,7 +132,8 @@ async def get_stream_url(video_id: str, quality: str = "720p") -> str:
 
 async def _resolve_stream_url(video_id: str, quality: str) -> str:
     target_height = int(quality.replace("p", ""))
-    for label in ["IOS", "TV"]:
+    # TV first because it worked in metadata!
+    for label in ["TV", "IOS", "MWEB"]:
         try:
             data = await call_player_api(video_id, label, send_params=True)
             url = _pick_best_stream(data, target_height)
@@ -142,7 +155,7 @@ async def get_audio_stream_url(video_id: str) -> str:
     cached = await get_cached_stream_url(cache_key)
     if cached: return cached
     url = None
-    for label in ["IOS", "TV"]:
+    for label in ["TV", "IOS", "MWEB"]:
         try:
             data = await call_player_api(video_id, label, send_params=True)
             url = _pick_best_audio_stream(data)
@@ -161,7 +174,7 @@ def _pick_best_audio_stream(data: dict) -> str | None:
     return audio_streams[0]["url"]
 
 async def get_video_metadata(video_id: str) -> dict:
-    for label in ["IOS", "TV"]:
+    for label in ["TV", "IOS", "MWEB"]:
         try:
             data = await call_player_api(video_id, label)
             details = data.get("videoDetails", {})
