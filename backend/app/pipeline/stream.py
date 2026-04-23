@@ -28,7 +28,6 @@ _ANDROID_CONTEXT = {
     "client": {
         "clientName": "ANDROID",
         "clientVersion": "17.31.35",
-        "androidSdkVersion": 30,
         "hl": "en",
         "gl": "US",
     }
@@ -37,6 +36,7 @@ _ANDROID_HEADERS = {
     "User-Agent": "com.google.android.youtube/17.31.35 (Linux; U; Android 11) gzip",
     "X-Youtube-Client-Name": "3",
     "X-Youtube-Client-Version": "17.31.35",
+    "API_KEY": "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w", # Client-specific key from Go repo
 }
 
 _IOS_CONTEXT = {
@@ -50,8 +50,9 @@ _IOS_CONTEXT = {
 }
 _IOS_HEADERS = {
     "User-Agent": "com.google.ios.youtube/17.33.2 (iPhone14,3; U; CPU iOS 15_6 like Mac OS X)",
-    "X-Youtube-Client-Name": "2",
+    "X-Youtube-Client-Name": "5",
     "X-Youtube-Client-Version": "17.33.2",
+    "API_KEY": "AIzaSyB-63vPrdThhKuerbB2N_l7Kwwcxj6yUAc",
 }
 
 _TV_EMBEDDED_CONTEXT = {
@@ -67,6 +68,9 @@ _TV_EMBEDDED_CONTEXT = {
 }
 _TV_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36",
+    "X-Youtube-Client-Name": "85",
+    "X-Youtube-Client-Version": "2.0",
+    "API_KEY": "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
 }
 
 _WEB_CONTEXT = {
@@ -81,6 +85,22 @@ _WEB_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
     "X-Youtube-Client-Name": "1",
     "X-Youtube-Client-Version": "2.20240410.01.00",
+    "API_KEY": "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
+}
+
+_MWEB_CONTEXT = {
+    "client": {
+        "clientName": "MWEB",
+        "clientVersion": "2.20240410.01.00",
+        "hl": "en",
+        "gl": "US",
+    }
+}
+_MWEB_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+    "X-Youtube-Client-Name": "2",
+    "X-Youtube-Client-Version": "2.20240410.01.00",
+    "API_KEY": "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
 }
 
 # Mapping context to headers
@@ -89,6 +109,7 @@ CLIENT_HEADERS = {
     id(_IOS_CONTEXT): _IOS_HEADERS,
     id(_TV_EMBEDDED_CONTEXT): _TV_HEADERS,
     id(_WEB_CONTEXT): _WEB_HEADERS,
+    id(_MWEB_CONTEXT): _MWEB_HEADERS,
 }
 
 PLAYER_ENDPOINT = f"{settings.INNERTUBE_API_BASE}/player"
@@ -115,12 +136,15 @@ async def _call_player_api(
         "contentCheckOk": True,
         "racyCheckOk": True,
     }
-    params = {"key": settings.INNERTUBE_API_KEY, "prettyPrint": "false"}
-    
     # Get official headers for this client
     headers = CLIENT_HEADERS.get(id(context), _WEB_HEADERS).copy()
+    api_key = headers.pop("API_KEY", settings.INNERTUBE_API_KEY)
+    
     headers["Content-Type"] = "application/json"
-    headers["X-Goog-Api-Format-Version"] = "2"
+    headers["X-Goog-Api-Format-Version"] = "1"
+    headers["X-Origin"] = "https://www.youtube.com"
+
+    params = {"key": api_key, "prettyPrint": "false"}
 
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
@@ -162,6 +186,7 @@ async def _resolve_stream_url(video_id: str, quality: str) -> str:
     target_height = int(quality.replace("p", ""))
 
     for context, label in [
+        (_MWEB_CONTEXT, "MWEB"),
         (_ANDROID_CONTEXT, "ANDROID"),
         (_IOS_CONTEXT, "IOS"),
         (_TV_EMBEDDED_CONTEXT, "TV_EMBEDDED"),
@@ -225,6 +250,7 @@ async def get_audio_stream_url(video_id: str) -> str:
 
     url = None
     for context, label in [
+        (_MWEB_CONTEXT, "MWEB"),
         (_ANDROID_CONTEXT, "ANDROID"),
         (_IOS_CONTEXT, "IOS"),
         (_TV_EMBEDDED_CONTEXT, "TV_EMBEDDED"),

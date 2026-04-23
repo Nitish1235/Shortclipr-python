@@ -29,6 +29,7 @@ from app.pipeline.stream import (
     CLIENT_HEADERS,
     _ANDROID_CONTEXT,
     _IOS_CONTEXT,
+    _MWEB_CONTEXT,
     _TV_EMBEDDED_CONTEXT,
     _WEB_CONTEXT,
 )
@@ -86,6 +87,7 @@ async def _fetch_innertube_captions(video_id: str, language: str = "en") -> list
 
     player_data = None
     for context, label in [
+        (_MWEB_CONTEXT, "MWEB"),
         (_ANDROID_CONTEXT, "ANDROID"),
         (_IOS_CONTEXT, "IOS"),
         (_TV_EMBEDDED_CONTEXT, "TV_EMBEDDED"),
@@ -153,6 +155,7 @@ async def _call_player_for_captions(video_id: str, context: dict) -> dict:
     payload = {
         "context": context,
         "videoId": video_id,
+        "params": "2AMBCgIQBg==",  # Required streaming signature
         "playbackContext": {
             "contentPlaybackContext": {
                 "vis": 0,
@@ -169,8 +172,13 @@ async def _call_player_for_captions(video_id: str, context: dict) -> dict:
 
     # Get official headers for this client
     headers = CLIENT_HEADERS.get(id(context), {}).copy()
+    api_key = headers.pop("API_KEY", settings.INNERTUBE_API_KEY)
+
     headers["Content-Type"] = "application/json"
-    headers["X-Goog-Api-Format-Version"] = "2"
+    headers["X-Goog-Api-Format-Version"] = "1"
+    headers["X-Origin"] = "https://www.youtube.com"
+
+    params = {"key": api_key, "prettyPrint": "false"}
 
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
