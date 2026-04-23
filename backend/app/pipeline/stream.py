@@ -1,16 +1,10 @@
 """
 stream.py — Step 3 of the ShortClipr pipeline.
-
-Calls YouTube's InnerTube API directly (same API the YouTube Android app uses).
-No yt-dlp. No cookies. No bot detection issues.
-Implements:
-  - Android client (primary)
-  - TV_EMBEDDED client (fallback)
-  - Audio-only extraction (for Whisper fallback)
-  - Stream URL caching in Redis (4-hour TTL)
+Hardened with verified settings from innertube-go.
 """
 
 import logging
+import re
 from typing import Literal
 
 import httpx
@@ -21,95 +15,77 @@ from app.core.redis import cache_stream_url, get_cached_stream_url
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# ── InnerTube client contexts ─────────────────────────────────
-# Multiple clients tried in order — later ones bypass more restrictions.
+# ── InnerTube Client Registry ─────────────────────────────────
+# EXACT settings from innertube-go config.go
 
-_ANDROID_CONTEXT = {
-    "client": {
-        "clientName": "ANDROID",
-        "clientVersion": "17.31.35",
-        "hl": "en",
-        "gl": "US",
-    }
-}
-_ANDROID_HEADERS = {
-    "User-Agent": "com.google.android.youtube/17.31.35 (Linux; U; Android 11) gzip",
-    "X-Youtube-Client-Name": "3",
-    "X-Youtube-Client-Version": "17.31.35",
-    "API_KEY": "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w", # Client-specific key from Go repo
-}
-
-_IOS_CONTEXT = {
-    "client": {
-        "clientName": "IOS",
-        "clientVersion": "17.33.2",
-        "deviceModel": "iPhone14,3",
-        "hl": "en",
-        "gl": "US",
-    }
-}
-_IOS_HEADERS = {
-    "User-Agent": "com.google.ios.youtube/17.33.2 (iPhone14,3; U; CPU iOS 15_6 like Mac OS X)",
-    "X-Youtube-Client-Name": "5",
-    "X-Youtube-Client-Version": "17.33.2",
-    "API_KEY": "AIzaSyB-63vPrdThhKuerbB2N_l7Kwwcxj6yUAc",
-}
-
-_TV_EMBEDDED_CONTEXT = {
-    "client": {
-        "clientName": "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
-        "clientVersion": "2.0",
-        "hl": "en",
-        "gl": "US",
+CLIENTS = {
+    "MWEB": {
+        "context": {
+            "client": {
+                "clientName": "MWEB",
+                "clientVersion": "2.20230301.09.00",
+                "hl": "en",
+                "gl": "US",
+            }
+        },
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Mobile Safari/537.36",
+            "X-Youtube-Client-Name": "2",
+            "X-Youtube-Client-Version": "2.20230301.09.00",
+            "Referer": "https://m.youtube.com/",
+        },
+        "api_key": "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
     },
-    "thirdParty": {
-        "embedUrl": "https://www.youtube.com",
+    "ANDROID": {
+        "context": {
+            "client": {
+                "clientName": "ANDROID",
+                "clientVersion": "17.13.3",
+                "hl": "en",
+                "gl": "US",
+            }
+        },
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Mobile Safari/537.36",
+            "X-Youtube-Client-Name": "3",
+            "X-Youtube-Client-Version": "17.13.3",
+        },
+        "api_key": "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w"
     },
-}
-_TV_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36",
-    "X-Youtube-Client-Name": "85",
-    "X-Youtube-Client-Version": "2.0",
-    "API_KEY": "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
-}
-
-_WEB_CONTEXT = {
-    "client": {
-        "clientName": "WEB",
-        "clientVersion": "2.20240410.01.00",
-        "hl": "en",
-        "gl": "US",
+    "TV": {
+        "context": {
+            "client": {
+                "clientName": "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+                "clientVersion": "2.0",
+                "hl": "en",
+                "gl": "US",
+            },
+            "thirdParty": {"embedUrl": "https://www.youtube.com"}
+        },
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36",
+            "X-Youtube-Client-Name": "85",
+            "X-Youtube-Client-Version": "2.0",
+        },
+        "api_key": "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+    },
+    "WEB": {
+        "context": {
+            "client": {
+                "clientName": "WEB",
+                "clientVersion": "2.20230301.09.00",
+                "hl": "en",
+                "gl": "US",
+            }
+        },
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+            "X-Youtube-Client-Name": "1",
+            "X-Youtube-Client-Version": "2.20230301.09.00",
+            "Referer": "https://www.youtube.com/",
+        },
+        "api_key": "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
     }
-}
-_WEB_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-    "X-Youtube-Client-Name": "1",
-    "X-Youtube-Client-Version": "2.20240410.01.00",
-    "API_KEY": "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
-}
-
-_MWEB_CONTEXT = {
-    "client": {
-        "clientName": "MWEB",
-        "clientVersion": "2.20240410.01.00",
-        "hl": "en",
-        "gl": "US",
-    }
-}
-_MWEB_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
-    "X-Youtube-Client-Name": "2",
-    "X-Youtube-Client-Version": "2.20240410.01.00",
-    "API_KEY": "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
-}
-
-# Mapping context to headers
-CLIENT_HEADERS = {
-    id(_ANDROID_CONTEXT): _ANDROID_HEADERS,
-    id(_IOS_CONTEXT): _IOS_HEADERS,
-    id(_TV_EMBEDDED_CONTEXT): _TV_HEADERS,
-    id(_WEB_CONTEXT): _WEB_HEADERS,
-    id(_MWEB_CONTEXT): _MWEB_HEADERS,
 }
 
 PLAYER_ENDPOINT = f"{settings.INNERTUBE_API_BASE}/player"
@@ -117,34 +93,36 @@ PLAYER_ENDPOINT = f"{settings.INNERTUBE_API_BASE}/player"
 
 # ── Core InnerTube request ─────────────────────────────────────
 
-async def _call_player_api(
-    video_id: str,
-    context: dict,
-) -> dict:
+async def call_player_api(video_id: str, client_name: str, send_params: bool = False) -> dict:
+    """Unified InnerTube player call with correct headers and payload."""
+    config = CLIENTS.get(client_name)
+    if not config:
+        raise ValueError(f"Unknown InnerTube client: {client_name}")
+
     payload = {
-        "context": context,
+        "context": config["context"],
         "videoId": video_id,
-        "params": "2AMBCgIQBg==",  # Request streaming data
         "playbackContext": {
             "contentPlaybackContext": {
                 "vis": 0,
                 "splay": False,
-                "referer": "https://www.youtube.com/watch?v=" + video_id,
+                "referer": f"https://www.youtube.com/watch?v={video_id}",
                 "signatureTimestamp": 19800
             }
         },
         "contentCheckOk": True,
         "racyCheckOk": True,
     }
-    # Get official headers for this client
-    headers = CLIENT_HEADERS.get(id(context), _WEB_HEADERS).copy()
-    api_key = headers.pop("API_KEY", settings.INNERTUBE_API_KEY)
     
+    # params is only needed for stream selection, not for metadata/captions
+    if send_params:
+        payload["params"] = "2AMBCgIQBg=="
+
+    headers = config["headers"].copy()
     headers["Content-Type"] = "application/json"
     headers["X-Goog-Api-Format-Version"] = "1"
-    headers["X-Origin"] = "https://www.youtube.com"
 
-    params = {"key": api_key, "prettyPrint": "false"}
+    params = {"key": config["api_key"], "alt": "json"}
 
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
@@ -159,22 +137,10 @@ async def _call_player_api(
 
 # ── Stream URL resolution ──────────────────────────────────────
 
-async def get_stream_url(
-    video_id: str,
-    quality: Literal["720p", "480p", "1080p"] = "720p",
-) -> str:
-    """
-    Returns a direct CDN stream URL for the video.
-    Cached in Redis for REDIS_STREAM_CACHE_TTL seconds (default 4h).
-    Primary: ANDROID client. Fallback: TV_EMBEDDED client.
-
-    Uses HTTP range requests (not full download).
-    """
+async def get_stream_url(video_id: str, quality: str = "720p") -> str:
     cache_key = f"{video_id}:{quality}"
     cached = await get_cached_stream_url(cache_key)
-    if cached:
-        logger.debug(f"[{video_id}] Stream URL cache hit")
-        return cached
+    if cached: return cached
 
     url = await _resolve_stream_url(video_id, quality)
     await cache_stream_url(cache_key, url)
@@ -182,153 +148,84 @@ async def get_stream_url(
 
 
 async def _resolve_stream_url(video_id: str, quality: str) -> str:
-    """Try 4 clients in order from most to least restrictive."""
     target_height = int(quality.replace("p", ""))
-
-    for context, label in [
-        (_MWEB_CONTEXT, "MWEB"),
-        (_ANDROID_CONTEXT, "ANDROID"),
-        (_IOS_CONTEXT, "IOS"),
-        (_TV_EMBEDDED_CONTEXT, "TV_EMBEDDED"),
-        (_WEB_CONTEXT, "WEB"),
-    ]:
+    for label in ["MWEB", "ANDROID", "TV", "WEB"]:
         try:
-            data = await _call_player_api(video_id, context)
+            # We NEED params for stream resolution
+            data = await call_player_api(video_id, label, send_params=True)
             url = _pick_best_stream(data, target_height)
-            if url:
-                logger.info(f"[{video_id}] Stream URL via {label} @ {quality}")
-                return url
+            if url: return url
         except Exception as e:
-            logger.warning(f"[{video_id}] {label} client failed: {e}")
-
+            logger.warning(f"[{video_id}] {label} stream resolution failed: {e}")
     raise RuntimeError(f"Could not resolve stream URL for {video_id}")
 
 
 def _pick_best_stream(data: dict, target_height: int) -> str | None:
-    """
-    Pick the best video-only adaptive stream.
-    Prefers exact target height, falls back to nearest lower quality.
-    """
-    formats = data.get("streamingData", {}).get("adaptiveFormats", [])
-
-    # Video-only streams sorted by height descending
+    streaming_data = data.get("streamingData", {})
+    formats = streaming_data.get("formats", []) + streaming_data.get("adaptiveFormats", [])
     video_streams = sorted(
         [f for f in formats if f.get("mimeType", "").startswith("video/") and "url" in f],
-        key=lambda f: f.get("height", 0),
-        reverse=True,
+        key=lambda f: f.get("height", 0), reverse=True
     )
-
-    if not video_streams:
-        return None
-
-    # Exact match first
+    if not video_streams: return None
     for stream in video_streams:
-        if stream.get("height") == target_height:
-            return stream["url"]
-
-    # Nearest match below target
-    lower = [s for s in video_streams if s.get("height", 0) < target_height]
-    if lower:
-        return lower[0]["url"]  # highest below target
-
-    # Return whatever we have
+        if stream.get("height") == target_height: return stream["url"]
     return video_streams[0]["url"]
 
 
-# ── Audio-only stream (for Whisper fallback) ───────────────────
-
 async def get_audio_stream_url(video_id: str) -> str:
-    """
-    Returns a direct CDN URL for the audio-only stream.
-    Used when no YouTube captions exist → feed to Whisper.
-    Tries all 4 clients in order to handle age/geo restrictions.
-    """
     cache_key = f"{video_id}:audio"
     cached = await get_cached_stream_url(cache_key)
-    if cached:
-        return cached
-
+    if cached: return cached
     url = None
-    for context, label in [
-        (_MWEB_CONTEXT, "MWEB"),
-        (_ANDROID_CONTEXT, "ANDROID"),
-        (_IOS_CONTEXT, "IOS"),
-        (_TV_EMBEDDED_CONTEXT, "TV_EMBEDDED"),
-        (_WEB_CONTEXT, "WEB"),
-    ]:
+    for label in ["MWEB", "ANDROID", "TV", "WEB"]:
         try:
-            data = await _call_player_api(video_id, context)
+            data = await call_player_api(video_id, label, send_params=True)
             url = _pick_best_audio_stream(data)
-            if url:
-                logger.info(f"[{video_id}] Audio stream via {label}")
-                break
+            if url: break
         except Exception as e:
-            logger.warning(f"[{video_id}] Audio {label} client failed: {e}")
-
-    if not url:
-        raise RuntimeError(f"Could not resolve audio stream for {video_id}")
-
+            logger.warning(f"[{video_id}] Audio {label} resolution failed: {e}")
+    if not url: raise RuntimeError(f"Could not resolve audio stream for {video_id}")
     await cache_stream_url(cache_key, url)
     return url
 
 
 def _pick_best_audio_stream(data: dict) -> str | None:
-    formats = data.get("streamingData", {}).get("adaptiveFormats", [])
-    audio_streams = sorted(
-        [f for f in formats if f.get("mimeType", "").startswith("audio/") and "url" in f],
-        key=lambda f: f.get("bitrate", 0),
-    )
-    return audio_streams[0]["url"] if audio_streams else None
+    streaming_data = data.get("streamingData", {})
+    formats = streaming_data.get("adaptiveFormats", [])
+    audio_streams = [f for f in formats if f.get("mimeType", "").startswith("audio/") and "url" in f]
+    if not audio_streams: return None
+    audio_streams.sort(key=lambda x: int(x.get("bitrate", 0)), reverse=True)
+    return audio_streams[0]["url"]
 
-
-# ── Video metadata ─────────────────────────────────────────────
 
 async def get_video_metadata(video_id: str) -> dict:
-    """
-    Returns title, duration (seconds), thumbnail URL, channel name.
-    Uses InnerTube as primary (for duration) — oEmbed as fallback.
-    """
-    try:
-        return await _get_innertube_metadata(video_id)
-    except Exception:
-        return await _get_oembed_metadata(video_id)
-
-
-async def _get_oembed_metadata(video_id: str) -> dict:
+    # Metadata works fine without params
+    for label in ["MWEB", "ANDROID", "WEB"]:
+        try:
+            data = await call_player_api(video_id, label, send_params=False)
+            details = data.get("videoDetails", {})
+            if details:
+                return {
+                    "title": details.get("title", ""),
+                    "channel": details.get("author", ""),
+                    "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
+                    "duration": int(details.get("lengthSeconds", 0)),
+                    "video_id": video_id,
+                }
+        except: continue
+    # Final oEmbed fallback
     url = f"https://www.youtube.com/oembed?url=https://youtu.be/{video_id}&format=json"
     async with httpx.AsyncClient(timeout=8) as client:
         resp = await client.get(url)
         resp.raise_for_status()
         d = resp.json()
-    return {
-        "title": d.get("title", ""),
-        "channel": d.get("author_name", ""),
-        "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
-        "duration": 0,  # oEmbed doesn't return duration
-        "video_id": video_id,
-    }
-
-
-async def _get_innertube_metadata(video_id: str) -> dict:
-    data = await _call_player_api(video_id, _ANDROID_CONTEXT)
-    details = data.get("videoDetails", {})
-    return {
-        "title": details.get("title", ""),
-        "channel": details.get("author", ""),
-        "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
-        "duration": int(details.get("lengthSeconds", 0)),
-        "video_id": video_id,
-    }
+    return {"title": d.get("title", ""), "channel": d.get("author_name", ""), "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg", "duration": 0, "video_id": video_id}
 
 
 def extract_video_id(url: str) -> str | None:
-    """Extract YouTube video ID from any valid YouTube URL format."""
-    import re
-    patterns = [
-        r"(?:v=|youtu\.be/|embed/|shorts/)([A-Za-z0-9_-]{11})",
-    ]
-    for p in patterns:
-        m = re.search(p, url)
-        if m:
-            return m.group(1)
+    patterns = [r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", r"youtu\.be\/([0-9A-Za-z_-]{11})", r"embed\/([0-9A-Za-z_-]{11})", r"shorts\/([0-9A-Za-z_-]{11})"]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match: return match.group(1)
     return None

@@ -1,15 +1,9 @@
 """
 transcript.py — Step 2 of the ShortClipr pipeline.
 
-Decision tree:
-  1. Fetch captions directly via InnerTube API (same API YouTube app uses).
-     Handles auto-generated captions in ANY language — works from datacenters.
-  2. If no captions available → stream audio via InnerTube → chunk into Whisper.
-
-Why InnerTube instead of youtube-transcript-api:
-  youtube-transcript-api scrapes youtube.com HTML which gets blocked by
-  YouTube when called from Google Cloud datacenter IPs. InnerTube is the
-  official internal API and is never blocked.
+Fetches captions directly via InnerTube API.
+Handles auto-generated captions in ANY language.
+Whisper fallback is only used if NO captions exist.
 """
 
 import asyncio
@@ -25,14 +19,7 @@ import httpx
 from openai import AsyncOpenAI
 
 from app.core.config import get_settings
-from app.pipeline.stream import (
-    CLIENT_HEADERS,
-    _ANDROID_CONTEXT,
-    _IOS_CONTEXT,
-    _MWEB_CONTEXT,
-    _TV_EMBEDDED_CONTEXT,
-    _WEB_CONTEXT,
-)
+from app.pipeline.stream import call_player_api
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -47,12 +34,7 @@ TranscriptEntry = dict  # {"text": str, "start": float, "duration": float}
 # ── Primary path ───────────────────────────────────────────────
 
 async def get_transcript(video_id: str, language: str = "en") -> tuple[list[TranscriptEntry], bool]:
-    """
-    Returns (transcript_entries, used_whisper_fallback).
-
-    Primary:  InnerTube caption fetch (works from datacenter, gets auto-generated captions).
-    Fallback: Whisper streaming via _whisper_fallback_transcript().
-    """
+    """Returns (transcript_entries, used_whisper_fallback)."""
     try:
         entries = await _fetch_innertube_captions(video_id, language)
         if entries:
@@ -70,31 +52,21 @@ async def get_transcript(video_id: str, language: str = "en") -> tuple[list[Tran
 # ── InnerTube caption fetching ─────────────────────────────────
 
 async def _fetch_innertube_captions(video_id: str, language: str = "en") -> list[TranscriptEntry]:
-    """
-    Use InnerTube player API to get caption track URLs, then parse the timed text XML.
-    Works with auto-generated captions — never blocked from Cloud Run.
-    Tries multiple clients to handle restricted videos.
-    """
+    """Fetch captions using the verified InnerTube client registry."""
     lang_map = {
         "English": "en",
         "Spanish": "es",
         "French": "fr",
         "German": "de",
         "Hindi": "hi",
-        "Auto / No translation": None,  # accept any language
     }
     preferred_lang = lang_map.get(language)
 
     player_data = None
-    for context, label in [
-        (_MWEB_CONTEXT, "MWEB"),
-        (_ANDROID_CONTEXT, "ANDROID"),
-        (_IOS_CONTEXT, "IOS"),
-        (_TV_EMBEDDED_CONTEXT, "TV_EMBEDDED"),
-        (_WEB_CONTEXT, "WEB"),
-    ]:
+    # Try all clients in order of reliability for captions
+    for label in ["MWEB", "ANDROID", "TV", "WEB"]:
         try:
-            data = await _call_player_for_captions(video_id, context)
+            data = await call_player_api(video_id, label)
             captions = data.get("captions", {})
             if captions:
                 player_data = data
@@ -106,7 +78,6 @@ async def _fetch_innertube_captions(video_id: str, language: str = "en") -> list
     if not player_data:
         raise RuntimeError("No caption data from any InnerTube client")
 
-    # Extract caption tracks list
     tracks = (
         player_data.get("captions", {})
         .get("playerCaptionsTracklistRenderer", {})
@@ -116,10 +87,7 @@ async def _fetch_innertube_captions(video_id: str, language: str = "en") -> list
     if not tracks:
         raise RuntimeError("Video has no caption tracks")
 
-    logger.info(f"[{video_id}] Available caption tracks: {[t.get('languageCode') for t in tracks]}")
-
-    # Pick the best track:
-    # 1. Exact language match  2. English  3. First auto-generated  4. Any track
+    # Pick the best track
     chosen = None
     if preferred_lang:
         for t in tracks:
@@ -132,7 +100,6 @@ async def _fetch_innertube_captions(video_id: str, language: str = "en") -> list
                 chosen = t
                 break
     if not chosen:
-        # Prefer auto-generated (asr) tracks
         for t in tracks:
             if t.get("kind") == "asr":
                 chosen = t
@@ -142,7 +109,6 @@ async def _fetch_innertube_captions(video_id: str, language: str = "en") -> list
 
     logger.info(f"[{video_id}] Using caption track: {chosen.get('languageCode')} (kind={chosen.get('kind', 'manual')})")
 
-    # Fetch the timed text XML
     caption_url = chosen.get("baseUrl", "")
     if not caption_url:
         raise RuntimeError("Caption track has no baseUrl")
@@ -150,50 +116,8 @@ async def _fetch_innertube_captions(video_id: str, language: str = "en") -> list
     return await _parse_caption_url(caption_url, video_id)
 
 
-async def _call_player_for_captions(video_id: str, context: dict) -> dict:
-    """Call InnerTube player endpoint to get caption metadata."""
-    payload = {
-        "context": context,
-        "videoId": video_id,
-        "params": "2AMBCgIQBg==",  # Required streaming signature
-        "playbackContext": {
-            "contentPlaybackContext": {
-                "vis": 0,
-                "splay": False,
-                "referer": "https://www.youtube.com/watch?v=" + video_id,
-                "signatureTimestamp": 19800
-            }
-        },
-        "contentCheckOk": True,
-        "racyCheckOk": True,
-    }
-    params = {"key": settings.INNERTUBE_API_KEY, "prettyPrint": "false"}
-    endpoint = f"{settings.INNERTUBE_API_BASE}/player"
-
-    # Get official headers for this client
-    headers = CLIENT_HEADERS.get(id(context), {}).copy()
-    api_key = headers.pop("API_KEY", settings.INNERTUBE_API_KEY)
-
-    headers["Content-Type"] = "application/json"
-    headers["X-Goog-Api-Format-Version"] = "1"
-    headers["X-Origin"] = "https://www.youtube.com"
-
-    params = {"key": api_key, "prettyPrint": "false"}
-
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            endpoint, 
-            json=payload, 
-            params=params, 
-            headers=headers
-        )
-        resp.raise_for_status()
-        return resp.json()
-
-
 async def _parse_caption_url(url: str, video_id: str) -> list[TranscriptEntry]:
-    """Download and parse the YouTube timed text XML into TranscriptEntry list."""
-    # Request JSON format instead of XML for cleaner parsing
+    """Download and parse YouTube timed text XML/JSON."""
     json_url = url + "&fmt=json3" if "?" in url else url + "?fmt=json3"
 
     async with httpx.AsyncClient(timeout=15) as client:
@@ -206,11 +130,9 @@ async def _parse_caption_url(url: str, video_id: str) -> list[TranscriptEntry]:
             entries = []
             for event in events:
                 segs = event.get("segs")
-                if not segs:
-                    continue
+                if not segs: continue
                 text = "".join(s.get("utf8", "") for s in segs).strip()
-                if not text or text == "\n":
-                    continue
+                if not text or text == "\n": continue
                 start_ms = event.get("tStartMs", 0)
                 duration_ms = event.get("dDurationMs", 2000)
                 entries.append({
@@ -218,12 +140,11 @@ async def _parse_caption_url(url: str, video_id: str) -> list[TranscriptEntry]:
                     "start": start_ms / 1000.0,
                     "duration": duration_ms / 1000.0,
                 })
-            if entries:
-                return entries
+            if entries: return entries
         except Exception:
-            pass  # fall through to XML parsing
+            pass
 
-    # Fallback: fetch as XML
+    # Fallback to XML
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(url)
         resp.raise_for_status()
@@ -232,27 +153,19 @@ async def _parse_caption_url(url: str, video_id: str) -> list[TranscriptEntry]:
 
 
 def _parse_caption_xml(xml_text: str, video_id: str) -> list[TranscriptEntry]:
-    """Parse YouTube timed text XML format into TranscriptEntry list."""
     entries = []
     try:
         root = ET.fromstring(xml_text)
         for text_el in root.iter("text"):
             raw = text_el.text or ""
-            # Unescape HTML entities
-            raw = (raw
-                   .replace("&amp;", "&")
-                   .replace("&lt;", "<")
-                   .replace("&gt;", ">")
-                   .replace("&quot;", '"')
-                   .replace("&#39;", "'")
-                   .replace("\n", " "))
+            raw = (raw.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                   .replace("&quot;", '"').replace("&#39;", "'").replace("\n", " "))
             raw = re.sub(r"<[^>]+>", "", raw).strip()
-            if not raw:
-                continue
+            if not raw: continue
             start = float(text_el.get("start", 0))
             dur = float(text_el.get("dur", 2.0))
             entries.append({"text": raw, "start": start, "duration": dur})
-    except ET.ParseError as e:
+    except Exception as e:
         logger.error(f"[{video_id}] Caption XML parse error: {e}")
     return entries
 
@@ -260,131 +173,54 @@ def _parse_caption_xml(xml_text: str, video_id: str) -> list[TranscriptEntry]:
 # ── Whisper fallback (streaming) ───────────────────────────────
 
 async def _whisper_fallback_transcript(video_id: str) -> list[TranscriptEntry]:
-    """
-    1. Get audio-only stream URL from InnerTube
-    2. Download audio in 30-second chunks with FFmpeg
-    3. Transcribe each chunk with Whisper in parallel
-    4. Return merged transcript
-    """
-    from app.pipeline.stream import get_audio_stream_url  # avoid circular import
-
+    from app.pipeline.stream import get_audio_stream_url
     audio_url = await get_audio_stream_url(video_id)
     entries: list[TranscriptEntry] = []
-
     async for chunk_entries in _transcribe_audio_streaming(audio_url, video_id):
         entries.extend(chunk_entries)
-
     return entries
 
 
-async def _transcribe_audio_streaming(
-    audio_url: str,
-    video_id: str,
-    chunk_seconds: int = 30,
-) -> AsyncGenerator[list[TranscriptEntry], None]:
-    """
-    Stream audio URL → chunk into 30s segments → Whisper → yield partial transcript.
-    """
+async def _transcribe_audio_streaming(audio_url: str, video_id: str, chunk_seconds: int = 30) -> AsyncGenerator[list[TranscriptEntry], None]:
     with tempfile.TemporaryDirectory(prefix="sc_whisper_") as tmpdir:
         tmp = Path(tmpdir)
-
         duration = await _get_audio_duration(audio_url)
-        logger.info(f"[{video_id}] Audio duration: {duration:.0f}s — splitting into {chunk_seconds}s chunks")
-
-        windows = [
-            (start, min(start + chunk_seconds, duration))
-            for start in range(0, int(duration), chunk_seconds)
-        ]
-
+        windows = [(start, min(start + chunk_seconds, duration)) for start in range(0, int(duration), chunk_seconds)]
         semaphore = asyncio.Semaphore(4)
-
         async def process_chunk(idx: int, start: float, end: float) -> list[TranscriptEntry]:
             async with semaphore:
                 chunk_path = tmp / f"chunk_{idx:04d}.mp3"
                 await _extract_audio_chunk(audio_url, start, end, chunk_path)
                 return await _whisper_transcribe_chunk(chunk_path, offset=start)
-
-        tasks = [
-            asyncio.create_task(process_chunk(i, s, e))
-            for i, (s, e) in enumerate(windows)
-        ]
-
+        tasks = [asyncio.create_task(process_chunk(i, s, e)) for i, (s, e) in enumerate(windows)]
         for task in tasks:
             result = await task
             yield result
 
 
 async def _get_audio_duration(audio_url: str) -> float:
-    """Use ffprobe to get duration without downloading the file."""
-    proc = await asyncio.create_subprocess_exec(
-        "ffprobe",
-        "-v", "quiet",
-        "-print_format", "json",
-        "-show_format",
-        "-i", audio_url,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    proc = await asyncio.create_subprocess_exec("ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-i", audio_url, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     stdout, _ = await proc.communicate()
     data = json.loads(stdout)
     return float(data["format"]["duration"])
 
 
-async def _extract_audio_chunk(
-    audio_url: str,
-    start: float,
-    end: float,
-    output_path: Path,
-) -> None:
-    """Extract a specific time range of audio to an mp3 file."""
+async def _extract_audio_chunk(audio_url: str, start: float, end: float, output_path: Path) -> None:
     duration = end - start
-    proc = await asyncio.create_subprocess_exec(
-        "ffmpeg", "-y",
-        "-ss", str(start),
-        "-t", str(duration),
-        "-i", audio_url,
-        "-vn",
-        "-ar", "16000",
-        "-ac", "1",
-        "-c:a", "libmp3lame",
-        "-q:a", "4",
-        str(output_path),
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
-    )
+    proc = await asyncio.create_subprocess_exec("ffmpeg", "-y", "-ss", str(start), "-t", str(duration), "-i", audio_url, "-vn", "-ar", "16000", "-ac", "1", "-c:a", "libmp3lame", "-q:a", "4", str(output_path), stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
     await proc.wait()
 
 
-async def _whisper_transcribe_chunk(
-    chunk_path: Path,
-    offset: float = 0.0,
-) -> list[TranscriptEntry]:
-    """Send a single audio chunk to OpenAI Whisper."""
+async def _whisper_transcribe_chunk(chunk_path: Path, offset: float = 0.0) -> list[TranscriptEntry]:
     with open(chunk_path, "rb") as f:
-        response = await openai.audio.transcriptions.create(
-            model=settings.WHISPER_MODEL,
-            file=f,
-            response_format="verbose_json",
-            timestamp_granularities=["segment"],
-        )
-
+        response = await openai.audio.transcriptions.create(model=settings.WHISPER_MODEL, file=f, response_format="verbose_json", timestamp_granularities=["segment"])
     entries = []
     for seg in response.segments:
-        entries.append({
-            "text": seg.text.strip(),
-            "start": seg.start + offset,
-            "duration": seg.end - seg.start,
-        })
+        entries.append({"text": seg.text.strip(), "start": seg.start + offset, "duration": seg.end - seg.start})
     return entries
 
 
-# ── Formatting ─────────────────────────────────────────────────
-
 def format_transcript_for_llm(entries: list[TranscriptEntry]) -> str:
-    """
-    Format transcript for GPT-4o prompt:
-    '00:42 - hey guys welcome back to the channel...'
-    """
     lines = []
     for e in entries:
         start = e["start"]
