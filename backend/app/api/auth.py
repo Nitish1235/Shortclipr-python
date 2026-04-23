@@ -10,6 +10,8 @@ Flow:
   6. Frontend stores JWT → sends as Authorization: Bearer header
 """
 
+import logging
+import traceback
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
@@ -22,6 +24,7 @@ from app.api.deps import (
 )
 from app.db import supabase as db
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 PLAN_CREDITS: dict[str, int] = {
@@ -47,47 +50,57 @@ async def google_auth(body: GoogleAuthRequest):
     Exchange a Google ID token for a ShortClipr JWT.
     Creates a new user on first sign-in; returns existing user on subsequent logins.
     """
-    # Verify token with Google
-    google_data = await verify_google_id_token(body.id_token)
+    try:
+        # Verify token with Google
+        google_data = await verify_google_id_token(body.id_token)
 
-    email = google_data.get("email", "")
-    google_sub = google_data.get("sub", "")
-    full_name = google_data.get("name", "")
-    avatar_url = google_data.get("picture", "")
+        email = google_data.get("email", "")
+        google_sub = google_data.get("sub", "")
+        full_name = google_data.get("name", "")
+        avatar_url = google_data.get("picture", "")
 
-    # Upsert user in database
-    import uuid
-    user = await db.upsert_user({
-        "id": str(uuid.uuid4()),  # ignored on update
-        "email": email,
-        "full_name": full_name,
-        "avatar_url": avatar_url,
-        "google_sub": google_sub,
-        "plan": "free",
-        "credits_used": 0,
-        "credits_limit": PLAN_CREDITS["free"],
-        "created_at": datetime.now(timezone.utc),
-    })
+        # Upsert user in database
+        import uuid
+        user = await db.upsert_user({
+            "id": uuid.uuid4(),          # pass UUID object — asyncpg expects it
+            "email": email,
+            "full_name": full_name,
+            "avatar_url": avatar_url,
+            "google_sub": google_sub,
+            "plan": "free",
+            "credits_used": 0,
+            "credits_limit": PLAN_CREDITS["free"],
+            "created_at": datetime.now(timezone.utc),
+        })
 
-    # Issue our JWT
-    token = create_access_token({
-        "sub": user["id"],
-        "email": user["email"],
-        "plan": user.get("plan", "free"),
-    })
+        # asyncpg returns UUID columns as uuid.UUID objects — coerce to str for JSON/Pydantic
+        user_id = str(user["id"])
+        user_email = str(user["email"])
 
-    return AuthResponse(
-        access_token=token,
-        user={
-            "user_id": user["id"],
-            "email": user["email"],
-            "full_name": user.get("full_name", ""),
-            "avatar_url": user.get("avatar_url", ""),
+        # Issue our JWT
+        token = create_access_token({
+            "sub": user_id,
+            "email": user_email,
             "plan": user.get("plan", "free"),
-            "credits_used": user.get("credits_used", 0),
-            "credits_limit": user.get("credits_limit", 3),
-        },
-    )
+        })
+
+        return AuthResponse(
+            access_token=token,
+            user={
+                "user_id": user_id,
+                "email": user_email,
+                "full_name": user.get("full_name", "") or "",
+                "avatar_url": user.get("avatar_url", "") or "",
+                "plan": user.get("plan", "free"),
+                "credits_used": user.get("credits_used", 0),
+                "credits_limit": user.get("credits_limit", 3),
+            },
+        )
+    except HTTPException:
+        raise  # let FastAPI handle 401s from token verification
+    except Exception as exc:
+        logger.error("[/auth/google] Unhandled error:\n%s", traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Internal server error: {exc}")
 
 
 @router.get("/me")

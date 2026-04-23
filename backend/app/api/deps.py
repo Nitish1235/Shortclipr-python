@@ -117,7 +117,7 @@ async def get_current_user(
             detail="User not found",
         )
     return AuthUser(
-        user_id=user["id"],
+        user_id=str(user["id"]),
         email=user["email"],
         full_name=user.get("full_name", ""),
         avatar_url=user.get("avatar_url", ""),
