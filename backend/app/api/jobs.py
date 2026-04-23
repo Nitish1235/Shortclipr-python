@@ -82,18 +82,22 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
         )
 
     # 3. Create job record in Supabase
+    import json
     job_id = str(uuid.uuid4())
-    client = await db.get_client()
-    await client.table("jobs").insert({
-        "job_id": job_id,
-        "user_id": current_user.user_id,
-        "youtube_url": body.youtube_url,
-        "status": "queued",
-        "progress": 0,
-        "current_step": "Queued — starting shortly",
-        "options": body.options.model_dump(),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }).execute()
+    await db._execute(
+        """
+        INSERT INTO jobs (job_id, user_id, youtube_url, status, progress, current_step, options, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $8)
+        """,
+        job_id,
+        current_user.user_id,
+        body.youtube_url,
+        "queued",
+        0,
+        "Queued — starting shortly",
+        json.dumps(body.options.model_dump()),
+        datetime.now(timezone.utc)
+    )
 
     # 4. Push to worker queue
     await enqueue_job(
@@ -109,16 +113,23 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
 @router.get("")
 async def list_jobs(current_user: CurrentUser):
     """List all jobs for the authenticated user, newest first."""
-    client = await db.get_client()
-    result = (
-        await client.table("jobs")
-        .select("*")
-        .eq("user_id", current_user.user_id)
-        .order("created_at", desc=True)
-        .limit(50)
-        .execute()
+    rows = await db._fetch(
+        "SELECT * FROM jobs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50",
+        current_user.user_id
     )
-    return {"jobs": result.data}
+    # Coerce UUID/datetime fields to string for reliable JSON serialization
+    for r in rows:
+        r["job_id"] = str(r["job_id"])
+        if "user_id" in r and r["user_id"]:
+            r["user_id"] = str(r["user_id"])
+        if "created_at" in r and r["created_at"]:
+            r["created_at"] = r["created_at"].isoformat()
+        if "updated_at" in r and r["updated_at"]:
+            r["updated_at"] = r["updated_at"].isoformat()
+        if "completed_at" in r and r["completed_at"]:
+            r["completed_at"] = r["completed_at"].isoformat()
+            
+    return {"jobs": rows}
 
 
 @router.get("/{job_id}")
@@ -127,8 +138,15 @@ async def get_job(job_id: str, current_user: CurrentUser):
     job = await db.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job["user_id"] != current_user.user_id:
+    if str(job["user_id"]) != current_user.user_id:
         raise HTTPException(status_code=403, detail="Access denied")
+        
+    job["job_id"] = str(job["job_id"])
+    job["user_id"] = str(job["user_id"])
+    if job.get("created_at"): job["created_at"] = job["created_at"].isoformat()
+    if job.get("updated_at"): job["updated_at"] = job["updated_at"].isoformat()
+    if job.get("completed_at"): job["completed_at"] = job["completed_at"].isoformat()
+    
     return job
 
 
@@ -136,9 +154,16 @@ async def get_job(job_id: str, current_user: CurrentUser):
 async def get_job_clips(job_id: str, current_user: CurrentUser):
     """Get all clips for a job, sorted by viral score."""
     job = await db.get_job(job_id)
-    if not job or job["user_id"] != current_user.user_id:
+    if not job or str(job["user_id"]) != current_user.user_id:
         raise HTTPException(status_code=404, detail="Job not found")
+        
     clips = await db.get_clips_for_job(job_id)
+    for c in clips:
+        c["clip_id"] = str(c["clip_id"])
+        c["job_id"] = str(c["job_id"])
+        c["user_id"] = str(c["user_id"])
+        if c.get("created_at"): c["created_at"] = c["created_at"].isoformat()
+        
     return {"clips": clips, "total": len(clips)}
 
 
@@ -146,8 +171,8 @@ async def get_job_clips(job_id: str, current_user: CurrentUser):
 async def delete_job(job_id: str, current_user: CurrentUser):
     """Delete job and all associated clips from DB (GCS cleanup handled async)."""
     job = await db.get_job(job_id)
-    if not job or job["user_id"] != current_user.user_id:
+    if not job or str(job["user_id"]) != current_user.user_id:
         raise HTTPException(status_code=404, detail="Job not found")
-    client = await db.get_client()
-    await client.table("clips").delete().eq("job_id", job_id).execute()
-    await client.table("jobs").delete().eq("job_id", job_id).execute()
+        
+    await db._execute("DELETE FROM clips WHERE job_id=$1", job_id)
+    await db._execute("DELETE FROM jobs WHERE job_id=$1", job_id)

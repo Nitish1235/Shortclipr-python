@@ -59,7 +59,6 @@ async def youtube_auth_callback(code: str, state: str):
     credentials = flow.credentials
 
     # Update User Record with YouTube Refresh Token
-    client = await db.get_client()
     user_data = await db.get_user(user_id)
     social_tokens = user_data.get("social_tokens", {})
     
@@ -71,7 +70,8 @@ async def youtube_auth_callback(code: str, state: str):
         "expiry": credentials.expiry.isoformat() if credentials.expiry else None
     }
 
-    await client.table("users").update({"social_tokens": social_tokens}).eq("id", user_id).execute()
+    import json
+    await db._execute("UPDATE users SET social_tokens=$1::jsonb WHERE id=$2", json.dumps(social_tokens), user_id)
     
     # Redirect back to frontend dashboard (dynamic for production)
     return RedirectResponse(url=f"{settings.FRONTEND_URL}/dashboard?status=social_connected")
@@ -84,7 +84,8 @@ async def publish_to_youtube(
     """
     Bulk upload selected clips to YouTube.
     """
-    tokens = current_user.social_tokens.get("youtube") if current_user.social_tokens else None
+    user_data = await db.get_user(current_user.user_id)
+    tokens = user_data.get("social_tokens", {}).get("youtube") if user_data.get("social_tokens") else None
     if not tokens or not tokens.get("refresh_token"):
         raise HTTPException(status_code=400, detail="YouTube account not connected.")
 

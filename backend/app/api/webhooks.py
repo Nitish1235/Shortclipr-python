@@ -91,20 +91,22 @@ async def _handle_payment_succeeded(payload: dict) -> None:
         logger.error("Payment succeeded but no email in payload")
         return
 
-    client = await db.get_client()
-    result = await client.table("users").select("id").eq("email", email).execute()
-    if not result.data:
+    row = await db._fetchrow("SELECT id FROM users WHERE email=$1", email)
+    if not row:
         logger.error(f"No user found for email: {email}")
         return
 
-    user_id = result.data[0]["id"]
+    user_id = row["id"]
     new_limit = PLAN_CREDITS.get(plan_name, 20)
 
-    await client.table("users").update({
-        "plan": plan_name,
-        "credits_limit": new_limit,
-        "credits_used": 0,  # Reset on new billing cycle
-    }).eq("id", user_id).execute()
+    await db._execute(
+        """
+        UPDATE users 
+        SET plan=$1, credits_limit=$2, credits_used=0 
+        WHERE id=$3
+        """,
+        plan_name, new_limit, user_id
+    )
 
     logger.info(f"Upgraded {email} to {plan_name} (limit: {new_limit})")
 
@@ -114,15 +116,18 @@ async def _handle_downgrade(payload: dict) -> None:
     if not email:
         return
 
-    client = await db.get_client()
-    result = await client.table("users").select("id").eq("email", email).execute()
-    if not result.data:
+    row = await db._fetchrow("SELECT id FROM users WHERE email=$1", email)
+    if not row:
         return
 
-    user_id = result.data[0]["id"]
-    await client.table("users").update({
-        "plan": "free",
-        "credits_limit": PLAN_CREDITS["free"],
-    }).eq("id", user_id).execute()
+    user_id = row["id"]
+    await db._execute(
+        """
+        UPDATE users 
+        SET plan='free', credits_limit=$1 
+        WHERE id=$2
+        """,
+        PLAN_CREDITS["free"], user_id
+    )
 
     logger.info(f"Downgraded {email} to free plan")

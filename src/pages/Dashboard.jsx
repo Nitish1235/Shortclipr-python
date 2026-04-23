@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Navigation from '../components/Navigation'
 import PublishModal from '../components/PublishModal'
+import ClipEngine from '../components/ClipEngine'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
@@ -134,8 +135,27 @@ export default function Dashboard() {
             <span>SECURE.TERMINAL_DASHBOARD</span>
             <span>USER:{user?.email?.split('@')[0]}</span>
           </div>
+          
+          <div style={{ background: 'var(--bg-dark)', padding: '20px', border: '2px solid var(--lime)', borderTop: 'none', borderBottom: 'none', display: 'flex', gap: '20px', justifyContent: 'center' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '1.2rem', color: 'var(--green)', fontWeight: 700 }}>{user?.credits_used || 0}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--muted)', textTransform: 'uppercase' }}>SHORTS MADE</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '1.2rem', color: 'var(--yellow)', fontWeight: 700 }}>{user?.videos_remaining || 0}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--muted)', textTransform: 'uppercase' }}>REMAINING</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '1.2rem', color: 'var(--lime)', fontWeight: 700 }}>{user?.credits_limit || 3}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--muted)', textTransform: 'uppercase' }}>MONTHLY LIMIT</div>
+            </div>
+          </div>
 
-          <div style={{ background: '#000', border: '2px solid var(--lime)', borderTop: 'none', padding: '32px' }}>
+          <div style={{ borderLeft: '2px solid var(--lime)', borderRight: '2px solid var(--lime)', padding: '20px 5%' }}>
+            <ClipEngine onJobCreated={fetchJobs} />
+          </div>
+
+          <div style={{ background: '#000', border: '2px solid var(--lime)', borderTop: '2px solid var(--lime)', padding: '32px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--muted)', paddingBottom: '12px', marginBottom: '24px' }}>
               <h2 style={{ fontFamily: "'Space Mono', monospace", color: 'var(--text)', margin: 0 }}>
                 &gt; JOB HISTORY QUEUE

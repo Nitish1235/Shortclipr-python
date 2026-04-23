@@ -18,6 +18,6 @@ async def save_editor_config(
     allowed_keys = {"aspect", "template", "captionPacing", "highlightColor", "subtitlePosition", "transcript"}
     if not set(config).issubset(allowed_keys):
         raise HTTPException(status_code=400, detail="Invalid config keys")
-    client = await db.get_client()
-    await client.table("clips").update({"editor_config": config}).eq("clip_id", clip_id).execute()
+    import json
+    await db._execute("UPDATE clips SET editor_config=$1::jsonb WHERE clip_id=$2", json.dumps(config), clip_id)
     return {"status": "ok"}

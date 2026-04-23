@@ -85,7 +85,12 @@ export default function Navigation() {
               transition: 'transform 0.1s, box-shadow 0.1s'
             }} className="retro-google-btn">
               <GoogleLogin
-                onSuccess={credentialResponse => loginWithGoogleToken(credentialResponse.credential)}
+                onSuccess={async (credentialResponse) => {
+                  const success = await loginWithGoogleToken(credentialResponse.credential)
+                  if (success) {
+                    window.location.href = '/dashboard'
+                  }
+                }}
                 onError={() => console.log('Login failed')}
                 theme="filled_black"
                 shape="rectangular"
