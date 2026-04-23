@@ -1,6 +1,6 @@
 """
 stream.py — Step 3 of the ShortClipr pipeline.
-Advanced InnerTube implementation with Session/VisitorData support.
+Harden implementation with TVHTML5 client (PoToken Bypass).
 """
 
 import logging
@@ -16,8 +16,25 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # ── InnerTube Client Registry ─────────────────────────────────
+# The TV client is the most reliable for bypassing PoToken requirements.
 
 CLIENTS = {
+    "TV": {
+        "context": {
+            "client": {
+                "clientName": "TVHTML5",
+                "clientVersion": "7.20230405.08.01",
+                "hl": "en",
+                "gl": "US",
+            }
+        },
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36",
+            "X-Youtube-Client-Name": "7",
+            "X-Youtube-Client-Version": "7.20230405.08.01",
+        },
+        "api_key": "AIzaSyDCU8hByM-4DrUqRUYnGn-3llEO78bcxq8" # TV-specific API key
+    },
     "WEB_EMBED": {
         "context": {
             "client": {
@@ -35,22 +52,6 @@ CLIENTS = {
             "Referer": "https://www.youtube.com/embed/",
         },
         "api_key": "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
-    },
-    "ANDROID": {
-        "context": {
-            "client": {
-                "clientName": "ANDROID",
-                "clientVersion": "17.13.3",
-                "hl": "en",
-                "gl": "US",
-            }
-        },
-        "headers": {
-            "User-Agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Mobile Safari/537.36",
-            "X-Youtube-Client-Name": "3",
-            "X-Youtube-Client-Version": "17.13.3",
-        },
-        "api_key": "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w"
     },
     "MWEB": {
         "context": {
@@ -73,28 +74,15 @@ CLIENTS = {
 
 PLAYER_ENDPOINT = f"{settings.INNERTUBE_API_BASE}/player"
 
-# Global session cache for visitor data
-_VISITOR_DATA_CACHE = None
-
-
 # ── Core InnerTube request ─────────────────────────────────────
 
 async def get_visitor_data():
-    """Fetch a fresh visitor token from YouTube to authorize our session."""
-    global _VISITOR_DATA_CACHE
-    if _VISITOR_DATA_CACHE:
-        return _VISITOR_DATA_CACHE
-    
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            # Pinging the main page for a session
             resp = await client.get("https://www.youtube.com", follow_redirects=True)
             match = re.search(r'ytcfg\.set\({"VISITOR_DATA":\s*"([^"]+)"', resp.text)
-            if match:
-                _VISITOR_DATA_CACHE = match.group(1)
-                return _VISITOR_DATA_CACHE
-    except:
-        pass
+            if match: return match.group(1)
+    except: pass
     return None
 
 
@@ -110,12 +98,10 @@ async def call_player_api(video_id: str, client_name: str, send_params: bool = F
                 "vis": 0,
                 "splay": False,
                 "referer": f"https://www.youtube.com/watch?v={video_id}",
-                "signatureTimestamp": 19800
+                "signatureTimestamp": 20000
             }
         }
     }
-    
-    # Inject VisitorData to prove we are a "real" session
     if visitor_data:
         payload["context"]["client"]["visitorData"] = visitor_data
 
@@ -124,19 +110,14 @@ async def call_player_api(video_id: str, client_name: str, send_params: bool = F
 
     headers = config["headers"].copy()
     headers["Content-Type"] = "application/json"
-    headers["X-Goog-Api-Format-Version"] = "2" # Try v2 for modern clients
+    headers["X-Goog-Api-Format-Version"] = "2"
     if visitor_data:
         headers["X-Goog-Visitor-Id"] = visitor_data
 
     params = {"key": config["api_key"]}
 
     async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            PLAYER_ENDPOINT, 
-            json=payload, 
-            params=params, 
-            headers=headers
-        )
+        resp = await client.post(PLAYER_ENDPOINT, json=payload, params=params, headers=headers)
         if resp.status_code != 200:
             logger.error(f"InnerTube {client_name} failed ({resp.status_code}): {resp.text[:200]}")
         resp.raise_for_status()
@@ -156,8 +137,8 @@ async def get_stream_url(video_id: str, quality: str = "720p") -> str:
 
 async def _resolve_stream_url(video_id: str, quality: str) -> str:
     target_height = int(quality.replace("p", ""))
-    # Try WEB_EMBED first as it is the most permissive for Cloud IPs
-    for label in ["WEB_EMBED", "MWEB", "ANDROID"]:
+    # TV is now #1 because it bypasses PoToken
+    for label in ["TV", "WEB_EMBED", "MWEB"]:
         try:
             data = await call_player_api(video_id, label, send_params=True)
             url = _pick_best_stream(data, target_height)
@@ -181,7 +162,7 @@ async def get_audio_stream_url(video_id: str) -> str:
     cached = await get_cached_stream_url(cache_key)
     if cached: return cached
     url = None
-    for label in ["WEB_EMBED", "MWEB", "ANDROID"]:
+    for label in ["TV", "WEB_EMBED", "MWEB"]:
         try:
             data = await call_player_api(video_id, label, send_params=True)
             url = _pick_best_audio_stream(data)
@@ -202,7 +183,7 @@ def _pick_best_audio_stream(data: dict) -> str | None:
 
 
 async def get_video_metadata(video_id: str) -> dict:
-    for label in ["WEB_EMBED", "MWEB"]:
+    for label in ["TV", "WEB_EMBED"]:
         try:
             data = await call_player_api(video_id, label)
             details = data.get("videoDetails", {})

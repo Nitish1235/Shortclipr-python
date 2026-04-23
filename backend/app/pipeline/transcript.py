@@ -63,8 +63,8 @@ async def _fetch_innertube_captions(video_id: str, language: str = "en") -> list
     preferred_lang = lang_map.get(language)
 
     player_data = None
-    # Try WEB_EMBED first as it is the most permissive for Cloud IPs
-    for label in ["WEB_EMBED", "MWEB", "ANDROID"]:
+    # Try TV first as it is the most reliable for bypassing PoToken blocks
+    for label in ["TV", "WEB_EMBED", "MWEB"]:
         try:
             data = await call_player_api(video_id, label)
             captions = data.get("captions", {})
