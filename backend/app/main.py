@@ -6,7 +6,6 @@ Health check endpoint included for Cloud Run readiness probe.
 """
 
 import logging
-import asyncio
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -70,16 +69,6 @@ app.include_router(webhooks.router)
 app.include_router(social.router)
 # Include the new editor router
 app.include_router(editor.router)
-
-# ── Startup event to run automatic migration ─────────────────────
-# @app.on_event("startup")
-# async def run_startup_tasks():
-#     # Run the migration that ensures editor_config column exists and defaults are set.
-#     try:
-#         await migration_script.run_migration()
-#         logging.info("[startup] Migration for editor_config completed.")
-#     except Exception as e:
-#         logging.error(f"[startup] Migration failed: {e}")
 
 # ── Health check (Cloud Run readiness probe) ───────────────────
 @app.get("/health", tags=["system"])

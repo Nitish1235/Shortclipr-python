@@ -7,15 +7,17 @@ DELETE /jobs/{job_id} — Delete job + clips
 """
 
 import uuid
+import asyncio
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, HttpUrl, field_validator
 
-from app.api.deps import CurrentUser
+from app.api.deps import CurrentUser, decode_access_token
 from app.db import supabase as db
 from app.pipeline.stream import extract_video_id, get_video_metadata
-from app.queue.producer import enqueue_job
+from app.pipeline.orchestrator import run_pipeline
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -98,15 +100,84 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
         datetime.now(timezone.utc)
     )
 
-    # 4. Push to worker queue
-    await enqueue_job(
-        job_id=job_id,
-        user_id=current_user.user_id,
-        youtube_url=body.youtube_url,
-        options=body.options.model_dump(),
-    )
-
+    # 4. Process directly via SSE trigger (Frontend must call /process_stream immediately)
+    
     return {"job_id": job_id, "status": "queued"}
+
+
+# ── SSE stream endpoint — MUST be declared BEFORE /{job_id} to avoid route collision ──
+@router.get("/{job_id}/process_stream")
+async def process_job_stream(job_id: str, token: str = Query(...)):
+    """
+    SSE endpoint — opened by the frontend immediately after POST /jobs.
+    Keeps the Cloud Run CPU alive (free!) while the pipeline runs.
+    The token is passed as a query param because EventSource cannot send Auth headers.
+    """
+    import logging as _log
+    _logger = _log.getLogger(__name__)
+
+    try:
+        payload = decode_access_token(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    job = await db.get_job(job_id)
+    if not job or str(job["user_id"]) != payload.sub:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    if job["status"] not in ["queued", "processing"]:
+        # Already done/failed — tell the client immediately and close
+        async def _already_done():
+            yield f"data: {job['status']}\n\n"
+        return StreamingResponse(_already_done(), media_type="text/event-stream")
+
+    async def event_generator():
+        # Only pass options that are stored on the job row.
+        # Richer options (style, language) are fetched from the job record.
+        options = {
+            "clip_count": job.get("clip_count", 10),
+            "style": "minimal",  # default; extend if stored in DB later
+        }
+        pipeline_error: Exception | None = None
+        task = asyncio.create_task(
+            run_pipeline(job_id, payload.sub, job["youtube_url"], options)
+        )
+        
+        try:
+            # Heartbeat loop — keeps the HTTP connection (and Cloud Run CPU) alive
+            while not task.done():
+                yield "data: heartbeat\n\n"
+                await asyncio.sleep(5)
+
+            # Collect any exception from the pipeline task
+            try:
+                await task  # re-raises if the task failed
+            except Exception as exc:
+                pipeline_error = exc
+
+            if pipeline_error:
+                error_msg = str(pipeline_error)[:300].replace("\n", " ")
+                _logger.error(f"[{job_id}] Pipeline error surfaced to SSE: {error_msg}")
+                yield f"data: error - {error_msg}\n\n"
+            else:
+                yield "data: done\n\n"
+
+        except asyncio.CancelledError:
+            # Client closed the browser tab — task keeps running but CPU may freeze
+            _logger.warning(
+                f"[{job_id}] Client disconnected from SSE stream. "
+                "Pipeline task is still running but Cloud Run may freeze CPU."
+            )
+            raise
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # Prevent nginx from buffering SSE
+        },
+    )
 
 
 @router.get("")

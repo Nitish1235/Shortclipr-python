@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Navigation from '../components/Navigation'
@@ -16,6 +16,7 @@ export default function Dashboard() {
   const [loadingClips, setLoadingClips] = useState(false)
   const [selectedClipIds, setSelectedClipIds] = useState(new Set())
   const [showPublishModal, setShowPublishModal] = useState(false)
+  const activeSseJobs = useRef(new Set())
 
   const fetchJobs = async () => {
     try {
@@ -38,7 +39,7 @@ export default function Dashboard() {
     }
   }
 
-  // Polling for active jobs
+  // Polling for active jobs and SSE connections
   useEffect(() => {
     fetchJobs()
     const interval = setInterval(() => {
@@ -50,6 +51,40 @@ export default function Dashboard() {
     }, 5000)
     return () => clearInterval(interval)
   }, [])
+
+  // Auto-connect SSE for queued/processing jobs
+  useEffect(() => {
+    const token = localStorage.getItem('sc_token')
+    if (!token) return
+
+    const activeJobs = jobs.filter(j => ['queued', 'processing'].includes(j.status))
+    
+    activeJobs.forEach(job => {
+      if (activeSseJobs.current.has(job.job_id)) return
+      
+      activeSseJobs.current.add(job.job_id)
+      const evtSource = new EventSource(`${API_BASE}/jobs/${job.job_id}/process_stream?token=${token}`)
+      
+      evtSource.onmessage = (event) => {
+        if (event.data === 'done' || event.data === 'completed' || event.data === 'failed') {
+          evtSource.close()
+          activeSseJobs.current.delete(job.job_id)
+          fetchJobs()
+        } else if (event.data.startsWith('error')) {
+          evtSource.close()
+          activeSseJobs.current.delete(job.job_id)
+          fetchJobs()
+        }
+      }
+      
+      evtSource.onerror = (err) => {
+        console.warn(`SSE connection error for job ${job.job_id}`, err)
+        // Close and remove from active set so the next poll cycle can retry
+        evtSource.close()
+        activeSseJobs.current.delete(job.job_id)
+      }
+    })
+  }, [jobs])
 
   const handleViewClips = async (jobId) => {
     if (selectedJob === jobId) return setSelectedJob(null)
@@ -160,14 +195,21 @@ export default function Dashboard() {
               <h2 style={{ fontFamily: "'Space Mono', monospace", color: 'var(--text)', margin: 0 }}>
                 &gt; JOB HISTORY QUEUE
               </h2>
-              {!user?.social_tokens?.youtube && (
-                <button 
-                  onClick={() => handleConnectSocial('youtube')}
-                  style={{ background: 'none', border: '1px solid var(--yellow)', color: 'var(--yellow)', padding: '5px 10px', fontSize: '0.7rem', fontFamily: "'Space Mono', monospace", cursor: 'pointer' }}
-                >
-                  [!] CONNECT_YOUTUBE_OAUTH
-                </button>
-              )}
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                {jobs.some(j => ['queued', 'processing'].includes(j.status)) && (
+                  <span className="blink" style={{ fontFamily: "'Space Mono', monospace", color: 'var(--yellow)', fontSize: '0.8rem', padding: '5px' }}>
+                    [!] KEEP THIS TAB OPEN UNTIL DONE
+                  </span>
+                )}
+                {!user?.social_tokens?.youtube && (
+                  <button 
+                    onClick={() => handleConnectSocial('youtube')}
+                    style={{ background: 'none', border: '1px solid var(--yellow)', color: 'var(--yellow)', padding: '5px 10px', fontSize: '0.7rem', fontFamily: "'Space Mono', monospace", cursor: 'pointer' }}
+                  >
+                    [!] CONNECT_YOUTUBE_OAUTH
+                  </button>
+                )}
+              </div>
             </div>
 
             {loading ? (

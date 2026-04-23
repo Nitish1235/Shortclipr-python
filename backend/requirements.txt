@@ -11,7 +11,9 @@ httpx==0.27.2
 ## Database
 asyncpg==0.29.0
 
-## Queue
+## Queue / Cache
+# Upstash Redis used for stream URL caching only (4-hour TTL)
+# REST-based client, no persistent TCP connection needed on Cloud Run
 upstash-redis==1.1.0
 
 ## AI / Transcription

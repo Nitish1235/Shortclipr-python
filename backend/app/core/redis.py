@@ -1,7 +1,9 @@
 """
-Upstash Redis client (HTTP-based, serverless-compatible).
-Uses upstash-redis which communicates over HTTPS — works on Cloud Run
-without needing a persistent TCP connection to Redis.
+redis.py — Upstash Redis cache helpers.
+
+Used ONLY for caching YouTube stream URLs (4-hour TTL) to avoid
+redundant InnerTube API calls per job. Queue/worker logic has been
+removed — jobs are now triggered via SSE from the API service.
 """
 
 import json
@@ -19,7 +21,7 @@ settings = get_settings()
 class UpstashRedis:
     """
     Thin async wrapper around Upstash Redis REST API.
-    Handles LPUSH, RPOP, BLPOP-like polling, SETEX, GET, DELETE.
+    Only cache operations are used (SETEX, GET).
     """
 
     def __init__(self) -> None:
@@ -40,23 +42,8 @@ class UpstashRedis:
             resp.raise_for_status()
             return resp.json().get("result")
 
-    # ── Queue operations ──────────────────────────────────────
-
-    async def lpush(self, key: str, value: str) -> int:
-        """Push to left side of list (producer)."""
-        return await self._cmd("LPUSH", key, value)
-
-    async def rpop(self, key: str) -> str | None:
-        """Non-blocking pop from right side (consumer)."""
-        return await self._cmd("RPOP", key)
-
-    async def llen(self, key: str) -> int:
-        return await self._cmd("LLEN", key) or 0
-
-    # ── Cache operations ──────────────────────────────────────
-
     async def setex(self, key: str, ttl_seconds: int, value: Any) -> str:
-        """Set key with expiry. Value is JSON-serialised."""
+        """Set key with expiry. Value is JSON-serialised if not already a string."""
         raw = json.dumps(value) if not isinstance(value, str) else value
         return await self._cmd("SETEX", key, ttl_seconds, raw)
 
@@ -69,27 +56,20 @@ class UpstashRedis:
         except (json.JSONDecodeError, TypeError):
             return raw
 
-    async def delete(self, key: str) -> int:
-        return await self._cmd("DEL", key)
-
-    async def incr(self, key: str) -> int:
-        return await self._cmd("INCR", key)
-
-    async def expire(self, key: str, ttl_seconds: int) -> int:
-        return await self._cmd("EXPIRE", key, ttl_seconds)
-
 
 # Module-level singleton
 redis = UpstashRedis()
 
 
-# ── Convenience helpers ───────────────────────────────────────
+# ── Stream URL cache helpers ───────────────────────────────────
 
 async def cache_stream_url(video_id: str, url: str) -> None:
+    """Cache an InnerTube stream URL in Redis for REDIS_STREAM_CACHE_TTL seconds."""
     key = f"stream:{video_id}"
     await redis.setex(key, settings.REDIS_STREAM_CACHE_TTL, url)
     logger.debug(f"Cached stream URL for {video_id}")
 
 
 async def get_cached_stream_url(video_id: str) -> str | None:
+    """Return cached stream URL or None if not present/expired."""
     return await redis.get(f"stream:{video_id}")

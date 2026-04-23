@@ -120,22 +120,30 @@ export default function ClipEngine({ onJobCreated }) {
       const { job_id } = await res.json()
       
       setTimeout(() => {
-        setTermLines(prev => [...prev, '> JOB ENQUEUED. ROUTING COMPILER MODULE...'])
+        setTermLines(prev => [
+          ...prev, 
+          '> JOB ENQUEUED. ROUTING COMPILER MODULE...',
+          '> [!] WARNING: DO NOT CLOSE THIS TAB UNTIL PROCESSING COMPLETES.',
+          '> SERVER RESOURCES ARE TIED TO THIS SECURE CONNECTION.',
+          '> REDIRECTING TO DASHBOARD...',
+        ])
       }, 500)
 
+      // Give the user time to read the warning before navigating
       setTimeout(() => {
-        if (onJobCreated) onJobCreated()
-        // If we are already on dashboard, just reset mode so they can see the job list
-        if (window.location.pathname === '/dashboard') {
+        if (onJobCreated) onJobCreated()  // triggers fetchJobs + SSE hookup in Dashboard
+        // Navigate to dashboard (SSE will auto-connect there)
+        if (window.location.pathname !== '/dashboard') {
+          navigate('/dashboard')
+        } else {
+          // Already on dashboard — just reset the engine UI
           setMode('input')
           setUrl('')
           setProcessing(false)
           setTermLines([TERMINAL_LINES[0]])
           lineIdx.current = 1
-        } else {
-          navigate('/dashboard')
         }
-      }, 1500)
+      }, 2500)
 
     } catch (err) {
       setTermLines(prev => [...prev, `> ERROR: ${err.message}`])

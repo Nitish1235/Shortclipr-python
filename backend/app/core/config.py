@@ -24,14 +24,9 @@ class Settings(BaseSettings):
     SUPABASE_DB_URL: str = ""  # postgresql://postgres:password@db.<project>.supabase.co:5432/postgres
 
 
-    # ── Upstash Redis ──────────────────────────────────────────
+    # ── Upstash Redis (stream URL cache only) ────────────────
     UPSTASH_REDIS_URL: str = ""
     UPSTASH_REDIS_TOKEN: str = ""
-
-    # Queue names
-    REDIS_JOB_QUEUE: str = "shortclipr:jobs:pending"
-    REDIS_RETRY_QUEUE: str = "shortclipr:jobs:retry"
-    REDIS_DEAD_QUEUE: str = "shortclipr:jobs:dead"
     REDIS_STREAM_CACHE_TTL: int = 14400  # 4 hours in seconds
 
     # ── OpenAI ────────────────────────────────────────────────
@@ -63,9 +58,7 @@ class Settings(BaseSettings):
     DODO_PRODUCT_PRO_1000: str = ""      # $79 — 1000 shorts
     DODO_PRODUCT_UNLIMITED: str = ""     # $199 — Unlimited
 
-    # ── Worker ────────────────────────────────────────────────
-    MAX_JOB_RETRIES: int = 3
-    WORKER_POLL_INTERVAL: float = 1.0   # seconds
+    # ── Worker / Pipeline ─────────────────────────────────────
     MAX_CONCURRENT_CLIPS: int = 10      # asyncio semaphore limit
 
     # ── InnerTube ──────────────────────────────────────────────

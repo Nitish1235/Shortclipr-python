@@ -226,7 +226,7 @@ async def _upload_and_save_clip(
         "clip_id": clip_id,
         "job_id": job_id,
         "user_id": user_id,
-        "clip_url": clip_url,
+        "video_url": clip_url,          # column name matches DB schema and frontend
         "thumbnail_url": thumbnail_url,
         "duration": ts.duration,
         "start_time": ts.start,
