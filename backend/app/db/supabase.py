@@ -36,8 +36,8 @@ async def get_pool() -> asyncpg.Pool:
 
 # ── Helpers ───────────────────────────────────────────────────
 
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 async def _execute(query: str, *args) -> str:
@@ -149,28 +149,30 @@ async def get_user_by_email(email: str) -> dict | None:
 
 
 async def upsert_user(user_data: dict) -> dict:
-    """Insert or update user on Google login."""
-    existing = await get_user_by_email(user_data["email"])
-    if existing:
-        await _execute(
-            """
-            UPDATE users
-            SET full_name=$1, avatar_url=$2, google_sub=$3
-            WHERE email=$4
-            """,
-            user_data["full_name"], user_data["avatar_url"],
-            user_data["google_sub"], user_data["email"],
-        )
-        return await get_user_by_email(user_data["email"])
-    else:
-        cols = list(user_data.keys())
-        placeholders = ", ".join(f"${i+1}" for i in range(len(cols)))
-        col_names = ", ".join(cols)
-        values = [user_data[c] for c in cols]
-        return await _fetchrow(
-            f"INSERT INTO users ({col_names}) VALUES ({placeholders}) RETURNING *",
-            *values,
-        )
+    """Insert or update user on Google login using atomic upsert."""
+    row = await _fetchrow(
+        """
+        INSERT INTO users (id, email, full_name, avatar_url, google_sub,
+                           plan, credits_used, credits_limit, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (email) DO UPDATE SET
+            full_name  = EXCLUDED.full_name,
+            avatar_url = EXCLUDED.avatar_url,
+            google_sub = EXCLUDED.google_sub,
+            updated_at = NOW()
+        RETURNING *
+        """,
+        user_data["id"],
+        user_data["email"],
+        user_data.get("full_name", ""),
+        user_data.get("avatar_url", ""),
+        user_data.get("google_sub", ""),
+        user_data.get("plan", "free"),
+        user_data.get("credits_used", 0),
+        user_data.get("credits_limit", 3),
+        user_data.get("created_at"),
+    )
+    return row or {}
 
 
 async def increment_credits_used(user_id: str) -> None:

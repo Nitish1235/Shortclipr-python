@@ -42,7 +42,8 @@ class Settings(BaseSettings):
     # ── Google Cloud ──────────────────────────────────────────
     GCS_BUCKET_NAME: str = "shortclipr-clips"
     GCS_PUBLIC_BASE_URL: str = "https://storage.googleapis.com"
-    GOOGLE_APPLICATION_CREDENTIALS: str = ""
+    # Note: No GOOGLE_APPLICATION_CREDENTIALS needed on Cloud Run
+    # — the attached Service Account is used automatically.
 
     # ── Google OAuth + JWT ────────────────────────────────────
     GOOGLE_CLIENT_ID: str = ""

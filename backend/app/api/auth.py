@@ -66,7 +66,7 @@ async def google_auth(body: GoogleAuthRequest):
         "plan": "free",
         "credits_used": 0,
         "credits_limit": PLAN_CREDITS["free"],
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(timezone.utc),
     })
 
     # Issue our JWT
