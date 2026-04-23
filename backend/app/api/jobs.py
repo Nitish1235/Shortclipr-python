@@ -82,12 +82,11 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
         )
 
     # 3. Create job record in Supabase
-    import json
     job_id = str(uuid.uuid4())
     await db._execute(
         """
-        INSERT INTO jobs (job_id, user_id, youtube_url, status, progress, current_step, options, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $8)
+        INSERT INTO jobs (job_id, user_id, youtube_url, status, progress, current_step, clip_count, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
         """,
         job_id,
         current_user.user_id,
@@ -95,7 +94,7 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
         "queued",
         0,
         "Queued — starting shortly",
-        json.dumps(body.options.model_dump()),
+        body.options.clip_count,
         datetime.now(timezone.utc)
     )
 
@@ -129,6 +128,9 @@ async def list_jobs(current_user: CurrentUser):
         if "completed_at" in r and r["completed_at"]:
             r["completed_at"] = r["completed_at"].isoformat()
             
+        # Reconstruct options for frontend compatibility
+        r["options"] = {"clip_count": r.get("clip_count", 0)}
+            
     return {"jobs": rows}
 
 
@@ -146,6 +148,9 @@ async def get_job(job_id: str, current_user: CurrentUser):
     if job.get("created_at"): job["created_at"] = job["created_at"].isoformat()
     if job.get("updated_at"): job["updated_at"] = job["updated_at"].isoformat()
     if job.get("completed_at"): job["completed_at"] = job["completed_at"].isoformat()
+    
+    # Reconstruct options for frontend compatibility
+    job["options"] = {"clip_count": job.get("clip_count", 0)}
     
     return job
 
