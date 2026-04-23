@@ -18,7 +18,7 @@ upstash-redis==1.1.0
 
 ## AI / Transcription
 openai==1.47.0
-youtube-transcript-api==0.6.3
+# youtube-transcript-api removed — captions now fetched directly via InnerTube API
 
 ## Video Processing
 ffmpeg-python==0.2.0

@@ -22,15 +22,30 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # ── InnerTube client contexts ─────────────────────────────────
+# Multiple clients tried in order — later ones bypass more restrictions.
 
 _ANDROID_CONTEXT = {
     "client": {
         "clientName": "ANDROID",
-        "clientVersion": "20.10.38",
+        "clientVersion": "19.44.38",
         "androidSdkVersion": 30,
         "userAgent": (
-            "com.google.android.youtube/20.10.38 "
+            "com.google.android.youtube/19.44.38 "
             "(Linux; U; Android 11) gzip"
+        ),
+        "hl": "en",
+        "gl": "US",
+    }
+}
+
+_IOS_CONTEXT = {
+    "client": {
+        "clientName": "IOS",
+        "clientVersion": "19.45.4",
+        "deviceModel": "iPhone16,2",
+        "userAgent": (
+            "com.google.ios.youtube/19.45.4 "
+            "(iPhone16,2; U; CPU iOS 17_5 like Mac OS X)"
         ),
         "hl": "en",
         "gl": "US",
@@ -41,6 +56,18 @@ _TV_EMBEDDED_CONTEXT = {
     "client": {
         "clientName": "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
         "clientVersion": "2.0",
+        "hl": "en",
+        "gl": "US",
+    },
+    "thirdParty": {
+        "embedUrl": "https://www.youtube.com",
+    },
+}
+
+_WEB_CONTEXT = {
+    "client": {
+        "clientName": "WEB",
+        "clientVersion": "2.20231121.08.00",
         "hl": "en",
         "gl": "US",
     }
@@ -95,12 +122,14 @@ async def get_stream_url(
 
 
 async def _resolve_stream_url(video_id: str, quality: str) -> str:
-    """Try Android client first, fall back to TV_EMBEDDED."""
+    """Try 4 clients in order from most to least restrictive."""
     target_height = int(quality.replace("p", ""))
 
     for context, label in [
         (_ANDROID_CONTEXT, "ANDROID"),
+        (_IOS_CONTEXT, "IOS"),
         (_TV_EMBEDDED_CONTEXT, "TV_EMBEDDED"),
+        (_WEB_CONTEXT, "WEB"),
     ]:
         try:
             data = await _call_player_api(video_id, context)
@@ -151,18 +180,28 @@ async def get_audio_stream_url(video_id: str) -> str:
     """
     Returns a direct CDN URL for the audio-only stream.
     Used when no YouTube captions exist → feed to Whisper.
+    Tries all 4 clients in order to handle age/geo restrictions.
     """
     cache_key = f"{video_id}:audio"
     cached = await get_cached_stream_url(cache_key)
     if cached:
         return cached
 
-    data = await _call_player_api(video_id, _ANDROID_CONTEXT)
-    url = _pick_best_audio_stream(data)
-    if not url:
-        # fallback client
-        data = await _call_player_api(video_id, _TV_EMBEDDED_CONTEXT)
-        url = _pick_best_audio_stream(data)
+    url = None
+    for context, label in [
+        (_ANDROID_CONTEXT, "ANDROID"),
+        (_IOS_CONTEXT, "IOS"),
+        (_TV_EMBEDDED_CONTEXT, "TV_EMBEDDED"),
+        (_WEB_CONTEXT, "WEB"),
+    ]:
+        try:
+            data = await _call_player_api(video_id, context)
+            url = _pick_best_audio_stream(data)
+            if url:
+                logger.info(f"[{video_id}] Audio stream via {label}")
+                break
+        except Exception as e:
+            logger.warning(f"[{video_id}] Audio {label} client failed: {e}")
 
     if not url:
         raise RuntimeError(f"Could not resolve audio stream for {video_id}")

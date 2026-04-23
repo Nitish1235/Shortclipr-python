@@ -2,28 +2,30 @@
 transcript.py — Step 2 of the ShortClipr pipeline.
 
 Decision tree:
-  1. Try youtube-transcript-api (fast, no auth, 0.2s)
-  2. If no captions → stream audio via InnerTube → chunk into Whisper
-     → yield partial transcript blocks as async generator
-     → caller starts AI analysis early (after 5 min of transcript available)
+  1. Fetch captions directly via InnerTube API (same API YouTube app uses).
+     Handles auto-generated captions in ANY language — works from datacenters.
+  2. If no captions available → stream audio via InnerTube → chunk into Whisper.
+
+Why InnerTube instead of youtube-transcript-api:
+  youtube-transcript-api scrapes youtube.com HTML which gets blocked by
+  YouTube when called from Google Cloud datacenter IPs. InnerTube is the
+  official internal API and is never blocked.
 """
 
 import asyncio
+import json
 import logging
 import re
 import tempfile
+import xml.etree.ElementTree as ET
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
 import httpx
 from openai import AsyncOpenAI
-from youtube_transcript_api import (
-    NoTranscriptFound,
-    TranscriptsDisabled,
-    YouTubeTranscriptApi,
-)
 
 from app.core.config import get_settings
+from app.pipeline.stream import _ANDROID_CONTEXT, _IOS_CONTEXT, _TV_EMBEDDED_CONTEXT, _WEB_CONTEXT
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -41,52 +43,186 @@ async def get_transcript(video_id: str, language: str = "en") -> tuple[list[Tran
     """
     Returns (transcript_entries, used_whisper_fallback).
 
-    Primary:  youtube-transcript-api — runs in thread pool (sync lib).
+    Primary:  InnerTube caption fetch (works from datacenter, gets auto-generated captions).
     Fallback: Whisper streaming via _whisper_fallback_transcript().
     """
-    loop = asyncio.get_event_loop()
     try:
-        entries = await loop.run_in_executor(
-            None, _fetch_yt_transcript, video_id, language
-        )
-        logger.info(f"[{video_id}] Transcript found in {language}: {len(entries)} entries")
-        return entries, False
-
-    except (NoTranscriptFound, TranscriptsDisabled) as e:
-        logger.warning(f"[{video_id}] No YouTube captions: {e}. Falling back to Whisper.")
-        entries = await _whisper_fallback_transcript(video_id)
-        return entries, True
+        entries = await _fetch_innertube_captions(video_id, language)
+        if entries:
+            logger.info(f"[{video_id}] InnerTube captions fetched: {len(entries)} entries")
+            return entries, False
+        else:
+            raise ValueError("No caption tracks found")
 
     except Exception as e:
-        logger.error(f"[{video_id}] Transcript fetch error: {e}. Trying Whisper.")
+        logger.warning(f"[{video_id}] No captions via InnerTube: {e}. Falling back to Whisper.")
         entries = await _whisper_fallback_transcript(video_id)
         return entries, True
 
 
-def _fetch_yt_transcript(video_id: str, language: str) -> list[TranscriptEntry]:
-    """Sync call — run inside executor to avoid blocking the event loop."""
-    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-    
-    # Map friendly names to codes
+# ── InnerTube caption fetching ─────────────────────────────────
+
+async def _fetch_innertube_captions(video_id: str, language: str = "en") -> list[TranscriptEntry]:
+    """
+    Use InnerTube player API to get caption track URLs, then parse the timed text XML.
+    Works with auto-generated captions — never blocked from Cloud Run.
+    Tries multiple clients to handle restricted videos.
+    """
     lang_map = {
         "English": "en",
         "Spanish": "es",
         "French": "fr",
         "German": "de",
+        "Hindi": "hi",
+        "Auto / No translation": None,  # accept any language
     }
-    target_code = lang_map.get(language, "en")
-    
-    # Try to find the specific language requested
-    try:
-        transcript = transcript_list.find_transcript([target_code])
-    except Exception:
-        # Fallback to English if requested fails, or just the first available
-        try:
-            transcript = transcript_list.find_transcript(["en"])
-        except Exception:
-            transcript = transcript_list.find_generated_transcript(["en", "es", "fr", "de"])
+    preferred_lang = lang_map.get(language)
 
-    return transcript.fetch()
+    player_data = None
+    for context, label in [
+        (_ANDROID_CONTEXT, "ANDROID"),
+        (_IOS_CONTEXT, "IOS"),
+        (_TV_EMBEDDED_CONTEXT, "TV_EMBEDDED"),
+        (_WEB_CONTEXT, "WEB"),
+    ]:
+        try:
+            data = await _call_player_for_captions(video_id, context)
+            captions = data.get("captions", {})
+            if captions:
+                player_data = data
+                logger.info(f"[{video_id}] Caption data via {label}")
+                break
+        except Exception as e:
+            logger.warning(f"[{video_id}] Caption {label} client failed: {e}")
+
+    if not player_data:
+        raise RuntimeError("No caption data from any InnerTube client")
+
+    # Extract caption tracks list
+    tracks = (
+        player_data.get("captions", {})
+        .get("playerCaptionsTracklistRenderer", {})
+        .get("captionTracks", [])
+    )
+
+    if not tracks:
+        raise RuntimeError("Video has no caption tracks")
+
+    logger.info(f"[{video_id}] Available caption tracks: {[t.get('languageCode') for t in tracks]}")
+
+    # Pick the best track:
+    # 1. Exact language match  2. English  3. First auto-generated  4. Any track
+    chosen = None
+    if preferred_lang:
+        for t in tracks:
+            if t.get("languageCode", "").startswith(preferred_lang):
+                chosen = t
+                break
+    if not chosen:
+        for t in tracks:
+            if t.get("languageCode", "").startswith("en"):
+                chosen = t
+                break
+    if not chosen:
+        # Prefer auto-generated (asr) tracks
+        for t in tracks:
+            if t.get("kind") == "asr":
+                chosen = t
+                break
+    if not chosen:
+        chosen = tracks[0]
+
+    logger.info(f"[{video_id}] Using caption track: {chosen.get('languageCode')} (kind={chosen.get('kind', 'manual')})")
+
+    # Fetch the timed text XML
+    caption_url = chosen.get("baseUrl", "")
+    if not caption_url:
+        raise RuntimeError("Caption track has no baseUrl")
+
+    return await _parse_caption_url(caption_url, video_id)
+
+
+async def _call_player_for_captions(video_id: str, context: dict) -> dict:
+    """Call InnerTube player endpoint to get caption metadata."""
+    payload = {
+        "context": context,
+        "videoId": video_id,
+        "contentCheckOk": True,
+        "racyCheckOk": True,
+    }
+    params = {"key": settings.INNERTUBE_API_KEY, "prettyPrint": "false"}
+    endpoint = f"{settings.INNERTUBE_API_BASE}/player"
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(endpoint, json=payload, params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def _parse_caption_url(url: str, video_id: str) -> list[TranscriptEntry]:
+    """Download and parse the YouTube timed text XML into TranscriptEntry list."""
+    # Request JSON format instead of XML for cleaner parsing
+    json_url = url + "&fmt=json3" if "?" in url else url + "?fmt=json3"
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(json_url)
+
+    if resp.status_code == 200:
+        try:
+            data = resp.json()
+            events = data.get("events", [])
+            entries = []
+            for event in events:
+                segs = event.get("segs")
+                if not segs:
+                    continue
+                text = "".join(s.get("utf8", "") for s in segs).strip()
+                if not text or text == "\n":
+                    continue
+                start_ms = event.get("tStartMs", 0)
+                duration_ms = event.get("dDurationMs", 2000)
+                entries.append({
+                    "text": text,
+                    "start": start_ms / 1000.0,
+                    "duration": duration_ms / 1000.0,
+                })
+            if entries:
+                return entries
+        except Exception:
+            pass  # fall through to XML parsing
+
+    # Fallback: fetch as XML
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(url)
+        resp.raise_for_status()
+
+    return _parse_caption_xml(resp.text, video_id)
+
+
+def _parse_caption_xml(xml_text: str, video_id: str) -> list[TranscriptEntry]:
+    """Parse YouTube timed text XML format into TranscriptEntry list."""
+    entries = []
+    try:
+        root = ET.fromstring(xml_text)
+        for text_el in root.iter("text"):
+            raw = text_el.text or ""
+            # Unescape HTML entities
+            raw = (raw
+                   .replace("&amp;", "&")
+                   .replace("&lt;", "<")
+                   .replace("&gt;", ">")
+                   .replace("&quot;", '"')
+                   .replace("&#39;", "'")
+                   .replace("\n", " "))
+            raw = re.sub(r"<[^>]+>", "", raw).strip()
+            if not raw:
+                continue
+            start = float(text_el.get("start", 0))
+            dur = float(text_el.get("dur", 2.0))
+            entries.append({"text": raw, "start": start, "duration": dur})
+    except ET.ParseError as e:
+        logger.error(f"[{video_id}] Caption XML parse error: {e}")
+    return entries
 
 
 # ── Whisper fallback (streaming) ───────────────────────────────
@@ -116,25 +252,18 @@ async def _transcribe_audio_streaming(
 ) -> AsyncGenerator[list[TranscriptEntry], None]:
     """
     Stream audio URL → chunk into 30s segments → Whisper → yield partial transcript.
-
-    KEY optimization: caller can subscribe to this generator and start
-    sending partial transcript to GPT-4o as soon as enough is accumulated
-    (see orchestrator.py for early-AI-start logic).
     """
     with tempfile.TemporaryDirectory(prefix="sc_whisper_") as tmpdir:
         tmp = Path(tmpdir)
 
-        # Get total duration first (fast metadata call)
         duration = await _get_audio_duration(audio_url)
         logger.info(f"[{video_id}] Audio duration: {duration:.0f}s — splitting into {chunk_seconds}s chunks")
 
-        # Build time windows
         windows = [
             (start, min(start + chunk_seconds, duration))
             for start in range(0, int(duration), chunk_seconds)
         ]
 
-        # Process chunks with controlled concurrency (max 4 parallel Whisper calls)
         semaphore = asyncio.Semaphore(4)
 
         async def process_chunk(idx: int, start: float, end: float) -> list[TranscriptEntry]:
@@ -148,7 +277,6 @@ async def _transcribe_audio_streaming(
             for i, (s, e) in enumerate(windows)
         ]
 
-        # Yield results in ORDER as they arrive (preserve timeline)
         for task in tasks:
             result = await task
             yield result
@@ -166,7 +294,6 @@ async def _get_audio_duration(audio_url: str) -> float:
         stderr=asyncio.subprocess.PIPE,
     )
     stdout, _ = await proc.communicate()
-    import json
     data = json.loads(stdout)
     return float(data["format"]["duration"])
 
@@ -184,9 +311,9 @@ async def _extract_audio_chunk(
         "-ss", str(start),
         "-t", str(duration),
         "-i", audio_url,
-        "-vn",                    # no video
-        "-ar", "16000",           # Whisper expects 16kHz
-        "-ac", "1",               # mono
+        "-vn",
+        "-ar", "16000",
+        "-ac", "1",
         "-c:a", "libmp3lame",
         "-q:a", "4",
         str(output_path),
@@ -200,10 +327,7 @@ async def _whisper_transcribe_chunk(
     chunk_path: Path,
     offset: float = 0.0,
 ) -> list[TranscriptEntry]:
-    """
-    Send a single audio chunk to OpenAI Whisper.
-    Adjust timestamps by offset so they align with the original video timeline.
-    """
+    """Send a single audio chunk to OpenAI Whisper."""
     with open(chunk_path, "rb") as f:
         response = await openai.audio.transcriptions.create(
             model=settings.WHISPER_MODEL,
