@@ -147,6 +147,14 @@ async def _call_player_for_captions(video_id: str, context: dict) -> dict:
     payload = {
         "context": context,
         "videoId": video_id,
+        "playbackContext": {
+            "contentPlaybackContext": {
+                "vis": 0,
+                "splay": False,
+                "referer": "https://www.youtube.com/watch?v=" + video_id,
+                "signatureTimestamp": 19800
+            }
+        },
         "contentCheckOk": True,
         "racyCheckOk": True,
     }

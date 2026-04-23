@@ -27,12 +27,8 @@ settings = get_settings()
 _ANDROID_CONTEXT = {
     "client": {
         "clientName": "ANDROID",
-        "clientVersion": "19.44.38",
+        "clientVersion": "17.31.35",
         "androidSdkVersion": 30,
-        "userAgent": (
-            "com.google.android.youtube/19.44.38 "
-            "(Linux; U; Android 11) gzip"
-        ),
         "hl": "en",
         "gl": "US",
     }
@@ -41,12 +37,8 @@ _ANDROID_CONTEXT = {
 _IOS_CONTEXT = {
     "client": {
         "clientName": "IOS",
-        "clientVersion": "19.45.4",
-        "deviceModel": "iPhone16,2",
-        "userAgent": (
-            "com.google.ios.youtube/19.45.4 "
-            "(iPhone16,2; U; CPU iOS 17_5 like Mac OS X)"
-        ),
+        "clientVersion": "17.33.2",
+        "deviceModel": "iPhone14,3",
         "hl": "en",
         "gl": "US",
     }
@@ -67,7 +59,7 @@ _TV_EMBEDDED_CONTEXT = {
 _WEB_CONTEXT = {
     "client": {
         "clientName": "WEB",
-        "clientVersion": "2.20231121.08.00",
+        "clientVersion": "2.20240410.01.00",
         "hl": "en",
         "gl": "US",
     }
@@ -86,6 +78,14 @@ async def _call_player_api(
         "context": context,
         "videoId": video_id,
         "params": "2AMBCgIQBg==",  # Request streaming data
+        "playbackContext": {
+            "contentPlaybackContext": {
+                "vis": 0,
+                "splay": False,
+                "referer": "https://www.youtube.com/watch?v=" + video_id,
+                "signatureTimestamp": 19800
+            }
+        },
         "contentCheckOk": True,
         "racyCheckOk": True,
     }
