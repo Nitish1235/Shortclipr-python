@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.api.deps import (
-    AuthUser,
+    CurrentUser,
     create_access_token,
     verify_google_id_token,
 )
@@ -104,7 +104,7 @@ async def google_auth(body: GoogleAuthRequest):
 
 
 @router.get("/me")
-async def get_me(current_user: AuthUser):
+async def get_me(current_user: CurrentUser):
     """Return current user info + plan stats."""
     user = await db.get_user(current_user.user_id)
     if not user:
