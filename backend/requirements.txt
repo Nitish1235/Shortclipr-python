@@ -23,9 +23,9 @@ ffmpeg-python==0.2.0
 
 ## Google Cloud
 google-cloud-storage==2.18.2
+google-auth-oauthlib==1.2.1
+google-api-python-client==2.143.0
 
-## Async utilities
-asyncio==3.4.3
 
 ## Face detection (optional — for auto-reframe)
 opencv-python-headless==4.10.0.84

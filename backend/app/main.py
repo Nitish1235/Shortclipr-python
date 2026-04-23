@@ -18,8 +18,6 @@ from app.api import auth, jobs, payments, social, webhooks, youtube
 from app.api import editor
 from app.core.config import get_settings
 
-# Import migration runner
-from migrations.add_editor_config import run_migration as migration_script  # noqa: E401,F401
 
 settings = get_settings()
 
