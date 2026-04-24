@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
 import myjdapi
+import httpx
 
 from app.pipeline.stream import call_player_api, CLIENTS, extract_video_id, _pick_best_stream, _pick_best_audio_stream
 from app.pipeline.transcript import _fetch_innertube_captions
