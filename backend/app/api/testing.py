@@ -222,8 +222,17 @@ async def debug_innertube(req: TestRequest):
 
     except Exception as e:
         report["results"]["player_api"] = "FAILED"
-        report["results"]["error"] = str(e)
-        add_log(f"FATAL ERROR: {str(e)}")
+        error_msg = str(e)
+        if isinstance(e, httpx.HTTPStatusError):
+            try:
+                error_body = e.response.text
+                error_msg = f"{e.response.status_code} {e.response.reason_phrase} - {error_body[:200]}"
+                add_log(f"RESPONSE BODY: {error_body[:500]}")
+            except:
+                pass
+        
+        report["results"]["error"] = error_msg
+        add_log(f"FATAL ERROR: {error_msg}")
         # Log full trace for developer
         logger.error(f"Debug test failed: {e}", exc_info=True)
 
