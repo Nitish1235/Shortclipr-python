@@ -144,7 +144,8 @@ export default function Lab() {
                     </span>
                   </label>
                 </div>
-              )}
+              </div>
+            )}
 
               <button 
                 onClick={activeTab === 'handshake' ? runHandshake : runResolver}
