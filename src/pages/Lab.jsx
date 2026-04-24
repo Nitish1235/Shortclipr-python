@@ -7,6 +7,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 export default function Lab() {
   const [url, setUrl] = useState('')
   const [client, setClient] = useState('ANDROID_VR')
+  const [useProxy, setUseProxy] = useState(false)
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState(null)
   const [error, setError] = useState(null)
@@ -21,7 +22,7 @@ export default function Lab() {
       const res = await fetch(`${API_BASE}/testing/debug`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url_or_id: url, client })
+        body: JSON.stringify({ url_or_id: url, client, use_proxy: useProxy })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || 'Audit failed')
@@ -130,6 +131,18 @@ export default function Lab() {
                     <option value="MWEB">MWEB (Fallback)</option>
                     <option value="HEADLESS">PLAYWRIGHT (Headless)</option>
                   </select>
+                <div style={{ border: '1px solid #333', padding: '20px', background: 'rgba(255,255,255,0.02)', marginTop: '10px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={useProxy}
+                      onChange={(e) => setUseProxy(e.target.checked)}
+                      style={{ accentColor: 'var(--lime)' }}
+                    />
+                    <span style={{ fontSize: '0.75rem', fontFamily: "'Space Mono', monospace", fontWeight: 700, color: 'var(--yellow)' }}>
+                      USE_BRIGHTDATA_PROXY
+                    </span>
+                  </label>
                 </div>
               )}
 

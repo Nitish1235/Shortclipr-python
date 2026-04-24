@@ -13,7 +13,6 @@ from typing import Optional
 import myjdapi
 
 from app.pipeline.stream import call_player_api, CLIENTS, extract_video_id, _pick_best_stream, _pick_best_audio_stream
-from app.pipeline.headless import get_player_data_headless
 from app.pipeline.transcript import _fetch_innertube_captions
 
 router = APIRouter(tags=["testing"])
@@ -27,7 +26,10 @@ MYJD_DEVICE_NAME = "JDownloader@nitish"
 
 class TestRequest(BaseModel):
     url_or_id: str
-    client: str  # e.g. "ANDROID_VR", "TV", "IOS", "MWEB"
+    client: str = "ANDROID_VR"
+    use_proxy: bool = False
+
+BRIGHTDATA_PROXY = "http://brd-customer-hl_71ec61d7-zone-residential_proxy1:yudidty3i648@brd.superproxy.io:33335"
 
 @router.get("/testing", response_class=HTMLResponse)
 async def testing_ui():
@@ -66,10 +68,8 @@ async def testing_ui():
                 <input type="text" id="url" placeholder="YouTube URL or Video ID" style="width: 300px;">
                 <select id="client">
                     <option value="ANDROID_VR">ANDROID_VR (Golden)</option>
-                    <option value="TV">TV (No-PoToken)</option>
                     <option value="IOS">IOS (Stealth)</option>
                     <option value="MWEB">MWEB (Fallback)</option>
-                    <option value="HEADLESS">PLAYWRIGHT (Headless)</option>
                 </select>
                 <button onclick="runTest()">RUN AUDIT</button>
             </div>
@@ -133,15 +133,44 @@ async def debug_innertube(req: TestRequest):
     # 1. Test Player API
     try:
         add_log("Initiating player handshake...")
+        if req.use_proxy:
+            add_log(f"USING BRIGHTDATA PROXY: brd.superproxy.io")
+            logger.info(f"LAB_AUDIT_START: video_id={video_id} client={req.client} proxied=True")
+        else:
+            logger.info(f"LAB_AUDIT_START: video_id={video_id} client={req.client} proxied=False")
+
         if req.client == "HEADLESS":
             add_log("Launching Playwright stealth session...")
+            # Note: Playwright proxy support can be added here if needed
             data = await get_player_data_headless(video_id)
         else:
             add_log(f"Calling InnerTube API with Golden Identity: {req.client}")
-            data = await call_player_api(video_id, req.client, send_params=True)
+            if req.use_proxy:
+                # Custom proxied call for lab testing
+                from app.pipeline.stream import CLIENTS, PLAYER_ENDPOINT
+                config = CLIENTS.get(req.client)
+                payload = {
+                    "context": config["context"].copy(),
+                    "videoId": video_id,
+                    "playbackContext": {"contentPlaybackContext": {"signatureTimestamp": 20000}},
+                    "contentCheckOk": True, "racyCheckOk": True
+                }
+                headers = config["headers"].copy()
+                headers["Content-Type"] = "application/json"
+                params = {"key": config["api_key"]}
+                
+                async with httpx.AsyncClient(proxy=BRIGHTDATA_PROXY, timeout=20) as client:
+                    add_log("Dispatching proxied request via httpx...")
+                    resp = await client.post(PLAYER_ENDPOINT, json=payload, params=params, headers=headers)
+                    add_log(f"Proxy Response: {resp.status_code}")
+                    resp.raise_for_status()
+                    data = resp.json()
+            else:
+                data = await call_player_api(video_id, req.client, send_params=True)
             
         report["results"]["player_api"] = "SUCCESS"
         add_log("API Response received (200 OK)")
+        logger.info(f"LAB_AUDIT_SUCCESS: video_id={video_id} client={req.client}")
 
         # Check Playability Status
         playability = data.get("playabilityStatus", {})
