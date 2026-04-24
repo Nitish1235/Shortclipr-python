@@ -59,6 +59,11 @@ export default function Navigation() {
               color: 'var(--lime)', textDecoration: 'none', fontFamily: "'Space Mono', monospace",
               fontSize: '0.8rem', fontWeight: 700, border: '1px solid var(--lime)', padding: '4px 10px'
             }}>DASHBOARD</Link>
+            <Link to="/lab" style={{
+              color: 'var(--yellow)', textDecoration: 'none', fontFamily: "'Space Mono', monospace",
+              fontSize: '0.8rem', fontWeight: 700, border: '1px solid var(--yellow)', padding: '4px 10px'
+            }}>LAB</Link>
+
             <div style={{
               background: 'rgba(132, 204, 22, 0.08)', border: '1px solid var(--lime)',
               padding: '6px 12px', fontFamily: "'Space Mono', monospace",

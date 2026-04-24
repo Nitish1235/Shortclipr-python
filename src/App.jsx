@@ -26,6 +26,8 @@ import PressKit from './pages/PressKit'
 import Careers from './pages/Careers'
 import DMCA from './pages/DMCA'
 import Editor from './pages/Editor'
+import Lab from './pages/Lab'
+
 
 // You must set this in your frontend/.env
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'dummy-client-id.apps.googleusercontent.com'
@@ -84,6 +86,8 @@ export default function App() {
             <Route path="/payment/success" element={<PaymentSuccess />} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/editor/:jobId/:clipId" element={<ProtectedRoute><Editor /></ProtectedRoute>} />
+            <Route path="/lab" element={<ProtectedRoute><Lab /></ProtectedRoute>} />
+
           </Routes>
         </BrowserRouter>
       </AuthProvider>
