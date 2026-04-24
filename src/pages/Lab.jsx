@@ -128,6 +128,7 @@ export default function Lab() {
                     <option value="TV">TV (No-PoToken)</option>
                     <option value="IOS">IOS (Stealth)</option>
                     <option value="MWEB">MWEB (Fallback)</option>
+                    <option value="HEADLESS">PLAYWRIGHT (Headless)</option>
                   </select>
                 </div>
               )}

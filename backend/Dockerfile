@@ -17,6 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Playwright browsers and system dependencies
+RUN pip install playwright && playwright install --with-deps chromium
+
 WORKDIR /app
 
 # Copy installed packages from builder

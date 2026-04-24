@@ -12,6 +12,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.redis import cache_stream_url, get_cached_stream_url
+from app.pipeline.headless import get_player_data_headless
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -155,6 +156,16 @@ async def _resolve_stream_url(video_id: str, quality: str) -> str:
             url = _pick_best_stream(data, target_height)
             if url: return url
         except: continue
+    
+    # ── Final Fallback: Headless Browser ──────────────────────────
+    try:
+        logger.info(f"Falling back to Headless Browser for {video_id}...")
+        data = await get_player_data_headless(video_id)
+        url = _pick_best_stream(data, target_height)
+        if url: return url
+    except Exception as e:
+        logger.error(f"Headless fallback failed: {e}")
+
     raise RuntimeError(f"Could not resolve stream URL for {video_id}")
 
 def _pick_best_stream(data: dict, target_height: int) -> str | None:
@@ -177,6 +188,14 @@ async def get_audio_stream_url(video_id: str) -> str:
             url = _pick_best_audio_stream(data)
             if url: break
         except: continue
+    
+    if not url:
+        # Fallback to Headless
+        try:
+            data = await get_player_data_headless(video_id)
+            url = _pick_best_audio_stream(data)
+        except: pass
+
     if not url: raise RuntimeError(f"Could not resolve audio stream for {video_id}")
     await cache_stream_url(cache_key, url)
     return url

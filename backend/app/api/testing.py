@@ -13,6 +13,7 @@ from typing import Optional
 import myjdapi
 
 from app.pipeline.stream import call_player_api, CLIENTS, extract_video_id, _pick_best_stream, _pick_best_audio_stream
+from app.pipeline.headless import get_player_data_headless
 from app.pipeline.transcript import _fetch_innertube_captions
 
 router = APIRouter(tags=["testing"])
@@ -68,6 +69,7 @@ async def testing_ui():
                     <option value="TV">TV (No-PoToken)</option>
                     <option value="IOS">IOS (Stealth)</option>
                     <option value="MWEB">MWEB (Fallback)</option>
+                    <option value="HEADLESS">PLAYWRIGHT (Headless)</option>
                 </select>
                 <button onclick="runTest()">RUN AUDIT</button>
             </div>
@@ -126,7 +128,11 @@ async def debug_innertube(req: TestRequest):
 
     # 1. Test Player API
     try:
-        data = await call_player_api(video_id, req.client, send_params=True)
+        if req.client == "HEADLESS":
+            data = await get_player_data_headless(video_id)
+        else:
+            data = await call_player_api(video_id, req.client, send_params=True)
+            
         report["results"]["player_api"] = "SUCCESS"
         
         # Check Metadata

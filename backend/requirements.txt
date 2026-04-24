@@ -37,3 +37,7 @@ structlog==24.4.0
 
 ## Third Party Tools
 myjdapi==1.1.10
+
+## Headless Browser Bypass
+playwright==1.47.0
+playwright-stealth==1.0.6
