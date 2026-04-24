@@ -30,7 +30,7 @@ class TestRequest(BaseModel):
     client: str = "ANDROID_VR"
     use_proxy: bool = False
 
-BRIGHTDATA_PROXY = "http://brd-customer-hl_71ec61d7-zone-residential_proxy1:yudidty3i648@brd.superproxy.io:33335"
+BRIGHTDATA_PROXY = "http://zj3ssxzve5ec:h7at9b54fymd1yv@65.111.2.163:3129"
 
 @router.get("/testing", response_class=HTMLResponse)
 async def testing_ui():
@@ -135,7 +135,7 @@ async def debug_innertube(req: TestRequest):
     try:
         add_log("Initiating player handshake...")
         if req.use_proxy:
-            add_log(f"USING BRIGHTDATA PROXY: brd.superproxy.io")
+            add_log(f"USING PROXYSCRAPE PROXY: 65.111.2.163:3129")
             logger.info(f"LAB_AUDIT_START: video_id={video_id} client={req.client} proxied=True")
         else:
             logger.info(f"LAB_AUDIT_START: video_id={video_id} client={req.client} proxied=False")

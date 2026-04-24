@@ -140,7 +140,7 @@ export default function Lab() {
                       style={{ accentColor: 'var(--lime)' }}
                     />
                     <span style={{ fontSize: '0.75rem', fontFamily: "'Space Mono', monospace", fontWeight: 700, color: 'var(--yellow)' }}>
-                      USE_BRIGHTDATA_PROXY
+                      USE_PROXYSCRAPE
                     </span>
                   </label>
                 </div>
