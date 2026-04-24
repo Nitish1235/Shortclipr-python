@@ -25,3 +25,14 @@ dist-ssr
 
 # Temporary research files
 temp-innertubego/
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.pytest_cache/
+.coverage
+htmlcov/
