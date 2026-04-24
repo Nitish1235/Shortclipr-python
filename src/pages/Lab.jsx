@@ -195,8 +195,20 @@ export default function Lab() {
                       <span>{new Date().toLocaleTimeString()}</span>
                     </div>
 
-                    <pre style={{ color: '#4ade80', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                      {JSON.stringify(results, null, 2)}
+                    {results.logs && (
+                      <div style={{ marginBottom: '25px', borderLeft: '2px solid #2a4d2a', paddingLeft: '15px' }}>
+                        <div style={{ color: '#2a4d2a', fontSize: '0.7rem', marginBottom: '10px' }}>// EXECUTION_LOGS</div>
+                        {results.logs.map((log, i) => (
+                          <div key={i} style={{ color: log.includes('ERROR') || log.includes('BLOCK') ? '#ff5555' : '#4ade80', fontSize: '0.75rem', marginBottom: '4px' }}>
+                            {log}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{ color: '#2a4d2a', fontSize: '0.7rem', marginBottom: '10px' }}>// RAW_DATA_OUTPUT</div>
+                    <pre style={{ color: '#4ade80', whiteSpace: 'pre-wrap', wordBreak: 'break-all', opacity: 0.8 }}>
+                      {JSON.stringify(results.results, null, 2)}
                     </pre>
 
                     {results.results?.streams && (

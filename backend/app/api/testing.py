@@ -123,20 +123,45 @@ async def debug_innertube(req: TestRequest):
     report = {
         "video_id": video_id,
         "client": req.client,
+        "logs": [],
         "results": {}
     }
 
+    def add_log(msg):
+        report["logs"].append(f"[{req.client}] {msg}")
+
     # 1. Test Player API
     try:
+        add_log("Initiating player handshake...")
         if req.client == "HEADLESS":
+            add_log("Launching Playwright stealth session...")
             data = await get_player_data_headless(video_id)
         else:
+            add_log(f"Calling InnerTube API with Golden Identity: {req.client}")
             data = await call_player_api(video_id, req.client, send_params=True)
             
         report["results"]["player_api"] = "SUCCESS"
+        add_log("API Response received (200 OK)")
+
+        # Check Playability Status
+        playability = data.get("playabilityStatus", {})
+        p_status = playability.get("status")
+        report["results"]["playability"] = p_status
+        add_log(f"Playability Status: {p_status}")
         
+        if p_status != "OK":
+            reason = playability.get("reason", "Unknown block reason")
+            add_log(f"BLOCK DETECTED: {reason}")
+            if "errorScreen" in playability:
+                add_log("Error screen present in response.")
+
         # Check Metadata
         details = data.get("videoDetails", {})
+        if details:
+            add_log(f"Metadata extracted: {details.get('title')[:30]}...")
+        else:
+            add_log("WARNING: videoDetails missing from response.")
+
         report["results"]["metadata"] = {
             "title": details.get("title"),
             "author": details.get("author"),
@@ -147,10 +172,18 @@ async def debug_innertube(req: TestRequest):
         captions = data.get("captions", {}).get("playerCaptionsTracklistRenderer", {}).get("captionTracks", [])
         report["results"]["captions_found"] = len(captions)
         report["results"]["caption_languages"] = [c.get("languageCode") for c in captions]
+        add_log(f"Found {len(captions)} caption tracks.")
 
         # Check Streams
+        add_log("Analyzing streaming formats...")
         video_url = _pick_best_stream(data, 720)
         audio_url = _pick_best_audio_stream(data)
+        
+        if not video_url:
+            add_log("CRITICAL: No video stream URLs found in streamingData.")
+        if not audio_url:
+            add_log("CRITICAL: No audio stream URLs found in streamingData.")
+
         report["results"]["streams"] = {
             "has_video_url": bool(video_url),
             "has_audio_url": bool(audio_url),
@@ -160,6 +193,7 @@ async def debug_innertube(req: TestRequest):
     except Exception as e:
         report["results"]["player_api"] = "FAILED"
         report["results"]["error"] = str(e)
+        add_log(f"FATAL ERROR: {str(e)}")
         # Log full trace for developer
         logger.error(f"Debug test failed: {e}", exc_info=True)
 
