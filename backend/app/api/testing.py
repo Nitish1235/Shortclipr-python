@@ -144,6 +144,27 @@ async def debug_innertube(req: TestRequest):
             add_log("Launching Playwright stealth session...")
             # Note: Playwright proxy support can be added here if needed
             data = await get_player_data_headless(video_id)
+        elif req.client == "APIFY_HTML_SPOOF":
+            add_log("Launching curl_cffi TLS Spoofing session (Chrome 120)...")
+            from curl_cffi.requests import AsyncSession
+            import re
+            import json
+            
+            target_url = f"https://www.youtube.com/watch?v={video_id}"
+            proxies = {"http": BRIGHTDATA_PROXY, "https": BRIGHTDATA_PROXY} if req.use_proxy else None
+            
+            async with AsyncSession(proxies=proxies, impersonate="chrome120") as s:
+                add_log(f"Fetching raw HTML from {target_url}...")
+                resp = await s.get(target_url)
+                add_log(f"HTML Download Complete. Status: {resp.status_code}")
+                
+                add_log("Scanning HTML for embedded ytInitialPlayerResponse JSON payload...")
+                match = re.search(r"var ytInitialPlayerResponse\s*=\s*({.+?});(?:var|</script>)", resp.text)
+                if match:
+                    add_log("SUCCESS: Extracted JSON payload from HTML.")
+                    data = json.loads(match.group(1))
+                else:
+                    raise Exception("ytInitialPlayerResponse not found in HTML. YouTube may have served a captcha or blocked page.")
         else:
             add_log(f"Calling InnerTube API with Golden Identity: {req.client}")
             if req.use_proxy:

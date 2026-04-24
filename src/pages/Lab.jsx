@@ -130,6 +130,7 @@ export default function Lab() {
                     <option value="IOS">IOS (Stealth)</option>
                     <option value="MWEB">MWEB (Fallback)</option>
                     <option value="HEADLESS">PLAYWRIGHT (Headless)</option>
+                    <option value="APIFY_HTML_SPOOF">APIFY_HTML_SPOOF (curl_cffi)</option>
                   </select>
                 <div style={{ border: '1px solid #333', padding: '20px', background: 'rgba(255,255,255,0.02)', marginTop: '10px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
