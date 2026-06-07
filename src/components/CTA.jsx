@@ -1,84 +1,105 @@
 export default function CTA() {
   return (
     <section id="cta" style={{
-      padding: '100px 5%', margin: '0 5% 60px',
-      background: 'var(--bg-dark)',
-      border: '3px solid var(--lime)',
-      boxShadow: '12px 12px 0 rgba(132,204,22,0.15)',
-      textAlign: 'center', position: 'relative', overflow: 'hidden',
+      background: '#cf1322',
+      padding: 'clamp(80px, 10vw, 120px) 5%',
+      textAlign: 'center',
+      position: 'relative', overflow: 'hidden',
     }}>
-      {/* VHS tape background label */}
+      {/* Decorative background text */}
       <div style={{
         position: 'absolute', top: '50%', left: '50%',
-        transform: 'translate(-50%, -50%) rotate(-15deg)',
-        fontFamily: "'Space Mono', monospace", fontWeight: 700,
-        fontSize: 'clamp(4rem, 10vw, 9rem)', color: 'rgba(132,204,22,0.04)',
-        whiteSpace: 'nowrap', pointerEvents: 'none', letterSpacing: '0.1em',
-        userSelect: 'none',
+        transform: 'translate(-50%,-50%) rotate(-10deg)',
+        fontSize: 'clamp(5rem, 15vw, 14rem)',
+        fontWeight: 800, letterSpacing: '-0.05em',
+        color: 'rgba(255,255,255,0.05)',
+        whiteSpace: 'nowrap', pointerEvents: 'none', userSelect: 'none',
       }}>SHORTCLIPR</div>
 
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        <div style={{
-          fontFamily: "'Space Mono', monospace", fontSize: '0.75rem', color: 'var(--lime)',
-          textTransform: 'uppercase', letterSpacing: '0.12em',
-          background: 'rgba(132,204,22,0.08)', border: '1px solid rgba(132,204,22,0.25)',
-          display: 'inline-block', padding: '4px 12px', marginBottom: '24px',
-        }}>SYSTEM_READY</div>
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: '680px', margin: '0 auto' }}>
 
-        <h2 style={{
-          fontFamily: "'Space Mono', monospace", fontWeight: 700,
-          fontSize: 'clamp(2rem, 5vw, 3.5rem)', lineHeight: 1.15, marginBottom: '20px',
-          textTransform: 'uppercase',
+        {/* Badge */}
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: '7px',
+          background: 'rgba(255,255,255,0.15)', borderRadius: '100px',
+          padding: '6px 16px', marginBottom: '24px',
+          fontSize: '0.78rem', fontWeight: 700, color: 'rgba(255,255,255,0.95)',
+          textTransform: 'uppercase', letterSpacing: '0.12em',
         }}>
-          STOP LEAVING<br />
-          <span style={{
-            WebkitTextStroke: '2px var(--lime)', color: 'transparent',
-          }}>VIRAL CLIPS</span><br />
-          ON THE TABLE.
+          <span style={{ width:'7px', height:'7px', background:'#fff', borderRadius:'50%', display:'inline-block' }}/>
+          Free forever — no credit card
+        </div>
+
+        {/* Big headline */}
+        <h2 style={{
+          fontSize: 'clamp(2.2rem, 6vw, 4.5rem)',
+          fontWeight: 800, color: '#fff',
+          letterSpacing: '-0.05em', lineHeight: 0.95,
+          marginBottom: '20px',
+        }}>
+          Your next viral clip<br/>is already in your feed.
         </h2>
 
         <p style={{
-          fontFamily: "'Space Mono', monospace", fontSize: '1rem',
-          color: 'var(--muted)', lineHeight: 1.7,
-          maxWidth: '540px', margin: '0 auto 40px',
+          color: 'rgba(255,255,255,0.78)', fontSize: 'clamp(0.95rem, 1.5vw, 1.1rem)',
+          maxWidth: '520px', margin: '0 auto 40px', lineHeight: 1.7,
         }}>
-          47,000+ creators are already using ShortClipr. Your next viral short is already 
-          inside your last upload — you just haven't found it yet.
+          12,000+ creators are turning their old YouTube videos into daily content.
+          Start free — paste any YouTube URL and get your first clips in minutes.
         </p>
 
-        <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <a href="#" style={{
-            background: 'var(--lime)', color: 'var(--bg-dark)', border: '2px solid var(--lime)',
-            padding: '16px 36px', fontFamily: "'Space Mono', monospace", fontWeight: 700,
-            fontSize: '1rem', textDecoration: 'none', textTransform: 'uppercase',
-            letterSpacing: '0.06em', transition: 'all 0.2s', display: 'inline-block',
-            boxShadow: '4px 4px 0 rgba(0,0,0,0.4)',
+        {/* Inline URL input */}
+        <form onSubmit={e => { e.preventDefault(); window.location.href = '/#hero' }} style={{
+          display: 'flex', maxWidth: '580px', margin: '0 auto 16px',
+          borderRadius: '12px', overflow: 'hidden',
+          border: '2px solid rgba(255,255,255,0.3)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+        }}>
+          <input
+            type="url"
+            placeholder="Paste a YouTube URL to start free..."
+            style={{
+              flex: 1, padding: '16px 18px',
+              border: 'none', outline: 'none',
+              fontSize: '0.95rem', background: 'rgba(255,255,255,0.95)',
+              color: '#111', minWidth: 0,
+            }}
+            onClick={() => { window.location.href = '/#hero' }}
+          />
+          <button type="submit" style={{
+            background: '#0f0f0f', color: '#fff',
+            border: 'none', padding: '16px 24px',
+            fontWeight: 800, fontSize: '0.9rem',
+            cursor: 'pointer', whiteSpace: 'nowrap',
+            transition: 'background 0.15s',
           }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'var(--green)'; e.currentTarget.style.transform = 'translate(-2px,-2px)'; e.currentTarget.style.boxShadow = '6px 6px 0 rgba(0,0,0,0.4)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'var(--lime)'; e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '4px 4px 0 rgba(0,0,0,0.4)' }}
-          >
-            START FOR FREE — NO CC
-          </a>
-          <a href="#how-it-works" style={{
-            background: 'transparent', color: 'var(--lime)', border: '2px solid var(--lime)',
-            padding: '16px 36px', fontFamily: "'Space Mono', monospace", fontWeight: 700,
-            fontSize: '1rem', textDecoration: 'none', textTransform: 'uppercase',
-            letterSpacing: '0.06em', transition: 'all 0.2s', display: 'inline-block',
-            boxShadow: '4px 4px 0 rgba(132,204,22,0.2)',
-          }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(132,204,22,0.1)'; e.currentTarget.style.transform = 'translate(-2px,-2px)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = '' }}
-          >
-            SEE HOW IT WORKS
-          </a>
+            onMouseEnter={e => e.currentTarget.style.background = '#333'}
+            onMouseLeave={e => e.currentTarget.style.background = '#0f0f0f'}
+          >Start free →</button>
+        </form>
+
+        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem', marginBottom: '32px' }}>
+          No credit card · No software install · Cancel anytime
+        </p>
+
+        {/* Social proof row */}
+        <div style={{
+          display: 'flex', justifyContent: 'center', gap: 'clamp(20px, 4vw, 48px)',
+          flexWrap: 'wrap', paddingTop: '28px',
+          borderTop: '1px solid rgba(255,255,255,0.15)',
+        }}>
+          {[
+            { num: '47K+',  label: 'Creators'           },
+            { num: '9.2M+', label: 'Clips generated'    },
+            { num: '4.8★',  label: 'Average rating'     },
+            { num: '99.1%', label: 'Uptime SLA'         },
+          ].map(s => (
+            <div key={s.label} style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.04em' }}>{s.num}</div>
+              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: '3px' }}>{s.label}</div>
+            </div>
+          ))}
         </div>
-
-        <p style={{
-          marginTop: '24px', fontFamily: "'Space Mono', monospace",
-          fontSize: '0.72rem', color: 'var(--muted)',
-        }}>
-          Free forever plan · No credit card · Cancel anytime
-        </p>
       </div>
     </section>
   )

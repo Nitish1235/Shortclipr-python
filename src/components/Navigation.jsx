@@ -1,120 +1,128 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { GoogleLogin } from '@react-oauth/google'
 import Logo from './Logo'
 
 export default function Navigation() {
-  const [scrolled, setScrolled] = useState(false)
+  const [scrolled, setScrolled]     = useState(false)
   const { user, loginWithGoogleToken, logout } = useAuth()
+  const location = useLocation()
+  const isApp = ['/dashboard','/editor','/lab'].some(p => location.pathname.startsWith(p))
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20)
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
+    const fn = () => setScrolled(window.scrollY > 10)
+    window.addEventListener('scroll', fn)
+    return () => window.removeEventListener('scroll', fn)
   }, [])
 
+  const navLinks = isApp ? [] : [
+    { label: 'How it works', href: '/#how-it-works' },
+    { label: 'Features',     href: '/#features'     },
+    { label: 'Pricing',      href: '/#pricing'      },
+    { label: 'About',        href: '/about'          },
+  ]
 
-
-
-  
   return (
-    <nav style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '20px 5%',
-      background: scrolled ? 'rgba(5,13,8,0.98)' : 'var(--bg-dark)',
-      borderBottom: '2px solid var(--lime)',
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-      backdropFilter: scrolled ? 'blur(8px)' : 'none',
-      transition: 'all 0.3s',
+    <div style={{
+      position: 'sticky', top: 0, zIndex: 200,
+      background: '#f9f9f9',
+      padding: scrolled ? '8px 5%' : '14px 5%',
+      transition: 'padding 0.2s',
     }}>
-      <Link to="/" className="logo">
-        <Logo size={40} />
-        SHORTCLIPR<span style={{ color: 'var(--green)', opacity: 0.7, fontSize: '1.1rem' }}>.COM</span>
-      </Link>
+      <nav style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        background: '#fff', borderRadius: '16px',
+        padding: '10px 10px 10px 22px',
+        border: '2px solid #111',
+        boxShadow: scrolled ? '6px 6px 0 #cf1322' : '4px 4px 0 #cf1322',
+        maxWidth: '1100px', margin: '0 auto',
+        transition: 'box-shadow 0.2s',
+        gap: '16px',
+      }}>
 
-      <ul style={{
-        display: 'flex', gap: '32px', listStyle: 'none',
-        fontFamily: "'Space Mono', monospace", fontSize: '0.85rem',
-        textTransform: 'uppercase', fontWeight: 700,
-      }} className="nav-desktop-links">
-        {[['/#how-it-works','HOW IT WORKS'],['/#features','Features'],['/#showcase','Showcase'],['/#pricing','Pricing']].map(([href, label]) => (
-          <li key={href}>
-            <a href={href} style={{
-              color: 'var(--muted)', textDecoration: 'none', transition: 'color 0.2s',
-              letterSpacing: '0.05em',
-            }}
-              onMouseEnter={e => e.target.style.color = 'var(--lime)'}
-              onMouseLeave={e => e.target.style.color = 'var(--muted)'}
-            >{label}</a>
-          </li>
-        ))}
-      </ul>
+        {/* Logo */}
+        <Link to="/" style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
+          <Logo size={30} />
+          <span style={{ fontSize:'1rem', fontWeight:700, color:'#cf1322', letterSpacing:'-0.02em' }}>
+            ShortClipr
+          </span>
+        </Link>
 
-      {/* Auth & Stats Bar */}
-      <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-        {user ? (
-          <>
-            <Link to="/dashboard" style={{
-              color: 'var(--lime)', textDecoration: 'none', fontFamily: "'Space Mono', monospace",
-              fontSize: '0.8rem', fontWeight: 700, border: '1px solid var(--lime)', padding: '4px 10px'
-            }}>DASHBOARD</Link>
-            <Link to="/lab" style={{
-              color: 'var(--yellow)', textDecoration: 'none', fontFamily: "'Space Mono', monospace",
-              fontSize: '0.8rem', fontWeight: 700, border: '1px solid var(--yellow)', padding: '4px 10px'
-            }}>LAB</Link>
-
-            <div style={{
-              background: 'rgba(132, 204, 22, 0.08)', border: '1px solid var(--lime)',
-              padding: '6px 12px', fontFamily: "'Space Mono', monospace",
-              fontSize: '0.7rem', color: 'var(--text)', whiteSpace: 'nowrap',
-              boxShadow: '2px 2px 0 rgba(132, 204, 22, 0.2)',
-            }}>
-              [ SHORTS GENERATED: <span style={{ color: 'var(--green)' }}>{user.credits_used}</span> • 
-              REMAINING: <span style={{ color: 'var(--yellow)' }}>{user.videos_remaining}</span> • 
-              TOTAL: <span style={{ color: 'var(--muted)' }}>{user.credits_limit}</span> ]
-            </div>
-            <a href="#" onClick={logout} style={{
-              color: 'var(--muted)', textDecoration: 'none', fontFamily: "'Space Mono', monospace",
-              fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
-            }}>LOGOUT</a>
-          </>
-        ) : (
-          <>
-            <div style={{ 
-              border: '2px solid var(--lime)', 
-              boxShadow: '2px 2px 0 var(--lime)', 
-              padding: '2px', 
-              background: 'var(--bg-dark)',
-              display: 'inline-flex',
-              transition: 'transform 0.1s, box-shadow 0.1s'
-            }} className="retro-google-btn">
-              <GoogleLogin
-                onSuccess={async (credentialResponse) => {
-                  const success = await loginWithGoogleToken(credentialResponse.credential)
-                  if (success) {
-                    window.location.href = '/dashboard'
-                  }
+        {/* Center links */}
+        {navLinks.length > 0 && (
+          <ul style={{ display:'flex', gap:'2px', listStyle:'none', flex:1, justifyContent:'center' }}>
+            {navLinks.map(({ label, href }) => (
+              <li key={href}>
+                <a href={href} style={{
+                  color:'#333', fontSize:'0.875rem', fontWeight:600,
+                  padding:'8px 14px', borderRadius:'8px', display:'block',
+                  transition:'background 0.15s, color 0.15s',
                 }}
-                onError={() => console.log('Login failed')}
-                theme="filled_black"
-                shape="rectangular"
-                text="signin_with"
-                size="medium"
-              />
-            </div>
-            <a href="/#pricing" className="nav-btn" style={{ textDecoration: 'none', display:'inline-block' }}>
-              GET STARTED
-            </a>
-            <style>{`
-              .retro-google-btn:active {
-                transform: translate(2px, 2px);
-                box-shadow: 0 0 0 transparent !important;
-              }
-            `}</style>
-          </>
+                  onMouseEnter={e => { e.currentTarget.style.background='#fef2f2'; e.currentTarget.style.color='#cf1322' }}
+                  onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='#333' }}
+                >{label}</a>
+              </li>
+            ))}
+          </ul>
         )}
-      </div>
-    </nav>
+
+        {/* Right: auth */}
+        <div style={{ display:'flex', alignItems:'center', gap:'8px', flexShrink:0 }}>
+          {user ? (
+            <>
+              <div style={{
+                background:'#fef2f2', border:'1px solid #fecaca',
+                borderRadius:'8px', padding:'6px 12px',
+                fontSize:'0.78rem', fontWeight:600, color:'#cf1322',
+                display:'flex', alignItems:'center', gap:'5px',
+              }}>
+                🎬 {user.videos_remaining ?? '–'} clips left
+              </div>
+              {!isApp && (
+                <Link to="/dashboard" style={{
+                  background:'#f4f4f4', color:'#111', padding:'8px 16px',
+                  borderRadius:'8px', fontSize:'0.82rem', fontWeight:700,
+                  border:'1.5px solid #e5e5e5',
+                }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor='#cf1322'}
+                  onMouseLeave={e => e.currentTarget.style.borderColor='#e5e5e5'}
+                >Dashboard</Link>
+              )}
+              <button onClick={logout} style={{
+                background:'transparent', border:'none', cursor:'pointer',
+                color:'#999', fontSize:'0.82rem', fontWeight:600, padding:'8px 10px',
+              }}
+                onMouseEnter={e => e.currentTarget.style.color='#cf1322'}
+                onMouseLeave={e => e.currentTarget.style.color='#999'}
+              >Sign out</button>
+            </>
+          ) : (
+            <>
+              <div style={{ border:'1.5px solid #e5e5e5', borderRadius:'8px', overflow:'hidden', display:'inline-flex' }}>
+                <GoogleLogin
+                  onSuccess={async cr => {
+                    const ok = await loginWithGoogleToken(cr.credential)
+                    if (ok) window.location.href = '/dashboard'
+                  }}
+                  onError={() => {}}
+                  theme="outline" shape="rectangular" text="signin_with" size="medium"
+                />
+              </div>
+              <a href="/#pricing" style={{
+                background:'#cf1322', color:'#fff',
+                padding:'10px 20px', borderRadius:'8px',
+                fontSize:'0.82rem', fontWeight:700,
+                border:'2px solid #111', boxShadow:'2px 2px 0 #111',
+                transition:'transform 0.1s, box-shadow 0.1s', display:'inline-block',
+              }}
+                onMouseEnter={e => { e.currentTarget.style.transform='translate(-1px,-1px)'; e.currentTarget.style.boxShadow='3px 3px 0 #111' }}
+                onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='2px 2px 0 #111' }}
+              >Get started →</a>
+            </>
+          )}
+        </div>
+      </nav>
+    </div>
   )
 }

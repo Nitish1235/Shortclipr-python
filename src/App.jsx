@@ -1,35 +1,40 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { AuthProvider, useAuth } from './context/AuthContext'
-import Navigation from './components/Navigation'
-import Hero from './components/Hero'
-import Ticker from './components/Ticker'
-import HowItWorks from './components/HowItWorks'
-import Features from './components/Features'
-import Showcase from './components/Showcase'
-import Testimonials from './components/Testimonials'
-import Pricing from './components/Pricing'
-import FAQ from './components/FAQ'
-import CTA from './components/CTA'
-import Footer from './components/Footer'
-import VisualHighlights from './components/VisualHighlights'
-import workflowImg from './assets/retro_workflow_diagram_1776835196805.png'
 
-import Privacy from './pages/Privacy'
-import Terms from './pages/Terms'
-import Contact from './pages/Contact'
-import About from './pages/About'
+// Layout
+import Navigation    from './components/Navigation'
+import Footer        from './components/Footer'
+
+// Landing sections
+import Hero              from './components/Hero'
+import Ticker            from './components/Ticker'
+import HowItWorks        from './components/HowItWorks'
+import Features          from './components/Features'
+import UseCases          from './components/UseCases'
+import VideoShowcase     from './components/VideoShowcase'
+import Comparison        from './components/Comparison'
+import Testimonials      from './components/Testimonials'
+import Pricing           from './components/Pricing'
+import VisualHighlights  from './components/VisualHighlights'
+import FAQ               from './components/FAQ'
+import CTA               from './components/CTA'
+
+// Pages
+import Privacy        from './pages/Privacy'
+import Terms          from './pages/Terms'
+import Contact        from './pages/Contact'
+import About          from './pages/About'
 import PaymentSuccess from './pages/PaymentSuccess'
-import Dashboard from './pages/Dashboard'
-import Changelog from './pages/Changelog'
-import PressKit from './pages/PressKit'
-import Careers from './pages/Careers'
-import DMCA from './pages/DMCA'
-import Editor from './pages/Editor'
-import Lab from './pages/Lab'
+import Dashboard      from './pages/Dashboard'
+import Changelog      from './pages/Changelog'
+import PressKit       from './pages/PressKit'
+import Careers        from './pages/Careers'
+import DMCA           from './pages/DMCA'
+import Editor         from './pages/Editor'
+import Lab            from './pages/Lab'
+import Admin          from './pages/Admin'
 
-
-// You must set this in your frontend/.env
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'dummy-client-id.apps.googleusercontent.com'
 
 function LandingPage() {
@@ -37,25 +42,42 @@ function LandingPage() {
     <>
       <Navigation />
       <main>
+        {/* 1. Hero — centered headline + URL input above fold */}
         <Hero />
+
+        {/* 2. Dark feature ticker */}
         <Ticker />
+
+        {/* 3. How it works */}
         <HowItWorks />
+
+        {/* 4. Feature cards */}
         <Features />
-        <Showcase />
+
+        {/* 5. Use cases by creator type */}
+        <UseCases />
+
+        {/* 6. INFINITE VIDEO SHOWCASE — admin-curated clips from GCS */}
+        <VideoShowcase />
+
+        {/* 7. AI pipeline flow */}
         <VisualHighlights />
+
+        {/* 8. Competitor comparison table */}
+        <Comparison />
+
+        {/* 9. Testimonials */}
         <Testimonials />
+
+        {/* 10. Pricing */}
         <Pricing />
+
+        {/* 11. SEO FAQ */}
         <FAQ />
+
+        {/* 12. Final CTA */}
         <CTA />
       </main>
-      {/* Workflow illustration */}
-      <section style={{ padding: '60px 5%', textAlign: 'center' }}>
-        <img
-          src={workflowImg}
-          alt="Workflow illustration"
-          style={{ maxWidth: '100%', height: 'auto', border: '2px solid var(--lime)', borderRadius: '8px' }}
-        />
-      </section>
       <Footer />
     </>
   )
@@ -63,7 +85,21 @@ function LandingPage() {
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
-  if (loading) return <div style={{ background: '#000', color: '#4ade80', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Space Mono', monospace" }}>[ VERIFYING SESSION... ]</div>
+  if (loading) return (
+    <div style={{
+      background: '#fff', height: '100vh',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      flexDirection: 'column', gap: '16px',
+    }}>
+      <div style={{
+        width: '36px', height: '36px',
+        border: '3px solid #fecaca', borderTopColor: '#cf1322',
+        borderRadius: '50%', animation: 'spin 0.8s linear infinite',
+      }}/>
+      <span style={{ fontSize: '0.85rem', color: '#aaa', fontWeight: 500 }}>Loading…</span>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  )
   if (!user) return <Navigate to="/" replace />
   return children
 }
@@ -74,20 +110,25 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/privacy" element={<Privacy />} />
-            <Route path="/terms" element={<Terms />} />
-            <Route path="/contact" element={<Contact />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/changelog" element={<Changelog />} />
-            <Route path="/press" element={<PressKit />} />
-            <Route path="/careers" element={<Careers />} />
-            <Route path="/dmca" element={<DMCA />} />
-            <Route path="/payment/success" element={<PaymentSuccess />} />
-            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/editor/:jobId/:clipId" element={<ProtectedRoute><Editor /></ProtectedRoute>} />
-            <Route path="/lab" element={<ProtectedRoute><Lab /></ProtectedRoute>} />
+            {/* Public */}
+            <Route path="/"                      element={<LandingPage />} />
+            <Route path="/privacy"               element={<Privacy />} />
+            <Route path="/terms"                 element={<Terms />} />
+            <Route path="/contact"               element={<Contact />} />
+            <Route path="/about"                 element={<About />} />
+            <Route path="/changelog"             element={<Changelog />} />
+            <Route path="/press"                 element={<PressKit />} />
+            <Route path="/careers"               element={<Careers />} />
+            <Route path="/dmca"                  element={<DMCA />} />
+            <Route path="/payment/success"       element={<PaymentSuccess />} />
 
+            {/* Protected — user must be logged in */}
+            <Route path="/dashboard"             element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/editor/:jobId/:clipId" element={<ProtectedRoute><Editor /></ProtectedRoute>} />
+            <Route path="/lab"                   element={<ProtectedRoute><Lab /></ProtectedRoute>} />
+
+            {/* Admin — no separate auth guard on frontend, backend enforces admin check */}
+            <Route path="/admin"                 element={<ProtectedRoute><Admin /></ProtectedRoute>} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

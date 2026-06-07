@@ -36,12 +36,12 @@ PRODUCT_IDS: dict[str, str] = {
     "starter_250":  settings.DODO_PRODUCT_STARTER_250,
     "pro_500":      settings.DODO_PRODUCT_PRO_500,
     "pro_1000":     settings.DODO_PRODUCT_PRO_1000,
-    "unlimited":    settings.DODO_PRODUCT_UNLIMITED,
+    "pro_2000":     settings.DODO_PRODUCT_PRO_2000,    # $145 — 2000 shorts
 }
 
 
 class CheckoutRequest(BaseModel):
-    plan: str    # starter_100 | starter_250 | pro_500 | pro_1000 | unlimited
+    plan: str    # starter_100 | starter_250 | pro_500 | pro_1000 | pro_2000
     period: str = "monthly"  # kept for webhook compatibility
 
 

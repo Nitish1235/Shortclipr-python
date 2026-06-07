@@ -69,18 +69,10 @@ async def upload_clip(
     job_id: str,
     clip_id: str,
 ) -> str:
-    """
-    Upload clip MP4 to GCS. Returns public URL.
-    Runs GCS upload in executor (blocking I/O).
-    """
+    """Upload clip MP4 to GCS. Returns public URL."""
     blob_name = f"clips/{job_id}/{clip_id}.mp4"
-    url = await asyncio.get_event_loop().run_in_executor(
-        None,
-        _upload_to_gcs,
-        local_path,
-        blob_name,
-        "video/mp4",
-    )
+    loop = asyncio.get_running_loop()
+    url = await loop.run_in_executor(None, _upload_to_gcs, local_path, blob_name, "video/mp4")
     logger.info(f"Uploaded clip → {url}")
     return url
 
@@ -92,13 +84,35 @@ async def upload_thumbnail(
 ) -> str:
     """Upload thumbnail JPEG to GCS. Returns public URL."""
     blob_name = f"thumbnails/{job_id}/{clip_id}.jpg"
-    return await asyncio.get_event_loop().run_in_executor(
-        None,
-        _upload_to_gcs,
-        local_path,
-        blob_name,
-        "image/jpeg",
-    )
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _upload_to_gcs, local_path, blob_name, "image/jpeg")
+
+
+async def delete_job_from_gcs(job_id: str) -> None:
+    """
+    Delete all GCS objects for a job (clips + thumbnails).
+    Called when a user deletes a job — prevents storage leaks.
+    """
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, _delete_job_blobs_sync, job_id)
+
+
+def _delete_job_blobs_sync(job_id: str) -> None:
+    """Synchronous GCS bulk delete — called in executor."""
+    try:
+        client = _get_gcs_client()
+        bucket = client.bucket(settings.GCS_BUCKET_NAME)
+        prefixes = [f"clips/{job_id}/", f"thumbnails/{job_id}/"]
+        deleted = 0
+        for prefix in prefixes:
+            blobs = list(bucket.list_blobs(prefix=prefix))
+            for blob in blobs:
+                blob.delete()
+                deleted += 1
+        logger.info(f"GCS cleanup: deleted {deleted} objects for job {job_id}")
+    except Exception as e:
+        # Don't fail the delete operation — log and continue
+        logger.error(f"GCS cleanup failed for job {job_id}: {e}")
 
 
 def _upload_to_gcs(local_path: Path, blob_name: str, content_type: str) -> str:
@@ -123,20 +137,30 @@ async def process_and_upload_clip(
     tmp_dir: Path,
 ) -> tuple[str, str]:
     """
-    1. Generate thumbnail
+    1. Generate thumbnail (non-blocking failure — won't break clip delivery)
     2. Upload clip to GCS
-    3. Upload thumbnail to GCS
+    3. Upload thumbnail to GCS (if generated successfully)
     4. Return (clip_url, thumbnail_url)
     """
     thumb_path = tmp_dir / f"{clip_id}_thumb.jpg"
 
-    # Thumbnail + upload happen concurrently
+    # Generate thumbnail — failures are non-fatal
     await generate_thumbnail(clip_path, thumb_path)
-    clip_url, thumb_url = await asyncio.gather(
-        upload_clip(clip_path, job_id, clip_id),
-        upload_thumbnail(thumb_path, job_id, clip_id) if thumb_path.exists() else asyncio.sleep(0),
-    )
-    return clip_url, thumb_url if thumb_path.exists() else ""
+
+    # Always upload the clip — upload thumbnail only if it was generated
+    thumb_exists = thumb_path.exists() and thumb_path.stat().st_size > 0
+
+    if thumb_exists:
+        clip_url, thumb_url = await asyncio.gather(
+            upload_clip(clip_path, job_id, clip_id),
+            upload_thumbnail(thumb_path, job_id, clip_id),
+        )
+    else:
+        logger.warning(f"[{clip_id}] Thumbnail generation failed — uploading clip only")
+        clip_url = await upload_clip(clip_path, job_id, clip_id)
+        thumb_url = ""
+
+    return clip_url, thumb_url
 
 
 # ── Cleanup ────────────────────────────────────────────────────

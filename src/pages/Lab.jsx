@@ -1,265 +1,225 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import Navigation from '../components/Navigation'
 import Footer from '../components/Footer'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
 export default function Lab() {
-  const [url, setUrl] = useState('')
-  const [client, setClient] = useState('ANDROID_VR')
-  const [useProxy, setUseProxy] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [results, setResults] = useState(null)
-  const [error, setError] = useState(null)
+  const [url,       setUrl]       = useState('')
+  const [client,    setClient]    = useState('ANDROID_VR')
+  const [useProxy,  setUseProxy]  = useState(false)
+  const [loading,   setLoading]   = useState(false)
+  const [results,   setResults]   = useState(null)
+  const [error,     setError]     = useState(null)
   const [activeTab, setActiveTab] = useState('handshake')
 
   const runHandshake = async () => {
     if (!url) return alert('Enter a URL')
-    setLoading(true)
-    setResults(null)
-    setError(null)
+    setLoading(true); setResults(null); setError(null)
     try {
-      const res = await fetch(`${API_BASE}/testing/debug`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url_or_id: url, client, use_proxy: useProxy })
+      const res  = await fetch(`${API_BASE}/testing/debug`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ url_or_id:url, client, use_proxy:useProxy }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || 'Audit failed')
       setResults(data)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+    } catch (err) { setError(err.message) }
+    finally       { setLoading(false) }
   }
 
   const runResolver = async () => {
     if (!url) return alert('Enter a URL')
-    setLoading(true)
-    setResults(null)
-    setError(null)
+    setLoading(true); setResults(null); setError(null)
     try {
-      const res = await fetch(`${API_BASE}/testing2/solve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url_or_id: url, client: 'JDOWNLOADER' })
+      const res  = await fetch(`${API_BASE}/testing2/solve`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ url_or_id:url, client:'JDOWNLOADER' }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || 'Solver failed')
       setResults(data)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+    } catch (err) { setError(err.message) }
+    finally       { setLoading(false) }
   }
 
+  const inputBase = {
+    width:'100%', background:'#fff', border:'1.5px solid #e5e5e5',
+    borderRadius:'8px', padding:'10px 14px', fontSize:'0.875rem',
+    color:'#111', outline:'none', fontFamily:'Space Grotesk, sans-serif',
+    transition:'border-color 0.15s', boxSizing:'border-box',
+  }
+  const tabBtnStyle = (active, color='#cf1322') => ({
+    padding:'12px 14px', textAlign:'left', fontWeight:700, fontSize:'0.82rem',
+    background: active ? color : 'transparent',
+    color: active ? '#fff' : '#555',
+    border: active ? 'none' : '1px solid #e5e5e5',
+    borderRadius:'8px', cursor:'pointer', transition:'all 0.15s',
+  })
+
   return (
-    <div style={{ background: 'var(--bg-dark)', minHeight: '100vh', color: 'var(--text)' }}>
+    <div style={{ background:'#f9f9f9', minHeight:'100vh' }}>
       <Navigation />
-      
-      <div style={{ paddingTop: '120px', paddingBottom: '60px', width: '90%', maxWidth: '1200px', margin: '0 auto' }}>
-        <header style={{ marginBottom: '40px', borderBottom: '2px solid var(--lime)', paddingBottom: '20px' }}>
-          <h1 style={{ fontFamily: "'Space Mono', monospace", fontSize: '2.5rem', color: 'var(--lime)', margin: 0, letterSpacing: '-0.02em' }}>
-            [ SYSTEM DIAGNOSTICS LAB ]
+
+      <div style={{ maxWidth:'1200px', margin:'0 auto', padding:'100px 5% 60px' }}>
+
+        {/* Header */}
+        <div style={{ marginBottom:'36px' }}>
+          <div style={{
+            display:'inline-block', background:'#fef2f2', border:'1px solid #fecaca',
+            borderRadius:'100px', padding:'3px 12px', fontSize:'0.7rem', fontWeight:700,
+            color:'#cf1322', textTransform:'uppercase', letterSpacing:'0.15em', marginBottom:'12px',
+          }}>Internal Lab</div>
+          <h1 style={{ fontSize:'1.8rem', fontWeight:700, color:'#111', letterSpacing:'-0.03em', marginBottom:'6px' }}>
+            System Diagnostics
           </h1>
-          <p style={{ color: 'var(--muted)', fontFamily: "'Space Mono', monospace", marginTop: '8px' }}>
-            Handshake stabilization and link decryption matrix.
-          </p>
-        </header>
+          <p style={{ color:'#999', fontSize:'0.9rem' }}>Handshake stabilization and link decryption matrix.</p>
+        </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '40px' }}>
-          {/* Controls */}
-          <aside>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div style={{ border: '1px solid #333', padding: '20px', background: 'rgba(255,255,255,0.02)' }}>
-                <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)', marginBottom: '8px', fontWeight: 700 }}>TARGET_URL</label>
-                <input 
-                  type="text" 
-                  value={url} 
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://youtube.com/watch?v=..."
-                  style={{ 
-                    width: '100%', background: '#000', border: '1px solid #444', color: 'var(--lime)',
-                    padding: '12px', fontFamily: "'Space Mono', monospace", fontSize: '0.9rem'
-                  }}
-                />
-              </div>
+        <div style={{ display:'grid', gridTemplateColumns:'280px 1fr', gap:'28px' }}>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <button 
-                  onClick={() => setActiveTab('handshake')}
-                  style={{ 
-                    padding: '15px', textAlign: 'left', fontFamily: "'Space Mono', monospace", fontWeight: 700,
-                    background: activeTab === 'handshake' ? 'var(--lime)' : 'transparent',
-                    color: activeTab === 'handshake' ? '#000' : 'var(--muted)',
-                    border: activeTab === 'handshake' ? 'none' : '1px solid #333',
-                    cursor: 'pointer', transition: 'all 0.2s'
-                  }}
-                >
-                  01. HANDSHAKE_AUDIT
-                </button>
-                <button 
-                  onClick={() => setActiveTab('resolver')}
-                  style={{ 
-                    padding: '15px', textAlign: 'left', fontFamily: "'Space Mono', monospace", fontWeight: 700,
-                    background: activeTab === 'resolver' ? 'var(--yellow)' : 'transparent',
-                    color: activeTab === 'resolver' ? '#000' : 'var(--muted)',
-                    border: activeTab === 'resolver' ? 'none' : '1px solid #333',
-                    cursor: 'pointer', transition: 'all 0.2s'
-                  }}
-                >
-                  02. RESOLVER_BYPASS
-                </button>
-              </div>
+          {/* Controls sidebar */}
+          <aside style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
 
-              {activeTab === 'handshake' && (
-                <div style={{ border: '1px solid #333', padding: '20px', background: 'rgba(255,255,255,0.02)' }}>
-                  <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)', marginBottom: '8px', fontWeight: 700 }}>IDENTITY_PROFILE</label>
-                  <select 
-                    value={client} 
-                    onChange={(e) => setClient(e.target.value)}
-                    style={{ 
-                      width: '100%', background: '#000', border: '1px solid #444', color: 'var(--lime)',
-                      padding: '12px', fontFamily: "'Space Mono', monospace"
-                    }}
-                  >
+            {/* URL input */}
+            <div style={{ background:'#fff', border:'1px solid #e5e5e5', borderRadius:'12px', padding:'16px' }}>
+              <label style={{ fontSize:'0.72rem', fontWeight:700, color:'#555', textTransform:'uppercase', letterSpacing:'0.08em', display:'block', marginBottom:'8px' }}>Target URL</label>
+              <input
+                type="text" value={url} onChange={e => setUrl(e.target.value)}
+                placeholder="https://youtube.com/watch?v=..."
+                style={inputBase}
+                onFocus={e => e.target.style.borderColor='#cf1322'}
+                onBlur={e => e.target.style.borderColor='#e5e5e5'}
+              />
+            </div>
+
+            {/* Tab switcher */}
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              <button onClick={() => setActiveTab('handshake')} style={tabBtnStyle(activeTab==='handshake','#cf1322')}>
+                01. Handshake Audit
+              </button>
+              <button onClick={() => setActiveTab('resolver')} style={tabBtnStyle(activeTab==='resolver','#ca8a04')}>
+                02. Resolver Bypass
+              </button>
+            </div>
+
+            {/* Handshake options */}
+            {activeTab === 'handshake' && (
+              <div style={{ background:'#fff', border:'1px solid #e5e5e5', borderRadius:'12px', padding:'16px', display:'flex', flexDirection:'column', gap:'12px' }}>
+                <div>
+                  <label style={{ fontSize:'0.72rem', fontWeight:700, color:'#555', textTransform:'uppercase', letterSpacing:'0.08em', display:'block', marginBottom:'8px' }}>Identity Profile</label>
+                  <select value={client} onChange={e => setClient(e.target.value)} style={inputBase}
+                    onFocus={e => e.target.style.borderColor='#cf1322'} onBlur={e => e.target.style.borderColor='#e5e5e5'}>
                     <option value="ANDROID_VR">ANDROID_VR (Golden)</option>
                     <option value="TV">TV (No-PoToken)</option>
                     <option value="IOS">IOS (Stealth)</option>
                     <option value="MWEB">MWEB (Fallback)</option>
                     <option value="HEADLESS">PLAYWRIGHT (Headless)</option>
-                    <option value="APIFY_HTML_SPOOF">APIFY_HTML_SPOOF (curl_cffi)</option>
+                    <option value="APIFY_HTML_SPOOF">APIFY_HTML_SPOOF</option>
                   </select>
-                <div style={{ border: '1px solid #333', padding: '20px', background: 'rgba(255,255,255,0.02)', marginTop: '10px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={useProxy}
-                      onChange={(e) => setUseProxy(e.target.checked)}
-                      style={{ accentColor: 'var(--lime)' }}
-                    />
-                    <span style={{ fontSize: '0.75rem', fontFamily: "'Space Mono', monospace", fontWeight: 700, color: 'var(--yellow)' }}>
-                      USE_PROXYSCRAPE
-                    </span>
-                  </label>
                 </div>
+                <label style={{ display:'flex', alignItems:'center', gap:'10px', cursor:'pointer', fontSize:'0.82rem', fontWeight:600, color:'#333' }}>
+                  <input type="checkbox" checked={useProxy} onChange={e => setUseProxy(e.target.checked)} style={{ accentColor:'#cf1322', width:'16px', height:'16px' }}/>
+                  Use ProxyScrape
+                </label>
               </div>
             )}
 
-              <button 
-                onClick={activeTab === 'handshake' ? runHandshake : runResolver}
-                disabled={loading}
-                style={{ 
-                  background: activeTab === 'handshake' ? 'var(--lime)' : 'var(--yellow)',
-                  color: '#000', fontWeight: 900, padding: '18px', border: 'none',
-                  fontFamily: "'Space Mono', monospace", cursor: loading ? 'not-allowed' : 'pointer',
-                  boxShadow: '4px 4px 0 #000, 4px 4px 0 2px var(--text)',
-                  opacity: loading ? 0.5 : 1
-                }}
-              >
-                {loading ? 'INITIALIZING...' : 'EXECUTE_TEST'}
-              </button>
-            </div>
+            {/* Run button */}
+            <button
+              onClick={activeTab === 'handshake' ? runHandshake : runResolver}
+              disabled={loading}
+              style={{
+                background: loading ? '#e5e5e5' : '#cf1322',
+                color: loading ? '#aaa' : '#fff',
+                border:'2px solid #111', borderRadius:'8px',
+                padding:'14px', fontWeight:700, fontSize:'0.9rem',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                boxShadow:'2px 2px 0 #111',
+                transition:'transform 0.1s, box-shadow 0.1s',
+              }}
+              onMouseEnter={e => { if (!loading) { e.currentTarget.style.transform='translate(-1px,-1px)'; e.currentTarget.style.boxShadow='3px 3px 0 #111' }}}
+              onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='2px 2px 0 #111' }}
+            >
+              {loading ? 'Running…' : 'Execute Test →'}
+            </button>
           </aside>
 
-          {/* Result Viewport */}
-          <main style={{ position: 'relative' }}>
-            <div className="crt-container" style={{ 
-              background: '#050a05', border: '2px solid #222', borderRadius: '4px',
-              height: '600px', overflowY: 'auto', padding: '30px', position: 'relative',
-              boxShadow: 'inset 0 0 50px rgba(0,0,0,0.8)'
+          {/* Results panel */}
+          <main>
+            <div style={{
+              background:'#111', borderRadius:'12px',
+              border:'1px solid #222',
+              height:'580px', overflowY:'auto', padding:'24px',
+              fontFamily:'monospace', fontSize:'0.82rem',
             }}>
-              {/* Scanlines Overlay */}
-              <div style={{
-                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                background: 'linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06))',
-                zIndex: 2, backgroundSize: '100% 2px, 3px 100%', pointerEvents: 'none'
-              }} />
-              
-              <div style={{ position: 'relative', zIndex: 3, fontFamily: "'Space Mono', monospace", fontSize: '0.85rem' }}>
-                {!results && !error && !loading && (
-                  <div style={{ color: '#2a4d2a', textAlign: 'center', marginTop: '150px' }}>
-                    <div style={{ fontSize: '3rem', marginBottom: '20px' }}>🛰️</div>
-                    <div>AWAITING COMMAND...</div>
-                    <div style={{ fontSize: '0.7rem', marginTop: '10px', opacity: 0.5 }}>READY_FOR_HANDSHAKE</div>
+              {!results && !error && !loading && (
+                <div style={{ color:'#444', textAlign:'center', marginTop:'120px' }}>
+                  <div style={{ fontSize:'2.5rem', marginBottom:'16px' }}>🛰️</div>
+                  <div style={{ color:'#555' }}>Awaiting command…</div>
+                  <div style={{ fontSize:'0.7rem', marginTop:'8px', color:'#333' }}>Ready for handshake</div>
+                </div>
+              )}
+
+              {loading && (
+                <div style={{ color:'#cf1322' }}>
+                  <div>[ SYSTEM ] Connecting to cluster…</div>
+                  <div style={{ marginTop:'8px', color:'#aaa' }}>Loading data matrix…</div>
+                </div>
+              )}
+
+              {error && (
+                <div>
+                  <div style={{ color:'#ef4444', marginBottom:'12px' }}>[ ERROR ] Operation failed</div>
+                  <div style={{ background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:'8px', padding:'14px', color:'#fca5a5' }}>
+                    {error}
                   </div>
-                )}
+                </div>
+              )}
 
-                {loading && (
-                  <div style={{ color: 'var(--lime)' }}>
-                    <div>[ SYSTEM ] CONNECTING TO CLUSTER...</div>
-                    <div className="blink" style={{ marginTop: '10px' }}>_ LOADING DATA MATRIX...</div>
+              {results && (
+                <div>
+                  <div style={{ color:'#22c55e', marginBottom:'16px', display:'flex', justifyContent:'space-between' }}>
+                    <span>[ OK ] Audit complete</span>
+                    <span style={{ color:'#555' }}>{new Date().toLocaleTimeString()}</span>
                   </div>
-                )}
 
-                {error && (
-                  <div style={{ color: '#ff5555' }}>
-                    <div>[ ERROR ] OPERATION FAILED</div>
-                    <div style={{ marginTop: '20px', background: 'rgba(255,0,0,0.1)', padding: '15px', border: '1px solid #ff5555' }}>
-                      {error}
-                    </div>
-                  </div>
-                )}
-
-                {results && (
-                  <div>
-                    <div style={{ color: 'var(--lime)', marginBottom: '20px', display: 'flex', justifyContent: 'space-between' }}>
-                      <span>[ OK ] AUDIT_COMPLETE</span>
-                      <span>{new Date().toLocaleTimeString()}</span>
-                    </div>
-
-                    {results.logs && (
-                      <div style={{ marginBottom: '25px', borderLeft: '2px solid #2a4d2a', paddingLeft: '15px' }}>
-                        <div style={{ color: '#2a4d2a', fontSize: '0.7rem', marginBottom: '10px' }}>// EXECUTION_LOGS</div>
-                        {results.logs.map((log, i) => (
-                          <div key={i} style={{ color: log.includes('ERROR') || log.includes('BLOCK') ? '#ff5555' : '#4ade80', fontSize: '0.75rem', marginBottom: '4px' }}>
-                            {log}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div style={{ color: '#2a4d2a', fontSize: '0.7rem', marginBottom: '10px' }}>// RAW_DATA_OUTPUT</div>
-                    <pre style={{ color: '#4ade80', whiteSpace: 'pre-wrap', wordBreak: 'break-all', opacity: 0.8 }}>
-                      {JSON.stringify(results.results, null, 2)}
-                    </pre>
-
-                    {results.results?.streams && (
-                      <div style={{ marginTop: '30px', padding: '20px', border: '1px solid var(--lime)', background: 'rgba(74, 222, 128, 0.05)' }}>
-                        <div style={{ color: 'var(--lime)', fontWeight: 700, marginBottom: '10px' }}>[ QUICK_VIEW ]</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                          <div>VIDEO_URL: <span style={{ color: results.results.streams.has_video_url ? 'var(--green)' : 'red' }}>{results.results.streams.has_video_url ? 'FOUND' : 'MISSING'}</span></div>
-                          <div>AUDIO_URL: <span style={{ color: results.results.streams.has_audio_url ? 'var(--green)' : 'red' }}>{results.results.streams.has_audio_url ? 'FOUND' : 'MISSING'}</span></div>
-                          <div>CAPTIONS: <span style={{ color: results.results.captions_found > 0 ? 'var(--green)' : 'red' }}>{results.results.captions_found} LANGUAGES</span></div>
+                  {results.logs && (
+                    <div style={{ marginBottom:'20px', borderLeft:'2px solid #1a3a1a', paddingLeft:'14px' }}>
+                      <div style={{ color:'#555', fontSize:'0.7rem', marginBottom:'8px' }}>// Execution logs</div>
+                      {results.logs.map((log, i) => (
+                        <div key={i} style={{ color: log.includes('ERROR') || log.includes('BLOCK') ? '#ef4444' : '#4ade80', fontSize:'0.75rem', marginBottom:'4px' }}>
+                          {log}
                         </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div style={{ color:'#555', fontSize:'0.7rem', marginBottom:'8px' }}>// Raw output</div>
+                  <pre style={{ color:'#4ade80', whiteSpace:'pre-wrap', wordBreak:'break-all', opacity:0.85 }}>
+                    {JSON.stringify(results.results, null, 2)}
+                  </pre>
+
+                  {results.results?.streams && (
+                    <div style={{ marginTop:'24px', padding:'16px', border:'1px solid #1a3a1a', borderRadius:'8px', background:'rgba(74,222,128,0.05)' }}>
+                      <div style={{ color:'#22c55e', fontWeight:700, marginBottom:'10px' }}>Quick View</div>
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', fontSize:'0.78rem', color:'#aaa' }}>
+                        <div>Video URL: <span style={{ color:results.results.streams.has_video_url ? '#22c55e' : '#ef4444' }}>{results.results.streams.has_video_url ? 'Found' : 'Missing'}</span></div>
+                        <div>Audio URL: <span style={{ color:results.results.streams.has_audio_url ? '#22c55e' : '#ef4444' }}>{results.results.streams.has_audio_url ? 'Found' : 'Missing'}</span></div>
+                        <div>Captions: <span style={{ color:results.results.captions_found > 0 ? '#22c55e' : '#ef4444' }}>{results.results.captions_found} languages</span></div>
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            
-            {/* Corner Accents */}
-            <div style={{ position: 'absolute', top: -5, left: -5, width: 20, height: 20, borderTop: '2px solid var(--lime)', borderLeft: '2px solid var(--lime)' }} />
-            <div style={{ position: 'absolute', top: -5, right: -5, width: 20, height: 20, borderTop: '2px solid var(--lime)', borderRight: '2px solid var(--lime)' }} />
-            <div style={{ position: 'absolute', bottom: -5, left: -5, width: 20, height: 20, borderBottom: '2px solid var(--lime)', borderLeft: '2px solid var(--lime)' }} />
-            <div style={{ position: 'absolute', bottom: -5, right: -5, width: 20, height: 20, borderBottom: '2px solid var(--lime)', borderRight: '2px solid var(--lime)' }} />
           </main>
         </div>
       </div>
 
       <Footer />
-
-      <style>{`
-        .blink { animation: blink 1s step-end infinite; }
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
-        .crt-container::-webkit-scrollbar { width: 6px; }
-        .crt-container::-webkit-scrollbar-track { background: #000; }
-        .crt-container::-webkit-scrollbar-thumb { background: #222; border-radius: 3px; }
-        .crt-container::-webkit-scrollbar-thumb:hover { background: #333; }
-      `}</style>
     </div>
   )
 }

@@ -1,37 +1,47 @@
-# ── Stage 1: Build ─────────────────────────────────────────────────────────────
+# ── Stage 1: Build — install Python deps ───────────────────────────────────────
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# ── Stage 2: Runtime ───────────────────────────────────────────────────────────
+
+# ── Stage 2: Runtime ────────────────────────────────────────────────────────────
 FROM python:3.11-slim
 
-# Install FFmpeg and OpenCV system dependencies
+# System dependencies for FFmpeg + OpenCV/MediaPipe
+# libglib2.0-0  : GLib (MediaPipe runtime)
+# libsm6        : X11 Session Management (OpenCV headless still links it)
+# libxext6      : X11 extensions (OpenCV)
+# libxrender-dev: X11 render extension (OpenCV)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
+        ffmpeg \
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
+        libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Playwright browsers and system dependencies
-RUN pip install playwright && playwright install --with-deps chromium
 
 WORKDIR /app
 
-# Copy installed packages from builder
+# Copy installed Python packages from builder stage
 COPY --from=builder /install /usr/local
 
-# Copy source code
-COPY app/ app/
+# Copy only what the app needs at runtime
+COPY app/        app/
 COPY migrations/ migrations/
 
-# ── API mode (default): uvicorn FastAPI server ──────────────────────────────
-# Override CMD in worker service deployment via cloudbuild-worker.yaml
+# ── Cloud Run settings ──────────────────────────────────────────────────────────
 ENV PORT=8080
 EXPOSE 8080
 
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Single worker — Cloud Run scales horizontally, not vertically.
+# --timeout-keep-alive 75: slightly above Cloud Run's 60s idle timeout so
+#   Cloud Run can drain connections cleanly before killing the container.
+# --log-level info: structured logs picked up by Cloud Logging.
+CMD ["python", "-m", "uvicorn", "app.main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8080", \
+     "--workers", "1", \
+     "--timeout-keep-alive", "75", \
+     "--log-level", "info"]

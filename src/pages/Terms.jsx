@@ -84,7 +84,7 @@ export default function Terms() {
             <ul>
               <li><strong>Free:</strong> 3 videos per month, no credit card required</li>
               <li><strong>Starter ($12/month):</strong> 20 videos per month</li>
-              <li><strong>Pro ($29/month):</strong> Unlimited videos</li>
+              <li><strong>Pro ($145/month):</strong> 2,000 shorts per month</li>
             </ul>
             <p>
               Charges are per <strong>video processed</strong>, not per minute of source video.

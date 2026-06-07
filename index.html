@@ -2,24 +2,124 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+
+    <!-- ── Favicons & PWA ────────────────────────────────────────────── -->
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#cf1322" />
+
+    <!-- ── Viewport ──────────────────────────────────────────────────── -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ShortClipr — Turn Long Videos Into Viral Shorts Instantly</title>
-    <meta name="description" content="ShortClipr uses AI to extract the highest-engagement moments from your YouTube videos and automatically renders 9:16 vertical shorts — no editing required." />
-    <meta property="og:title" content="ShortClipr — AI Shorts Generator" />
-    <meta property="og:description" content="Long to Shorts. No Editing Required. Paste a YouTube URL, get viral clips." />
-    <meta property="og:image" content="https://shortclipr.com/logo.svg" />
-    <meta property="og:type" content="website" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet" />
+
+    <!-- ── Primary SEO ───────────────────────────────────────────────── -->
+    <title>ShortClipr — AI YouTube to Shorts Generator | Turn Long Videos Into Viral Clips</title>
+    <meta name="description" content="ShortClipr is the fastest AI-powered YouTube to Shorts generator. Automatically convert long YouTube videos into viral TikTok, Instagram Reels, and YouTube Shorts clips with captions in under 3 minutes. Best OpusClip alternative. Free to start." />
+    <meta name="keywords" content="AI shorts generator, YouTube to shorts, automatic clip creator, repurpose YouTube videos, TikTok clip maker, Instagram Reels from YouTube, podcast clips AI, viral clip tool, OpusClip alternative, Klap alternative, Vidyo alternative, short form video AI" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://shortclipr.com/" />
+    <meta name="author" content="ShortClipr" />
+
+    <!-- ── Open Graph ────────────────────────────────────────────────── -->
+    <meta property="og:type"        content="website" />
+    <meta property="og:site_name"   content="ShortClipr" />
+    <meta property="og:url"         content="https://shortclipr.com/" />
+    <meta property="og:title"       content="ShortClipr — AI YouTube to Shorts Generator" />
+    <meta property="og:description" content="Turn any YouTube video into viral TikTok, Reels & Shorts clips automatically. AI captions, 9:16 reframe, virality scoring — under 3 minutes. Free to start." />
+    <meta property="og:image"       content="https://shortclipr.com/og-image.png" />
+    <meta property="og:image:width"  content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt"    content="ShortClipr — AI YouTube to Viral Shorts in Minutes" />
+
+    <!-- ── Twitter Card ──────────────────────────────────────────────── -->
+    <meta name="twitter:card"        content="summary_large_image" />
+    <meta name="twitter:site"        content="@shortclipr" />
+    <meta name="twitter:title"       content="ShortClipr — Turn YouTube Videos Into Viral Shorts" />
+    <meta name="twitter:description" content="AI-powered YouTube to Shorts generator. Auto captions, 9:16 reframe, virality scoring. Under 3 mins. Free plan available." />
+    <meta name="twitter:image"       content="https://shortclipr.com/og-image.png" />
+
+    <!-- ── Schema.org — SoftwareApplication ─────────────────────────── -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "ShortClipr",
+      "applicationCategory": "VideoApplication",
+      "operatingSystem": "Web",
+      "url": "https://shortclipr.com",
+      "logo": "https://shortclipr.com/logo.svg",
+      "image": "https://shortclipr.com/og-image.png",
+      "description": "AI-powered tool that automatically converts long YouTube videos into viral vertical short-form clips for TikTok, Instagram Reels, and YouTube Shorts. Features auto-captioning, 9:16 reframe, virality scoring, and direct publishing.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+        "description": "Free plan — 3 clips, no credit card"
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "ratingCount": "1200",
+        "bestRating": "5"
+      },
+      "sameAs": ["https://twitter.com/shortclipr"]
+    }
+    </script>
+
+    <!-- ── Schema.org — Organization ────────────────────────────────── -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "Organization",
+      "name": "ShortClipr",
       "url": "https://shortclipr.com",
-      "logo": "https://shortclipr.com/logo.svg"
+      "logo": "https://shortclipr.com/logo.svg",
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "email": "hello@shortclipr.com",
+        "contactType": "customer support"
+      }
     }
     </script>
+
+    <!-- ── Schema.org — FAQPage ──────────────────────────────────────── -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is ShortClipr?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "ShortClipr is an AI-powered video repurposing tool that automatically converts long YouTube videos into viral short-form clips for TikTok, Instagram Reels, and YouTube Shorts in under 3 minutes."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is ShortClipr better than OpusClip?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "ShortClipr processes videos 3-5x faster than OpusClip, has no watermarks on the free plan, uses per-video pricing instead of per-minute, and offers 11 caption styles vs OpusClip's 4."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How long does it take to generate clips?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Average processing time is 2-4 minutes per video regardless of length. A 3-hour podcast returns 10-15 scored clips in under 5 minutes."
+          }
+        }
+      ]
+    }
+    </script>
+
+    <!-- ── Fonts ─────────────────────────────────────────────────────── -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600;800&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="root"></div>

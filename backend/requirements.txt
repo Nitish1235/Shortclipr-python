@@ -11,35 +11,22 @@ httpx==0.27.2
 ## Database
 asyncpg==0.29.0
 
-## Queue / Cache
-# Upstash Redis used for stream URL caching only (4-hour TTL)
-# REST-based client, no persistent TCP connection needed on Cloud Run
-upstash-redis==1.1.0
+## Cache (Upstash Redis — REST client via httpx, no SDK needed)
+# upstash-redis SDK not used — redis.py calls the REST API directly with httpx
 
 ## AI / Transcription
 openai==1.47.0
-# youtube-transcript-api removed — captions now fetched directly via InnerTube API
+youtube-transcript-api==1.2.4
 
-## Video Processing & Stream Extraction
-ffmpeg-python==0.2.0
-curl_cffi==0.15.0
-pytubefix==10.3.8
+## Video Stream Extraction
+yt-dlp==2024.11.4
 
 ## Google Cloud
 google-cloud-storage==2.18.2
 google-auth-oauthlib==1.2.1
 google-api-python-client==2.143.0
 
-
-## Face detection (optional — for auto-reframe)
+## Face detection + reframing (MediaPipe requires these OpenCV headless + protobuf)
 opencv-python-headless==4.10.0.84
-
-## Logging
-structlog==24.4.0
-
-## Third Party Tools
-myjdapi==1.1.10
-
-## Headless Browser Bypass
-playwright==1.47.0
-playwright-stealth==1.0.6
+mediapipe==0.10.14
+protobuf==4.25.3

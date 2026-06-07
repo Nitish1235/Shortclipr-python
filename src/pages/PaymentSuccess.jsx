@@ -2,81 +2,107 @@ import { useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import Navigation from '../components/Navigation'
 import Footer from '../components/Footer'
-import './legal.css'
 
 export default function PaymentSuccess() {
   const [params] = useSearchParams()
   const plan = params.get('plan') || 'Pro'
 
   useEffect(() => {
-    // Optionally refresh user plan from /auth/me after payment
     const token = localStorage.getItem('sc_token')
     if (token) {
       fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8080'}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
         .then(r => r.json())
-        .then(data => {
-          if (data.plan) localStorage.setItem('sc_plan', data.plan)
-        })
+        .then(data => { if (data.plan) localStorage.setItem('sc_plan', data.plan) })
         .catch(() => {})
     }
   }, [])
 
+  const planName = plan.charAt(0).toUpperCase() + plan.slice(1)
+
   return (
     <>
       <Navigation />
-      <div className="legal-page" style={{ textAlign: 'center' }}>
-        <div className="legal-inner" style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '4rem', marginBottom: '24px' }}>✅</div>
-          <div className="legal-badge">PAYMENT_CONFIRMED</div>
-          <h1 className="legal-title" style={{ textAlign: 'center' }}>
-            Welcome to <span>ShortClipr {plan.charAt(0).toUpperCase() + plan.slice(1)}</span>
+      <main style={{ background:'#f9f9f9', minHeight:'100vh', padding:'100px 5% 80px' }}>
+        <div style={{ maxWidth:'560px', margin:'0 auto', textAlign:'center' }}>
+
+          {/* Success icon */}
+          <div style={{
+            width:'72px', height:'72px', background:'#f0fdf4',
+            border:'2px solid #bbf7d0', borderRadius:'50%',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            fontSize:'2rem', margin:'0 auto 24px',
+          }}>✅</div>
+
+          <div style={{
+            display:'inline-block', background:'#fef2f2', border:'1px solid #fecaca',
+            borderRadius:'100px', padding:'4px 14px',
+            fontSize:'0.72rem', fontWeight:700, color:'#cf1322',
+            textTransform:'uppercase', letterSpacing:'0.15em', marginBottom:'16px',
+          }}>Payment Confirmed</div>
+
+          <h1 style={{ fontSize:'2rem', fontWeight:700, color:'#0f0f0f', letterSpacing:'-0.04em', marginBottom:'12px' }}>
+            Welcome to ShortClipr{' '}
+            <span style={{ color:'#cf1322' }}>{planName}</span>!
           </h1>
-          <p style={{
-            fontFamily: "'Space Mono', monospace", fontSize: '0.9rem',
-            color: 'var(--muted)', lineHeight: 1.8, marginBottom: '32px',
-          }}>
+
+          <p style={{ fontSize:'0.95rem', color:'#666', lineHeight:1.7, marginBottom:'32px' }}>
             Payment confirmed. Your plan is now active.<br />
             Start generating viral clips immediately.
           </p>
 
+          {/* Status card */}
           <div style={{
-            background: 'rgba(132,204,22,0.06)', border: '1px solid rgba(132,204,22,0.2)',
-            padding: '24px', marginBottom: '32px',
-            fontFamily: "'Space Mono', monospace", fontSize: '0.82rem', color: 'var(--muted)',
-            textAlign: 'left',
+            background:'#fff', border:'1px solid #e5e5e5',
+            borderRadius:'12px', padding:'20px 24px', marginBottom:'32px',
+            textAlign:'left',
           }}>
-            <div style={{ color: 'var(--lime)', marginBottom: '12px', fontWeight: 700 }}>SYSTEM_LOG:</div>
-            <div>[OK] Payment verified by Dodo Payments</div>
-            <div>[OK] Plan upgraded successfully</div>
-            <div>[OK] New video allowance active</div>
-            <div style={{ marginTop: '8px' }}>[→] Ready to process videos</div>
+            {[
+              { ok:true,  text:'Payment verified by Dodo Payments' },
+              { ok:true,  text:'Plan upgraded successfully'        },
+              { ok:true,  text:'New video allowance active'        },
+              { ok:null,  text:'Ready to process videos'           },
+            ].map((item, i) => (
+              <div key={i} style={{
+                display:'flex', alignItems:'center', gap:'10px',
+                padding:'8px 0',
+                borderBottom: i < 3 ? '1px solid #f0f0f0' : 'none',
+                fontSize:'0.875rem',
+                color: item.ok === null ? '#cf1322' : '#333',
+                fontWeight: item.ok === null ? 600 : 400,
+              }}>
+                <span style={{ color: item.ok === true ? '#16a34a' : '#cf1322', fontWeight:700, flexShrink:0 }}>
+                  {item.ok === true ? '✓' : '→'}
+                </span>
+                {item.text}
+              </div>
+            ))}
           </div>
 
-          <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link to="/" style={{
-              display: 'inline-block', padding: '14px 32px',
-              background: 'var(--lime)', color: 'var(--bg-dark)',
-              fontFamily: "'Space Mono', monospace", fontWeight: 700,
-              fontSize: '0.85rem', textDecoration: 'none', textTransform: 'uppercase',
-            }}>
-              START GENERATING →
-            </Link>
+          <div style={{ display:'flex', gap:'12px', justifyContent:'center', flexWrap:'wrap' }}>
+            <Link to="/dashboard" style={{
+              background:'#cf1322', color:'#fff',
+              border:'2px solid #111', borderRadius:'8px',
+              padding:'13px 28px', fontWeight:700, fontSize:'0.9rem',
+              boxShadow:'2px 2px 0 #111', display:'inline-block',
+            }}
+              onMouseEnter={e => { e.currentTarget.style.transform='translate(-1px,-1px)'; e.currentTarget.style.boxShadow='3px 3px 0 #111' }}
+              onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='2px 2px 0 #111' }}
+            >Go to Dashboard →</Link>
             <Link to="/contact" style={{
-              display: 'inline-block', padding: '14px 32px',
-              border: '1px solid var(--lime)', color: 'var(--lime)',
-              fontFamily: "'Space Mono', monospace", fontSize: '0.82rem',
-              textDecoration: 'none', textTransform: 'uppercase',
-            }}>
-              NEED HELP?
-            </Link>
+              background:'transparent', color:'#666',
+              border:'1.5px solid #e5e5e5', borderRadius:'8px',
+              padding:'12px 24px', fontWeight:600, fontSize:'0.875rem',
+              display:'inline-block',
+            }}>Need help?</Link>
           </div>
-          <p style={{ marginTop: '24px', fontSize: '0.75rem', color: 'var(--muted)', fontFamily: "'Space Mono', monospace" }}>
+
+          <p style={{ marginTop:'20px', fontSize:'0.75rem', color:'#bbb' }}>
             A receipt has been sent to your email by Dodo Payments.
           </p>
         </div>
-      </div>
+      </main>
       <Footer />
     </>
   )

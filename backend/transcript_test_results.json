@@ -1,0 +1,119 @@
+[
+  {
+    "method": "1_ytta_bare",
+    "status": "OK",
+    "entries": 2389,
+    "first_words": "At one point, al-Qaeda came close to",
+    "elapsed_sec": 1.99,
+    "error": "",
+    "note": "Uses InnerTube timedtext endpoint directly"
+  },
+  {
+    "method": "2_ytta_decodo",
+    "status": "OK",
+    "entries": 2389,
+    "first_words": "At one point, al-Qaeda came close to",
+    "elapsed_sec": 3.61,
+    "error": "",
+    "note": "proxy=gate.decodo.com"
+  },
+  {
+    "method": "3_ytdlp_subs_bare",
+    "status": "OK",
+    "entries": 2389,
+    "first_words": "At one point, al-Qaeda came close to",
+    "elapsed_sec": 3.25,
+    "error": "",
+    "note": "lang=en"
+  },
+  {
+    "method": "4_ytdlp_subs_decodo",
+    "status": "OK",
+    "entries": 2389,
+    "first_words": "At one point, al-Qaeda came close to",
+    "elapsed_sec": 6.36,
+    "error": "",
+    "note": "lang=en proxy=gate.decodo.com"
+  },
+  {
+    "method": "5_ytdlp_android_decodo",
+    "status": "OK",
+    "entries": 2389,
+    "first_words": "At one point, al-Qaeda came close to",
+    "elapsed_sec": 10.75,
+    "error": "",
+    "note": "lang=en client=android"
+  },
+  {
+    "method": "6_ytdlp_tvembed_decodo",
+    "status": "OK",
+    "entries": 2389,
+    "first_words": "At one point, al-Qaeda came close to",
+    "elapsed_sec": 5.27,
+    "error": "",
+    "note": "lang=en client=tv_embedded"
+  },
+  {
+    "method": "9_pytubefix",
+    "status": "FAIL",
+    "entries": 0,
+    "first_words": "",
+    "elapsed_sec": 6.06,
+    "error": "Command '['C:\\\\Users\\\\nitish\\\\AppData\\\\Local\\\\Microsoft\\\\WindowsApps\\\\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\\\\python.exe', '-m', 'pip', 'i",
+    "note": ""
+  },
+  {
+    "method": "7_innertube_android_vr",
+    "status": "NO_CAPTIONS",
+    "entries": 0,
+    "first_words": "",
+    "elapsed_sec": 0.58,
+    "error": "",
+    "note": "playability=LOGIN_REQUIRED"
+  },
+  {
+    "method": "8_innertube_tv",
+    "status": "NO_CAPTIONS",
+    "entries": 0,
+    "first_words": "",
+    "elapsed_sec": 0.59,
+    "error": "",
+    "note": "playability=LOGIN_REQUIRED"
+  },
+  {
+    "method": "10_supadata_api",
+    "status": "SKIPPED",
+    "entries": 0,
+    "first_words": "",
+    "elapsed_sec": 0,
+    "error": "",
+    "note": "Set SUPADATA_KEY env var. Free: supadata.ai (100/month)"
+  },
+  {
+    "method": "11_serpapi",
+    "status": "SKIPPED",
+    "entries": 0,
+    "first_words": "",
+    "elapsed_sec": 0,
+    "error": "",
+    "note": "Set SERPAPI_KEY env var. Free: serpapi.com (100/month)"
+  },
+  {
+    "method": "12_transcriptapi_com",
+    "status": "SKIPPED",
+    "entries": 0,
+    "first_words": "",
+    "elapsed_sec": 0,
+    "error": "",
+    "note": "Set TRANSCRIPTAPI_KEY env var. Free: transcriptapi.com (100 credits)"
+  },
+  {
+    "method": "13_scrapingdog",
+    "status": "SKIPPED",
+    "entries": 0,
+    "first_words": "",
+    "elapsed_sec": 0,
+    "error": "",
+    "note": "Set SCRAPINGDOG_KEY env var. Free: scrapingdog.com (1000 credits)"
+  }
+]

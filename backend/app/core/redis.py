@@ -63,13 +63,16 @@ redis = UpstashRedis()
 
 # ── Stream URL cache helpers ───────────────────────────────────
 
-async def cache_stream_url(video_id: str, url: str) -> None:
-    """Cache an InnerTube stream URL in Redis for REDIS_STREAM_CACHE_TTL seconds."""
-    key = f"stream:{video_id}"
+async def cache_stream_url(cache_key: str, url: str) -> None:
+    """
+    Cache an InnerTube stream URL in Redis for REDIS_STREAM_CACHE_TTL seconds.
+    cache_key is typically "{video_id}:{quality}", e.g. "abc123:1080p".
+    """
+    key = f"stream:{cache_key}"
     await redis.setex(key, settings.REDIS_STREAM_CACHE_TTL, url)
-    logger.debug(f"Cached stream URL for {video_id}")
+    logger.debug(f"Cached stream URL for {cache_key}")
 
 
-async def get_cached_stream_url(video_id: str) -> str | None:
+async def get_cached_stream_url(cache_key: str) -> str | None:
     """Return cached stream URL or None if not present/expired."""
-    return await redis.get(f"stream:{video_id}")
+    return await redis.get(f"stream:{cache_key}")

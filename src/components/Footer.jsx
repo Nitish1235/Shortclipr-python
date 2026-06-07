@@ -3,137 +3,111 @@ import Logo from './Logo'
 
 const COLS = [
   {
-    title: 'PRODUCT',
+    title: 'Product',
     links: [
-      { label: 'Features', href: '/#features' },
-      { label: 'Pricing', href: '/#pricing' },
-      { label: 'Showcase', href: '/#showcase' },
-      { label: 'Changelog', href: '/changelog' },
+      { label: 'Features',  href: '/#features'      },
+      { label: 'Pricing',   href: '/#pricing'        },
+      { label: 'Showcase',  href: '/#showcase'       },
+      { label: 'Changelog', href: '/changelog'       },
     ],
   },
   {
-    title: 'COMPANY',
+    title: 'Company',
     links: [
-      { label: 'About', href: '/about' },
-      { label: 'Contact', href: '/contact' },
-      { label: 'Press Kit', href: '/press' },
-      { label: 'Careers', href: '/careers' },
+      { label: 'About',    href: '/about'   },
+      { label: 'Contact',  href: '/contact' },
+      { label: 'Press Kit',href: '/press'   },
+      { label: 'Careers',  href: '/careers' },
     ],
   },
   {
-    title: 'LEGAL',
+    title: 'Legal',
     links: [
-      { label: 'Privacy Policy', href: '/privacy' },
-      { label: 'Terms of Service', href: '/terms' },
-      { label: 'Contact Us', href: '/contact' },
-      { label: 'DMCA', href: '/dmca' },
+      { label: 'Privacy Policy',   href: '/privacy' },
+      { label: 'Terms of Service', href: '/terms'   },
+      { label: 'DMCA',             href: '/dmca'    },
     ],
   },
 ]
 
-const linkStyle = {
-  fontFamily: "'Space Mono', monospace", fontSize: '0.8rem',
-  color: 'var(--muted)', textDecoration: 'none', transition: 'color 0.2s',
-  display: 'block',
-}
-
 export default function Footer() {
   const year = new Date().getFullYear()
 
+  const linkBase = {
+    fontSize:'0.85rem', color:'#666', display:'block',
+    marginBottom:'10px', transition:'color 0.15s',
+    textDecoration:'none',
+  }
+
   return (
     <footer style={{
-      padding: '50px 5% 30px', background: 'var(--bg-dark)',
-      borderTop: '4px solid var(--lime)',
+      background:'#fff',
+      borderTop:'1px solid #e5e5e5',
+      padding:'60px 5% 32px',
     }}>
-      <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+      <div style={{ maxWidth:'1100px', margin:'0 auto' }}>
+
         {/* Top row */}
         <div style={{
-          display: 'grid', gridTemplateColumns: '1fr auto auto auto',
-          gap: '48px', marginBottom: '48px',
+          display:'grid', gridTemplateColumns:'1.4fr 1fr 1fr 1fr',
+          gap:'48px', marginBottom:'56px',
         }}>
+
           {/* Brand */}
           <div>
-            <Link to="/" className="logo" style={{ marginBottom: '12px', display: 'inline-flex' }}>
-              <Logo size={40} />
-              SHORTCLIPR<span style={{ color: 'var(--green)', opacity: 0.7, fontSize: '1.1rem' }}>.COM</span>
+            <Link to="/" style={{ display:'inline-flex', alignItems:'center', gap:'10px', marginBottom:'14px' }}>
+              <Logo size={32}/>
+              <span style={{ fontWeight:700, fontSize:'1rem', color:'#cf1322', letterSpacing:'-0.02em' }}>ShortClipr</span>
             </Link>
-            <p style={{
-              fontFamily: "'Space Mono', monospace", fontSize: '0.8rem',
-              color: 'var(--muted)', lineHeight: 1.7, maxWidth: '220px', marginTop: '10px',
-            }}>
-              Long to Shorts.<br />No Editing Required.<br />No Credit Card.
+            <p style={{ fontSize:'0.85rem', color:'#999', lineHeight:1.7, maxWidth:'220px' }}>
+              Long to Shorts.<br/>No Editing Required.<br/>No Credit Card.
             </p>
+            {/* Red accent bar */}
+            <div style={{ width:'40px', height:'3px', background:'#cf1322', marginTop:'20px', borderRadius:'2px' }}/>
           </div>
 
           {/* Link columns */}
           {COLS.map(col => (
             <div key={col.title}>
               <div style={{
-                fontFamily: "'Space Mono', monospace", fontWeight: 700, fontSize: '0.75rem',
-                color: 'var(--lime)', letterSpacing: '0.12em', marginBottom: '16px',
-                textTransform: 'uppercase',
+                fontWeight:700, fontSize:'0.75rem', color:'#111',
+                letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:'18px',
               }}>{col.title}</div>
               {col.links.map(link => (
-                <div key={link.label} style={{ marginBottom: '10px' }}>
-                  {link.href.startsWith('/') && !link.href.includes('#') ? (
-                    <Link
-                      to={link.href}
-                      style={linkStyle}
-                      onMouseEnter={e => e.currentTarget.style.color = 'var(--lime)'}
-                      onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}
-                    >{link.label}</Link>
-                  ) : (
-                    <a
-                      href={link.href}
-                      style={linkStyle}
-                      onMouseEnter={e => e.target.style.color = 'var(--lime)'}
-                      onMouseLeave={e => e.target.style.color = 'var(--muted)'}
-                    >{link.label}</a>
-                  )}
-                </div>
+                <Link
+                  key={link.label}
+                  to={link.href}
+                  style={linkBase}
+                  onMouseEnter={e => e.currentTarget.style.color='#cf1322'}
+                  onMouseLeave={e => e.currentTarget.style.color='#666'}
+                >{link.label}</Link>
               ))}
             </div>
           ))}
         </div>
 
-        {/* Bottom bar */}
-        <div style={{
-          borderTop: '1px dashed #1a3322', paddingTop: '24px',
-          display: 'flex', justifyContent: 'space-between',
-          alignItems: 'center', flexWrap: 'wrap', gap: '12px',
-        }}>
-          <span style={{ fontFamily: "'Space Mono', monospace", fontSize: '0.75rem', color: 'var(--muted)' }}>
-            C:\&gt; COPYRIGHT {year} SHORTCLIPR.COM — ALL RIGHTS RESERVED
+        {/* Divider */}
+        <div style={{ borderTop:'1px solid #e5e5e5', paddingTop:'24px', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'12px' }}>
+          <span style={{ fontSize:'0.8rem', color:'#bbb' }}>
+            © {year} ShortClipr — All rights reserved
           </span>
-          <span style={{ fontFamily: "'Space Mono', monospace", fontSize: '0.75rem', color: 'var(--muted)', display: 'flex', gap: '20px' }}>
-            <Link to="/privacy" style={{ color: 'var(--muted)', textDecoration: 'none' }}
-              onMouseEnter={e => e.currentTarget.style.color = 'var(--lime)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}
-            >Privacy</Link>
-            <Link to="/terms" style={{ color: 'var(--muted)', textDecoration: 'none' }}
-              onMouseEnter={e => e.currentTarget.style.color = 'var(--lime)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}
-            >Terms</Link>
-            <Link to="/contact" style={{ color: 'var(--muted)', textDecoration: 'none' }}
-              onMouseEnter={e => e.currentTarget.style.color = 'var(--lime)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}
-            >Contact</Link>
-          </span>
-          <span style={{
-            fontFamily: "'Space Mono', monospace", fontSize: '0.75rem', color: 'var(--yellow)',
-            display: 'flex', alignItems: 'center', gap: '8px',
-          }}>
-            SYS_VER: 2.0.4 — UPTIME: 99.1% <span className="blink">█</span>
-          </span>
+          <div style={{ display:'flex', gap:'20px' }}>
+            {[['Privacy','/privacy'],['Terms','/terms'],['Contact','/contact']].map(([label,href]) => (
+              <Link key={href} to={href} style={{ fontSize:'0.8rem', color:'#bbb', textDecoration:'none' }}
+                onMouseEnter={e => e.currentTarget.style.color='#cf1322'}
+                onMouseLeave={e => e.currentTarget.style.color='#bbb'}
+              >{label}</Link>
+            ))}
+          </div>
+          <span style={{ fontSize:'0.78rem', color:'#ddd' }}>v2.0.4</span>
         </div>
       </div>
 
       <style>{`
-        @media (max-width: 768px) {
-          footer > div > div:first-child { grid-template-columns: 1fr 1fr !important; }
+        @media(max-width:768px){
+          footer div[style*="grid-template-columns"]{grid-template-columns:1fr 1fr !important;}
         }
       `}</style>
     </footer>
   )
 }
-

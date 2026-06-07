@@ -1,33 +1,52 @@
-export default function Ticker() {
-  const items = [
-    'AI_POWERED_CLIPPING','9:16_AUTO_REFRAME','BURN-IN_CAPTIONS',
-    'MULTI-PLATFORM_EXPORT','VIRAL_HOOK_DETECTION','NO_WATERMARK_PRO',
-    '4K_READY_OUTPUT','BATCH_PROCESSING',
-  ]
-  const doubled = [...items, ...items]
+// Social proof + feature ticker — between hero and how-it-works
+const items = [
+  { text: '✅ No watermarks on free plan'           },
+  { text: '⚡ Under 3 min processing'               },
+  { text: '🎬 11 caption styles'                    },
+  { text: '📐 Auto 9:16 reframe'                    },
+  { text: '🌍 28 languages supported'               },
+  { text: '📊 Virality score per clip'               },
+  { text: '🔥 Viral score for every clip'           },
+  { text: '📦 Batch process 20 videos'             },
+  { text: '💳 No credit card for free plan'         },
+  { text: '🎙️ Works with podcasts & interviews'    },
+  { text: '📱 TikTok · Reels · Shorts · LinkedIn'  },
+  { text: '🏆 Best OpusClip alternative'           },
+]
 
+const doubled = [...items, ...items]
+
+export default function Ticker() {
   return (
     <div style={{
-      overflow: 'hidden', borderTop: '2px solid var(--lime)',
-      borderBottom: '2px solid var(--lime)', background: 'var(--lime)',
-      padding: '10px 0',
+      overflow: 'hidden',
+      borderTop: '1px solid #e5e5e5',
+      borderBottom: '1px solid #e5e5e5',
+      background: '#0f0f0f',
+      padding: '14px 0',
     }}>
       <div style={{
-        display: 'flex', gap: '40px', width: 'max-content',
-        animation: 'ticker 22s linear infinite',
-        fontFamily: "'Space Mono', monospace", fontWeight: 700,
-        fontSize: '0.85rem', color: 'var(--bg-dark)', letterSpacing: '0.06em',
+        display: 'flex',
+        width: 'max-content',
+        animation: 'marquee 32s linear infinite',
+        gap: '0',
       }}>
         {doubled.map((item, i) => (
-          <span key={i}>● {item}</span>
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center',
+            gap: '10px', padding: '0 28px',
+            borderRight: '1px solid #333',
+            flexShrink: 0,
+          }}>
+            <span style={{
+              fontSize: '0.8rem', fontWeight: 600,
+              color: '#e5e5e5', whiteSpace: 'nowrap',
+              letterSpacing: '0.02em',
+            }}>{item.text}</span>
+          </div>
         ))}
       </div>
-      <style>{`
-        @keyframes ticker {
-          from { transform: translateX(0); }
-          to   { transform: translateX(-50%); }
-        }
-      `}</style>
+      <style>{`@keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}`}</style>
     </div>
   )
 }

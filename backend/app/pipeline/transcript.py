@@ -1,154 +1,291 @@
 """
 transcript.py — Step 2 of the ShortClipr pipeline.
 
-Fetches captions directly via InnerTube API.
-Handles auto-generated captions in ANY language.
-Whisper fallback is only used if NO captions exist.
+Transcript extraction: 3-method fallback chain, all via proxy-cheap.
+
+Priority order (proven entry counts → broadest compatibility):
+  1. youtube-transcript-api v1.2.4 + proxy-cheap  (proven: 2389 entries, fastest)
+  2. InnerTube ANDROID + proxy-cheap              (player + timedtext via SAME proxy)
+  3. yt-dlp subtitle extraction + proxy-cheap
+
+Fallback triggers on:
+  - TranscriptsDisabled         → HARD STOP (no captions exist on this video)
+  - VideoUnavailable            → HARD STOP (video gone/private)
+  - NoTranscriptFound           → try next method
+  - TooManyRequests             → try next method (proxy rotation helps)
+  - YouTubeRequestFailed        → try next method
+  - HTTP 4xx/5xx                → try next method
+  - Empty result                → try next method
+  - Any other exception         → try next method
+
+InnerTube method note: the caption baseUrl contains an IP-tied auth token.
+The timedtext fetch MUST use the same proxy as the player API call.
+
+_fetch_innertube_captions is kept for backward compatibility with testing.py Lab.
 """
 
 import asyncio
-import json
 import logging
 import re
-import tempfile
 import xml.etree.ElementTree as ET
-from collections.abc import AsyncGenerator
-from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 import httpx
-from openai import AsyncOpenAI
 
-from app.core.config import get_settings
+from app.core.proxy import get_proxy_url
 from app.pipeline.stream import call_player_api
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
-openai = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-
-
-# ── Data types ─────────────────────────────────────────────────
 
 TranscriptEntry = dict  # {"text": str, "start": float, "duration": float}
 
+_TRANSCRIPT_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="transcript")
 
-# ── Primary path ───────────────────────────────────────────────
+LANG_MAP = {
+    # Frontend display names → ISO 639-1 codes
+    "English":              "en",
+    "Spanish":              "es",
+    "French":               "fr",
+    "German":               "de",
+    "Hindi":                "hi",
+    "Portuguese":           "pt",
+    "Italian":              "it",
+    "Japanese":             "ja",
+    "Korean":               "ko",
+    "Chinese":              "zh",
+    # "Auto" variants → default to English
+    "Auto":                 "en",
+    "Auto / No translation": "en",
+    "auto":                 "en",
+}
 
-async def get_transcript(video_id: str, language: str = "en") -> tuple[list[TranscriptEntry], bool]:
-    """Returns (transcript_entries, used_whisper_fallback)."""
+# ── Sentinel for hard "no captions" signal ─────────────────────
+
+class _TranscriptsDisabledError(Exception):
+    """Video has transcripts disabled — no point trying other methods."""
+
+
+# ── Public API ─────────────────────────────────────────────────
+
+async def get_transcript(video_id: str, language: str = "en") -> list[TranscriptEntry]:
+    """
+    Return transcript entries via 3-method proxy-backed fallback chain.
+    Raises RuntimeError if all methods fail.
+    """
+    lang_code = LANG_MAP.get(language, language)
+    errors: list[str] = []
+
+    # ── Method 1: youtube-transcript-api + proxy-cheap ────────
     try:
-        entries = await _fetch_innertube_captions(video_id, language)
+        entries = await _ytta_proxy(video_id, lang_code)
         if entries:
-            logger.info(f"[{video_id}] InnerTube captions fetched: {len(entries)} entries")
-            return entries, False
-        else:
-            raise ValueError("No caption tracks found")
-
+            logger.info(f"[{video_id}] transcript ← ytta+proxy ({len(entries)} entries)")
+            return entries
+        errors.append("ytta: empty result")
+    except _TranscriptsDisabledError:
+        raise RuntimeError(f"[{video_id}] Video has transcripts disabled — cannot extract captions")
+    except _VideoUnavailableError as e:
+        raise RuntimeError(f"[{video_id}] Video unavailable: {e}")
     except Exception as e:
-        logger.warning(f"[{video_id}] No captions via InnerTube: {e}. Falling back to Whisper.")
-        entries = await _whisper_fallback_transcript(video_id)
-        return entries, True
+        logger.warning(f"[{video_id}] ytta+proxy failed: {e}")
+        errors.append(f"ytta: {e}")
+
+    # ── Method 2: InnerTube ANDROID + proxy-cheap ─────────────
+    # player + timedtext calls share the same proxy URL — critical because
+    # the caption baseUrl contains an IP-bound auth token.
+    try:
+        entries = await _innertube_android_proxy(video_id, lang_code)
+        if entries:
+            logger.info(f"[{video_id}] transcript ← InnerTube ANDROID+proxy ({len(entries)} entries)")
+            return entries
+        errors.append("innertube: empty result")
+    except Exception as e:
+        logger.warning(f"[{video_id}] InnerTube ANDROID+proxy failed: {e}")
+        errors.append(f"innertube: {e}")
+
+    # ── Method 3: yt-dlp subtitle extraction + proxy-cheap ────
+    try:
+        entries = await _ytdlp_subs_proxy(video_id, lang_code)
+        if entries:
+            logger.info(f"[{video_id}] transcript ← yt-dlp subs+proxy ({len(entries)} entries)")
+            return entries
+        errors.append("ytdlp: empty result")
+    except Exception as e:
+        logger.warning(f"[{video_id}] yt-dlp subs+proxy failed: {e}")
+        errors.append(f"ytdlp: {e}")
+
+    raise RuntimeError(
+        f"[{video_id}] All 3 transcript methods failed — {'; '.join(errors)}"
+    )
 
 
-# ── InnerTube caption fetching ─────────────────────────────────
+# ── Method 1: youtube-transcript-api + proxy-cheap ────────────
 
-async def _fetch_innertube_captions(video_id: str, language: str = "en") -> list[TranscriptEntry]:
-    """Fetch captions using the verified InnerTube client registry."""
-    lang_map = {
-        "English": "en",
-        "Spanish": "es",
-        "French": "fr",
-        "German": "de",
-        "Hindi": "hi",
-    }
-    preferred_lang = lang_map.get(language)
+class _VideoUnavailableError(Exception):
+    pass
 
-    player_data = None
-    # Try Golden Identities: ANDROID_VR first, then TV, then IOS
-    for label in ["ANDROID_VR", "TV", "IOS", "MWEB"]:
+
+def _ytta_fetch_sync(
+    video_id: str,
+    lang_code: str,
+    proxy_url: str | None,
+) -> list[TranscriptEntry]:
+    """Synchronous YTTA call — runs inside thread pool."""
+    from youtube_transcript_api import YouTubeTranscriptApi
+
+    # Import exceptions — available at top level in v1.2.4
+    try:
+        from youtube_transcript_api import (
+            TranscriptsDisabled,
+            VideoUnavailable,
+            NoTranscriptFound,
+            TooManyRequests,
+            CouldNotRetrieveTranscript,
+        )
+    except ImportError:
+        # Older builds expose exceptions under _errors
+        from youtube_transcript_api._errors import (  # type: ignore[no-redef]
+            TranscriptsDisabled,
+            VideoUnavailable,
+            NoTranscriptFound,
+            TooManyRequests,
+            CouldNotRetrieveTranscript,
+        )
+
+    try:
+        # v1.2.4 constructor accepts proxies= kwarg
         try:
-            data = await call_player_api(video_id, label)
-            captions = data.get("captions", {})
-            if captions:
-                player_data = data
-                logger.info(f"[{video_id}] Caption data via {label}")
-                break
-        except Exception as e:
-            logger.warning(f"[{video_id}] Caption {label} client failed: {e}")
+            api = YouTubeTranscriptApi(
+                proxies={"http": proxy_url, "https": proxy_url} if proxy_url else {}
+            )
+        except TypeError:
+            # Some builds only accept http_client=
+            import requests
+            session = requests.Session()
+            if proxy_url:
+                session.proxies = {"http": proxy_url, "https": proxy_url}
+            api = YouTubeTranscriptApi(http_client=session)
 
-    if not player_data:
-        raise RuntimeError("No caption data from any InnerTube client")
+        # Preferred language, then English fallbacks, then auto-generated English
+        lang_prefs = list(dict.fromkeys([lang_code, "en", "en-US", "en-GB", "a.en"]))
+        fetched = api.fetch(video_id, languages=lang_prefs)
+        return [
+            {"text": s.text.strip(), "start": s.start, "duration": s.duration}
+            for s in fetched
+            if s.text.strip()
+        ]
+
+    except TranscriptsDisabled:
+        raise _TranscriptsDisabledError("TranscriptsDisabled")
+    except VideoUnavailable as e:
+        raise _VideoUnavailableError(str(e))
+    except (NoTranscriptFound, TooManyRequests, CouldNotRetrieveTranscript) as e:
+        raise RuntimeError(f"YTTA {type(e).__name__}: {e}")
+
+
+async def _ytta_proxy(video_id: str, lang_code: str) -> list[TranscriptEntry]:
+    proxy = get_proxy_url()
+    loop = asyncio.get_running_loop()
+    # _TranscriptsDisabledError and _VideoUnavailableError propagate naturally
+    return await loop.run_in_executor(
+        _TRANSCRIPT_POOL,
+        _ytta_fetch_sync,
+        video_id,
+        lang_code,
+        proxy,
+    )
+
+
+# ── Method 2: InnerTube ANDROID + proxy-cheap ─────────────────
+
+async def _innertube_android_proxy(video_id: str, lang_code: str) -> list[TranscriptEntry]:
+    """
+    Fetch caption track list via InnerTube ANDROID player call, then download
+    the timedtext URL — both via the SAME proxy URL.
+    """
+    proxy = get_proxy_url()
+    data = await call_player_api(video_id, client_name="ANDROID", proxy_url=proxy)
+
+    ps = data.get("playabilityStatus", {})
+    status = ps.get("status", "OK")
+    if status in {"LOGIN_REQUIRED", "SIGN_IN_REQUIRED", "AGE_CHECK_REQUIRED"}:
+        raise RuntimeError(f"InnerTube blocked: playabilityStatus={status}")
 
     tracks = (
-        player_data.get("captions", {})
+        data.get("captions", {})
         .get("playerCaptionsTracklistRenderer", {})
         .get("captionTracks", [])
     )
-
     if not tracks:
-        raise RuntimeError("Video has no caption tracks")
+        raise RuntimeError(f"InnerTube ANDROID: no caption tracks (playability={status})")
 
-    # Pick the best track
-    chosen = None
-    if preferred_lang:
-        for t in tracks:
-            if t.get("languageCode", "").startswith(preferred_lang):
-                chosen = t
-                break
-    if not chosen:
-        for t in tracks:
-            if t.get("languageCode", "").startswith("en"):
-                chosen = t
-                break
-    if not chosen:
-        for t in tracks:
-            if t.get("kind") == "asr":
-                chosen = t
-                break
-    if not chosen:
-        chosen = tracks[0]
+    chosen = _pick_caption_track(tracks, lang_code)
+    base_url = chosen.get("baseUrl", "")
+    if not base_url:
+        raise RuntimeError("Chosen caption track has no baseUrl")
 
-    logger.info(f"[{video_id}] Using caption track: {chosen.get('languageCode')} (kind={chosen.get('kind', 'manual')})")
-
-    caption_url = chosen.get("baseUrl", "")
-    if not caption_url:
-        raise RuntimeError("Caption track has no baseUrl")
-
-    return await _parse_caption_url(caption_url, video_id)
+    return await _fetch_timedtext(base_url, video_id, proxy_url=proxy)
 
 
-async def _parse_caption_url(url: str, video_id: str) -> list[TranscriptEntry]:
-    """Download and parse YouTube timed text XML/JSON."""
-    json_url = url + "&fmt=json3" if "?" in url else url + "?fmt=json3"
+def _pick_caption_track(tracks: list[dict], lang_code: str) -> dict:
+    """Return best caption track for the requested language code."""
+    # 1. Requested language
+    for t in tracks:
+        if t.get("languageCode", "").startswith(lang_code):
+            return t
+    # 2. Any English track
+    for t in tracks:
+        if t.get("languageCode", "").startswith("en"):
+            return t
+    # 3. Auto-generated (ASR)
+    for t in tracks:
+        if t.get("kind") == "asr":
+            return t
+    return tracks[0]
 
-    async with httpx.AsyncClient(timeout=15) as client:
+
+async def _fetch_timedtext(
+    base_url: str,
+    video_id: str,
+    proxy_url: str | None,
+) -> list[TranscriptEntry]:
+    """Download timedtext in JSON3 format (XML fallback) via proxy."""
+    sep = "&" if "?" in base_url else "?"
+    json_url = f"{base_url}{sep}fmt=json3"
+
+    client_kwargs: dict = {"timeout": 15}
+    if proxy_url:
+        client_kwargs["proxy"] = proxy_url
+
+    # Try JSON3 first — richer format with millisecond timestamps
+    async with httpx.AsyncClient(**client_kwargs) as client:
         resp = await client.get(json_url)
 
     if resp.status_code == 200:
         try:
-            data = resp.json()
-            events = data.get("events", [])
+            events = resp.json().get("events", [])
             entries = []
-            for event in events:
-                segs = event.get("segs")
-                if not segs: continue
+            for ev in events:
+                segs = ev.get("segs")
+                if not segs:
+                    continue
                 text = "".join(s.get("utf8", "") for s in segs).strip()
-                if not text or text == "\n": continue
-                start_ms = event.get("tStartMs", 0)
-                duration_ms = event.get("dDurationMs", 2000)
+                if not text or text == "\n":
+                    continue
                 entries.append({
                     "text": text,
-                    "start": start_ms / 1000.0,
-                    "duration": duration_ms / 1000.0,
+                    "start": ev.get("tStartMs", 0) / 1000.0,
+                    "duration": ev.get("dDurationMs", 2000) / 1000.0,
                 })
-            if entries: return entries
+            if entries:
+                return entries
         except Exception:
             pass
 
-    # Fallback to XML
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.get(url)
+    # XML fallback — older format, still supported
+    async with httpx.AsyncClient(**client_kwargs) as client:
+        resp = await client.get(base_url)
         resp.raise_for_status()
-
     return _parse_caption_xml(resp.text, video_id)
 
 
@@ -156,75 +293,131 @@ def _parse_caption_xml(xml_text: str, video_id: str) -> list[TranscriptEntry]:
     entries = []
     try:
         root = ET.fromstring(xml_text)
-        for text_el in root.iter("text"):
-            raw = text_el.text or ""
-            raw = (raw.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+        for el in root.iter("text"):
+            raw = el.text or ""
+            raw = (raw
+                   .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
                    .replace("&quot;", '"').replace("&#39;", "'").replace("\n", " "))
             raw = re.sub(r"<[^>]+>", "", raw).strip()
-            if not raw: continue
-            start = float(text_el.get("start", 0))
-            dur = float(text_el.get("dur", 2.0))
-            entries.append({"text": raw, "start": start, "duration": dur})
+            if not raw:
+                continue
+            entries.append({
+                "text": raw,
+                "start": float(el.get("start", 0)),
+                "duration": float(el.get("dur", 2.0)),
+            })
     except Exception as e:
         logger.error(f"[{video_id}] Caption XML parse error: {e}")
     return entries
 
 
-# ── Whisper fallback (streaming) ───────────────────────────────
+# ── Method 3: yt-dlp subtitle extraction + proxy-cheap ────────
 
-async def _whisper_fallback_transcript(video_id: str) -> list[TranscriptEntry]:
-    from app.pipeline.stream import get_audio_stream_url
-    audio_url = await get_audio_stream_url(video_id)
-    entries: list[TranscriptEntry] = []
-    async for chunk_entries in _transcribe_audio_streaming(audio_url, video_id):
-        entries.extend(chunk_entries)
-    return entries
+def _ytdlp_subs_sync(
+    video_id: str,
+    lang_code: str,
+    proxy_url: str | None,
+) -> list[TranscriptEntry]:
+    """yt-dlp subtitle fetch — sync, runs inside thread pool."""
+    import yt_dlp
 
+    opts: dict = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "noplaylist": True,
+        "socket_timeout": 25,
+    }
+    if proxy_url:
+        opts["proxy"] = proxy_url
 
-async def _transcribe_audio_streaming(audio_url: str, video_id: str, chunk_seconds: int = 30) -> AsyncGenerator[list[TranscriptEntry], None]:
-    with tempfile.TemporaryDirectory(prefix="sc_whisper_") as tmpdir:
-        tmp = Path(tmpdir)
-        duration = await _get_audio_duration(audio_url)
-        windows = [(start, min(start + chunk_seconds, duration)) for start in range(0, int(duration), chunk_seconds)]
-        semaphore = asyncio.Semaphore(4)
-        async def process_chunk(idx: int, start: float, end: float) -> list[TranscriptEntry]:
-            async with semaphore:
-                chunk_path = tmp / f"chunk_{idx:04d}.mp3"
-                await _extract_audio_chunk(audio_url, start, end, chunk_path)
-                return await _whisper_transcribe_chunk(chunk_path, offset=start)
-        tasks = [asyncio.create_task(process_chunk(i, s, e)) for i, (s, e) in enumerate(windows)]
-        for task in tasks:
-            result = await task
-            yield result
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(
+            f"https://www.youtube.com/watch?v={video_id}",
+            download=False,
+        )
 
+    if not info:
+        raise RuntimeError("yt-dlp returned no info")
 
-async def _get_audio_duration(audio_url: str) -> float:
-    proc = await asyncio.create_subprocess_exec("ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-i", audio_url, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    stdout, _ = await proc.communicate()
-    data = json.loads(stdout)
-    return float(data["format"]["duration"])
+    subs = info.get("subtitles", {})
+    auto = info.get("automatic_captions", {})
 
+    # Try manual captions first, then auto-generated
+    sub_url: str | None = None
+    for source in (subs, auto):
+        for lang in (lang_code, f"{lang_code}-orig", "en", "en-orig", "en-US"):
+            if lang in source:
+                for track in source[lang]:
+                    if track.get("ext") in ("json3", "vtt", "srv1"):
+                        sub_url = track.get("url")
+                        break
+            if sub_url:
+                break
+        if sub_url:
+            break
 
-async def _extract_audio_chunk(audio_url: str, start: float, end: float, output_path: Path) -> None:
-    duration = end - start
-    proc = await asyncio.create_subprocess_exec("ffmpeg", "-y", "-ss", str(start), "-t", str(duration), "-i", audio_url, "-vn", "-ar", "16000", "-ac", "1", "-c:a", "libmp3lame", "-q:a", "4", str(output_path), stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-    await proc.wait()
+    if not sub_url:
+        available = list(subs.keys()) + list(auto.keys())
+        raise RuntimeError(f"yt-dlp: no subtitle track found (available: {available[:10]})")
 
+    # Fetch the subtitle URL through the same proxy
+    sep = "&" if "?" in sub_url else "?"
+    json_url = f"{sub_url}{sep}fmt=json3" if "fmt=" not in sub_url else sub_url
 
-async def _whisper_transcribe_chunk(chunk_path: Path, offset: float = 0.0) -> list[TranscriptEntry]:
-    with open(chunk_path, "rb") as f:
-        response = await openai.audio.transcriptions.create(model=settings.WHISPER_MODEL, file=f, response_format="verbose_json", timestamp_granularities=["segment"])
+    with httpx.Client(proxy=proxy_url, timeout=15) as client:
+        resp = client.get(json_url)
+        resp.raise_for_status()
+
     entries = []
-    for seg in response.segments:
-        entries.append({"text": seg.text.strip(), "start": seg.start + offset, "duration": seg.end - seg.start})
+    for ev in resp.json().get("events", []):
+        text = "".join(s.get("utf8", "") for s in ev.get("segs", [])).strip()
+        if text and text != "\n":
+            entries.append({
+                "text": text,
+                "start": ev.get("tStartMs", 0) / 1000.0,
+                "duration": ev.get("dDurationMs", 2000) / 1000.0,
+            })
     return entries
 
+
+async def _ytdlp_subs_proxy(video_id: str, lang_code: str) -> list[TranscriptEntry]:
+    proxy = get_proxy_url()
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        _TRANSCRIPT_POOL,
+        _ytdlp_subs_sync,
+        video_id,
+        lang_code,
+        proxy,
+    )
+
+
+# ── Backward-compat shim for testing.py Lab ───────────────────
+
+async def _fetch_innertube_captions(
+    video_id: str,
+    language: str = "en",
+) -> list[TranscriptEntry]:
+    """Legacy shim — wraps method 2 (InnerTube ANDROID+proxy). Used by testing.py."""
+    lang_code = LANG_MAP.get(language, language)
+    return await _innertube_android_proxy(video_id, lang_code)
+
+
+# ── LLM formatter ─────────────────────────────────────────────
 
 def format_transcript_for_llm(entries: list[TranscriptEntry]) -> str:
+    """
+    Format transcript for GPT with sub-second precision.
+    Format: MM:SS.d  (tenths of a second) so GPT can pick precise clip boundaries.
+    Example: 12:34.7 - Hello world...
+    """
     lines = []
     for e in entries:
-        start = e["start"]
-        mm = int(start) // 60
-        ss = int(start) % 60
-        lines.append(f"{mm:02d}:{ss:02d} - {e['text'].strip()}")
+        start   = e["start"]
+        total_s = int(start)
+        mm      = total_s // 60
+        ss      = total_s % 60
+        tenth   = int((start - total_s) * 10)
+        lines.append(f"{mm:02d}:{ss:02d}.{tenth} - {e['text'].strip()}")
     return "\n".join(lines)

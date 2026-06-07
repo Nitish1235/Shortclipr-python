@@ -1,0 +1,14 @@
+# Frontend .dockerignore
+# Prevents large/unnecessary files from being sent to the Docker build daemon.
+
+node_modules/
+dist/
+.git/
+.gitignore
+*.md
+.env
+.env.*
+.vscode/
+.idea/
+backend/
+*.log

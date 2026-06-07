@@ -14,6 +14,7 @@ from typing import Any
 import asyncpg
 
 from app.core.config import get_settings
+from app.core.plan_limits import get_max_video_minutes, get_video_minutes_limit
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -151,11 +152,17 @@ async def get_user_by_email(email: str) -> dict | None:
 
 async def upsert_user(user_data: dict) -> dict:
     """Insert or update user on Google login using atomic upsert."""
+    from app.core.plan_limits import get_plan_limits  # local import avoids circular dependency at module init
+    plan = user_data.get("plan", "free")
+    limits = get_plan_limits(plan)
+
     row = await _fetchrow(
         """
         INSERT INTO users (id, email, full_name, avatar_url, google_sub,
-                           plan, credits_used, credits_limit, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                           plan, credits_used, credits_limit,
+                           video_minutes_used, video_minutes_limit,
+                           created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         ON CONFLICT (email) DO UPDATE SET
             full_name  = EXCLUDED.full_name,
             avatar_url = EXCLUDED.avatar_url,
@@ -168,9 +175,11 @@ async def upsert_user(user_data: dict) -> dict:
         user_data.get("full_name", ""),
         user_data.get("avatar_url", ""),
         user_data.get("google_sub", ""),
-        user_data.get("plan", "free"),
+        plan,
         user_data.get("credits_used", 0),
-        user_data.get("credits_limit", 3),
+        user_data.get("credits_limit", limits["credits_limit"]),
+        user_data.get("video_minutes_used", 0),
+        user_data.get("video_minutes_limit", limits["video_minutes_limit"]),
         user_data.get("created_at"),
     )
     return row or {}
@@ -183,10 +192,121 @@ async def increment_credits_used(user_id: str) -> None:
     )
 
 
+async def count_active_jobs(user_id: str) -> int:
+    """Count jobs currently in processing state for this user."""
+    row = await _fetchrow(
+        "SELECT COUNT(*) AS cnt FROM jobs WHERE user_id=$1 AND status='processing'",
+        user_id,
+    )
+    return int(row["cnt"]) if row else 0
+
+
 async def check_user_can_process(user_id: str) -> tuple[bool, str]:
+    """
+    Check plan credit limit with automatic monthly reset.
+    Resets BOTH credits_used AND video_minutes_used to 0 when the billing
+    month rolls over (tracked by credits_reset_at).
+    """
     user = await get_user(user_id)
     if not user:
         return False, "User not found"
+
+    now = _now()
+
+    # ── Monthly reset (credits + video minutes together) ─────
+    reset_at = user.get("credits_reset_at")
+    needs_reset = (
+        reset_at is None
+        or reset_at.year < now.year
+        or (reset_at.year == now.year and reset_at.month < now.month)
+    )
+    if needs_reset:
+        await _execute(
+            """
+            UPDATE users
+            SET credits_used       = 0,
+                video_minutes_used = 0,
+                credits_reset_at   = date_trunc('month', NOW())
+            WHERE id = $1
+            """,
+            user_id,
+        )
+        user = await get_user(user_id)
+        if not user:
+            return False, "User not found after reset"
+
+    # ── Credits (shorts) quota ───────────────────────────────
     if user["credits_used"] >= user["credits_limit"]:
-        return False, f"Monthly limit reached for {user['plan']} plan. Upgrade to continue."
+        return False, (
+            f"Monthly shorts limit reached ({user['credits_used']}/{user['credits_limit']}) "
+            f"for {user['plan']} plan. Resets next month — upgrade to continue."
+        )
+
     return True, "ok"
+
+
+async def check_video_quota(
+    user_id: str,
+    duration_seconds: int,
+    plan: str,
+) -> tuple[bool, str]:
+    """
+    Two-gate video duration check — called BEFORE creating the job.
+
+    Gate 1 — per-video maximum: is this single video too long for the plan?
+    Gate 2 — monthly hours quota: would adding this video exceed the month's
+              video_minutes_limit?
+
+    Returns (True, "ok") or (False, human-readable reason).
+    """
+    duration_minutes = duration_seconds / 60
+
+    # Gate 1: per-video cap
+    max_mins = get_max_video_minutes(plan)
+    if duration_minutes > max_mins:
+        return False, (
+            f"Video is {int(duration_minutes)} min — your {plan} plan allows "
+            f"a maximum of {max_mins} min per video. "
+            f"Try a shorter video or upgrade your plan."
+        )
+
+    # Gate 2: monthly hours quota
+    user = await get_user(user_id)
+    if not user:
+        return False, "User not found"
+
+    used  = int(user.get("video_minutes_used", 0) or 0)
+    limit = int(user.get("video_minutes_limit", get_video_minutes_limit(plan)) or 0)
+    remaining = limit - used
+
+    if duration_minutes > remaining:
+        used_hrs  = round(used  / 60, 1)
+        limit_hrs = round(limit / 60, 1)
+        return False, (
+            f"Monthly video-hours quota reached ({used_hrs} / {limit_hrs} hrs used). "
+            f"This video is {int(duration_minutes)} min but you only have "
+            f"{max(0, int(remaining))} min remaining this month. "
+            f"Resets on the 1st — or upgrade for more hours."
+        )
+
+    return True, "ok"
+
+
+async def increment_video_minutes_used(user_id: str, minutes: int) -> None:
+    """
+    Add `minutes` to the user's running video_minutes_used counter.
+    Called once per successfully completed job.
+    Uses LEAST(used + n, limit) to never exceed the stored cap.
+    """
+    await _execute(
+        """
+        UPDATE users
+        SET video_minutes_used = LEAST(
+                COALESCE(video_minutes_used, 0) + $1,
+                COALESCE(video_minutes_limit, 30)
+            )
+        WHERE id = $2
+        """,
+        max(0, minutes),
+        user_id,
+    )

@@ -1,14 +1,48 @@
 """
-captions.py — Step 6 of the ShortClipr pipeline.
+captions.py — Step 7 of the ShortClipr pipeline.
 
-Filters transcript to clip time range → generates ASS subtitle file →
-burns captions into video with FFmpeg.
+Word-level caption generation with 11 trending styles, 7 colour combos,
+9 positions, and proper ASS animation tags.
 
-Styles:
-  minimal   — Clean white text, bottom third, subtle shadow
-  hormozi   — Bold white text, coloured keyword highlights, box BG
-  mrbeast   — Large animated text, yellow/white, emoji-ready
-  karaoke   — Word-by-word colour highlight as audio progresses
+──────────────────────────────────────────────────────────────────────
+STYLES
+──────────────────────────────────────────────────────────────────────
+  minimal     — Clean static white text, subtle shadow, phrase-level
+  fade        — Smooth 400 ms fade-in / fade-out, phrase-level
+  word_pop    — Word-by-word bounce  (80 % → 115 % → 100 % scale)
+  typewriter  — Words appear one-at-a-time with quick fade, left→right
+  slide       — Each word slides in from the left edge
+  zoom        — Phrases scale up from 50 % on appear
+  shake       — Phrases appear with rapid rotation wiggle (emphasis)
+  karaoke     — All words in one line; ASS \kf sweeps white → yellow
+  hormozi     — 2-3 words ALL CAPS, opaque box background (Alex Hormozi)
+  mrbeast     — 3-4 words, giant text, bounce energy
+  neon        — Phrases with coloured glow-blur outline
+
+──────────────────────────────────────────────────────────────────────
+COLOUR COMBOS
+──────────────────────────────────────────────────────────────────────
+  white_black / yellow_black / black_white /
+  green_dark  / orange_dark  / cyan_dark   / red_white
+
+──────────────────────────────────────────────────────────────────────
+POSITION  (h_align × v_align)
+──────────────────────────────────────────────────────────────────────
+  h_align : left | center | right
+  v_align : top  | center | bottom
+
+──────────────────────────────────────────────────────────────────────
+WORDS PER LINE  (user choice 1 / 2 / 3)
+──────────────────────────────────────────────────────────────────────
+  1 → one word at a time  (most impactful, slowest reading pace)
+  2 → two words at a time  (balanced, very popular on TikTok)
+  3 → three words at a time  (default, natural speech rhythm)
+
+  Applies globally across ALL styles. Every phrase-level style
+  honours this limit. Word-by-word styles (word_pop, typewriter,
+  slide) group words into chunks of this size.
+
+ASS colours: &HAABBGGRR  (alpha, blue, green, red — NOT RGB order)
 """
 
 import asyncio
@@ -25,49 +59,538 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+# ── Data model ─────────────────────────────────────────────────
+
 @dataclass
 class Caption:
-    start: float   # seconds from clip start (NOT video start)
-    end: float
-    text: str
+    start: float       # seconds relative to clip start (0 = clip begins)
+    end:   float
+    text:  str
 
 
-# ── Transcript filtering ───────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+#  COLOUR COMBOS
+#  ASS format: &HAABBGGRR   (00 alpha = fully opaque)
+# ══════════════════════════════════════════════════════════════
 
-def get_clip_captions(
-    transcript: list[TranscriptEntry],
-    clip_start: float,
-    clip_end: float,
-) -> list[Caption]:
+COLOR_COMBOS: dict[str, dict[str, str]] = {
+    "white_black": {
+        "primary":   "&H00FFFFFF",   # white
+        "secondary": "&H0000FFFF",   # yellow  (karaoke active)
+        "outline":   "&H00000000",   # black
+        "back":      "&H99000000",   # semi-transparent black box
+        "highlight": "&H0000FFFF",   # yellow
+    },
+    "yellow_black": {
+        "primary":   "&H0000FFFF",   # yellow
+        "secondary": "&H00FFFFFF",   # white
+        "outline":   "&H00000000",   # black
+        "back":      "&H99000000",
+        "highlight": "&H00FFFFFF",
+    },
+    "black_white": {
+        "primary":   "&H00000000",   # black
+        "secondary": "&H000000FF",   # red
+        "outline":   "&H00FFFFFF",   # white
+        "back":      "&H99FFFFFF",
+        "highlight": "&H000000FF",
+    },
+    "green_dark": {
+        "primary":   "&H0000FF00",   # lime
+        "secondary": "&H00FFFFFF",
+        "outline":   "&H00003200",   # dark green
+        "back":      "&H99000000",
+        "highlight": "&H00FFFFFF",
+    },
+    "orange_dark": {
+        "primary":   "&H000080FF",   # orange
+        "secondary": "&H00FFFFFF",
+        "outline":   "&H00002060",   # dark brown
+        "back":      "&H99000000",
+        "highlight": "&H00FFFFFF",
+    },
+    "cyan_dark": {
+        "primary":   "&H00FFFF00",   # cyan
+        "secondary": "&H00FFFFFF",
+        "outline":   "&H00800000",   # dark navy
+        "back":      "&H99000000",
+        "highlight": "&H00FFFFFF",
+    },
+    "red_white": {
+        "primary":   "&H000000FF",   # red
+        "secondary": "&H0000FFFF",   # yellow
+        "outline":   "&H00FFFFFF",   # white
+        "back":      "&H99000000",
+        "highlight": "&H0000FFFF",
+    },
+}
+
+DEFAULT_COLOR = "white_black"
+
+
+# ══════════════════════════════════════════════════════════════
+#  POSITION PRESETS  (x, y, ASS alignment code)
+#  PlayRes: 1080 × 1920
+#  Alignment: 1=BL 2=BC 3=BR  4=ML 5=MC 6=MR  7=TL 8=TC 9=TR
+# ══════════════════════════════════════════════════════════════
+
+_POS: dict[str, tuple[int, int, int]] = {
+    "top_left":      (80,   220,  7),
+    "top_center":    (540,  220,  8),
+    "top_right":     (1000, 220,  9),
+    "center_left":   (80,   960,  4),
+    "center":        (540,  960,  5),
+    "center_right":  (1000, 960,  6),
+    "bottom_left":   (80,   1720, 1),
+    "bottom_center": (540,  1720, 2),
+    "bottom_right":  (1000, 1720, 3),
+}
+
+
+def _resolve_pos(h_align: str, v_align: str) -> tuple[int, int, int]:
+    h = (h_align or "center").lower().strip()
+    v = (v_align or "bottom").lower().strip()
+    key = "center" if (v == "center" and h == "center") else f"{v}_{h}"
+    return _POS.get(key, _POS["bottom_center"])
+
+
+# ══════════════════════════════════════════════════════════════
+#  ASS STYLE DEFINITIONS
+#  Format: Name,Font,Size,Primary,Secondary,Outline,Back,
+#           Bold,Italic,Underline,Strike,ScaleX,ScaleY,
+#           Spacing,Angle,BorderStyle,Outline,Shadow,
+#           Alignment,MarginL,MarginR,MarginV,Encoding
+# ══════════════════════════════════════════════════════════════
+
+# Colours are placeholders — overridden per-combo in _style_line()
+_BASE_STYLES: dict[str, dict] = {
+    "minimal": dict(
+        font="Arial", size=72, bold=0,
+        border_style=1, outline=3, shadow=1,
+        scale_x=100, scale_y=100, spacing=0,
+    ),
+    "fade": dict(
+        font="Arial", size=72, bold=0,
+        border_style=1, outline=3, shadow=1,
+        scale_x=100, scale_y=100, spacing=0,
+    ),
+    "word_pop": dict(
+        font="Arial Black", size=80, bold=1,
+        border_style=1, outline=4, shadow=0,
+        scale_x=100, scale_y=100, spacing=1,
+    ),
+    "typewriter": dict(
+        font="Arial", size=72, bold=0,
+        border_style=1, outline=3, shadow=1,
+        scale_x=100, scale_y=100, spacing=0,
+    ),
+    "slide": dict(
+        font="Arial Black", size=80, bold=1,
+        border_style=1, outline=4, shadow=0,
+        scale_x=100, scale_y=100, spacing=0,
+    ),
+    "zoom": dict(
+        font="Arial", size=76, bold=1,
+        border_style=1, outline=3, shadow=1,
+        scale_x=100, scale_y=100, spacing=0,
+    ),
+    "shake": dict(
+        font="Arial Black", size=80, bold=1,
+        border_style=1, outline=4, shadow=0,
+        scale_x=100, scale_y=100, spacing=0,
+    ),
+    "karaoke": dict(
+        font="Arial", size=76, bold=0,
+        border_style=1, outline=3, shadow=1,
+        scale_x=100, scale_y=100, spacing=0,
+    ),
+    "hormozi": dict(
+        font="Arial Black", size=88, bold=1,
+        border_style=3, outline=10, shadow=0,   # BorderStyle 3 = opaque box
+        scale_x=100, scale_y=100, spacing=2,
+    ),
+    "mrbeast": dict(
+        font="Arial Black", size=96, bold=1,
+        border_style=1, outline=5, shadow=2,
+        scale_x=100, scale_y=100, spacing=0,
+    ),
+    "neon": dict(
+        font="Arial", size=76, bold=1,
+        border_style=1, outline=5, shadow=0,
+        scale_x=100, scale_y=100, spacing=1,
+    ),
+}
+
+
+def _style_line(style: str, color: str, alignment: int) -> str:
+    """Build one ASS [V4+ Styles] Style: line for the given style+colour."""
+    cfg = _BASE_STYLES.get(style, _BASE_STYLES["minimal"])
+    clr = COLOR_COMBOS.get(color, COLOR_COMBOS[DEFAULT_COLOR])
+
+    primary   = clr["primary"]
+    secondary = clr["secondary"]
+    outline_c = clr["outline"]
+    back_c    = clr["back"]
+
+    # For hormozi the box BG is the "back" colour (used as shadow/fill colour)
+    # BorderStyle 3: BackColour fills the box, OutlineColour is the box border
+    if style == "hormozi":
+        back_c = clr.get("highlight", "&H0000FFFF")
+
+    return (
+        f"Style: Default,"
+        f"{cfg['font']},"
+        f"{cfg['size']},"
+        f"{primary},{secondary},{outline_c},{back_c},"
+        f"{cfg['bold']},0,0,0,"
+        f"{cfg['scale_x']},{cfg['scale_y']},"
+        f"{cfg['spacing']},0,"
+        f"{cfg['border_style']},"
+        f"{cfg['outline']},"
+        f"{cfg['shadow']},"
+        f"{alignment},"
+        f"40,40,40,1"
+    )
+
+
+# ══════════════════════════════════════════════════════════════
+#  WORD / PHRASE SPLITTING
+# ══════════════════════════════════════════════════════════════
+
+def _split_words(cap: Caption, wpl: int = 1) -> list[Caption]:
     """
-    Filter transcript entries that fall within [clip_start, clip_end].
-    Adjusts timestamps to be relative to clip start (so 0 = clip beginning).
-    """
-    captions = []
-    for entry in transcript:
-        entry_start = entry["start"]
-        entry_end = entry_start + entry.get("duration", 2.0)
+    Split one Caption into chunks of `wpl` words with character-weighted timing.
 
-        # Include if there's any overlap with our clip window
-        if entry_end < clip_start or entry_start > clip_end:
+    The last chunk's end is always snapped to cap.end to prevent float drift.
+    Enforces MIN_CHUNK_DUR so animations have enough time to complete visually.
+    """
+    MIN_CHUNK_DUR = 0.12          # 120 ms — minimum visible window per chunk
+    words = cap.text.split()
+    if not words:
+        return []
+
+    chunks = [words[i:i + wpl] for i in range(0, len(words), wpl)]
+    if len(chunks) == 1:
+        return [Caption(start=cap.start, end=cap.end, text=" ".join(chunks[0]))]
+
+    total_chars = sum(len(w) for w in words) or 1
+    total_dur   = max(cap.end - cap.start, MIN_CHUNK_DUR * len(chunks))
+
+    # Character-weighted raw durations
+    raw = [(sum(len(w) for w in c) / total_chars) * total_dur for c in chunks]
+
+    # Enforce minimum display time — scale down proportionally if needed
+    if any(d < MIN_CHUNK_DUR for d in raw):
+        raw = [max(d, MIN_CHUNK_DUR) for d in raw]
+        total_raw = sum(raw)
+        if total_raw > total_dur:
+            scale = total_dur / total_raw
+            raw = [d * scale for d in raw]
+
+    result, t = [], cap.start
+    for i, (chunk, dur) in enumerate(zip(chunks, raw)):
+        # Snap the last chunk's end to cap.end — eliminates float accumulation error
+        end = cap.end if i == len(chunks) - 1 else t + dur
+        result.append(Caption(start=t, end=end, text=" ".join(chunk)))
+        t = end
+    return result
+
+
+def _split_phrases(cap: Caption, wpl: int = 3) -> list[Caption]:
+    """
+    Split one Caption into chunks of `wpl` words with equal timing.
+    The last phrase's end is always snapped to cap.end.
+    """
+    words = cap.text.split()
+    if not words:
+        return []
+    groups   = [words[i:i + wpl] for i in range(0, len(words), wpl)]
+    dur_each = max(cap.end - cap.start, 0.05) / len(groups)
+    result   = []
+    for i, grp in enumerate(groups):
+        t   = cap.start + i * dur_each
+        # Snap last phrase to cap.end to eliminate float drift
+        end = cap.end if i == len(groups) - 1 else t + dur_each
+        result.append(Caption(start=t, end=end, text=" ".join(grp)))
+    return result
+
+
+# ══════════════════════════════════════════════════════════════
+#  DIALOGUE LINE BUILDERS
+#  Each returns a list of raw ASS "Dialogue: ..." lines.
+# ══════════════════════════════════════════════════════════════
+
+def _t(secs: float) -> str:
+    """
+    Seconds → ASS timestamp  H:MM:SS.cc
+
+    Works in integer centiseconds to avoid floating-point overflow
+    (e.g. 59.9999 rounding to "60.00" which is an invalid ASS timestamp).
+    """
+    secs = max(0.0, secs)
+    total_cs = round(secs * 100)          # centiseconds, integer — no float error
+    cs  = total_cs % 100
+    total_s = total_cs // 100
+    s   = total_s % 60
+    total_m = total_s // 60
+    m   = total_m % 60
+    h   = total_m // 60
+    return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
+
+
+def _dlg(start: float, end: float, text: str) -> str:
+    """Bare dialogue line (no tags)."""
+    return f"Dialogue: 0,{_t(start)},{_t(end)},Default,,0,0,0,,{text}"
+
+
+def _pos_tag(x: int, y: int) -> str:
+    return f"{{\\pos({x},{y})}}"
+
+
+# ── minimal ────────────────────────────────────────────────────
+def _lines_minimal(captions: list[Caption], x: int, y: int, wpl: int = 3) -> list[str]:
+    pos   = _pos_tag(x, y)
+    lines = []
+    for c in captions:
+        for p in _split_phrases(c, wpl):
+            lines.append(_dlg(p.start, p.end, f"{pos}{_esc(p.text)}"))
+    return lines
+
+
+# ── fade ───────────────────────────────────────────────────────
+def _lines_fade(captions: list[Caption], x: int, y: int, wpl: int = 3) -> list[str]:
+    pos   = _pos_tag(x, y)
+    lines = []
+    for c in captions:
+        for p in _split_phrases(c, wpl):
+            dur_ms  = max(1, int((p.end - p.start) * 1000))
+            # Cap fade at 20 % of phrase duration each side so text is
+            # visible for at least 60 % of the time it's on screen.
+            fade_ms = min(300, dur_ms // 5)
+            tag     = f"{pos}{{\\fad({fade_ms},{fade_ms})}}"
+            lines.append(_dlg(p.start, p.end, f"{tag}{_esc(p.text)}"))
+    return lines
+
+
+# ── word_pop ───────────────────────────────────────────────────
+def _lines_word_pop(captions: list[Caption], x: int, y: int, wpl: int = 1) -> list[str]:
+    """
+    Chunks bounce in: 80 % → 115 % → 100 %.
+
+    BUG FIX: animation keyframe times are clamped to the chunk's actual
+    display duration so that on very fast speech the animation doesn't
+    overshoot the end of the visible window.
+    """
+    pos   = _pos_tag(x, y)
+    lines = []
+    for c in captions:
+        for chunk in _split_words(c, wpl):
+            dur_ms = max(1, int((chunk.end - chunk.start) * 1000))
+            # Scale 150/280 proportionally if chunk is shorter than 280 ms
+            t1 = min(150, int(dur_ms * 0.55))
+            t2 = min(280, dur_ms)
+            tag = (
+                f"{pos}"
+                f"{{\\fscx80\\fscy80"
+                f"\\t(0,{t1},1,\\fscx115\\fscy115)"
+                f"\\t({t1},{t2},1,\\fscx100\\fscy100)}}"
+            )
+            lines.append(_dlg(chunk.start, chunk.end, f"{tag}{_esc(_safe_upper(chunk.text))}"))
+    return lines
+
+
+# ── typewriter ─────────────────────────────────────────────────
+def _lines_typewriter(captions: list[Caption], x: int, y: int, wpl: int = 1) -> list[str]:
+    """
+    True typewriter: words accumulate left-to-right.
+
+    Each ASS line shows the GROWING accumulated text and is replaced by
+    the next line (with one more word) at the next chunk's start time.
+    Lines are CONTIGUOUS — no overlapping timestamps at the same position.
+
+    e.g. for "Hello world how":
+      t=0.00–0.45 : shows "Hello"
+      t=0.45–0.85 : shows "Hello world"
+      t=0.85–1.30 : shows "Hello world how"
+    """
+    pos   = _pos_tag(x, y)
+    lines = []
+    for c in captions:
+        word_list = c.text.split()
+        if not word_list:
             continue
+        chunks     = [word_list[i:i + wpl] for i in range(0, len(word_list), wpl)]
+        chunk_caps = _split_words(c, wpl)
 
-        # Clamp to clip boundaries
-        adjusted_start = max(entry_start - clip_start, 0.0)
-        adjusted_end = min(entry_end - clip_start, clip_end - clip_start)
-
-        text = entry["text"].strip()
-        if text:
-            captions.append(Caption(
-                start=adjusted_start,
-                end=adjusted_end,
-                text=text,
-            ))
-
-    return captions
+        for i, (chunk_words, chunk_cap) in enumerate(zip(chunks, chunk_caps)):
+            # Build the accumulated text (all chunks up to and including this one)
+            accumulated = " ".join(" ".join(chunks[j]) for j in range(i + 1))
+            # Show until the NEXT chunk starts (or the caption entry ends)
+            display_end = chunk_caps[i + 1].start if i + 1 < len(chunk_caps) else c.end
+            tag = f"{pos}{{\\alpha&HFF&\\t(0,100,1,\\alpha&H00&)}}"
+            lines.append(_dlg(chunk_cap.start, display_end, f"{tag}{_esc(accumulated)}"))
+    return lines
 
 
-# ── ASS subtitle file generation ──────────────────────────────
+# ── slide ──────────────────────────────────────────────────────
+def _lines_slide(captions: list[Caption], x: int, y: int, wpl: int = 1) -> list[str]:
+    """Each chunk slides in from the left edge.
+    Slide duration clamped to chunk display time."""
+    lines   = []
+    start_x = -300
+    for c in captions:
+        for chunk in _split_words(c, wpl):
+            dur_ms   = max(1, int((chunk.end - chunk.start) * 1000))
+            slide_ms = min(350, int(dur_ms * 0.7))   # max 70 % of display time
+            move = f"{{\\move({start_x},{y},{x},{y},0,{slide_ms})}}"
+            lines.append(_dlg(chunk.start, chunk.end, f"{move}{_esc(_safe_upper(chunk.text))}"))
+    return lines
+
+
+# ── zoom ───────────────────────────────────────────────────────
+def _lines_zoom(captions: list[Caption], x: int, y: int, wpl: int = 3) -> list[str]:
+    """Chunks scale from 50 % → 100 % over 300 ms."""
+    pos   = _pos_tag(x, y)
+    lines = []
+    for c in captions:
+        for p in _split_phrases(c, wpl):
+            tag = (
+                f"{pos}"
+                f"{{\\fscx50\\fscy50"
+                f"\\t(0,300,1,\\fscx100\\fscy100)}}"
+            )
+            lines.append(_dlg(p.start, p.end, f"{tag}{_esc(p.text)}"))
+    return lines
+
+
+# ── shake ──────────────────────────────────────────────────────
+def _lines_shake(captions: list[Caption], x: int, y: int, wpl: int = 3) -> list[str]:
+    """Chunks appear with rapid ±2° rotation wiggle."""
+    pos   = _pos_tag(x, y)
+    lines = []
+    for c in captions:
+        for p in _split_phrases(c, wpl):
+            tag = (
+                f"{pos}"
+                f"{{\\t(0,60,\\frz-2)"
+                f"\\t(60,120,\\frz2)"
+                f"\\t(120,180,\\frz-2)"
+                f"\\t(180,240,\\frz2)"
+                f"\\t(240,300,\\frz0)}}"
+            )
+            lines.append(_dlg(p.start, p.end, f"{tag}{_esc(p.text)}"))
+    return lines
+
+
+# ── karaoke ────────────────────────────────────────────────────
+def _lines_karaoke(captions: list[Caption], x: int, y: int, wpl: int = 3) -> list[str]:
+    """
+    Groups of `wpl` words on one line with \\kf sweep (secondary → primary colour).
+    Timing unit: centiseconds (1/100 s).
+
+    BUG FIX: distribute remainder centiseconds evenly across words so that
+    sum(kf_values) == total_cs exactly — no drift.
+    e.g. 70 cs / 3 words → [24, 23, 23] not [23, 23, 23] (missing 1 cs).
+    """
+    pos   = _pos_tag(x, y)
+    lines = []
+    for c in captions:
+        for group in _split_phrases(c, wpl):
+            words    = group.text.split()
+            n        = len(words)
+            total_cs = max(round((group.end - group.start) * 100), n)
+            base_cs  = total_cs // n
+            remainder = total_cs - base_cs * n   # distribute remainder to first R words
+            kf_vals  = [base_cs + (1 if i < remainder else 0) for i in range(n)]
+            tagged   = " ".join(f"{{\\kf{kf_vals[i]}}}{_esc(w)}" for i, w in enumerate(words))
+            lines.append(_dlg(group.start, group.end, f"{pos}{tagged}"))
+    return lines
+
+
+# ── hormozi ────────────────────────────────────────────────────
+def _lines_hormozi(captions: list[Caption], x: int, y: int, wpl: int = 3) -> list[str]:
+    """
+    ALL CAPS with opaque box background (BorderStyle 3) — Hormozi style.
+    """
+    pos   = _pos_tag(x, y)
+    lines = []
+    for c in captions:
+        for p in _split_phrases(c, wpl):
+            tag = f"{pos}{{\\fad(80,80)}}"
+            lines.append(_dlg(p.start, p.end, f"{tag}{_esc(_safe_upper(p.text))}"))
+    return lines
+
+
+# ── mrbeast ────────────────────────────────────────────────────
+def _lines_mrbeast(captions: list[Caption], x: int, y: int, wpl: int = 3) -> list[str]:
+    """Giant text, quick pop on appear, ALL CAPS."""
+    pos   = _pos_tag(x, y)
+    lines = []
+    for c in captions:
+        for p in _split_phrases(c, wpl):
+            tag = (
+                f"{pos}"
+                f"{{\\fscx90\\fscy90"
+                f"\\t(0,180,1,\\fscx105\\fscy105)"
+                f"\\t(180,320,1,\\fscx100\\fscy100)"
+                f"\\fad(0,200)}}"
+            )
+            lines.append(_dlg(p.start, p.end, f"{tag}{_esc(_safe_upper(p.text))}"))
+    return lines
+
+
+# ── neon ───────────────────────────────────────────────────────
+def _lines_neon(captions: list[Caption], x: int, y: int, wpl: int = 3) -> list[str]:
+    """Chunks with 4 px blur glow outline."""
+    pos   = _pos_tag(x, y)
+    lines = []
+    for c in captions:
+        for p in _split_phrases(c, wpl):
+            tag = f"{pos}{{\\blur4\\fad(300,300)}}"
+            lines.append(_dlg(p.start, p.end, f"{tag}{_esc(p.text)}"))
+    return lines
+
+
+# ── dispatcher ────────────────────────────────────────────────
+
+_BUILDERS = {
+    "minimal":    _lines_minimal,
+    "fade":       _lines_fade,
+    "word_pop":   _lines_word_pop,
+    "typewriter": _lines_typewriter,
+    "slide":      _lines_slide,
+    "zoom":       _lines_zoom,
+    "shake":      _lines_shake,
+    "karaoke":    _lines_karaoke,
+    "hormozi":    _lines_hormozi,
+    "mrbeast":    _lines_mrbeast,
+    "neon":       _lines_neon,
+}
+
+
+# ── ASS escape ────────────────────────────────────────────────
+
+def _esc(text: str) -> str:
+    """Escape ASS special chars in caption text."""
+    return text.replace("{", "\\{").replace("}", "\\}")
+
+
+def _safe_upper(text: str) -> str:
+    """
+    Uppercase only when the text is Latin-script.
+    Arabic, CJK, Devanagari, Hebrew etc. have no case — calling .upper()
+    returns them unchanged but can corrupt surrogate pairs in some builds.
+    Guard: if ALL characters are ASCII (ord < 128) or Extended-Latin (ord < 592),
+    uppercase is safe. Otherwise return the text as-is.
+    """
+    if all(ord(c) < 592 or not c.isalpha() for c in text):
+        return text.upper()
+    return text
+
+
+# ══════════════════════════════════════════════════════════════
+#  ASS FILE BUILDER
+# ══════════════════════════════════════════════════════════════
 
 _ASS_HEADER = """\
 [Script Info]
@@ -75,6 +598,7 @@ ScriptType: v4.00+
 PlayResX: 1080
 PlayResY: 1920
 ScaledBorderAndShadow: yes
+YCbCr Matrix: TV.709
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -85,81 +609,120 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 {events}
 """
 
-_STYLES: dict[str, str] = {
-    "minimal": (
-        "Style: Default,Inter,72,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,"
-        "0,0,0,0,100,100,0,0,1,3,2,2,80,80,60,1"
-    ),
-    "hormozi": (
-        "Style: Default,Inter Black,88,&H00FFFFFF,&H0000FFFF,&H00000000,&H00000000,"
-        "1,0,0,0,100,100,0,0,3,0,0,2,80,80,80,1"
-    ),
-    "mrbeast": (
-        "Style: Default,Bangers,96,&H00FFFF00,&H000000FF,&H00000000,&H00000000,"
-        "1,0,0,0,100,100,2,0,1,4,3,2,80,80,80,1"
-    ),
-    "karaoke": (
-        "Style: Default,Inter,76,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,"
-        "0,0,0,0,100,100,0,0,1,3,2,2,80,80,60,1"
-    ),
-}
 
+def build_ass_content(
+    captions:      list[Caption],
+    style:         str = "minimal",
+    color:         str = DEFAULT_COLOR,
+    h_align:       str = "center",
+    v_align:       str = "bottom",
+    words_per_line: int = 3,
+) -> str:
+    """
+    Build a complete .ass subtitle file string.
 
-def _secs_to_ass_time(secs: float) -> str:
-    h = int(secs // 3600)
-    m = int((secs % 3600) // 60)
-    s = secs % 60
-    return f"{h}:{m:02d}:{s:05.2f}"
+    Args:
+        captions:       list of Caption (times relative to clip start)
+        style:          one of the 11 style names
+        color:          one of the 7 colour combo names
+        h_align:        left | center | right
+        v_align:        top  | center | bottom
+        words_per_line: 1 | 2 | 3  — words shown per screen at once
+    """
+    x, y, alignment = _resolve_pos(h_align, v_align)
+    style_key = style if style in _BASE_STYLES else "minimal"
+    color_key = color if color in COLOR_COMBOS else DEFAULT_COLOR
+    wpl       = max(1, min(int(words_per_line), 4))   # clamp 1-4
 
-
-def _build_ass_content(captions: list[Caption], style: str) -> str:
-    style_line = _STYLES.get(style, _STYLES["minimal"])
-    events = []
-    for cap in captions:
-        start_t = _secs_to_ass_time(cap.start)
-        end_t = _secs_to_ass_time(cap.end)
-        # Escape special ASS characters
-        text = cap.text.replace("{", "\\{").replace("}", "\\}")
-        # Karaoke: add {\k} tags per word for highlight effect
-        if style == "karaoke":
-            words = text.split()
-            word_duration = (cap.end - cap.start) / max(len(words), 1)
-            tagged_words = []
-            for word in words:
-                k_val = int(word_duration * 100)  # centiseconds
-                tagged_words.append(f"{{\\k{k_val}}}{word}")
-            text = " ".join(tagged_words)
-
-        events.append(
-            f"Dialogue: 0,{start_t},{end_t},Default,,0,0,0,,{text}"
-        )
+    sline  = _style_line(style_key, color_key, alignment)
+    build  = _BUILDERS.get(style_key, _lines_minimal)
+    events = build(captions, x, y, wpl)
 
     return _ASS_HEADER.format(
-        style_line=style_line,
+        style_line=sline,
         events="\n".join(events),
     )
 
 
-# ── Caption burning ────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+#  TRANSCRIPT → CAPTION FILTERING
+# ══════════════════════════════════════════════════════════════
+
+def get_clip_captions(
+    transcript: list[TranscriptEntry],
+    clip_start: float,
+    clip_end:   float,
+) -> list[Caption]:
+    """
+    Filter transcript entries overlapping [clip_start, clip_end] and
+    return Captions with timestamps relative to clip start (0 = clip begins).
+
+    BUG FIX (Bug 8): cap each entry's end at the NEXT entry's start to prevent
+    overlapping captions when the stored `duration` field overshoots reality.
+    Also removes entries that have effectively zero display time after clamping.
+    """
+    MIN_DISPLAY = 0.05      # drop entries shorter than 50 ms after clamping
+    clip_dur    = clip_end - clip_start
+
+    # Pre-compute natural end times capped at next entry start
+    timed: list[tuple[float, float, str]] = []    # (e_start, e_end, text)
+    for i, entry in enumerate(transcript):
+        e_start = entry["start"]
+        raw_dur = entry.get("duration") or 2.0
+        # Natural end is raw_dur, but must not reach next entry's start
+        if i + 1 < len(transcript):
+            next_start = transcript[i + 1]["start"]
+            e_end = min(e_start + raw_dur, next_start - 0.001)
+        else:
+            e_end = e_start + raw_dur
+        e_end = max(e_end, e_start + MIN_DISPLAY)
+        timed.append((e_start, e_end, (entry.get("text") or "").strip()))
+
+    captions = []
+    for e_start, e_end, text in timed:
+        if not text:
+            continue
+        if e_end <= clip_start or e_start >= clip_end:
+            continue                              # fully outside clip window
+
+        adj_start = max(e_start - clip_start, 0.0)
+        adj_end   = min(e_end   - clip_start, clip_dur)
+
+        if adj_end - adj_start < MIN_DISPLAY:
+            continue                              # too short to show
+
+        captions.append(Caption(start=adj_start, end=adj_end, text=text))
+
+    return captions
+
+
+# ══════════════════════════════════════════════════════════════
+#  CAPTION BURNING
+# ══════════════════════════════════════════════════════════════
 
 async def burn_captions(
-    clip_path: Path,
-    captions: list[Caption],
-    style: str,
-    output_path: Path,
+    clip_path:      Path,
+    captions:       list[Caption],
+    output_path:    Path,
+    style:          str = "minimal",
+    color:          str = DEFAULT_COLOR,
+    h_align:        str = "center",
+    v_align:        str = "bottom",
+    words_per_line: int = 3,
 ) -> Path:
     """
-    Burn captions into a clip using FFmpeg ASS subtitle filter.
-    Writes a temp .ass file, burns it, then cleans up.
+    Burn captions into a clip via FFmpeg ASS filter.
+    Writes a temp .ass file, burns it in one pass, cleans up.
     """
     if not captions:
         logger.warning(f"No captions for {clip_path.name} — copying without subtitles")
         output_path.write_bytes(clip_path.read_bytes())
         return output_path
 
-    ass_content = _build_ass_content(captions, style)
+    ass_content = build_ass_content(
+        captions, style, color, h_align, v_align, words_per_line
+    )
 
-    # Write ASS file to temp location
     with tempfile.NamedTemporaryFile(
         suffix=".ass", mode="w", encoding="utf-8", delete=False
     ) as f:
@@ -167,10 +730,12 @@ async def burn_captions(
         ass_path = f.name
 
     try:
+        # Escape Windows backslashes / colons for FFmpeg filter string
+        safe_ass = ass_path.replace("\\", "/").replace(":", "\\:")
         cmd = [
             "ffmpeg", "-y",
             "-i", str(clip_path),
-            "-vf", f"ass={ass_path}",
+            "-vf", f"ass={safe_ass}",
             "-c:v", "libx264",
             "-preset", "fast",
             "-crf", "22",
@@ -178,7 +743,6 @@ async def burn_captions(
             "-movflags", "+faststart",
             str(output_path),
         ]
-
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.DEVNULL,
@@ -188,41 +752,63 @@ async def burn_captions(
 
         if proc.returncode != 0:
             raise RuntimeError(
-                f"Caption burn failed for {clip_path.name}: {stderr.decode(errors='ignore')[-400:]}"
+                f"Caption burn failed [{style}] {clip_path.name}: "
+                f"{stderr.decode(errors='ignore')[-400:]}"
             )
 
     finally:
         Path(ass_path).unlink(missing_ok=True)
 
-    logger.info(f"Burned {style} captions → {output_path.name}")
+    logger.info(f"Burned [{style}/{color}] captions → {output_path.name}")
     return output_path
 
 
 async def burn_all_captions_parallel(
-    clips: list[tuple[object, Path]],  # list of (ClipTimestamp, raw_path)
-    transcript: list[TranscriptEntry],
-    style: str,
-    job_dir: Path,
-) -> list[tuple[object, Path]]:
+    clips:          list[tuple],      # (ClipTimestamp, Path)
+    transcript:     list[TranscriptEntry],
+    style:          str,
+    job_dir:        Path,
+    color:          str = DEFAULT_COLOR,
+    h_align:        str = "center",
+    v_align:        str = "bottom",
+    words_per_line: int = 3,
+) -> list[tuple]:
     """
     Burn captions into all clips simultaneously via asyncio.gather().
     Returns list of (ClipTimestamp, captioned_path) tuples.
     """
-    async def _burn_one(i: int, ts, raw_path: Path) -> tuple:
-        captions = get_clip_captions(transcript, ts.start, ts.end)
-        captioned_path = job_dir / f"clip_{i:02d}_captioned.mp4"
-        final_path = await burn_captions(raw_path, captions, style, captioned_path)
+    async def _one(i: int, ts, raw_path: Path):
+        captions   = get_clip_captions(transcript, ts.start, ts.end)
+        out_path   = job_dir / f"clip_{i:02d}_captioned.mp4"
+        final_path = await burn_captions(
+            raw_path, captions, out_path,
+            style=style, color=color,
+            h_align=h_align, v_align=v_align,
+            words_per_line=words_per_line,
+        )
         return ts, final_path
 
-    tasks = [_burn_one(i, ts, raw_path) for i, (ts, raw_path) in enumerate(clips)]
+    tasks   = [_one(i, ts, p) for i, (ts, p) in enumerate(clips)]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    successful = []
-    for i, result in enumerate(results):
-        if isinstance(result, Exception):
-            logger.error(f"Caption burn failed for clip {i}: {result}")
+    ok, failed = [], 0
+    for i, r in enumerate(results):
+        if isinstance(r, Exception):
+            logger.error(f"Caption burn clip {i} failed: {r}")
+            failed += 1
         else:
-            successful.append(result)
+            ok.append(r)
 
-    logger.info(f"Burned captions for {len(successful)}/{len(clips)} clips")
-    return successful
+    logger.info(f"Burned captions {len(ok)}/{len(clips)} clips ({failed} failed)")
+    return ok
+
+
+# ══════════════════════════════════════════════════════════════
+#  PUBLIC CONSTANTS  (for API schema validation)
+# ══════════════════════════════════════════════════════════════
+
+VALID_STYLES         = list(_BASE_STYLES.keys())
+VALID_COLORS         = list(COLOR_COMBOS.keys())
+VALID_HALIGNS        = ["left", "center", "right"]
+VALID_VALIGNS        = ["top", "center", "bottom"]
+VALID_WORDS_PER_LINE = [1, 2, 3]          # user choices exposed to frontend

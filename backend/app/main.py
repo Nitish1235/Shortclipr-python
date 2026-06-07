@@ -11,10 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-# Existing routers
-from app.api import auth, jobs, payments, social, webhooks, youtube
-# New editor router
-from app.api import editor, testing
+from app.api import auth, editor, admin, jobs, payments, social, webhooks, youtube
 from app.core.config import get_settings
 
 
@@ -35,6 +32,8 @@ app = FastAPI(
     docs_url="/docs" if settings.APP_ENV == "development" else None,
     redoc_url=None,
 )
+
+
 
 # ── Proxy Headers (for Cloud Run HTTPS) ────────────────────────
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
@@ -69,8 +68,12 @@ app.include_router(webhooks.router)
 app.include_router(social.router)
 # Include the new editor router
 app.include_router(editor.router)
-# Include the testing lab
-app.include_router(testing.router)
+app.include_router(admin.router)
+
+# Lab/testing endpoints — development only, never exposed in production
+if settings.APP_ENV == "development":
+    from app.api import testing
+    app.include_router(testing.router)
 
 # ── Health check (Cloud Run readiness probe) ───────────────────
 @app.get("/health", tags=["system"])

@@ -22,16 +22,11 @@ from app.api.deps import (
     create_access_token,
     verify_google_id_token,
 )
+from app.core.plan_limits import get_credits_limit, get_video_minutes_limit
 from app.db import supabase as db
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-PLAN_CREDITS: dict[str, int] = {
-    "free": 3,
-    "starter": 20,
-    "pro": 999999,  # unlimited
-}
 
 
 class GoogleAuthRequest(BaseModel):
@@ -62,14 +57,16 @@ async def google_auth(body: GoogleAuthRequest):
         # Upsert user in database
         import uuid
         user = await db.upsert_user({
-            "id": uuid.uuid4(),          # pass UUID object — asyncpg expects it
+            "id": uuid.uuid4(),
             "email": email,
             "full_name": full_name,
             "avatar_url": avatar_url,
             "google_sub": google_sub,
             "plan": "free",
             "credits_used": 0,
-            "credits_limit": PLAN_CREDITS["free"],
+            "credits_limit":       get_credits_limit("free"),
+            "video_minutes_used":  0,
+            "video_minutes_limit": get_video_minutes_limit("free"),
             "created_at": datetime.now(timezone.utc),
         })
 
@@ -93,7 +90,7 @@ async def google_auth(body: GoogleAuthRequest):
                 "avatar_url": user.get("avatar_url", "") or "",
                 "plan": user.get("plan", "free"),
                 "credits_used": user.get("credits_used", 0),
-                "credits_limit": user.get("credits_limit", 3),
+                "credits_limit": user.get("credits_limit", 1),
             },
         )
     except HTTPException:
@@ -109,13 +106,23 @@ async def get_me(current_user: CurrentUser):
     user = await db.get_user(current_user.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    credits_used  = int(user.get("credits_used",  0) or 0)
+    credits_limit = int(user.get("credits_limit", 1) or 1)
+    vm_used       = int(user.get("video_minutes_used",  0) or 0)
+    vm_limit      = int(user.get("video_minutes_limit", 30) or 30)
+
     return {
-        "user_id": user["id"],
-        "email": user["email"],
-        "full_name": user.get("full_name", ""),
+        "user_id":    str(user["id"]),
+        "email":      user["email"],
+        "full_name":  user.get("full_name", ""),
         "avatar_url": user.get("avatar_url", ""),
-        "plan": user.get("plan", "free"),
-        "credits_used": user.get("credits_used", 0),
-        "credits_limit": user.get("credits_limit", 3),
-        "videos_remaining": max(0, user.get("credits_limit", 3) - user.get("credits_used", 0)),
+        "plan":       user.get("plan", "free"),
+        # Shorts quota
+        "credits_used":       credits_used,
+        "credits_limit":      credits_limit,
+        "videos_remaining":   max(0, credits_limit - credits_used),
+        # Video-hours quota
+        "video_minutes_used":      vm_used,
+        "video_minutes_limit":     vm_limit,
+        "video_minutes_remaining": max(0, vm_limit - vm_used),
     }

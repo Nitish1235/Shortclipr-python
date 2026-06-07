@@ -16,7 +16,7 @@ export default function Changelog() {
 
           <div className="legal-section">
             <h2>v2.0.4 - Current</h2>
-            <p><strong>[ADDED]</strong> Retro-tape branding and neon owl mascot identity.</p>
+            <p><strong>[UPDATED]</strong> New brand identity — bold red S lettermark logo across all surfaces.</p>
             <p><strong>[ADDED]</strong> Enhanced subtitles customization (position, size, colors).</p>
             <p><strong>[FIXED]</strong> YouTube bot-detection bypass using PO token integration.</p>
             

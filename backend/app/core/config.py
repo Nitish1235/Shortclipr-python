@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     # ── App ────────────────────────────────────────────────────
     APP_ENV: str = "development"
+    ADMIN_EMAILS: str = ""   # comma-separated admin email list, e.g. "you@gmail.com,other@gmail.com"
     PORT: int = 8080
     LOG_LEVEL: str = "INFO"
     FRONTEND_URL: str = "http://localhost:5173"
@@ -32,7 +33,6 @@ class Settings(BaseSettings):
     # ── OpenAI ────────────────────────────────────────────────
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o"
-    WHISPER_MODEL: str = "whisper-1"
 
     # ── Google Cloud ──────────────────────────────────────────
     GCS_BUCKET_NAME: str = "shortclipr-clips"
@@ -52,18 +52,29 @@ class Settings(BaseSettings):
     DODO_PAYMENTS_WEBHOOK_SECRET: str = ""
     # Product IDs from your Dodo dashboard (Products → copy ID)
     # 5 tiers matching the pricing slider
-    DODO_PRODUCT_STARTER_100: str = ""   # $10 — 100 shorts
-    DODO_PRODUCT_STARTER_250: str = ""   # $25 — 250 shorts
-    DODO_PRODUCT_PRO_500: str = ""       # $45 — 500 shorts
-    DODO_PRODUCT_PRO_1000: str = ""      # $79 — 1000 shorts
-    DODO_PRODUCT_UNLIMITED: str = ""     # $199 — Unlimited
+    DODO_PRODUCT_STARTER_100: str = ""   # $10  — 100 shorts
+    DODO_PRODUCT_STARTER_250: str = ""   # $25  — 250 shorts
+    DODO_PRODUCT_PRO_500: str = ""       # $45  — 500 shorts
+    DODO_PRODUCT_PRO_1000: str = ""      # $79  — 1000 shorts
+    DODO_PRODUCT_PRO_2000: str = ""      # $145 — 2000 shorts
 
     # ── Worker / Pipeline ─────────────────────────────────────
-    MAX_CONCURRENT_CLIPS: int = 10      # asyncio semaphore limit
+    MAX_CONCURRENT_CLIPS: int = 10          # asyncio semaphore for FFmpeg
+    MAX_CONCURRENT_JOBS_PER_USER: int = 2   # prevent spam-submit
+    # Note: per-video duration limits are now plan-based — see app/core/plan_limits.py
 
     # ── InnerTube ──────────────────────────────────────────────
     INNERTUBE_API_KEY: str = "AIzaSyA8eiZmM1FaSbwzBlGmbW3ILtKBNJI41zQ"
     INNERTUBE_API_BASE: str = "https://www.youtube.com/youtubei/v1"
+
+    # ── Proxy (proxy-cheap residential) ───────────────────────────
+    # Production proxy is proxy-cheap. Set in .env / Cloud Run secrets.
+    # PROXY_PORTS: range "10001-10007" or CSV "10001,10002,10003".
+    # Leave PROXY_HOST empty to run without proxy (local dev / CI).
+    PROXY_HOST: str = ""              # e.g. gate.proxy-cheap.com
+    PROXY_USER: str = ""              # proxy username / customer ID
+    PROXY_PASS: str = ""              # proxy password
+    PROXY_PORTS: str = "10001-10007"  # port pool for random rotation
 
 
 @lru_cache

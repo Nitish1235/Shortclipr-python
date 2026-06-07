@@ -3,7 +3,7 @@ orchestrator.py — The master coordinator for the ShortClipr pipeline.
 
 Manages the full flow for a single job:
   1. Video metadata
-  2. Transcript (primary) OR Whisper streaming (fallback + early AI start)
+  2. Transcript via InnerTube captions
   3. Stream URL resolution
   4. GPT-4o viral clip finding
   5. Parallel clip extraction (HTTP range requests)
@@ -19,6 +19,7 @@ Realtime channel can update the UI in real-time.
 
 import asyncio
 import logging
+import math
 import tempfile
 import uuid
 from pathlib import Path
@@ -35,9 +36,8 @@ from app.pipeline.uploader import cleanup_job_files, process_and_upload_clip
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Minimum transcript entries before triggering early AI start (Whisper fallback)
-EARLY_AI_START_ENTRIES = 150  # ~5 minutes of speech
 
+PIPELINE_TIMEOUT_SECONDS = 1200   # 20 minutes — kill hung jobs
 
 async def run_pipeline(
     job_id: str,
@@ -46,15 +46,21 @@ async def run_pipeline(
     options: dict,
 ) -> None:
     """
-    Main pipeline coordinator. Designed to be called by the queue consumer.
-    All exceptions are caught and reported to Supabase — never crash the worker.
+    Main pipeline coordinator. Hard timeout of 20 minutes.
+    All exceptions caught and written to Supabase — never crashes the worker.
     """
     try:
-        await _execute_pipeline(job_id, user_id, youtube_url, options)
+        await asyncio.wait_for(
+            _execute_pipeline(job_id, user_id, youtube_url, options),
+            timeout=PIPELINE_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        msg = f"Pipeline timed out after {PIPELINE_TIMEOUT_SECONDS}s"
+        logger.error(f"[{job_id}] {msg}")
+        await db.fail_job(job_id, msg)
     except Exception as e:
         logger.exception(f"[{job_id}] Pipeline failed: {e}")
         await db.fail_job(job_id, str(e))
-        raise  # Re-raise so queue consumer can handle retry logic
 
 
 async def _execute_pipeline(
@@ -64,10 +70,16 @@ async def _execute_pipeline(
     options: dict,
 ) -> None:
 
-    clip_style = options.get("style", "minimal")
-    clip_count = options.get("clip_count", 10)
-    quality = options.get("quality", "720p")
-    language = options.get("language", "English")
+    clip_style      = options.get("style",          "minimal")
+    clip_count      = options.get("clip_count",     10)
+    quality         = options.get("quality",        "1080p")
+    language        = options.get("language",       "English")
+    color_combo     = options.get("color",          "white_black")
+    h_align         = options.get("h_align",        "center")
+    v_align         = options.get("v_align",        "bottom")
+    words_per_line  = options.get("words_per_line", 3)
+    short_template  = options.get("short_template", "smart_crop")
+    bar_color       = options.get("bar_color",      "#0d0d0d")
 
     # ── Create temp directory for this job ────────────────────
     job_dir = Path(tempfile.mkdtemp(prefix=f"sc_{job_id[:8]}_"))
@@ -79,31 +91,36 @@ async def _execute_pipeline(
             raise ValueError(f"Cannot extract video ID from: {youtube_url}")
 
         # ── STEP 2: Video metadata (title, duration) ──────────────
-        await db.update_job_progress(job_id, 2, "Fetching video info...")
-        metadata = await get_video_metadata(video_id)
-        await db.update_job_metadata(job_id, metadata["title"], metadata["duration"])
-        logger.info(f"[{job_id}] Video: {metadata['title']}")
+        # jobs.py does a pre-flight metadata fetch and passes the result
+        # via options to avoid a second InnerTube round-trip.
+        prefetched_duration = options.get("prefetched_duration", 0)
+        prefetched_title    = options.get("prefetched_title", "")
 
-        # ── STEP 3: Transcript (primary or Whisper fallback) ──
+        if prefetched_duration > 0:
+            metadata = {
+                "title":     prefetched_title,
+                "duration":  prefetched_duration,
+                "thumbnail": "",
+            }
+            await db.update_job_metadata(job_id, metadata["title"], metadata["duration"])
+            logger.info(f"[{job_id}] Video (prefetched): '{metadata['title']}' ({metadata['duration']}s)")
+        else:
+            await db.update_job_progress(job_id, 2, "Fetching video info...")
+            metadata = await get_video_metadata(video_id)
+            await db.update_job_metadata(job_id, metadata["title"], metadata["duration"])
+            logger.info(f"[{job_id}] Video: '{metadata['title']}' ({metadata['duration']}s)")
+
+        # ── STEP 3: Transcript via InnerTube captions ────────────
         await db.update_job_progress(job_id, 5, "Reading video transcript...")
-        transcript, used_whisper = await _get_transcript_with_early_ai(
-            job_id, video_id, language, options, job_dir
-        )
+        transcript = await get_transcript(video_id, language=language)
 
         # ── STEP 4: Stream URL ────────────────────────────────
         await db.update_job_progress(job_id, 15, "Connecting to video stream...")
         stream_url = await get_stream_url(video_id, quality=quality)
 
-        # ── STEP 5: Find viral clips (if not already done early)
-        if not used_whisper:
-            await db.update_job_progress(job_id, 20, "AI analyzing best moments...")
-            timestamps = await find_viral_clips(transcript, options)
-        else:
-            # AI was already called in _get_transcript_with_early_ai
-            timestamps = options.get("_early_timestamps", [])
-            if not timestamps:
-                # Fallback: full transcript now ready, do full AI pass
-                timestamps = await find_viral_clips(transcript, options)
+        # ── STEP 5: Find viral clips ──────────────────────────
+        await db.update_job_progress(job_id, 20, "AI analyzing best moments...")
+        timestamps = await find_viral_clips(transcript, options)
 
         if not timestamps:
             raise RuntimeError("AI found no suitable clip moments in this video")
@@ -121,11 +138,18 @@ async def _execute_pipeline(
         await db.update_job_progress(job_id, 55, "Clips extracted, reframing to vertical...")
 
         # ── STEP 7: Reframe to 9:16 vertical (parallel) ───────
-        reframed = await _reframe_all_parallel(raw_clips, job_dir)
+        reframed = await _reframe_all_parallel(
+            raw_clips, job_dir,
+            template=short_template, bar_color=bar_color,
+        )
         await db.update_job_progress(job_id, 65, "Adding captions...")
 
         # ── STEP 8: Burn captions (parallel) ──────────────────
-        captioned = await burn_all_captions_parallel(reframed, transcript, clip_style, job_dir)
+        captioned = await burn_all_captions_parallel(
+            reframed, transcript, clip_style, job_dir,
+            color=color_combo, h_align=h_align, v_align=v_align,
+            words_per_line=words_per_line,
+        )
         await db.update_job_progress(job_id, 80, "Uploading clips...")
 
         # ── STEP 9: Upload each clip + insert DB row immediately
@@ -155,53 +179,47 @@ async def _execute_pipeline(
         # ── STEP 10: Complete ─────────────────────────────────
         await db.complete_job(job_id, uploaded_count)
         await db.increment_credits_used(user_id)
-        logger.info(f"[{job_id}] ✅ Pipeline complete: {uploaded_count} clips delivered")
+
+        # Bill video minutes — ceiling to nearest minute
+        billed_minutes = math.ceil(metadata["duration"] / 60)
+        await db.increment_video_minutes_used(user_id, billed_minutes)
+
+        logger.info(
+            f"[{job_id}] ✅ Pipeline complete: {uploaded_count} clips delivered "
+            f"({billed_minutes} min billed to user {user_id})"
+        )
 
     finally:
         # Always clean up temp files — Cloud Run disk is limited
         cleanup_job_files(job_dir)
 
 
-async def _get_transcript_with_early_ai(
-    job_id: str,
-    video_id: str,
-    language: str,
-    options: dict,
-    job_dir: Path,
-) -> tuple[list, bool]:
-    """
-    Smart transcript acquisition with early AI start for Whisper fallback.
-
-    Returns (full_transcript, used_whisper_bool).
-    When Whisper is used, also stores early AI timestamps in options dict.
-    """
-    from app.pipeline.transcript import get_transcript
-    transcript, used_whisper = await get_transcript(video_id, language=language)
-
-    if used_whisper:
-        # Notify user about slower path
-        await db.update_job_progress(
-            job_id, 8,
-            "No captions found — using AI transcription (~2 min total)...",
-        )
-
-    return transcript, used_whisper
-
 
 async def _reframe_all_parallel(
     raw_clips: list[tuple[ClipTimestamp, Path]],
-    job_dir: Path,
+    job_dir:   Path,
+    template:  str = "smart_crop",
+    bar_color: str = "#0d0d0d",
 ) -> list[tuple[ClipTimestamp, Path]]:
     """Reframe all clips to 9:16 vertical concurrently."""
     async def _reframe_one(i: int, ts: ClipTimestamp, raw_path: Path):
         output = job_dir / f"clip_{i:02d}_vertical.mp4"
-        reframed = await reframe_to_vertical(raw_path, output)
+        reframed = await reframe_to_vertical(
+            raw_path, output,
+            template=template, bar_color=bar_color,
+        )
         return ts, reframed
 
     tasks = [_reframe_one(i, ts, p) for i, (ts, p) in enumerate(raw_clips)]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    return [r for r in results if not isinstance(r, Exception)]
+    ok = []
+    for i, r in enumerate(results):
+        if isinstance(r, Exception):
+            logger.error(f"Reframe clip {i} failed: {r}")
+        else:
+            ok.append(r)
+    return ok
 
 
 async def _upload_and_save_clip(

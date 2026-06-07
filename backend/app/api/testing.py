@@ -1,382 +1,288 @@
 """
-testing.py — Stealth InnerTube Lab
-Dashboard for testing different YouTube client identities.
+testing.py — InnerTube Stabilization Lab  (DEV ONLY)
+
+Mounted only when APP_ENV == "development" (see main.py).
+Never exposed in production.
+
+Two endpoints:
+  GET  /testing        — HTML UI
+  POST /testing/debug  — single client audit
+  POST /testing/decodo — all-clients sweep via proxy
 """
 
-import logging
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
-from fastapi import APIRouter, Request, HTTPException
+import logging
+
+import httpx
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from typing import Optional
-import myjdapi
-import httpx
 
-from app.pipeline.stream import call_player_api, CLIENTS, extract_video_id, _pick_best_stream, _pick_best_audio_stream
-from app.pipeline.transcript import _fetch_innertube_captions
+from app.core.proxy import get_proxy_url
+from app.pipeline.stream import (
+    CLIENTS,
+    PLAYER_ENDPOINT,
+    _pick_best_audio_stream,
+    _pick_best_stream,
+    call_player_api,
+    extract_video_id,
+)
 
 router = APIRouter(tags=["testing"])
 logger = logging.getLogger(__name__)
-executor = ThreadPoolExecutor(max_workers=5)
 
-# Hardcoded Credentials for testing2
-MYJD_EMAIL = "jnit432@gmail.com"
-MYJD_PASSWORD = "Jnit432@00"
-MYJD_DEVICE_NAME = "JDownloader@nitish"
+
+# ── Request models ────────────────────────────────────────────
 
 class TestRequest(BaseModel):
     url_or_id: str
-    client: str = "ANDROID_VR"
+    client:    str  = "ANDROID_VR"
     use_proxy: bool = False
 
-BRIGHTDATA_PROXY = "http://zj3ssxzve5ec:h7at9b54fymd1yv@65.111.2.163:3129"
+
+class SweepRequest(BaseModel):
+    url_or_id: str
+
+
+# ── HTML UI ───────────────────────────────────────────────────
 
 @router.get("/testing", response_class=HTMLResponse)
 async def testing_ui():
-    """Serves a simple, high-tech HTML/JS tester UI."""
+    """Serves the InnerTube Lab UI (dev only)."""
     return """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>ShortClipr | InnerTube Lab</title>
-        <style>
-            :root { --bg: #0a0a0a; --accent: #00ffcc; --text: #e0e0e0; }
-            body { background: var(--bg); color: var(--text); font-family: 'Courier New', monospace; padding: 40px; }
-            .container { max-width: 800px; margin: 0 auto; }
-            h1 { color: var(--accent); border-bottom: 1px solid var(--accent); padding-bottom: 10px; }
-            .input-group { margin-bottom: 20px; }
-            input, select, button { 
-                background: #1a1a1a; color: white; border: 1px solid #333; 
-                padding: 10px; font-size: 16px; border-radius: 4px;
-            }
-            button { background: var(--accent); color: black; font-weight: bold; cursor: pointer; border: none; }
-            button:hover { opacity: 0.8; }
-            .results { background: #111; padding: 20px; border: 1px solid #222; min-height: 200px; white-space: pre-wrap; font-size: 13px; }
-            .status { margin-bottom: 10px; font-weight: bold; }
-            .status.ok { color: #00ff00; }
-            .status.fail { color: #ff0055; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>InnerTube Stabilization Lab</h1>
-            <p>Test various "Golden Identities" against blocked YouTube videos.</p>
-            
-            <div class="input-group">
-                <input type="text" id="url" placeholder="YouTube URL or Video ID" style="width: 300px;">
-                <select id="client">
-                    <option value="ANDROID_VR">ANDROID_VR (Golden)</option>
-                    <option value="IOS">IOS (Stealth)</option>
-                    <option value="MWEB">MWEB (Fallback)</option>
-                </select>
-                <button onclick="runTest()">RUN AUDIT</button>
-            </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ShortClipr | InnerTube Lab</title>
+  <style>
+    :root { --bg:#0a0a0a; --accent:#00ffcc; --orange:#ff9900; --text:#e0e0e0; }
+    body  { background:var(--bg); color:var(--text); font-family:'Courier New',monospace; padding:40px; }
+    .wrap { max-width:900px; margin:0 auto; }
+    h1    { color:var(--accent); border-bottom:1px solid var(--accent); padding-bottom:10px; }
+    h2    { color:var(--orange); border-bottom:1px solid var(--orange); padding-bottom:8px; margin-top:40px; }
+    .row  { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:20px; }
+    input, select, button {
+      background:#1a1a1a; color:white; border:1px solid #333;
+      padding:10px; font-size:15px; border-radius:4px;
+    }
+    button { font-weight:bold; cursor:pointer; border:none; }
+    .btn-g { background:var(--accent);  color:black; }
+    .btn-o { background:var(--orange); color:black; }
+    .out   { background:#111; padding:20px; border:1px solid #222; min-height:160px;
+             white-space:pre-wrap; font-size:13px; border-radius:4px; }
+    .st    { margin-bottom:8px; font-weight:bold; font-size:14px; }
+    .ok    { color:#00ff00; } .fail { color:#ff0055; }
+    hr     { border-color:#222; margin:30px 0; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>⚡ InnerTube Stabilization Lab</h1>
+  <p>Test InnerTube client identities against YouTube — with or without proxy.</p>
 
-            <div id="status" class="status">Ready.</div>
-            <div id="results" class="results">Results will appear here...</div>
-        </div>
+  <!-- Single client audit -->
+  <div class="row">
+    <input type="text" id="url1" placeholder="YouTube URL or Video ID" style="width:280px">
+    <select id="client">
+      <option value="ANDROID_VR">ANDROID_VR</option>
+      <option value="TV">TV (TVHTML5)</option>
+      <option value="IOS">IOS</option>
+      <option value="MWEB">MWEB</option>
+    </select>
+    <label style="color:#aaa;font-size:13px">
+      <input type="checkbox" id="use_proxy"> Use Proxy
+    </label>
+    <button class="btn-g" onclick="runAudit()">RUN AUDIT</button>
+  </div>
+  <div id="st1" class="st">Ready.</div>
+  <div id="out1" class="out">Results appear here...</div>
 
-        <script>
-            async function runTest() {
-                const url = document.getElementById('url').value;
-                const client = document.getElementById('client').value;
-                const status = document.getElementById('status');
-                const results = document.getElementById('results');
+  <hr>
 
-                if (!url) return alert('Enter a URL');
-                
-                status.innerText = "Running audit...";
-                status.className = "status";
-                results.innerText = "Analyzing handshake...";
+  <!-- All-clients sweep -->
+  <h2>🟠 All-Clients Proxy Sweep</h2>
+  <p>Tests all 4 clients simultaneously via proxy and returns a comparison report.</p>
+  <div class="row">
+    <input type="text" id="url2" placeholder="YouTube URL or Video ID" style="width:280px">
+    <button class="btn-o" onclick="runSweep()">🔥 RUN SWEEP</button>
+  </div>
+  <div id="st2" class="st">Ready.</div>
+  <div id="out2" class="out">Sweep results appear here...</div>
+</div>
 
-                try {
-                    const res = await fetch('/testing/debug', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ url_or_id: url, client: client })
-                    });
-                    const data = await res.json();
-                    
-                    status.innerText = res.ok ? "AUDIT SUCCESSFUL" : "AUDIT FAILED";
-                    status.className = "status " + (res.ok ? "ok" : "fail");
-                    results.innerText = JSON.stringify(data, null, 2);
-                } catch (e) {
-                    status.innerText = "NETWORK ERROR";
-                    status.className = "status fail";
-                    results.innerText = e.message;
-                }
-            }
-        </script>
-    </body>
-    </html>
-    """
+<script>
+async function runAudit() {
+  const url    = document.getElementById('url1').value;
+  const client = document.getElementById('client').value;
+  const proxy  = document.getElementById('use_proxy').checked;
+  const st = document.getElementById('st1'), out = document.getElementById('out1');
+  if (!url) return alert('Enter a URL');
+  st.textContent = `Running ${client}${proxy?' via proxy':''}...`; st.className='st';
+  out.textContent = 'Requesting...';
+  try {
+    const r = await fetch('/testing/debug', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({url_or_id:url, client, use_proxy:proxy})
+    });
+    const d = await r.json();
+    st.textContent = r.ok ? '✅ SUCCESS' : '❌ FAILED';
+    st.className = 'st ' + (r.ok ? 'ok' : 'fail');
+    out.textContent = JSON.stringify(d, null, 2);
+  } catch(e) { st.textContent='❌ NETWORK ERROR'; st.className='st fail'; out.textContent=e.message; }
+}
+
+async function runSweep() {
+  const url = document.getElementById('url2').value;
+  const st = document.getElementById('st2'), out = document.getElementById('out2');
+  if (!url) return alert('Enter a URL');
+  st.textContent = 'Sweeping all clients...'; st.className='st';
+  out.textContent = 'Running...';
+  try {
+    const r = await fetch('/testing/sweep', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({url_or_id:url})
+    });
+    const d = await r.json();
+    const anyOk = Object.values(d.clients||{}).some(c=>c.playability==='OK');
+    st.textContent = anyOk ? '✅ AT LEAST ONE PASSED' : '❌ ALL BLOCKED';
+    st.className = 'st ' + (anyOk ? 'ok' : 'fail');
+    out.textContent = JSON.stringify(d, null, 2);
+  } catch(e) { st.textContent='❌ NETWORK ERROR'; st.className='st fail'; out.textContent=e.message; }
+}
+</script>
+</body>
+</html>
+"""
+
+
+# ── Single client audit ───────────────────────────────────────
 
 @router.post("/testing/debug")
 async def debug_innertube(req: TestRequest):
-    """Performs a full InnerTube audit for a specific client."""
+    """Single InnerTube client audit — proxy loaded from settings."""
     video_id = extract_video_id(req.url_or_id) or req.url_or_id
     if len(video_id) != 11:
-        raise HTTPException(status_code=400, detail="Invalid Video ID")
+        raise HTTPException(status_code=400, detail="Invalid Video ID or URL")
 
-    report = {
-        "video_id": video_id,
-        "client": req.client,
-        "logs": [],
-        "results": {}
-    }
+    proxy_url = get_proxy_url() if req.use_proxy else None
+    report: dict = {"video_id": video_id, "client": req.client, "logs": [], "results": {}}
 
-    def add_log(msg):
+    def log(msg: str) -> None:
         report["logs"].append(f"[{req.client}] {msg}")
 
-    # 1. Test Player API
     try:
-        add_log("Initiating player handshake...")
-        if req.use_proxy:
-            add_log(f"USING PROXYSCRAPE PROXY: 65.111.2.163:3129")
-            logger.info(f"LAB_AUDIT_START: video_id={video_id} client={req.client} proxied=True")
-        else:
-            logger.info(f"LAB_AUDIT_START: video_id={video_id} client={req.client} proxied=False")
+        log(f"Calling InnerTube with client={req.client} proxy={bool(proxy_url)}")
+        data = await call_player_api(video_id, req.client, send_params=True, proxy_url=proxy_url)
 
-        if req.client == "HEADLESS":
-            add_log("Launching Playwright stealth session...")
-            # Note: Playwright proxy support can be added here if needed
-            data = await get_player_data_headless(video_id)
-        elif req.client == "APIFY_HTML_SPOOF":
-            add_log("Launching curl_cffi TLS Spoofing session (Chrome 120)...")
-            from curl_cffi.requests import AsyncSession
-            import re
-            import json
-            
-            target_url = f"https://www.youtube.com/watch?v={video_id}"
-            proxies = {"http": BRIGHTDATA_PROXY, "https": BRIGHTDATA_PROXY} if req.use_proxy else None
-            
-            async with AsyncSession(proxies=proxies, impersonate="chrome120") as s:
-                add_log(f"Fetching raw HTML from {target_url}...")
-                resp = await s.get(target_url)
-                add_log(f"HTML Download Complete. Status: {resp.status_code}")
-                
-                add_log("Scanning HTML for embedded ytInitialPlayerResponse JSON payload...")
-                match = re.search(r"var ytInitialPlayerResponse\s*=\s*({.+?});(?:var|</script>)", resp.text)
-                if match:
-                    add_log("SUCCESS: Extracted JSON payload from HTML.")
-                    data = json.loads(match.group(1))
-                else:
-                    raise Exception("ytInitialPlayerResponse not found in HTML. YouTube may have served a captcha or blocked page.")
-        else:
-            add_log(f"Calling InnerTube API with Golden Identity: {req.client}")
-            if req.use_proxy:
-                # Custom proxied call for lab testing
-                from app.pipeline.stream import CLIENTS, PLAYER_ENDPOINT
-                config = CLIENTS.get(req.client)
-                payload = {
-                    "context": config["context"].copy(),
-                    "videoId": video_id,
-                    "playbackContext": {"contentPlaybackContext": {"signatureTimestamp": 20000}},
-                    "contentCheckOk": True, "racyCheckOk": True
-                }
-                headers = config["headers"].copy()
-                headers["Content-Type"] = "application/json"
-                params = {"key": config["api_key"]}
-                
-                async with httpx.AsyncClient(proxy=BRIGHTDATA_PROXY, timeout=20) as client:
-                    add_log("Dispatching proxied request via httpx...")
-                    resp = await client.post(PLAYER_ENDPOINT, json=payload, params=params, headers=headers)
-                    add_log(f"Proxy Response: {resp.status_code}")
-                    resp.raise_for_status()
-                    data = resp.json()
-            else:
-                data = await call_player_api(video_id, req.client, send_params=True)
-            
-        report["results"]["player_api"] = "SUCCESS"
-        add_log("API Response received (200 OK)")
-        logger.info(f"LAB_AUDIT_SUCCESS: video_id={video_id} client={req.client}")
-
-        # Check Playability Status
         playability = data.get("playabilityStatus", {})
-        p_status = playability.get("status")
-        report["results"]["playability"] = p_status
-        add_log(f"Playability Status: {p_status}")
-        
-        if p_status != "OK":
-            reason = playability.get("reason", "Unknown block reason")
-            add_log(f"BLOCK DETECTED: {reason}")
-            if "errorScreen" in playability:
-                add_log("Error screen present in response.")
-
-        # Check Metadata
-        details = data.get("videoDetails", {})
-        if details:
-            add_log(f"Metadata extracted: {details.get('title')[:30]}...")
-        else:
-            add_log("WARNING: videoDetails missing from response.")
-
-        report["results"]["metadata"] = {
-            "title": details.get("title"),
-            "author": details.get("author"),
-            "length": details.get("lengthSeconds")
-        }
-
-        # Check Captions
-        captions = data.get("captions", {}).get("playerCaptionsTracklistRenderer", {}).get("captionTracks", [])
-        report["results"]["captions_found"] = len(captions)
-        report["results"]["caption_languages"] = [c.get("languageCode") for c in captions]
-        add_log(f"Found {len(captions)} caption tracks.")
-
-        # Check Streams
-        add_log("Analyzing streaming formats...")
+        p_status    = playability.get("status", "UNKNOWN")
+        details     = data.get("videoDetails", {})
+        captions    = (
+            data.get("captions", {})
+                .get("playerCaptionsTracklistRenderer", {})
+                .get("captionTracks", [])
+        )
         video_url = _pick_best_stream(data, 720)
         audio_url = _pick_best_audio_stream(data)
-        
-        if not video_url:
-            add_log("CRITICAL: No video stream URLs found in streamingData.")
-        if not audio_url:
-            add_log("CRITICAL: No audio stream URLs found in streamingData.")
 
-        report["results"]["streams"] = {
-            "has_video_url": bool(video_url),
-            "has_audio_url": bool(audio_url),
-            "video_url_preview": video_url[:100] + "..." if video_url else None
+        log(f"Playability: {p_status}")
+        if p_status != "OK":
+            log(f"Block reason: {playability.get('reason', 'unknown')}")
+        log(f"Caption tracks found: {len(captions)}")
+        log(f"Video stream: {'✅' if video_url else '❌'}")
+        log(f"Audio stream: {'✅' if audio_url else '❌'}")
+
+        report["results"] = {
+            "playability":        p_status,
+            "title":              details.get("title"),
+            "duration_sec":       details.get("lengthSeconds"),
+            "captions_count":     len(captions),
+            "caption_languages":  [c.get("languageCode") for c in captions],
+            "has_video_stream":   bool(video_url),
+            "has_audio_stream":   bool(audio_url),
+            "video_url_preview":  (video_url[:120] + "...") if video_url else None,
         }
 
-    except Exception as e:
-        report["results"]["player_api"] = "FAILED"
-        error_msg = str(e)
-        if isinstance(e, httpx.HTTPStatusError):
-            try:
-                error_body = e.response.text
-                error_msg = f"{e.response.status_code} {e.response.reason_phrase} - {error_body[:200]}"
-                add_log(f"RESPONSE BODY: {error_body[:500]}")
-            except:
-                pass
-        
-        report["results"]["error"] = error_msg
-        add_log(f"FATAL ERROR: {error_msg}")
-        # Log full trace for developer
-        logger.error(f"Debug test failed: {e}", exc_info=True)
+    except Exception as exc:
+        log(f"FATAL: {exc}")
+        report["results"]["error"] = str(exc)
+        logger.error(f"InnerTube lab audit failed: {exc}", exc_info=True)
 
     return report
 
-@router.get("/testing2", response_class=HTMLResponse)
-async def testing2_ui():
-    """Serves the JDownloader Heavy-Lifter UI."""
-    return """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>ShortClipr | JDownloader Lab</title>
-        <style>
-            :root { --bg: #0a0a0a; --accent: #ff9900; --text: #e0e0e0; }
-            body { background: var(--bg); color: var(--text); font-family: 'Courier New', monospace; padding: 40px; }
-            .container { max-width: 800px; margin: 0 auto; }
-            h1 { color: var(--accent); border-bottom: 1px solid var(--accent); padding-bottom: 10px; }
-            .input-group { margin-bottom: 20px; }
-            input, button { 
-                background: #1a1a1a; color: white; border: 1px solid #333; 
-                padding: 10px; font-size: 16px; border-radius: 4px;
-            }
-            button { background: var(--accent); color: black; font-weight: bold; cursor: pointer; border: none; }
-            .results { background: #111; padding: 20px; border: 1px solid #222; min-height: 200px; white-space: pre-wrap; font-size: 13px; }
-            .status { margin-bottom: 10px; font-weight: bold; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>JDownloader 2 Lab (/testing2)</h1>
-            <p>Using <b>JDownloader@nitish</b> to resolve unblockable YouTube URLs.</p>
-            
-            <div class="input-group">
-                <input type="text" id="url" placeholder="YouTube URL" style="width: 400px;">
-                <button onclick="solveLink()">SOLVE LINK</button>
-            </div>
 
-            <div id="status" class="status">Ready.</div>
-            <div id="results" class="results">JDownloader results...</div>
-        </div>
+# ── All-clients proxy sweep ───────────────────────────────────
 
-        <script>
-            async function solveLink() {
-                const url = document.getElementById('url').value;
-                const status = document.getElementById('status');
-                const results = document.getElementById('results');
-
-                if (!url) return alert('Enter a URL');
-                
-                status.innerText = "Sending to JDownloader...";
-                results.innerText = "Requesting decryption...";
-
-                try {
-                    const res = await fetch('/testing2/solve', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ url_or_id: url, client: "JDOWNLOADER" })
-                    });
-                    const data = await res.json();
-                    status.innerText = "JD SOLVER FINISHED";
-                    results.innerText = JSON.stringify(data, null, 2);
-                } catch (e) {
-                    status.innerText = "JD ERROR";
-                    results.innerText = e.message;
-                }
-            }
-        </script>
-    </body>
-    </html>
+@router.post("/testing/sweep")
+async def sweep_all_clients(req: SweepRequest):
     """
+    Test all registered InnerTube clients through proxy simultaneously.
+    Proxy loaded from settings (PROXY_HOST / PROXY_USER / PROXY_PASS).
+    """
+    video_id = extract_video_id(req.url_or_id) or req.url_or_id
+    if len(video_id) != 11:
+        raise HTTPException(status_code=400, detail="Invalid Video ID or URL")
 
-def _jd_solve_sync(url: str):
-    """Synchronous JDownloader logic to run in executor."""
-    jd = myjdapi.MyJDownloader()
-    jd.set_app_key("ShortClipr_Labs")
-    
-    try:
-        jd.connect(MYJD_EMAIL, MYJD_PASSWORD)
-        device = jd.get_device(MYJD_DEVICE_NAME)
-        if not device:
-            return {"error": f"Device {MYJD_DEVICE_NAME} not found online."}
+    proxy_url = get_proxy_url()
 
-        # Add link to JDownloader
-        # We use linkgrabber to avoid actually downloading, just resolving.
-        device.linkgrabber.add_links([{"link": url, "autostart": False}])
-        
-        # Poll for a few seconds to see if it resolves
-        import time
-        max_retries = 10
-        for _ in range(max_retries):
-            time.sleep(2)
-            packages = device.linkgrabber.query_packages()
-            for pkg in packages:
-                # Look for links in the grabber
-                links = device.linkgrabber.query_links(package_uuids=[pkg.get("uuid")])
-                for link in links:
-                    if url in link.get("url", "") or video_id_in_link(url, link):
-                        return {
-                            "status": "RESOLVED",
-                            "name": link.get("name"),
-                            "url": link.get("url"), # This might be the source URL
-                            "comment": link.get("comment"),
-                            "bytes_total": link.get("bytesTotal"),
-                            "raw_link_data": link
-                        }
-        
-        return {"status": "TIMEOUT", "message": "JDownloader added the link but hasn't finished resolving yet. Check your JDownloader app GUI."}
+    async def _test(client_name: str) -> dict:
+        config = CLIENTS.get(client_name)
+        if not config:
+            return {"status": "SKIPPED", "error": "Unknown client"}
+        payload = {
+            "context": config["context"].copy(),
+            "videoId": video_id,
+            "playbackContext": {"contentPlaybackContext": {"signatureTimestamp": 20000}},
+            "contentCheckOk": True,
+            "racyCheckOk": True,
+            "params": "2AMBCgIQBg==",
+        }
+        headers = {**config["headers"], "Content-Type": "application/json"}
+        try:
+            client_kwargs: dict = {"timeout": 25}
+            if proxy_url:
+                client_kwargs["proxy"] = proxy_url
+            async with httpx.AsyncClient(**client_kwargs) as client:
+                resp = await client.post(
+                    PLAYER_ENDPOINT,
+                    json=payload,
+                    params={"key": config["api_key"]},
+                    headers=headers,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            p      = data.get("playabilityStatus", {})
+            status = p.get("status", "UNKNOWN")
+            v_url  = _pick_best_stream(data, 720)
+            a_url  = _pick_best_audio_stream(data)
+            return {
+                "playability":      status,
+                "block_reason":     p.get("reason") if status != "OK" else None,
+                "title":            data.get("videoDetails", {}).get("title"),
+                "has_video_stream": bool(v_url),
+                "has_audio_stream": bool(a_url),
+                "video_preview":    (v_url[:120] + "...") if v_url else None,
+            }
+        except httpx.HTTPStatusError as exc:
+            return {"status": "HTTP_ERROR", "code": exc.response.status_code, "error": exc.response.text[:300]}
+        except Exception as exc:
+            return {"status": "ERROR", "error": str(exc)}
 
-    except Exception as e:
-        return {"error": str(e)}
+    client_names = list(CLIENTS.keys())
+    results = await asyncio.gather(*[_test(n) for n in client_names])
+    client_results = dict(zip(client_names, results))
 
-def video_id_in_link(target_url, link_data):
-    # Helper to match video ID if URL changes
-    from app.pipeline.stream import extract_video_id
-    tid = extract_video_id(target_url)
-    return tid and tid in (link_data.get("name", "") + link_data.get("url", ""))
+    passed = [k for k, v in client_results.items() if v.get("playability") == "OK" and v.get("has_video_stream")]
 
-@router.post("/testing2/solve")
-async def solve_jd(req: TestRequest):
-    """Endpoint to trigger JDownloader resolution."""
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(executor, _jd_solve_sync, req.url_or_id)
-    return result
+    return {
+        "summary": {
+            "video_id":       video_id,
+            "proxy_used":     bool(proxy_url),
+            "passed_clients": passed,
+            "failed_clients": [k for k in client_names if k not in passed],
+            "best_client":    passed[0] if passed else None,
+            "verdict":        "✅ WORKING" if passed else "❌ ALL BLOCKED",
+        },
+        "clients": client_results,
+    }

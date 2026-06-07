@@ -11,13 +11,12 @@ DodoPayments.Initialize({
   },
 })
 
-// ── Slider tiers ───────────────────────────────────────────────────
 const TIERS = [
-  { clips: 100,       price: 10,  label: '100 Shorts',  dodoId: 'starter_100'  },
-  { clips: 250,       price: 25,  label: '250 Shorts',  dodoId: 'starter_250'  },
-  { clips: 500,       price: 45,  label: '500 Shorts',  dodoId: 'pro_500'      },
-  { clips: 1000,      price: 79,  label: '1000 Shorts', dodoId: 'pro_1000'     },
-  { clips: Infinity,  price: 199, label: 'Unlimited ∞', dodoId: 'unlimited'    },
+  { clips: 100,      price: 10,  label: '100 Shorts',  dodoId: 'starter_100'  },
+  { clips: 250,      price: 25,  label: '250 Shorts',  dodoId: 'starter_250'  },
+  { clips: 500,      price: 45,  label: '500 Shorts',  dodoId: 'pro_500'      },
+  { clips: 1000,     price: 79,  label: '1000 Shorts', dodoId: 'pro_1000'     },
+  { clips: 2000,     price: 145, label: '2000 Shorts', dodoId: 'pro_2000'     },
 ]
 
 const FREE_FEATURES = [
@@ -31,7 +30,7 @@ const FREE_FEATURES = [
 
 function getFeatures(tier) {
   return [
-    `${tier.clips === Infinity ? 'Unlimited' : tier.clips} shorts/month`,
+    `${tier.clips} shorts/month`,
     'All formats: 30s / 60s / 90s',
     '1080p — Zero Watermark',
     'All 12 caption styles incl. Karaoke',
@@ -45,14 +44,12 @@ function getFeatures(tier) {
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
 export default function Pricing() {
-  const [tierIdx, setTierIdx] = useState(1)       // default: 250 clips
-  const [loading, setLoading]   = useState(false)
+  const [tierIdx, setTierIdx]     = useState(1)
+  const [loading, setLoading]     = useState(false)
   const [freeLoading, setFreeLoading] = useState(false)
-  const [error, setError]       = useState('')
+  const [error, setError]         = useState('')
 
-  const tier = TIERS[tierIdx]
-
-  // How full the slider track should appear (0–100%)
+  const tier    = TIERS[tierIdx]
   const fillPct = (tierIdx / (TIERS.length - 1)) * 100
 
   const handlePaidCheckout = async () => {
@@ -61,40 +58,17 @@ export default function Pricing() {
     try {
       const token = localStorage.getItem('sc_token')
       if (!token) { window.location.href = '/#hero'; return }
-
       const res = await fetch(`${API_BASE}/payments/checkout-session`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ plan: tier.dodoId, period: 'monthly' }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ plan: tier.dodoId, period: 'monthly' }), // pro_2000 | pro_1000 | pro_500 | starter_250 | starter_100
       })
       if (!res.ok) {
         const e = await res.json().catch(() => ({}))
         throw new Error(e.detail || `Error ${res.status}`)
       }
       const { checkout_url } = await res.json()
-
-      await DodoPayments.Checkout.open({
-        checkoutUrl: checkout_url,
-        options: {
-          showSecurityBadge: true,
-          themeConfig: {
-            dark: {
-              bgPrimary: '#050d08',
-              bgSecondary: '#0a1a0f',
-              borderPrimary: '#1a3322',
-              textPrimary: '#e8f5ec',
-              textSecondary: '#8ca392',
-              buttonPrimary: '#84cc16',
-              buttonPrimaryHover: '#65a30d',
-              buttonTextPrimary: '#050d08',
-            },
-            radius: '0px',
-          },
-        },
-      })
+      await DodoPayments.Checkout.open({ checkoutUrl: checkout_url })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -104,300 +78,151 @@ export default function Pricing() {
 
   const handleFreeStart = () => {
     setFreeLoading(true)
-    setTimeout(() => {
-      window.location.href = '/#hero'
-    }, 300)
+    setTimeout(() => { window.location.href = '/#hero' }, 300)
   }
 
+  const checkStyle = { color:'#cf1322', fontWeight:700, marginRight:'8px' }
+
   return (
-    <section id="pricing" style={{ padding: '90px 5%', borderTop: '2px dashed #1a3322' }}>
-      <div style={{ maxWidth: '1100px', margin: '0 auto', textAlign: 'center' }}>
+    <section id="pricing" style={{ padding:'96px 0', background:'#fff' }}>
+      <div style={{ maxWidth:'1100px', margin:'0 auto', padding:'0 5%' }}>
 
         {/* Header */}
-        <div style={{
-          fontFamily: "'Space Mono', monospace", fontSize: '0.75rem', color: 'var(--lime)',
-          textTransform: 'uppercase', letterSpacing: '0.12em',
-          background: 'rgba(132,204,22,0.08)', border: '1px solid rgba(132,204,22,0.25)',
-          display: 'inline-block', padding: '4px 12px', marginBottom: '20px',
-        }}>LICENSE_TIERS</div>
-        <h2 className="sec-title">SIMPLE PRICING.</h2>
-        <p style={{
-          fontFamily: "'Space Mono', monospace", color: 'var(--muted)',
-          fontSize: '0.85rem', marginTop: '-24px', marginBottom: '52px',
-        }}>
-          Pay for what you use. Cancel monthly. No annual trap.
-        </p>
+        <div style={{ textAlign:'center', marginBottom:'56px' }}>
+          <div style={{ display:'inline-flex', alignItems:'center', gap:'12px', marginBottom:'16px' }}>
+            <div style={{ width:'32px', height:'2px', background:'#cf1322' }}/>
+            <span style={{ fontSize:'0.72rem', fontWeight:700, color:'#cf1322', textTransform:'uppercase', letterSpacing:'0.22em' }}>Pricing</span>
+            <div style={{ width:'32px', height:'2px', background:'#cf1322' }}/>
+          </div>
+          <h2 style={{ fontSize:'clamp(1.9rem,4vw,3.2rem)', fontWeight:700, color:'#0f0f0f', letterSpacing:'-0.04em', marginBottom:'12px' }}>
+            Simple, honest pricing.
+          </h2>
+          <p style={{ color:'#666', fontSize:'1rem' }}>Start free. Upgrade when you're ready.</p>
+        </div>
 
-        {/* Error */}
-        {error && (
+        {/* Two cards */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1.1fr', gap:'28px', alignItems:'start' }}>
+
+          {/* Free card */}
           <div style={{
-            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-            borderLeft: '4px solid #ef4444', padding: '12px 20px',
-            marginBottom: '28px', fontFamily: "'Space Mono', monospace",
-            fontSize: '0.78rem', color: '#fca5a5', textAlign: 'left',
-            maxWidth: '780px', margin: '0 auto 28px',
-          }}>❌ {error}</div>
-        )}
-
-        {/* 2-card grid */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: '30px', maxWidth: '900px', margin: '0 auto',
-          textAlign: 'left',
-        }}>
-
-          {/* ── FREE CARD ── */}
-          <div className="retro-card pr-card" style={{
-            borderColor: 'var(--muted)',
-            boxShadow: '8px 8px 0 rgba(140,163,145,0.15)',
-            display: 'flex', flexDirection: 'column',
+            border:'1px solid #e5e5e5', borderRadius:'16px',
+            padding:'32px', background:'#fff',
           }}>
-            {/* Label */}
-            <div style={{
-              fontFamily: "'Space Mono', monospace", fontSize: '0.7rem',
-              color: 'var(--muted)', letterSpacing: '0.15em', textTransform: 'uppercase',
-              marginBottom: '10px',
-            }}>FREE TRIAL</div>
-
-            <h3 style={{
-              fontFamily: "'Space Mono', monospace", fontSize: '1.4rem',
-              color: 'var(--off-white)', fontWeight: 700, marginBottom: '4px',
-            }}>GUEST_USER.EXE</h3>
-
-            {/* Price */}
-            <div style={{
-              fontFamily: "'Space Mono', monospace", fontSize: '3rem',
-              fontWeight: 700, color: 'var(--text)', margin: '12px 0 4px',
-            }}>
-              $0
-              <span style={{ fontSize: '1rem', color: 'var(--muted)', fontWeight: 400 }}>/forever</span>
+            <div style={{ fontSize:'0.8rem', fontWeight:700, color:'#666', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'8px' }}>Free plan</div>
+            <div style={{ fontSize:'3rem', fontWeight:700, color:'#0f0f0f', letterSpacing:'-0.05em', marginBottom:'4px' }}>
+              $0<span style={{ fontSize:'1rem', color:'#aaa', fontWeight:400 }}>/forever</span>
             </div>
-            <p style={{
-              fontFamily: "'Space Mono', monospace", fontSize: '0.78rem',
-              color: 'var(--muted)', marginBottom: '28px', lineHeight: 1.7,
-            }}>
-              Try the full product. No credit card.<br />
-              3 videos to experience the speed.
-            </p>
+            <p style={{ fontSize:'0.85rem', color:'#666', marginBottom:'28px' }}>Perfect for trying it out.</p>
+
+            <ul style={{ listStyle:'none', marginBottom:'32px', display:'flex', flexDirection:'column', gap:'10px' }}>
+              {FREE_FEATURES.map(f => (
+                <li key={f} style={{ fontSize:'0.875rem', color:'#333', display:'flex', alignItems:'flex-start' }}>
+                  <span style={checkStyle}>✓</span>{f}
+                </li>
+              ))}
+            </ul>
+
+            <button onClick={handleFreeStart} disabled={freeLoading} style={{
+              width:'100%', background:'transparent', color:'#cf1322',
+              border:'2px solid #cf1322', borderRadius:'8px',
+              padding:'13px', fontWeight:700, fontSize:'0.9rem', cursor:'pointer',
+              transition:'background 0.15s, color 0.15s',
+            }}
+              onMouseEnter={e => { e.currentTarget.style.background='#cf1322'; e.currentTarget.style.color='#fff' }}
+              onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='#cf1322' }}
+            >
+              {freeLoading ? 'Loading...' : 'Start for free →'}
+            </button>
+          </div>
+
+          {/* Pro card */}
+          <div style={{
+            border:'2px solid #cf1322', borderRadius:'16px',
+            padding:'32px', background:'#fff',
+            boxShadow:'4px 4px 0 #cf1322',
+            position:'relative',
+          }}>
+            {/* Popular badge */}
+            <div style={{
+              position:'absolute', top:'-14px', left:'50%', transform:'translateX(-50%)',
+              background:'#cf1322', color:'#fff', fontSize:'0.7rem', fontWeight:700,
+              padding:'4px 16px', borderRadius:'100px', textTransform:'uppercase', letterSpacing:'0.08em',
+            }}>Most popular</div>
+
+            <div style={{ fontSize:'0.8rem', fontWeight:700, color:'#cf1322', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'8px' }}>Pro plan</div>
+
+            {/* Price display */}
+            <div style={{ marginBottom:'16px' }}>
+              <div style={{ fontSize:'3rem', fontWeight:700, color:'#0f0f0f', letterSpacing:'-0.05em', lineHeight:1 }}>
+                ${tier.price}<span style={{ fontSize:'1rem', color:'#aaa', fontWeight:400 }}>/mo</span>
+              </div>
+              <div style={{ fontSize:'0.8rem', color:'#cf1322', fontWeight:600, marginTop:'4px' }}>
+                {tier.label} · ${(tier.price / tier.clips).toFixed(3)}/short
+              </div>
+            </div>
+
+            {/* Tier pills */}
+            <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'16px' }}>
+              {TIERS.map((t, i) => (
+                <button key={i} onClick={() => setTierIdx(i)} style={{
+                  padding:'5px 12px', borderRadius:'100px', fontSize:'0.75rem', fontWeight:600,
+                  cursor:'pointer', border: i === tierIdx ? '2px solid #cf1322' : '1.5px solid #e5e5e5',
+                  background: i === tierIdx ? '#fef2f2' : '#fff',
+                  color: i === tierIdx ? '#cf1322' : '#666',
+                  transition:'all 0.15s',
+                }}>{t.label}</button>
+              ))}
+            </div>
+
+            {/* Slider */}
+            <div style={{ position:'relative', height:'36px', display:'flex', alignItems:'center', marginBottom:'24px' }}>
+              <div style={{ position:'absolute', left:0, right:0, height:'4px', background:'#f4f4f4', borderRadius:'2px' }}/>
+              <div style={{ position:'absolute', left:0, width:`${fillPct}%`, height:'4px', background:'#cf1322', borderRadius:'2px', transition:'width 0.2s' }}/>
+              <input type="range" min={0} max={TIERS.length - 1} value={tierIdx}
+                onChange={e => setTierIdx(Number(e.target.value))}
+                style={{ position:'absolute', left:0, right:0, width:'100%', opacity:0, cursor:'pointer', height:'100%' }}
+              />
+            </div>
 
             {/* Features */}
-            <ul style={{ listStyle: 'none', margin: '0 0 28px', padding: 0, flex: 1 }}>
-              {FREE_FEATURES.map(f => (
-                <li key={f} style={{
-                  fontFamily: "'Space Mono', monospace", fontSize: '0.82rem',
-                  color: 'var(--muted)', marginBottom: '10px',
-                  display: 'flex', alignItems: 'flex-start', gap: '10px',
-                }}>
-                  <span style={{ color: 'var(--lime)', fontWeight: 700, flexShrink: 0 }}>›</span>
-                  {f}
-                </li>
-              ))}
-            </ul>
-
-            <button
-              className="btn-full"
-              onClick={handleFreeStart}
-              disabled={freeLoading}
-              style={{ opacity: freeLoading ? 0.7 : 1 }}
-            >
-              {freeLoading ? '[ LOADING... ]' : 'START_FREE.EXE →'}
-            </button>
-          </div>
-
-          {/* ── PAID CARD ── */}
-          <div className="retro-card pr-card pro" style={{
-            display: 'flex', flexDirection: 'column',
-            borderColor: 'var(--lime)',
-            boxShadow: '8px 8px 0 rgba(132,204,22,0.25)',
-            position: 'relative',
-          }}>
-            {/* Badge */}
-            <div style={{
-              position: 'absolute', top: '-2px', left: '50%', transform: 'translateX(-50%)',
-              background: 'var(--lime)', color: 'var(--bg-dark)',
-              fontFamily: "'Space Mono', monospace", fontWeight: 700,
-              fontSize: '0.65rem', padding: '3px 18px', whiteSpace: 'nowrap',
-              letterSpacing: '0.1em',
-            }}>MOST_POPULAR</div>
-
-            <div style={{
-              fontFamily: "'Space Mono', monospace", fontSize: '0.7rem',
-              color: 'var(--lime)', letterSpacing: '0.15em', textTransform: 'uppercase',
-              marginBottom: '10px', marginTop: '14px',
-            }}>PAY AS YOU GROW</div>
-
-            <h3 style={{
-              fontFamily: "'Space Mono', monospace", fontSize: '1.4rem',
-              color: 'var(--off-white)', fontWeight: 700, marginBottom: '4px',
-            }}>CREATOR_PRO.EXE</h3>
-
-            {/* Live price display */}
-            <div style={{ margin: '12px 0 4px' }}>
-              <div style={{
-                fontFamily: "'Space Mono', monospace", fontSize: '3rem',
-                fontWeight: 700, color: 'var(--lime)',
-                transition: 'all 0.25s',
-              }}>
-                ${tier.price}
-                <span style={{ fontSize: '1rem', color: 'var(--muted)', fontWeight: 400 }}>/month</span>
-              </div>
-              <div style={{
-                fontFamily: "'Space Mono', monospace", fontSize: '0.8rem',
-                color: 'var(--yellow)', marginTop: '2px',
-              }}>
-                {tier.clips === Infinity ? 'Unlimited' : tier.clips.toLocaleString()} shorts/month
-              </div>
-            </div>
-
-            {/* ── SLIDER ── */}
-            <div style={{ margin: '24px 0 20px' }}>
-              {/* Tick labels */}
-              <div style={{
-                display: 'flex', justifyContent: 'space-between',
-                fontFamily: "'Space Mono', monospace", fontSize: '0.65rem',
-                color: 'var(--muted)', marginBottom: '10px',
-              }}>
-                {TIERS.map((t, i) => (
-                  <span
-                    key={t.clips}
-                    style={{
-                      color: i === tierIdx ? 'var(--lime)' : 'var(--muted)',
-                      fontWeight: i === tierIdx ? 700 : 400,
-                      cursor: 'pointer',
-                      transition: 'color 0.2s',
-                      textAlign: 'center',
-                      flex: 1,
-                    }}
-                    onClick={() => setTierIdx(i)}
-                  >
-                    {t.clips === Infinity ? '∞' : t.clips}
-                  </span>
-                ))}
-              </div>
-
-              {/* Custom slider wrapper */}
-              <div style={{ position: 'relative', height: '36px', display: 'flex', alignItems: 'center' }}>
-                {/* Track background */}
-                <div style={{
-                  position: 'absolute', inset: '0 0 0 0',
-                  height: '6px', top: '50%', transform: 'translateY(-50%)',
-                  background: '#1a3322', border: '1px solid #2a4a32',
-                }} />
-                {/* Filled portion */}
-                <div style={{
-                  position: 'absolute',
-                  left: 0, height: '6px', top: '50%', transform: 'translateY(-50%)',
-                  width: `${fillPct}%`,
-                  background: 'var(--lime)',
-                  transition: 'width 0.25s',
-                }} />
-                {/* Dot markers */}
-                {TIERS.map((_, i) => {
-                  const pct = (i / (TIERS.length - 1)) * 100
-                  return (
-                    <div
-                      key={i}
-                      onClick={() => setTierIdx(i)}
-                      style={{
-                        position: 'absolute',
-                        left: `calc(${pct}% - 6px)`,
-                        width: '12px', height: '12px',
-                        background: i <= tierIdx ? 'var(--lime)' : '#1a3322',
-                        border: `2px solid ${i <= tierIdx ? 'var(--lime)' : '#2a4a32'}`,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        zIndex: 2,
-                      }}
-                    />
-                  )
-                })}
-                {/* Native range input (hidden visually but functional) */}
-                <input
-                  type="range"
-                  min={0}
-                  max={TIERS.length - 1}
-                  step={1}
-                  value={tierIdx}
-                  onChange={e => setTierIdx(Number(e.target.value))}
-                  style={{
-                    position: 'absolute', inset: 0, width: '100%',
-                    opacity: 0, cursor: 'pointer', zIndex: 3, height: '100%',
-                  }}
-                />
-              </div>
-
-              {/* Below slider: per-short cost */}
-              <div style={{
-                display: 'flex', justifyContent: 'space-between',
-                fontFamily: "'Space Mono', monospace", fontSize: '0.65rem',
-                color: 'var(--muted)', marginTop: '8px',
-              }}>
-                <span>drag to choose</span>
-                <span style={{ color: 'var(--lime)' }}>
-                  {tier.clips === Infinity
-                    ? '∞ — best value'
-                    : `≈ $${(tier.price / tier.clips).toFixed(2)}/short`
-                  }
-                </span>
-              </div>
-            </div>
-
-            {/* Features list */}
-            <ul style={{ listStyle: 'none', margin: '0 0 28px', padding: 0, flex: 1 }}>
+            <ul style={{ listStyle:'none', marginBottom:'28px', display:'flex', flexDirection:'column', gap:'10px' }}>
               {getFeatures(tier).map(f => (
-                <li key={f} style={{
-                  fontFamily: "'Space Mono', monospace", fontSize: '0.82rem',
-                  color: 'var(--muted)', marginBottom: '10px',
-                  display: 'flex', alignItems: 'flex-start', gap: '10px',
-                }}>
-                  <span style={{ color: 'var(--lime)', fontWeight: 700, flexShrink: 0 }}>›</span>
-                  {f}
+                <li key={f} style={{ fontSize:'0.875rem', color:'#333', display:'flex', alignItems:'flex-start' }}>
+                  <span style={checkStyle}>✓</span>{f}
                 </li>
               ))}
             </ul>
 
-            <button
-              className="btn-full"
-              onClick={handlePaidCheckout}
-              disabled={loading}
-              style={{
-                background: 'var(--lime)', color: 'var(--bg-dark)',
-                opacity: loading ? 0.7 : 1,
-                cursor: loading ? 'wait' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-              }}
+            {error && <div style={{ color:'#cf1322', fontSize:'0.8rem', marginBottom:'12px' }}>{error}</div>}
+
+            <button onClick={handlePaidCheckout} disabled={loading} style={{
+              width:'100%', background:'#cf1322', color:'#fff',
+              border:'2px solid #111', borderRadius:'8px',
+              padding:'14px', fontWeight:700, fontSize:'0.9rem', cursor:'pointer',
+              boxShadow:'2px 2px 0 #111',
+              transition:'transform 0.1s, box-shadow 0.1s',
+            }}
+              onMouseEnter={e => { e.currentTarget.style.transform='translate(-1px,-1px)'; e.currentTarget.style.boxShadow='3px 3px 0 #111' }}
+              onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='2px 2px 0 #111' }}
             >
-              {loading
-                ? <><span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span> CONNECTING...</>
-                : `GET ${tier.label.toUpperCase()} →`
-              }
+              {loading ? 'Opening checkout...' : `Get ${tier.label} — $${tier.price}/mo →`}
             </button>
+
+            <p style={{ textAlign:'center', fontSize:'0.72rem', color:'#aaa', marginTop:'10px' }}>
+              Cancel anytime · No contracts · Instant access
+            </p>
           </div>
         </div>
 
-        {/* Trust bar */}
-        <div style={{
-          marginTop: '44px', display: 'flex', flexWrap: 'wrap',
-          justifyContent: 'center', gap: '20px 32px',
-          fontFamily: "'Space Mono', monospace", fontSize: '0.72rem', color: 'var(--muted)',
-        }}>
-          {['🔒 Secured by Dodo Payments', '🌐 200+ countries', '💳 Cancel anytime', '⚡ Instant activation', '📩 Receipt by email'].map(t => (
-            <span key={t}>{t}</span>
-          ))}
-        </div>
-        <p style={{
-          marginTop: '14px', fontFamily: "'Space Mono', monospace",
-          fontSize: '0.72rem', color: 'var(--muted)', opacity: 0.55,
-        }}>
-          All sales final · No refunds · See <a href="/terms" style={{ color: 'var(--lime)' }}>Terms §6</a>
+        {/* Bottom note */}
+        <p style={{ textAlign:'center', fontSize:'0.82rem', color:'#aaa', marginTop:'32px' }}>
+          All plans include automatic 9:16 reframe, burn-in captions, and clip download.
         </p>
       </div>
 
       <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 640px) {
-          #pricing .retro-card { padding: 24px 20px; }
+        @media(max-width:700px){
+          #pricing div[style*="grid-template-columns"]{grid-template-columns:1fr !important;}
         }
       `}</style>
     </section>
