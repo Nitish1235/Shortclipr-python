@@ -25,11 +25,12 @@ import asyncio
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 
 from app.core.config import get_settings
-from app.core.proxy import get_proxy_url
+from app.core.proxy import get_proxy_url, url_is_ip_bound
 from app.core.redis import cache_stream_url, get_cached_stream_url
 
 logger = logging.getLogger(__name__)
@@ -324,8 +325,8 @@ def _pick_stream_ytdlp(info: dict | None) -> str | None:
 
 # ── Method 1: InnerTube ANDROID + proxy-cheap ─────────────────
 
-async def _innertube_android_stream(video_id: str, target_height: int) -> str:
-    proxy = get_proxy_url()
+async def _innertube_android_stream(video_id: str, target_height: int, session_id: str | None = None) -> str:
+    proxy = get_proxy_url(session_id)
     data = await call_player_api(video_id, client_name="ANDROID", send_params=True, proxy_url=proxy)
 
     blocked, reason = _innertube_is_blocked(data)
@@ -368,10 +369,11 @@ async def _ytdlp_stream(
     *,
     client: str | None = None,
     label: str,
+    session_id: str | None = None,
 ) -> str:
     import yt_dlp
 
-    proxy = get_proxy_url()
+    proxy = get_proxy_url(session_id)
     opts = _ytdlp_base_opts(proxy)
     opts["format"] = format_str
     if client:
@@ -414,15 +416,15 @@ def _fmt(height: int) -> str:
 
 # ── Fallback chain ─────────────────────────────────────────────
 
-async def _resolve_stream_url(video_id: str, quality: str) -> str:
+async def _resolve_stream_url(video_id: str, quality: str, session_id: str | None = None) -> str:
     h = int(quality.rstrip("p"))
 
     chain: list[tuple[str, object]] = [
         # 1. InnerTube ANDROID + proxy  (~2s, highest priority)
-        ("InnerTube ANDROID+proxy", lambda: _innertube_android_stream(video_id, h)),
+        ("InnerTube ANDROID+proxy", lambda: _innertube_android_stream(video_id, h, session_id)),
         # 2. yt-dlp + tv_embedded + proxy
         ("yt-dlp+tv_embedded+proxy", lambda: _ytdlp_stream(
-            video_id, _fmt(h), client="tv_embedded", label="yt-dlp+tv_embedded"
+            video_id, _fmt(h), client="tv_embedded", label="yt-dlp+tv_embedded", session_id=session_id
         )),
         # 3. yt-dlp + relaxed 1080p format + proxy
         # (drops [ext=mp4] constraint — sometimes succeeds when strict selector fails)
@@ -430,14 +432,15 @@ async def _resolve_stream_url(video_id: str, quality: str) -> str:
             video_id,
             "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
             label="yt-dlp+1080p-relaxed",
+            session_id=session_id
         )),
         # 4. yt-dlp + default format + proxy
         ("yt-dlp+default+proxy", lambda: _ytdlp_stream(
-            video_id, "bestvideo+bestaudio/best", label="yt-dlp+default"
+            video_id, "bestvideo+bestaudio/best", label="yt-dlp+default", session_id=session_id
         )),
         # 5. yt-dlp + android client + proxy
         ("yt-dlp+android+proxy", lambda: _ytdlp_stream(
-            video_id, _fmt(h), client="android", label="yt-dlp+android"
+            video_id, _fmt(h), client="android", label="yt-dlp+android", session_id=session_id
         )),
     ]
 
@@ -456,30 +459,73 @@ async def _resolve_stream_url(video_id: str, quality: str) -> str:
 
 # ── Public API ─────────────────────────────────────────────────
 
-async def get_stream_url(video_id: str, quality: str = "1080p") -> str:
-    cache_key = f"{video_id}:{quality}"
-    cached = await get_cached_stream_url(cache_key)
+async def get_stream_url(video_id: str, quality: str = "1080p", session_id: str | None = None) -> str:
+    # 1. Look up job-specific cache first
+    if session_id:
+        job_cache_key = f"{video_id}:{quality}:{session_id}"
+        cached = await get_cached_stream_url(job_cache_key)
+        if cached:
+            logger.info(f"[{video_id}] stream ← job-specific cache ({session_id})")
+            return cached
+
+    # 2. Look up global cache
+    global_cache_key = f"{video_id}:{quality}"
+    cached = await get_cached_stream_url(global_cache_key)
     if cached:
-        return cached
-    url = await _resolve_stream_url(video_id, quality)
-    await cache_stream_url(cache_key, url)
+        if not url_is_ip_bound(cached):
+            logger.info(f"[{video_id}] stream ← global cache (non-IP-bound)")
+            return cached
+        else:
+            logger.info(f"[{video_id}] ignoring global cache: URL is IP-bound")
+
+    # 3. Resolve the URL
+    url = await _resolve_stream_url(video_id, quality, session_id)
+
+    # 4. Cache appropriately
+    if url_is_ip_bound(url):
+        if session_id:
+            job_cache_key = f"{video_id}:{quality}:{session_id}"
+            await cache_stream_url(job_cache_key, url)
+    else:
+        await cache_stream_url(global_cache_key, url)
+
     return url
 
 
-async def get_audio_stream_url(video_id: str) -> str:
+async def get_audio_stream_url(video_id: str, session_id: str | None = None) -> str:
     """Audio-only stream URL — used by testing.py Lab."""
-    cache_key = f"{video_id}:audio"
-    cached = await get_cached_stream_url(cache_key)
-    if cached:
-        return cached
+    # 1. Look up job-specific cache first
+    if session_id:
+        job_cache_key = f"{video_id}:audio:{session_id}"
+        cached = await get_cached_stream_url(job_cache_key)
+        if cached:
+            logger.info(f"[{video_id}] audio stream ← job-specific cache ({session_id})")
+            return cached
 
-    proxy = get_proxy_url()
+    # 2. Look up global cache
+    global_cache_key = f"{video_id}:audio"
+    cached = await get_cached_stream_url(global_cache_key)
+    if cached:
+        if not url_is_ip_bound(cached):
+            logger.info(f"[{video_id}] audio stream ← global cache (non-IP-bound)")
+            return cached
+        else:
+            logger.info(f"[{video_id}] ignoring global audio cache: URL is IP-bound")
+
+    # 3. Resolve
+    proxy = get_proxy_url(session_id)
     for client_name in ["ANDROID", "TV", "IOS"]:
         try:
             data = await call_player_api(video_id, client_name=client_name, send_params=True, proxy_url=proxy)
             url = _pick_best_audio_stream(data)
             if url:
-                await cache_stream_url(cache_key, url)
+                # 4. Cache appropriately
+                if url_is_ip_bound(url):
+                    if session_id:
+                        job_cache_key = f"{video_id}:audio:{session_id}"
+                        await cache_stream_url(job_cache_key, url)
+                else:
+                    await cache_stream_url(global_cache_key, url)
                 return url
         except Exception:
             continue
@@ -487,7 +533,7 @@ async def get_audio_stream_url(video_id: str) -> str:
     raise RuntimeError(f"Could not resolve audio stream for {video_id}")
 
 
-async def get_video_metadata(video_id: str) -> dict:
+async def get_video_metadata(video_id: str, session_id: str | None = None) -> dict:
     """
     Fetch video title, duration, thumbnail.
 
@@ -515,7 +561,7 @@ async def get_video_metadata(video_id: str) -> dict:
         logger.warning(f"[{video_id}] oEmbed metadata failed: {e}")
 
     # ── 2. InnerTube ANDROID + proxy (for duration, or if oEmbed failed) ──
-    proxy = get_proxy_url()
+    proxy = get_proxy_url(session_id)
     try:
         data = await call_player_api(video_id, client_name="ANDROID", proxy_url=proxy)
         details = data.get("videoDetails", {})

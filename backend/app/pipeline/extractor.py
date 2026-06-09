@@ -57,12 +57,10 @@ import json
 import logging
 import math
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
-
 import numpy as np
 
 from app.core.config import get_settings
-from app.core.proxy import get_proxy_url
+from app.core.proxy import get_proxy_url, url_is_ip_bound
 from app.pipeline.ai_clipper import ClipTimestamp
 
 logger = logging.getLogger(__name__)
@@ -98,40 +96,6 @@ def _get_semaphore() -> asyncio.Semaphore:
 # ══════════════════════════════════════════════════════════════
 #  STEP 5 — Clip extraction
 # ══════════════════════════════════════════════════════════════
-
-def _url_is_ip_bound(url: str) -> bool:
-    """
-    Determine whether a YouTube CDN URL is cryptographically bound to a
-    specific IP address.
-
-    YouTube includes 'ip' in the `sparams` field when the HMAC signature
-    covers the requesting IP. Example URL fragment:
-        ...&ip=1.2.3.4&...&sparams=expire,ei,ip,id,itag,...&sig=SIG...
-
-    When 'ip' is in sparams:
-      - The sig is computed over ip=<proxy_ip>
-      - Any request from a DIFFERENT IP will receive HTTP 403
-      - FFmpeg on Cloud Run MUST route through the same proxy
-
-    When 'ip' is absent from sparams (or ip=0.0.0.0):
-      - The URL is not IP-locked
-      - FFmpeg downloads directly from Cloud Run — zero proxy bandwidth
-
-    Returns True  → URL is IP-bound, FFmpeg must use proxy
-    Returns False → URL is not IP-bound, FFmpeg downloads direct ✅
-    """
-    try:
-        qs = parse_qs(urlparse(url).query)
-        sparams_str = qs.get("sparams", [""])[0]
-        signed_params = {p.strip() for p in sparams_str.split(",") if p.strip()}
-        if "ip" not in signed_params:
-            return False  # ip not in signature → not IP-bound ✅
-        # ip IS signed — check if the value is the unbound sentinel
-        ip_val = qs.get("ip", ["0.0.0.0"])[0].strip()
-        return ip_val not in ("0.0.0.0", "0", "")
-    except Exception:
-        # If we can't parse, assume not IP-bound (safe default)
-        return False
 
 
 async def extract_clip(
@@ -200,6 +164,7 @@ async def extract_all_clips_parallel(
     stream_url: str,
     timestamps: list[ClipTimestamp],
     job_dir: Path,
+    session_id: str | None = None,
 ) -> list[tuple[ClipTimestamp, Path]]:
     """
     Extract all clips in parallel.
@@ -210,8 +175,8 @@ async def extract_all_clips_parallel(
     on the most expensive part of the pipeline.
     """
     # ── One-time IP-binding check ──────────────────────────────
-    ip_bound = _url_is_ip_bound(stream_url)
-    proxy_url = get_proxy_url() if ip_bound else None
+    ip_bound = url_is_ip_bound(stream_url)
+    proxy_url = get_proxy_url(session_id) if ip_bound else None
 
     if ip_bound:
         logger.info(

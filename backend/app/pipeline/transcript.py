@@ -67,7 +67,7 @@ class _TranscriptsDisabledError(Exception):
 
 # ── Public API ─────────────────────────────────────────────────
 
-async def get_transcript(video_id: str, language: str = "en") -> list[TranscriptEntry]:
+async def get_transcript(video_id: str, language: str = "en", session_id: str | None = None) -> list[TranscriptEntry]:
     """
     Return transcript entries via 3-method proxy-backed fallback chain.
     Raises RuntimeError if all methods fail.
@@ -77,7 +77,7 @@ async def get_transcript(video_id: str, language: str = "en") -> list[Transcript
 
     # ── Method 1: youtube-transcript-api + proxy-cheap ────────
     try:
-        entries = await _ytta_proxy(video_id, lang_code)
+        entries = await _ytta_proxy(video_id, lang_code, session_id)
         if entries:
             logger.info(f"[{video_id}] transcript ← ytta+proxy ({len(entries)} entries)")
             return entries
@@ -94,7 +94,7 @@ async def get_transcript(video_id: str, language: str = "en") -> list[Transcript
     # player + timedtext calls share the same proxy URL — critical because
     # the caption baseUrl contains an IP-bound auth token.
     try:
-        entries = await _innertube_android_proxy(video_id, lang_code)
+        entries = await _innertube_android_proxy(video_id, lang_code, session_id)
         if entries:
             logger.info(f"[{video_id}] transcript ← InnerTube ANDROID+proxy ({len(entries)} entries)")
             return entries
@@ -105,7 +105,7 @@ async def get_transcript(video_id: str, language: str = "en") -> list[Transcript
 
     # ── Method 3: yt-dlp subtitle extraction + proxy-cheap ────
     try:
-        entries = await _ytdlp_subs_proxy(video_id, lang_code)
+        entries = await _ytdlp_subs_proxy(video_id, lang_code, session_id)
         if entries:
             logger.info(f"[{video_id}] transcript ← yt-dlp subs+proxy ({len(entries)} entries)")
             return entries
@@ -183,8 +183,8 @@ def _ytta_fetch_sync(
         raise RuntimeError(f"YTTA {type(e).__name__}: {e}")
 
 
-async def _ytta_proxy(video_id: str, lang_code: str) -> list[TranscriptEntry]:
-    proxy = get_proxy_url()
+async def _ytta_proxy(video_id: str, lang_code: str, session_id: str | None = None) -> list[TranscriptEntry]:
+    proxy = get_proxy_url(session_id)
     loop = asyncio.get_running_loop()
     # _TranscriptsDisabledError and _VideoUnavailableError propagate naturally
     return await loop.run_in_executor(
@@ -198,12 +198,12 @@ async def _ytta_proxy(video_id: str, lang_code: str) -> list[TranscriptEntry]:
 
 # ── Method 2: InnerTube ANDROID + proxy-cheap ─────────────────
 
-async def _innertube_android_proxy(video_id: str, lang_code: str) -> list[TranscriptEntry]:
+async def _innertube_android_proxy(video_id: str, lang_code: str, session_id: str | None = None) -> list[TranscriptEntry]:
     """
     Fetch caption track list via InnerTube ANDROID player call, then download
     the timedtext URL — both via the SAME proxy URL.
     """
-    proxy = get_proxy_url()
+    proxy = get_proxy_url(session_id)
     data = await call_player_api(video_id, client_name="ANDROID", proxy_url=proxy)
 
     ps = data.get("playabilityStatus", {})
@@ -381,8 +381,8 @@ def _ytdlp_subs_sync(
     return entries
 
 
-async def _ytdlp_subs_proxy(video_id: str, lang_code: str) -> list[TranscriptEntry]:
-    proxy = get_proxy_url()
+async def _ytdlp_subs_proxy(video_id: str, lang_code: str, session_id: str | None = None) -> list[TranscriptEntry]:
+    proxy = get_proxy_url(session_id)
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
         _TRANSCRIPT_POOL,
@@ -401,7 +401,7 @@ async def _fetch_innertube_captions(
 ) -> list[TranscriptEntry]:
     """Legacy shim — wraps method 2 (InnerTube ANDROID+proxy). Used by testing.py."""
     lang_code = LANG_MAP.get(language, language)
-    return await _innertube_android_proxy(video_id, lang_code)
+    return await _innertube_android_proxy(video_id, lang_code, session_id=None)
 
 
 # ── LLM formatter ─────────────────────────────────────────────

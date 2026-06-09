@@ -106,17 +106,17 @@ async def _execute_pipeline(
             logger.info(f"[{job_id}] Video (prefetched): '{metadata['title']}' ({metadata['duration']}s)")
         else:
             await db.update_job_progress(job_id, 2, "Fetching video info...")
-            metadata = await get_video_metadata(video_id)
+            metadata = await get_video_metadata(video_id, session_id=job_id)
             await db.update_job_metadata(job_id, metadata["title"], metadata["duration"])
             logger.info(f"[{job_id}] Video: '{metadata['title']}' ({metadata['duration']}s)")
 
         # ── STEP 3: Transcript via InnerTube captions ────────────
         await db.update_job_progress(job_id, 5, "Reading video transcript...")
-        transcript = await get_transcript(video_id, language=language)
+        transcript = await get_transcript(video_id, language=language, session_id=job_id)
 
         # ── STEP 4: Stream URL ────────────────────────────────
         await db.update_job_progress(job_id, 15, "Connecting to video stream...")
-        stream_url = await get_stream_url(video_id, quality=quality)
+        stream_url = await get_stream_url(video_id, quality=quality, session_id=job_id)
 
         # ── STEP 5: Find viral clips ──────────────────────────
         await db.update_job_progress(job_id, 20, "AI analyzing best moments...")
@@ -130,7 +130,7 @@ async def _execute_pipeline(
 
         # ── STEP 6: Extract clips (parallel) ──────────────────
         await db.update_job_progress(job_id, 33, f"Extracting {len(timestamps)} clips...")
-        raw_clips = await extract_all_clips_parallel(stream_url, timestamps, job_dir)
+        raw_clips = await extract_all_clips_parallel(stream_url, timestamps, job_dir, session_id=job_id)
 
         if not raw_clips:
             raise RuntimeError("All clip extractions failed")

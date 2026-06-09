@@ -74,7 +74,8 @@ class Settings(BaseSettings):
     PROXY_HOST: str = ""              # e.g. gate.proxy-cheap.com
     PROXY_USER: str = ""              # proxy username / customer ID
     PROXY_PASS: str = ""              # proxy password
-    PROXY_PORTS: str = "10001-10007"  # port pool for random rotation
+    PROXY_PORT: str = ""              # single port for residential proxy (e.g. 31112)
+    PROXY_PORTS: str = "10001-10007"  # port pool for random rotation (ignored if PROXY_PORT is set)
 
 
 @lru_cache
