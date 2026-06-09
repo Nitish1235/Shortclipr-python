@@ -1,0 +1,130 @@
+/* ── Shared styles for /tools/* and /alternatives/* programmatic SEO pages ── */
+
+.seo-page { background: #f9f9f9; min-height: 100vh; color: #111; }
+
+.seo-hero {
+  padding: 120px 5% 64px;
+  text-align: center;
+  background: linear-gradient(180deg, #fff 0%, #f9f9f9 100%);
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.seo-hero-inner { max-width: 820px; margin: 0 auto; }
+
+.seo-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #cf1322;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  padding: 5px 14px;
+  border-radius: 100px;
+  margin-bottom: 20px;
+}
+
+.seo-h1 {
+  font-size: clamp(2rem, 5vw, 3.4rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.08;
+  margin-bottom: 18px;
+  color: #0f0f0f;
+}
+
+.seo-sub {
+  font-size: clamp(0.95rem, 1.6vw, 1.1rem);
+  line-height: 1.75;
+  color: #555;
+  max-width: 640px;
+  margin: 0 auto 32px;
+}
+
+.seo-cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 28px; }
+
+.seo-btn-primary {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 14px 30px; background: #cf1322; color: #fff;
+  font-weight: 700; font-size: 0.92rem;
+  border: 2px solid #111; border-radius: 10px;
+  box-shadow: 3px 3px 0 #111; text-decoration: none;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.seo-btn-primary:hover { transform: translate(-1px,-1px); box-shadow: 4px 4px 0 #111; }
+
+.seo-btn-secondary {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 14px 30px; background: #fff; color: #111;
+  font-weight: 700; font-size: 0.92rem;
+  border: 2px solid #e5e5e5; border-radius: 10px;
+  text-decoration: none; transition: border-color 0.15s;
+}
+.seo-btn-secondary:hover { border-color: #cf1322; color: #cf1322; }
+
+.seo-stat {
+  display: inline-flex; flex-direction: column; align-items: center;
+  gap: 2px; padding: 14px 28px;
+  background: #fff; border: 1px solid #e5e5e5; border-radius: 12px;
+}
+.seo-stat-value { font-size: 1.6rem; font-weight: 800; color: #cf1322; letter-spacing: -0.03em; }
+.seo-stat-label { font-size: 0.78rem; color: #888; }
+
+.seo-section { max-width: 1040px; margin: 0 auto; padding: 56px 5%; }
+.seo-section-title {
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  font-weight: 800; letter-spacing: -0.03em;
+  margin-bottom: 36px; text-align: center; color: #0f0f0f;
+}
+
+/* Steps */
+.seo-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+.seo-step { background: #fff; border: 1px solid #e5e5e5; border-radius: 14px; padding: 28px; }
+.seo-step-num { font-family: monospace; font-size: 0.8rem; font-weight: 700; color: #cf1322; letter-spacing: 0.1em; margin-bottom: 12px; display: block; }
+.seo-step h3 { font-size: 1.02rem; font-weight: 700; margin-bottom: 8px; color: #111; }
+.seo-step p { font-size: 0.88rem; line-height: 1.7; color: #666; }
+
+/* Features */
+.seo-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+.seo-feature { background: #fff; border: 1px solid #e5e5e5; border-radius: 14px; padding: 24px; display: flex; gap: 16px; align-items: flex-start; }
+.seo-feature-icon { font-size: 1.5rem; flex-shrink: 0; }
+.seo-feature h3 { font-size: 0.98rem; font-weight: 700; margin-bottom: 6px; color: #111; }
+.seo-feature p { font-size: 0.86rem; line-height: 1.7; color: #666; margin: 0; }
+
+/* Comparison table */
+.seo-table-wrap { overflow-x: auto; border: 1px solid #e5e5e5; border-radius: 14px; background: #fff; }
+.seo-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; min-width: 480px; }
+.seo-table th, .seo-table td { padding: 14px 20px; text-align: left; border-bottom: 1px solid #f0f0f0; }
+.seo-table th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: #888; font-weight: 700; }
+.seo-table th.us-col, .seo-table td.us-col { color: #cf1322; font-weight: 700; background: #fef2f2; }
+.seo-table tr:last-child td { border-bottom: none; }
+
+/* Why switch cards */
+.seo-why { display: grid; gap: 16px; }
+.seo-why-card { background: #fff; border: 1px solid #e5e5e5; border-left: 4px solid #cf1322; border-radius: 0 12px 12px 0; padding: 22px 26px; }
+.seo-why-card h3 { font-size: 0.98rem; font-weight: 700; margin-bottom: 6px; color: #111; }
+.seo-why-card p { font-size: 0.87rem; line-height: 1.7; color: #666; margin: 0; }
+
+/* FAQ */
+.seo-faq { display: flex; flex-direction: column; gap: 12px; }
+.seo-faq-item { background: #fff; border: 1px solid #e5e5e5; border-radius: 12px; padding: 22px 26px; }
+.seo-faq-item h3 { font-size: 0.94rem; font-weight: 700; margin-bottom: 8px; color: #111; }
+.seo-faq-item p { font-size: 0.86rem; line-height: 1.75; color: #666; margin: 0; }
+
+/* Bottom CTA band */
+.seo-cta-band {
+  background: #cf1322; padding: 64px 5%; text-align: center;
+}
+.seo-cta-band h2 { font-size: clamp(1.6rem, 4vw, 2.6rem); font-weight: 800; color: #fff; letter-spacing: -0.03em; margin-bottom: 14px; }
+.seo-cta-band p { font-size: 0.95rem; color: rgba(255,255,255,0.85); margin-bottom: 26px; }
+.seo-cta-band .seo-btn-primary { background: #fff; color: #cf1322; border-color: #111; }
+
+/* Cross-links */
+.seo-crosslinks { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 18px; }
+.seo-crosslink {
+  font-size: 0.8rem; font-weight: 600; color: #555;
+  background: #fff; border: 1px solid #e5e5e5; border-radius: 100px;
+  padding: 8px 16px; text-decoration: none; transition: all 0.15s;
+}
+.seo-crosslink:hover { border-color: #cf1322; color: #cf1322; }

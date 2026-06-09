@@ -5,6 +5,65 @@
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
+  <!-- ── Tools (programmatic SEO landing pages) ───────────────────── -->
+  <url>
+    <loc>https://shortclipr.com/tools</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://shortclipr.com/tools/youtube-long-video-to-short</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://shortclipr.com/tools/long-video-to-shorts-ai</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://shortclipr.com/tools/youtube-to-shorts-converter</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://shortclipr.com/tools/ai-clip-maker</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://shortclipr.com/tools/youtube-transcript-to-clips</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://shortclipr.com/tools/podcast-to-shorts</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- ── Alternatives / comparison pages ───────────────────────────── -->
+  <url>
+    <loc>https://shortclipr.com/alternatives</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://shortclipr.com/alternatives/opus-clip</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://shortclipr.com/alternatives/klap</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://shortclipr.com/alternatives/vmaker</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
   <url>
     <loc>https://shortclipr.com/about</loc>
     <changefreq>monthly</changefreq>

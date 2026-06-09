@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 const rows = [
   {
     feature: 'Processing speed',
@@ -162,13 +164,17 @@ export default function Comparison() {
           </table>
         </div>
 
-        {/* Bottom note — SEO text */}
+        {/* Bottom note — SEO text + internal links to full comparison pages */}
         <p style={{
           textAlign: 'center', fontSize: '0.78rem', color: '#bbb',
           marginTop: '20px', lineHeight: 1.6,
         }}>
-          ShortClipr is the fastest AI shorts generator and the best free alternative to OpusClip, Klap, WayinAI, and Vidyo.ai.
-          Create TikTok clips, Instagram Reels, and YouTube Shorts from any long-form video in minutes.
+          ShortClipr is the fastest AI shorts generator and the best free alternative to{' '}
+          <Link to="/alternatives/opus-clip" style={{ color: '#cf1322', textDecoration: 'underline', textUnderlineOffset: '3px' }}>OpusClip</Link>,{' '}
+          <Link to="/alternatives/klap" style={{ color: '#cf1322', textDecoration: 'underline', textUnderlineOffset: '3px' }}>Klap</Link>, and{' '}
+          <Link to="/alternatives/vmaker" style={{ color: '#cf1322', textDecoration: 'underline', textUnderlineOffset: '3px' }}>Vmaker AI</Link>.{' '}
+          Create TikTok clips, Instagram Reels, and YouTube Shorts from any long-form video in minutes — see the{' '}
+          <Link to="/alternatives" style={{ color: '#cf1322', textDecoration: 'underline', textUnderlineOffset: '3px' }}>full feature-by-feature comparison</Link>.
         </p>
       </div>
     </section>

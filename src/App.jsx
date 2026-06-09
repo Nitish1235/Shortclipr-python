@@ -35,6 +35,12 @@ import Editor         from './pages/Editor'
 import Lab            from './pages/Lab'
 import Admin          from './pages/Admin'
 
+// SEO landing pages
+import ToolsIndex        from './pages/ToolsIndex'
+import ToolLanding       from './pages/ToolLanding'
+import AlternativesIndex from './pages/AlternativesIndex'
+import AlternativeLanding from './pages/AlternativeLanding'
+
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'dummy-client-id.apps.googleusercontent.com'
 
 function LandingPage() {
@@ -121,6 +127,12 @@ export default function App() {
             <Route path="/careers"               element={<Careers />} />
             <Route path="/dmca"                  element={<DMCA />} />
             <Route path="/payment/success"       element={<PaymentSuccess />} />
+
+            {/* SEO programmatic landing pages */}
+            <Route path="/tools"                 element={<ToolsIndex />} />
+            <Route path="/tools/:slug"           element={<ToolLanding />} />
+            <Route path="/alternatives"          element={<AlternativesIndex />} />
+            <Route path="/alternatives/:slug"    element={<AlternativeLanding />} />
 
             {/* Protected — user must be logged in */}
             <Route path="/dashboard"             element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

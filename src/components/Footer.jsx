@@ -12,6 +12,26 @@ const COLS = [
     ],
   },
   {
+    title: 'Tools',
+    links: [
+      { label: 'YouTube to Shorts Converter', href: '/tools/youtube-to-shorts-converter' },
+      { label: 'Long Video to Shorts AI',     href: '/tools/long-video-to-shorts-ai'     },
+      { label: 'AI Clip Maker',               href: '/tools/ai-clip-maker'               },
+      { label: 'Transcript to Clips',         href: '/tools/youtube-transcript-to-clips' },
+      { label: 'Podcast to Shorts',           href: '/tools/podcast-to-shorts'           },
+      { label: 'All tools →',                 href: '/tools'                             },
+    ],
+  },
+  {
+    title: 'Compare',
+    links: [
+      { label: 'vs Opus Clip',     href: '/alternatives/opus-clip' },
+      { label: 'vs Klap',          href: '/alternatives/klap'      },
+      { label: 'vs Vmaker AI',     href: '/alternatives/vmaker'    },
+      { label: 'All comparisons →',href: '/alternatives'           },
+    ],
+  },
+  {
     title: 'Company',
     links: [
       { label: 'About',    href: '/about'   },
@@ -49,8 +69,8 @@ export default function Footer() {
 
         {/* Top row */}
         <div style={{
-          display:'grid', gridTemplateColumns:'1.4fr 1fr 1fr 1fr',
-          gap:'48px', marginBottom:'56px',
+          display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))',
+          gap:'40px', marginBottom:'56px',
         }}>
 
           {/* Brand */}

@@ -19,6 +19,8 @@ export default function Navigation() {
   const navLinks = isApp ? [] : [
     { label: 'How it works', href: '/#how-it-works' },
     { label: 'Features',     href: '/#features'     },
+    { label: 'Tools',        href: '/tools'          },
+    { label: 'Compare',      href: '/alternatives'   },
     { label: 'Pricing',      href: '/#pricing'      },
     { label: 'About',        href: '/about'          },
   ]
