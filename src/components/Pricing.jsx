@@ -57,7 +57,7 @@ export default function Pricing() {
     setLoading(true)
     try {
       const token = localStorage.getItem('sc_token')
-      if (!token) { window.location.href = '/#hero'; return }
+      if (!token) { window.location.href = '/'; return }
       const res = await fetch(`${API_BASE}/payments/checkout-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -78,7 +78,7 @@ export default function Pricing() {
 
   const handleFreeStart = () => {
     setFreeLoading(true)
-    setTimeout(() => { window.location.href = '/#hero' }, 300)
+    setTimeout(() => { window.location.href = '/' }, 300)
   }
 
   const checkStyle = { color:'#cf1322', fontWeight:700, marginRight:'8px' }

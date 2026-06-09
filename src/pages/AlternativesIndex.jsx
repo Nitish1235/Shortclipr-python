@@ -64,7 +64,7 @@ export default function AlternativesIndex() {
         <section className="seo-cta-band">
           <h2>Try it yourself — free</h2>
           <p>3 videos, no watermark, no credit card. Compare the output directly.</p>
-          <Link to="/#hero" className="seo-btn-primary">Get started free →</Link>
+          <Link to="/" className="seo-btn-primary">Get started free →</Link>
         </section>
       </div>
 

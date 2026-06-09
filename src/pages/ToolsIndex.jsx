@@ -76,7 +76,7 @@ export default function ToolsIndex() {
         <section className="seo-cta-band">
           <h2>Pick a tool, paste a link, get clips</h2>
           <p>Every tool above runs on the same fast pipeline — 3 free videos, no watermark.</p>
-          <Link to="/#hero" className="seo-btn-primary">Get started free →</Link>
+          <Link to="/" className="seo-btn-primary">Get started free →</Link>
         </section>
       </div>
 

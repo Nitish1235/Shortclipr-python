@@ -136,7 +136,7 @@ export default function Editor() {
             ))}
           </div>
           <div style={{ display:'flex', gap:'10px', justifyContent:'center' }}>
-            <a href="/#pricing" style={{
+            <a href="/" style={{
               background:'#cf1322', color:'#fff', border:'2px solid #111',
               borderRadius:'8px', padding:'11px 24px', fontWeight:700, fontSize:'0.875rem',
               boxShadow:'2px 2px 0 #111', display:'inline-block',

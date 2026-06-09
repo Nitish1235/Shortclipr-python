@@ -282,7 +282,7 @@ export default function VideoShowcase() {
             : `✦ ${videos.filter(v => !v.isPlaceholder).length} real clips from ShortClipr`
           } · Hover a phone to play
         </p>
-        <a href="#hero" style={{
+        <a href="/" style={{
           display: 'inline-block',
           background: '#cf1322', color: '#fff',
           border: '2px solid rgba(255,255,255,0.2)',

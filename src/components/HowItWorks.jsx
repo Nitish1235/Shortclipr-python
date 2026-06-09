@@ -179,7 +179,7 @@ export default function HowItWorks() {
               </span>
             ))}
           </div>
-          <a href="#hero" style={{
+          <a href="/" style={{
             background: '#cf1322', color: '#fff',
             border: 'none', borderRadius: '8px',
             padding: '9px 20px', fontWeight: 700, fontSize: '0.82rem',

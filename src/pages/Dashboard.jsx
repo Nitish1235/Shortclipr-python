@@ -428,7 +428,7 @@ export default function Dashboard() {
               </div>
 
               <div style={{ display:'flex', gap:'12px' }}>
-                <a href="/#pricing" onClick={() => setShowUpgradeModal(false)} style={{
+                <a href="/" onClick={() => setShowUpgradeModal(false)} style={{
                   flex:1, textAlign:'center',
                   background:'#cf1322', color:'#fff',
                   border:'2px solid #111', borderRadius:'8px',

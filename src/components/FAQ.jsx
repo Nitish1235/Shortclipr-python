@@ -93,7 +93,7 @@ export default function FAQ() {
 
         {/* Bottom CTA */}
         <div style={{ marginTop: '28px', textAlign: 'center' }}>
-          <a href="#hero" style={{
+          <a href="/" style={{
             display: 'inline-block',
             background: '#cf1322', color: '#fff',
             border: '2px solid #111', borderRadius: '8px',

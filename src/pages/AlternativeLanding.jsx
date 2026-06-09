@@ -57,8 +57,8 @@ export default function AlternativeLanding() {
             <h1 className="seo-h1">{data.h1}</h1>
             <p className="seo-sub">{data.intro}</p>
             <div className="seo-cta-row">
-              <Link to="/#hero" className="seo-btn-primary">Try ShortClipr free →</Link>
-              <Link to="/#pricing" className="seo-btn-secondary">Compare pricing</Link>
+              <Link to="/" className="seo-btn-primary">Try ShortClipr free →</Link>
+              <Link to="/" className="seo-btn-secondary">Compare pricing</Link>
             </div>
           </div>
         </section>
@@ -134,7 +134,7 @@ export default function AlternativeLanding() {
         <section className="seo-cta-band">
           <h2>See the difference on your own video</h2>
           <p>3 free videos, no watermark, no credit card — compare the output yourself.</p>
-          <Link to="/#hero" className="seo-btn-primary">Get started free →</Link>
+          <Link to="/" className="seo-btn-primary">Get started free →</Link>
         </section>
       </div>
 

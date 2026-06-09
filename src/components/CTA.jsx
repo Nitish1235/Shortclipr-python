@@ -49,7 +49,7 @@ export default function CTA() {
         </p>
 
         {/* Inline URL input */}
-        <form onSubmit={e => { e.preventDefault(); window.location.href = '/#hero' }} style={{
+        <form onSubmit={e => { e.preventDefault(); window.location.href = '/' }} style={{
           display: 'flex', maxWidth: '580px', margin: '0 auto 16px',
           borderRadius: '12px', overflow: 'hidden',
           border: '2px solid rgba(255,255,255,0.3)',
@@ -64,7 +64,7 @@ export default function CTA() {
               fontSize: '0.95rem', background: 'rgba(255,255,255,0.95)',
               color: '#111', minWidth: 0,
             }}
-            onClick={() => { window.location.href = '/#hero' }}
+            onClick={() => { window.location.href = '/' }}
           />
           <button type="submit" style={{
             background: '#0f0f0f', color: '#fff',

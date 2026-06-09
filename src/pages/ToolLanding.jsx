@@ -65,8 +65,8 @@ export default function ToolLanding() {
             <h1 className="seo-h1">{data.h1}</h1>
             <p className="seo-sub">{data.subhead}</p>
             <div className="seo-cta-row">
-              <Link to="/#hero" className="seo-btn-primary">Try it free →</Link>
-              <Link to="/#how-it-works" className="seo-btn-secondary">See how it works</Link>
+              <Link to="/" className="seo-btn-primary">Try it free →</Link>
+              <Link to="/" className="seo-btn-secondary">See how it works</Link>
             </div>
             {data.heroStat && (
               <div className="seo-stat">
@@ -135,7 +135,7 @@ export default function ToolLanding() {
         <section className="seo-cta-band">
           <h2>Try it on your own video — free</h2>
           <p>3 videos, no watermark, no credit card. See your own clips in under 3 minutes.</p>
-          <Link to="/#hero" className="seo-btn-primary">Get started free →</Link>
+          <Link to="/" className="seo-btn-primary">Get started free →</Link>
         </section>
       </div>
 

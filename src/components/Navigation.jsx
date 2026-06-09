@@ -111,7 +111,7 @@ export default function Navigation() {
                   theme="outline" shape="rectangular" text="signin_with" size="medium"
                 />
               </div>
-              <a href="/#pricing" style={{
+              <a href="/" style={{
                 background:'#cf1322', color:'#fff',
                 padding:'10px 20px', borderRadius:'8px',
                 fontSize:'0.82rem', fontWeight:700,
