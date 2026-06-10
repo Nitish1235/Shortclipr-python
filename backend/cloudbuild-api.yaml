@@ -78,3 +78,9 @@ images:
 
 options:
   logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _PROXY_HOST: thehub.proxy-cheap.com
+  _PROXY_USER: OyQOEnhVOxIz1Cr
+  _PROXY_PORT: '8080'
+
