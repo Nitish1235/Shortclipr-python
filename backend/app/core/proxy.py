@@ -9,6 +9,8 @@ and appends a sticky session suffix to the password to maintain the same exit IP
 Returns None when no proxy is configured (dev mode).
 """
 
+from app.core.config import get_settings
+
 def validate_proxy_env() -> None:
     """Validate proxy environment variables.
     Ensures PROXY_HOST, PROXY_USER, PROXY_PASS are non‑empty strings and
