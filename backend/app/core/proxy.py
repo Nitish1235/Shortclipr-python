@@ -45,10 +45,12 @@ def get_proxy_url(session_id: str | None = None) -> str | None:
         else:
             port = random.choice(ports)
 
-    # Handle password session suffix for sticky residential exit IPs
+    # Use proxy password as-is.
+    # NOTE: proxy-cheap "Sticky" session suffix (_session-{id}) is NOT used here
+    # because the proxy plan is configured as "Random IP" (not Sticky).
+    # Appending a session suffix with a non-sticky plan causes proxy-cheap to return
+    # 308 Permanent Redirect (billing redirect) instead of authenticating.
     password = s.PROXY_PASS
-    if session_id and password:
-        password = f"{password}_session-{session_id}"
 
     return f"http://{s.PROXY_USER}:{password}@{s.PROXY_HOST}:{port}"
 
