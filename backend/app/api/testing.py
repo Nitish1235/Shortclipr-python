@@ -240,7 +240,7 @@ async def sweep_all_clients(req: SweepRequest):
         }
         headers = {**config["headers"], "Content-Type": "application/json"}
         try:
-            client_kwargs: dict = {"timeout": 25}
+            client_kwargs: dict = {"timeout": 25, "follow_redirects": True}
             if proxy_url:
                 client_kwargs["proxy"] = proxy_url
             async with httpx.AsyncClient(**client_kwargs) as client:

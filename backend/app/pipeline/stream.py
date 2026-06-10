@@ -119,22 +119,26 @@ PLAYER_ENDPOINT = f"{settings.INNERTUBE_API_BASE}/player"
 _ANDROID_CTX = {
     "client": {
         "clientName": "ANDROID",
-        "clientVersion": "19.29.01",
-        "androidSdkVersion": 30,
+        "clientVersion": "19.44.41",
+        "androidSdkVersion": 34,
         "hl": "en",
         "gl": "US",
+        "osName": "Android",
+        "osVersion": "14",
+        "platform": "MOBILE",
     }
 }
 
 _ANDROID_HEADERS = {
     "User-Agent": (
-        "com.google.android.youtube/19.29.01 "
-        "(Linux; U; Android 11; en_US; Pixel 5 Build/RQ3A.211001.001) gzip"
+        "com.google.android.youtube/19.44.41 "
+        "(Linux; U; Android 14; en_US; Pixel 8 Build/AP2A.240905.003) gzip"
     ),
     "X-Youtube-Client-Name": "3",
-    "X-Youtube-Client-Version": "19.29.01",
+    "X-Youtube-Client-Version": "19.44.41",
     "Content-Type": "application/json",
     "X-Goog-Api-Format-Version": "2",
+    "Origin": "https://www.youtube.com",
 }
 
 _ANDROID_API_KEY = "AIzaSyA8eiZmM1FaSbwzBlGmbW3ILtKBNJI41zQ"
@@ -252,7 +256,7 @@ async def call_player_api(
         headers["X-Goog-Api-Format-Version"] = "2"
         api_key = config["api_key"]
 
-    client_kwargs: dict = {"timeout": 20}
+    client_kwargs: dict = {"timeout": 20, "follow_redirects": True}
     if proxy_url:
         client_kwargs["proxy"] = proxy_url
 

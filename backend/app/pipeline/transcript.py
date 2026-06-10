@@ -139,8 +139,10 @@ def _ytta_fetch_sync(
             TranscriptsDisabled,
             VideoUnavailable,
             NoTranscriptFound,
-            TooManyRequests,
             CouldNotRetrieveTranscript,
+            YouTubeRequestFailed,
+            IpBlocked,
+            RequestBlocked,
         )
     except ImportError:
         # Older builds expose exceptions under _errors
@@ -148,8 +150,10 @@ def _ytta_fetch_sync(
             TranscriptsDisabled,
             VideoUnavailable,
             NoTranscriptFound,
-            TooManyRequests,
             CouldNotRetrieveTranscript,
+            YouTubeRequestFailed,
+            IpBlocked,
+            RequestBlocked,
         )
 
     try:
@@ -168,7 +172,34 @@ def _ytta_fetch_sync(
 
         # Preferred language, then English fallbacks, then auto-generated English
         lang_prefs = list(dict.fromkeys([lang_code, "en", "en-US", "en-GB", "a.en"]))
-        fetched = api.fetch(video_id, languages=lang_prefs)
+        try:
+            fetched = api.fetch(video_id, languages=lang_prefs)
+        except NoTranscriptFound:
+            # Requested language not available — discover what IS available and
+            # grab any transcript (preferring auto-generated for speed).
+            # This handles videos with only Hindi, Japanese, etc. auto-captions.
+            try:
+                transcript_list = api.list(video_id)
+                # Prefer generated (auto) over manual; take first available
+                chosen = None
+                for t in transcript_list:
+                    if t.is_generated:
+                        chosen = t
+                        break
+                if chosen is None:
+                    for t in transcript_list:
+                        chosen = t
+                        break
+                if chosen is None:
+                    raise NoTranscriptFound(video_id, lang_prefs, transcript_list)
+                logger.info(
+                    f"[{video_id}] No {lang_prefs} transcript — falling back to "
+                    f"{chosen.language_code} ({'generated' if chosen.is_generated else 'manual'})"
+                )
+                fetched = chosen.fetch()
+            except Exception:
+                raise  # let outer handler catch it
+
         return [
             {"text": s.text.strip(), "start": s.start, "duration": s.duration}
             for s in fetched
@@ -179,7 +210,7 @@ def _ytta_fetch_sync(
         raise _TranscriptsDisabledError("TranscriptsDisabled")
     except VideoUnavailable as e:
         raise _VideoUnavailableError(str(e))
-    except (NoTranscriptFound, TooManyRequests, CouldNotRetrieveTranscript) as e:
+    except (NoTranscriptFound, CouldNotRetrieveTranscript, YouTubeRequestFailed, IpBlocked, RequestBlocked) as e:
         raise RuntimeError(f"YTTA {type(e).__name__}: {e}")
 
 
@@ -253,7 +284,7 @@ async def _fetch_timedtext(
     sep = "&" if "?" in base_url else "?"
     json_url = f"{base_url}{sep}fmt=json3"
 
-    client_kwargs: dict = {"timeout": 15}
+    client_kwargs: dict = {"timeout": 15, "follow_redirects": True}
     if proxy_url:
         client_kwargs["proxy"] = proxy_url
 
@@ -344,9 +375,11 @@ def _ytdlp_subs_sync(
     auto = info.get("automatic_captions", {})
 
     # Try manual captions first, then auto-generated
+    # Priority: requested lang → English variants → any available lang
     sub_url: str | None = None
+    preferred_langs = [lang_code, f"{lang_code}-orig", "en", "en-orig", "en-US"]
     for source in (subs, auto):
-        for lang in (lang_code, f"{lang_code}-orig", "en", "en-orig", "en-US"):
+        for lang in preferred_langs:
             if lang in source:
                 for track in source[lang]:
                     if track.get("ext") in ("json3", "vtt", "srv1"):
@@ -357,6 +390,18 @@ def _ytdlp_subs_sync(
         if sub_url:
             break
 
+    # Last resort: grab ANY available language track
+    if not sub_url:
+        all_available = {**auto, **subs}  # auto first (prefer generated)
+        for lang_key, tracks in all_available.items():
+            for track in tracks:
+                if track.get("ext") in ("json3", "vtt", "srv1"):
+                    sub_url = track.get("url")
+                    logger.info(f"[{video_id}] yt-dlp: no {lang_code}/en — falling back to '{lang_key}' caption track")
+                    break
+            if sub_url:
+                break
+
     if not sub_url:
         available = list(subs.keys()) + list(auto.keys())
         raise RuntimeError(f"yt-dlp: no subtitle track found (available: {available[:10]})")
@@ -365,7 +410,7 @@ def _ytdlp_subs_sync(
     sep = "&" if "?" in sub_url else "?"
     json_url = f"{sub_url}{sep}fmt=json3" if "fmt=" not in sub_url else sub_url
 
-    with httpx.Client(proxy=proxy_url, timeout=15) as client:
+    with httpx.Client(proxy=proxy_url, timeout=15, follow_redirects=True) as client:
         resp = client.get(json_url)
         resp.raise_for_status()
 
