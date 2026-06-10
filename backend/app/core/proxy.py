@@ -14,12 +14,7 @@ import random
 from urllib.parse import parse_qs, urlparse, quote_plus
 from app.core.config import get_settings
 
-def validate_proxy_env():
-    """Validate that proxy environment variables are correctly typed.
-    - PROXY_HOST and PROXY_USER must be non‑empty strings.
-    - PROXY_PORT must be a numeric string (if set).
-    Raises a ValueError with a clear message if validation fails.
-    """
+    s = get_settings()
     # Ensure all proxy variables are present and valid
     if not s.PROXY_HOST or not s.PROXY_HOST.strip():
         raise ValueError("PROXY_HOST must be set for proxy-only operation.")
