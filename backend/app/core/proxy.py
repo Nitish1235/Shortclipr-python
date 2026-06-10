@@ -9,20 +9,18 @@ and appends a sticky session suffix to the password to maintain the same exit IP
 Returns None when no proxy is configured (dev mode).
 """
 
-import hashlib
-import random
-from urllib.parse import parse_qs, urlparse, quote_plus
-from app.core.config import get_settings
-
+def validate_proxy_env() -> None:
+    """Validate proxy environment variables.
+    Ensures PROXY_HOST, PROXY_USER, PROXY_PASS are non‑empty strings and
+    PROXY_PORT is a positive integer. Raises ValueError on any problem.
+    """
     s = get_settings()
-    # Ensure all proxy variables are present and valid
     if not s.PROXY_HOST or not s.PROXY_HOST.strip():
         raise ValueError("PROXY_HOST must be set for proxy-only operation.")
     if not s.PROXY_USER or not s.PROXY_USER.strip():
         raise ValueError("PROXY_USER must be set for proxy-only operation.")
     if not s.PROXY_PASS or not s.PROXY_PASS.strip():
         raise ValueError("PROXY_PASS must be set for proxy-only operation.")
-    # PROXY_PORT is now an int; ensure it is a positive integer
     if s.PROXY_PORT is None:
         raise ValueError("PROXY_PORT must be set for proxy-only operation.")
     if not isinstance(s.PROXY_PORT, int) or s.PROXY_PORT <= 0:
