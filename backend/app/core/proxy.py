@@ -25,7 +25,13 @@ def get_proxy_url(session_id: str | None = None) -> str | None:
         if multiple ports are defined, ensuring stable routing within the same job.
     """
     s = get_settings()
-    if not s.PROXY_HOST or not s.PROXY_USER:
+
+    # Clean leading/trailing whitespaces or newlines (common in Secret Manager)
+    host = s.PROXY_HOST.strip() if s.PROXY_HOST else ""
+    user = s.PROXY_USER.strip() if s.PROXY_USER else ""
+    password = s.PROXY_PASS.strip() if s.PROXY_PASS else ""
+
+    if not host or not user:
         return None
 
     # Handle port selection
@@ -45,14 +51,13 @@ def get_proxy_url(session_id: str | None = None) -> str | None:
         else:
             port = random.choice(ports)
 
-    # Use proxy password as-is.
-    # NOTE: proxy-cheap "Sticky" session suffix (_session-{id}) is NOT used here
-    # because the proxy plan is configured as "Random IP" (not Sticky).
-    # Appending a session suffix with a non-sticky plan causes proxy-cheap to return
-    # 308 Permanent Redirect (billing redirect) instead of authenticating.
-    password = s.PROXY_PASS
+    # Log safe metadata to help diagnose configuration issues in production
+    import logging
+    logger = logging.getLogger(__name__)
+    safe_pass = f"{password[:2]}...{password[-2:]} (len={len(password)})" if len(password) > 4 else f"len={len(password)}"
+    logger.info(f"[proxy.py] Loaded proxy settings — host: {host}, user: {user}, port: {port}, password: {safe_pass}")
 
-    return f"http://{s.PROXY_USER}:{password}@{s.PROXY_HOST}:{port}"
+    return f"http://{user}:{password}@{host}:{port}"
 
 
 def _parse_ports(spec: str) -> list[int]:
