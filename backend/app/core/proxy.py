@@ -28,8 +28,9 @@ def get_proxy_url(session_id: str | None = None) -> str | None:
 
     # Clean leading/trailing whitespaces or newlines (common in Secret Manager)
     host = s.PROXY_HOST.strip() if s.PROXY_HOST else ""
-    user = s.PROXY_USER.strip() if s.PROXY_USER else ""
-    password = s.PROXY_PASS.strip() if s.PROXY_PASS else ""
+    from urllib.parse import quote_plus
+    user = quote_plus(s.PROXY_USER.strip()) if s.PROXY_USER else ""
+    password = quote_plus(s.PROXY_PASS.strip()) if s.PROXY_PASS else ""
 
     if not host or not user:
         return None
