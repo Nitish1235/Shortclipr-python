@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
@@ -186,6 +187,22 @@ export default function VideoShowcase() {
   const [videos, setVideos]   = useState([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(false)
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  const handleStartFree = (e) => {
+    e.preventDefault()
+    if (location.pathname === '/') {
+      const el = document.getElementById('hero')
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' })
+        const input = el.querySelector('input[type="url"]')
+        if (input) input.focus()
+      }
+    } else {
+      navigate('/', { state: { scrollToSection: 'hero' } })
+    }
+  }
 
   useEffect(() => {
     fetch(`${API}/showcase`)
@@ -282,7 +299,7 @@ export default function VideoShowcase() {
             : `✦ ${videos.filter(v => !v.isPlaceholder).length} real clips from ShortClipr`
           } · Hover a phone to play
         </p>
-        <a href="/" style={{
+        <a href="/" onClick={handleStartFree} style={{
           display: 'inline-block',
           background: '#cf1322', color: '#fff',
           border: '2px solid rgba(255,255,255,0.2)',

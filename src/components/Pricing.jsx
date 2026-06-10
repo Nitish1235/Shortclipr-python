@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { DodoPayments } from 'dodopayments-checkout'
+import { useNavigate, useLocation } from 'react-router-dom'
 
 // Initialise Dodo overlay once
 const DODO_MODE = import.meta.env.VITE_DODO_MODE || 'test'
@@ -47,7 +48,9 @@ export default function Pricing() {
   const [tierIdx, setTierIdx]     = useState(1)
   const [loading, setLoading]     = useState(false)
   const [freeLoading, setFreeLoading] = useState(false)
-  const [error, setError]         = useState('')
+  const [error,   setError]         = useState('')
+  const navigate = useNavigate()
+  const location = useLocation()
 
   const tier    = TIERS[tierIdx]
   const fillPct = (tierIdx / (TIERS.length - 1)) * 100
@@ -78,7 +81,19 @@ export default function Pricing() {
 
   const handleFreeStart = () => {
     setFreeLoading(true)
-    setTimeout(() => { window.location.href = '/' }, 300)
+    setTimeout(() => {
+      setFreeLoading(false)
+      if (location.pathname === '/') {
+        const el = document.getElementById('hero')
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' })
+          const input = el.querySelector('input[type="url"]')
+          if (input) input.focus()
+        }
+      } else {
+        navigate('/', { state: { scrollToSection: 'hero' } })
+      }
+    }, 300)
   }
 
   const checkStyle = { color:'#cf1322', fontWeight:700, marginRight:'8px' }

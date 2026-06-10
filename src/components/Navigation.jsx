@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { GoogleLogin } from '@react-oauth/google'
 import Logo from './Logo'
@@ -8,6 +8,7 @@ export default function Navigation() {
   const [scrolled, setScrolled]     = useState(false)
   const { user, loginWithGoogleToken, logout } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const isApp = ['/dashboard','/editor','/lab'].some(p => location.pathname.startsWith(p))
 
   useEffect(() => {
@@ -24,6 +25,31 @@ export default function Navigation() {
     { label: 'Pricing',      href: '/#pricing'      },
     { label: 'About',        href: '/about'          },
   ]
+
+  const handleNavClick = (e, href) => {
+    if (href.startsWith('/#')) {
+      e.preventDefault()
+      const id = href.replace('/#', '')
+      if (location.pathname === '/') {
+        const el = document.getElementById(id)
+        if (el) el.scrollIntoView({ behavior: 'smooth' })
+      } else {
+        navigate('/', { state: { scrollToSection: id } })
+      }
+    } else if (href === '/') {
+      e.preventDefault()
+      if (location.pathname === '/') {
+        const el = document.getElementById('hero')
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' })
+          const input = el.querySelector('input[type="url"]')
+          if (input) input.focus()
+        }
+      } else {
+        navigate('/', { state: { scrollToSection: 'hero' } })
+      }
+    }
+  }
 
   return (
     <div style={{
@@ -56,11 +82,13 @@ export default function Navigation() {
           <ul style={{ display:'flex', gap:'2px', listStyle:'none', flex:1, justifyContent:'center' }}>
             {navLinks.map(({ label, href }) => (
               <li key={href}>
-                <a href={href} style={{
-                  color:'#333', fontSize:'0.875rem', fontWeight:600,
-                  padding:'8px 14px', borderRadius:'8px', display:'block',
-                  transition:'background 0.15s, color 0.15s',
-                }}
+                <a href={href}
+                  onClick={(e) => handleNavClick(e, href)}
+                  style={{
+                    color:'#333', fontSize:'0.875rem', fontWeight:600,
+                    padding:'8px 14px', borderRadius:'8px', display:'block',
+                    transition:'background 0.15s, color 0.15s',
+                  }}
                   onMouseEnter={e => { e.currentTarget.style.background='#fef2f2'; e.currentTarget.style.color='#cf1322' }}
                   onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='#333' }}
                 >{label}</a>
@@ -111,13 +139,15 @@ export default function Navigation() {
                   theme="outline" shape="rectangular" text="signin_with" size="medium"
                 />
               </div>
-              <a href="/" style={{
-                background:'#cf1322', color:'#fff',
-                padding:'10px 20px', borderRadius:'8px',
-                fontSize:'0.82rem', fontWeight:700,
-                border:'2px solid #111', boxShadow:'2px 2px 0 #111',
-                transition:'transform 0.1s, box-shadow 0.1s', display:'inline-block',
-              }}
+              <a href="/"
+                onClick={(e) => handleNavClick(e, '/')}
+                style={{
+                  background:'#cf1322', color:'#fff',
+                  padding:'10px 20px', borderRadius:'8px',
+                  fontSize:'0.82rem', fontWeight:700,
+                  border:'2px solid #111', boxShadow:'2px 2px 0 #111',
+                  transition:'transform 0.1s, box-shadow 0.1s', display:'inline-block',
+                }}
                 onMouseEnter={e => { e.currentTarget.style.transform='translate(-1px,-1px)'; e.currentTarget.style.boxShadow='3px 3px 0 #111' }}
                 onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='2px 2px 0 #111' }}
               >Get started →</a>

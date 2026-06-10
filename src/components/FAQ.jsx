@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 
 const faqs = [
   {
@@ -33,6 +34,22 @@ const faqs = [
 
 export default function FAQ() {
   const [open, setOpen] = useState(null)
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  const handleStartFree = (e) => {
+    e.preventDefault()
+    if (location.pathname === '/') {
+      const el = document.getElementById('hero')
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' })
+        const input = el.querySelector('input[type="url"]')
+        if (input) input.focus()
+      }
+    } else {
+      navigate('/', { state: { scrollToSection: 'hero' } })
+    }
+  }
 
   return (
     <section id="faq" style={{ padding: '96px 0', background: '#f9f9f9' }}>
@@ -93,7 +110,7 @@ export default function FAQ() {
 
         {/* Bottom CTA */}
         <div style={{ marginTop: '28px', textAlign: 'center' }}>
-          <a href="/" style={{
+          <a href="/" onClick={handleStartFree} style={{
             display: 'inline-block',
             background: '#cf1322', color: '#fff',
             border: '2px solid #111', borderRadius: '8px',

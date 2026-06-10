@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -45,6 +45,28 @@ import AlternativeLanding from './pages/AlternativeLanding'
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'dummy-client-id.apps.googleusercontent.com'
 
 function LandingPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (location.state?.scrollToSection) {
+      const id = location.state.scrollToSection
+      // Clear state so page reload doesn't trigger scroll again
+      navigate(location.pathname, { replace: true, state: {} })
+      
+      setTimeout(() => {
+        const el = document.getElementById(id)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' })
+          if (id === 'hero') {
+            const input = el.querySelector('input[type="url"]')
+            if (input) input.focus()
+          }
+        }
+      }, 100)
+    }
+  }, [location, navigate])
+
   return (
     <>
       <Navigation />

@@ -1,3 +1,5 @@
+import { useNavigate, useLocation } from 'react-router-dom'
+
 const steps = [
   {
     num: '01',
@@ -50,6 +52,23 @@ const steps = [
 ]
 
 export default function HowItWorks() {
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  const handleStartFree = (e) => {
+    e.preventDefault()
+    if (location.pathname === '/') {
+      const el = document.getElementById('hero')
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' })
+        const input = el.querySelector('input[type="url"]')
+        if (input) input.focus()
+      }
+    } else {
+      navigate('/', { state: { scrollToSection: 'hero' } })
+    }
+  }
+
   return (
     <section id="how-it-works" style={{ padding: '96px 0', background: '#f9f9f9' }}>
       <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 5%' }}>
@@ -179,7 +198,7 @@ export default function HowItWorks() {
               </span>
             ))}
           </div>
-          <a href="/" style={{
+          <a href="/" onClick={handleStartFree} style={{
             background: '#cf1322', color: '#fff',
             border: 'none', borderRadius: '8px',
             padding: '9px 20px', fontWeight: 700, fontSize: '0.82rem',
