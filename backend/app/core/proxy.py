@@ -35,21 +35,26 @@ def get_proxy_url(session_id: str | None = None) -> str | None:
         return None
 
     # Handle port selection
-    if s.PROXY_PORT:
+    port = 8080  # default fallback for proxy-cheap
+    proxy_port_str = s.PROXY_PORT.strip() if s.PROXY_PORT else ""
+    if proxy_port_str:
         try:
-            port = int(s.PROXY_PORT.strip())
-        except ValueError:
-            port = 80  # fallback safety
+            port = int(proxy_port_str)
+        except ValueError as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                f"[proxy.py] Failed to parse PROXY_PORT={repr(s.PROXY_PORT)}: {e}. Falling back to 8080."
+            )
+            port = 8080
     else:
         ports = _parse_ports(s.PROXY_PORTS)
-        if not ports:
-            return None
-        if session_id:
-            # Deterministic choice from the port pool based on session ID
-            hash_val = int(hashlib.md5(session_id.encode()).hexdigest(), 16)
-            port = ports[hash_val % len(ports)]
-        else:
-            port = random.choice(ports)
+        if ports:
+            if session_id:
+                # Deterministic choice from the port pool based on session ID
+                hash_val = int(hashlib.md5(session_id.encode()).hexdigest(), 16)
+                port = ports[hash_val % len(ports)]
+            else:
+                port = random.choice(ports)
 
     # Log safe metadata to help diagnose configuration issues in production
     import logging
