@@ -1,14 +1,16 @@
 """
 stream.py — Step 3 of the ShortClipr pipeline.
 
-Stream URL extraction: 5-method fallback chain, all via proxy-cheap.
+Stream URL extraction: 7-method fallback chain, all via proxy-cheap.
 
 Priority order (fastest → broadest compatibility):
-  1. InnerTube ANDROID + proxy-cheap   (~2s, ~100% success rate)
-  2. yt-dlp + proxy-cheap + tv_embedded
-  3. yt-dlp + proxy-cheap + relaxed 1080p format
-  4. yt-dlp + proxy-cheap (default)
-  5. yt-dlp + proxy-cheap + android client
+  1. InnerTube ANDROID + proxy-cheap   (~2s, highest priority)
+  2. yt-dlp + proxy-cheap + android client
+  3. yt-dlp + proxy-cheap + mweb client
+  4. yt-dlp + proxy-cheap + web client
+  5. yt-dlp + proxy-cheap + ios client
+  6. yt-dlp + proxy-cheap + tv_embedded
+  7. yt-dlp + proxy-cheap (relaxed, no format constraints)
 
 Fallback triggers on:
   - playabilityStatus != OK  (LOGIN_REQUIRED, SIGN_IN_REQUIRED, etc.)
@@ -185,6 +187,8 @@ _YTDLP_BOT_SIGNALS = (
     "please verify you're human",
     "automated queries",
     "not a bot",
+    "requested format is not available",
+    "youtube is no longer supported",
 )
 
 
@@ -439,6 +443,25 @@ def _fmt(height: int) -> str:
     )
 
 
+def _fmt_unconstrained() -> str:
+    """
+    Most permissive format selector - no height or extension constraints.
+    Used as final fallback when all else fails.
+    """
+    return "best"
+
+
+def _fmt_relaxed(height: int) -> str:
+    """
+    Relaxed format selector - no extension constraint.
+    Used as an additional fallback when strict mp4 selector fails.
+    """
+    return (
+        f"bestvideo[height<={height}]+bestaudio/best[height<={height}]"
+        f"/bestvideo+bestaudio/best"
+    )
+
+
 # ── Fallback chain ─────────────────────────────────────────────
 
 async def _resolve_stream_url(video_id: str, quality: str, session_id: str | None = None) -> str:
@@ -447,29 +470,29 @@ async def _resolve_stream_url(video_id: str, quality: str, session_id: str | Non
     chain: list[tuple[str, object]] = [
         # 1. InnerTube ANDROID + proxy  (~2s, highest priority)
         ("InnerTube ANDROID+proxy", lambda: _innertube_android_stream(video_id, h, session_id)),
-        # 2. yt-dlp + tv_embedded + proxy
-        ("yt-dlp+tv_embedded+proxy", lambda: _ytdlp_stream(
-            video_id, _fmt(h), client="tv_embedded", label="yt-dlp+tv_embedded", session_id=session_id
-        )),
-        # 3. yt-dlp + relaxed 1080p format + proxy
-        # (drops [ext=mp4] constraint — sometimes succeeds when strict selector fails)
-        ("yt-dlp+1080p-relaxed+proxy", lambda: _ytdlp_stream(
-            video_id,
-            "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
-            label="yt-dlp+1080p-relaxed",
-            session_id=session_id
-        )),
-        # 4. yt-dlp + default format + proxy
-        ("yt-dlp+default+proxy", lambda: _ytdlp_stream(
-            video_id, "bestvideo+bestaudio/best", label="yt-dlp+default", session_id=session_id
-        )),
-        # 5. yt-dlp + android client + proxy
+        # 2. yt-dlp + android client + proxy (most reliable - use "best" format)
         ("yt-dlp+android+proxy", lambda: _ytdlp_stream(
-            video_id, _fmt(h), client="android", label="yt-dlp+android", session_id=session_id
+            video_id, "best", client="android", label="yt-dlp+android", session_id=session_id
         )),
-        # New fallback using the generic web client – works when Android/TV are blocked
+        # 3. yt-dlp + mweb client + proxy (mobile web works well with proxies)
+        ("yt-dlp+mweb+proxy", lambda: _ytdlp_stream(
+            video_id, "best", client="mweb", label="yt-dlp+mweb", session_id=session_id
+        )),
+        # 4. yt-dlp + ios client + proxy
+        ("yt-dlp+ios+proxy", lambda: _ytdlp_stream(
+            video_id, "best", client="ios", label="yt-dlp+ios", session_id=session_id
+        )),
+        # 5. yt-dlp + web client + proxy (generic web)
         ("yt-dlp+web+proxy", lambda: _ytdlp_stream(
-            video_id, _fmt(h), client="web", label="yt-dlp+web", session_id=session_id
+            video_id, "best", client="web", label="yt-dlp+web", session_id=session_id
+        )),
+        # 6. yt-dlp with height-constrained format (for android)
+        ("yt-dlp+android-constrained+proxy", lambda: _ytdlp_stream(
+            video_id, _fmt(h), client="android", label="yt-dlp+android-constrained", session_id=session_id
+        )),
+        # 7. yt-dlp unconstrained (any client, any format)
+        ("yt-dlp+unconstrained+proxy", lambda: _ytdlp_stream(
+            video_id, "best", label="yt-dlp+unconstrained", session_id=session_id
         )),
     ]
 
@@ -482,7 +505,7 @@ async def _resolve_stream_url(video_id: str, quality: str, session_id: str | Non
             last_err = exc
 
     raise RuntimeError(
-        f"All 5 stream methods failed for {video_id}. Last error: {last_err}"
+        f"All 7 stream methods failed for {video_id}. Last error: {last_err}"
     )
 
 

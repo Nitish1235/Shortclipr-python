@@ -9,7 +9,14 @@ and appends a sticky session suffix to the password to maintain the same exit IP
 Returns None when no proxy is configured (dev mode).
 """
 
+import hashlib
+import logging
+import random
+from urllib.parse import parse_qs, quote_plus, urlparse
+
 from app.core.config import get_settings
+
+_logger = logging.getLogger(__name__)
 
 def validate_proxy_env() -> None:
     """Validate proxy environment variables.
@@ -43,7 +50,6 @@ def get_proxy_url(session_id: str | None = None) -> str | None:
 
     # Clean leading/trailing whitespaces or newlines (common in Secret Manager)
     host = s.PROXY_HOST.strip() if s.PROXY_HOST else ""
-    from urllib.parse import quote_plus
     user = quote_plus(s.PROXY_USER.strip()) if s.PROXY_USER else ""
     password = quote_plus(s.PROXY_PASS.strip()) if s.PROXY_PASS else ""
 
@@ -63,8 +69,7 @@ def get_proxy_url(session_id: str | None = None) -> str | None:
                 try:
                     port = int(proxy_port_str)
                 except ValueError as e:
-                    import logging
-                    logging.getLogger(__name__).warning(
+                    _logger.warning(
                         f"[proxy.py] Failed to parse PROXY_PORT={repr(s.PROXY_PORT)}: {e}. Falling back to 8080."
                     )
                     port = 8080
@@ -79,10 +84,8 @@ def get_proxy_url(session_id: str | None = None) -> str | None:
                 port = random.choice(ports)
 
     # Log safe metadata to help diagnose configuration issues in production
-    import logging
-    logger = logging.getLogger(__name__)
     safe_pass = f"{password[:2]}...{password[-2:]} (len={len(password)})" if len(password) > 4 else f"len={len(password)}"
-    logger.info(f"[proxy.py] Loaded proxy settings — host: {host}, user: {user}, port: {port}, password: {safe_pass}")
+    _logger.info(f"[proxy.py] Loaded proxy settings — host: {host}, user: {user}, port: {port}, password: {safe_pass}")
 
     return f"http://{user}:{password}@{host}:{port}"
 

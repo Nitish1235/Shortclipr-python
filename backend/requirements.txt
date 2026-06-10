@@ -19,7 +19,10 @@ openai==1.47.0
 youtube-transcript-api==1.2.4
 
 ## Video Stream Extraction
-yt-dlp==2024.11.4
+# NOTE: YouTube breaks old yt-dlp every few months. Keep this current — a stale
+# pin manifests as "Requested format is not available" / "Failed to extract any
+# player response" on every client. Verified working: 2026.06.09.
+yt-dlp==2026.6.9
 
 ## Google Cloud
 google-cloud-storage==2.18.2

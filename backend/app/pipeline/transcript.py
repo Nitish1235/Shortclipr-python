@@ -157,18 +157,13 @@ def _ytta_fetch_sync(
         )
 
     try:
-        # v1.2.4 constructor accepts proxies= kwarg
-        try:
-            api = YouTubeTranscriptApi(
-                proxies={"http": proxy_url, "https": proxy_url} if proxy_url else {}
-            )
-        except TypeError:
-            # Some builds only accept http_client=
-            import requests
-            session = requests.Session()
-            if proxy_url:
-                session.proxies = {"http": proxy_url, "https": proxy_url}
-            api = YouTubeTranscriptApi(http_client=session)
+        # v1.2.4 takes a configured requests.Session via http_client= (there is
+        # no proxies= kwarg on this version). Route the proxy through the session.
+        import requests
+        session = requests.Session()
+        if proxy_url:
+            session.proxies = {"http": proxy_url, "https": proxy_url}
+        api = YouTubeTranscriptApi(http_client=session)
 
         # Preferred language, then English fallbacks, then auto-generated English
         lang_prefs = list(dict.fromkeys([lang_code, "en", "en-US", "en-GB", "a.en"]))
