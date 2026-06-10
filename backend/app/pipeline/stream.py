@@ -35,6 +35,25 @@ from app.core.redis import cache_stream_url, get_cached_stream_url
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+# Validate proxy environment variables early – will raise a clear error if mis‑configured
+from app.core.proxy import validate_proxy_env
+validate_proxy_env()
+
+# Helper functions for optional Redis caching – skip if Redis not configured
+def _redis_enabled() -> bool:
+    return bool(settings.UPSTASH_REDIS_URL)
+
+async def _maybe_get_cached(key: str) -> str | None:
+    if _redis_enabled():
+        from app.core.redis import get_cached_stream_url
+        return await get_cached_stream_url(key)
+    return None
+
+async def _maybe_cache(key: str, url: str) -> None:
+    if _redis_enabled():
+        from app.core.redis import cache_stream_url
+        await cache_stream_url(key, url)
+
 
 # Thread pool for blocking yt-dlp calls (sync library)
 _YTDLP_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ytdlp-stream")
@@ -364,6 +383,8 @@ def _ytdlp_base_opts(proxy_url: str | None) -> dict:
     }
     if proxy_url:
         opts["proxy"] = proxy_url
+    # Default to the most permissive client (web) unless overridden later
+    opts["extractor_args"] = {"youtube": {"player_client": ["web"]}}
     return opts
 
 
@@ -446,6 +467,10 @@ async def _resolve_stream_url(video_id: str, quality: str, session_id: str | Non
         ("yt-dlp+android+proxy", lambda: _ytdlp_stream(
             video_id, _fmt(h), client="android", label="yt-dlp+android", session_id=session_id
         )),
+        # New fallback using the generic web client – works when Android/TV are blocked
+        ("yt-dlp+web+proxy", lambda: _ytdlp_stream(
+            video_id, _fmt(h), client="web", label="yt-dlp+web", session_id=session_id
+        )),
     ]
 
     last_err: Exception | None = None
@@ -467,14 +492,14 @@ async def get_stream_url(video_id: str, quality: str = "1080p", session_id: str 
     # 1. Look up job-specific cache first
     if session_id:
         job_cache_key = f"{video_id}:{quality}:{session_id}"
-        cached = await get_cached_stream_url(job_cache_key)
+        cached = await _maybe_get_cached(job_cache_key)
         if cached:
             logger.info(f"[{video_id}] stream ← job-specific cache ({session_id})")
             return cached
 
     # 2. Look up global cache
     global_cache_key = f"{video_id}:{quality}"
-    cached = await get_cached_stream_url(global_cache_key)
+    cached = await _maybe_get_cached(global_cache_key)
     if cached:
         if not url_is_ip_bound(cached):
             logger.info(f"[{video_id}] stream ← global cache (non-IP-bound)")
@@ -489,9 +514,9 @@ async def get_stream_url(video_id: str, quality: str = "1080p", session_id: str 
     if url_is_ip_bound(url):
         if session_id:
             job_cache_key = f"{video_id}:{quality}:{session_id}"
-            await cache_stream_url(job_cache_key, url)
+            await _maybe_cache(job_cache_key, url)
     else:
-        await cache_stream_url(global_cache_key, url)
+        await _maybe_cache(global_cache_key, url)
 
     return url
 

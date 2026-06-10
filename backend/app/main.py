@@ -17,6 +17,15 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
+# Validate proxy environment early; abort on misconfiguration per user preference.
+try:
+    from app.core.proxy import validate_proxy_env
+    validate_proxy_env()
+except Exception as e:
+    import logging, sys
+    logging.getLogger(__name__).error(f"Proxy configuration validation failed: {e}. Aborting startup.")
+    sys.exit(1)
+
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",

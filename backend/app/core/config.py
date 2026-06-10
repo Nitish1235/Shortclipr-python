@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     PROXY_HOST: str = ""              # e.g. gate.proxy-cheap.com
     PROXY_USER: str = ""              # proxy username / customer ID
     PROXY_PASS: str = ""              # proxy password
-    PROXY_PORT: str = ""              # single port for residential proxy (e.g. 31112)
+    PROXY_PORT: int = 8080              # single port for residential proxy (e.g. 31112)
     PROXY_PORTS: str = "10001-10007"  # port pool for random rotation (ignored if PROXY_PORT is set)
 
 
@@ -82,3 +82,7 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Cached singleton — import and call this everywhere."""
     return Settings()
+
+# Validator to ensure PROXY_PORT is positive integer (already typed as int)
+# Pydantic will enforce type, but we provide a custom check for clarity.
+# No additional code needed here as validation occurs in validate_proxy_env.

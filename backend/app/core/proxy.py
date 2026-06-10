@@ -11,8 +11,28 @@ Returns None when no proxy is configured (dev mode).
 
 import hashlib
 import random
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, quote_plus
 from app.core.config import get_settings
+
+def validate_proxy_env():
+    """Validate that proxy environment variables are correctly typed.
+    - PROXY_HOST and PROXY_USER must be non‑empty strings.
+    - PROXY_PORT must be a numeric string (if set).
+    Raises a ValueError with a clear message if validation fails.
+    """
+    # Ensure all proxy variables are present and valid
+    if not s.PROXY_HOST or not s.PROXY_HOST.strip():
+        raise ValueError("PROXY_HOST must be set for proxy-only operation.")
+    if not s.PROXY_USER or not s.PROXY_USER.strip():
+        raise ValueError("PROXY_USER must be set for proxy-only operation.")
+    if not s.PROXY_PASS or not s.PROXY_PASS.strip():
+        raise ValueError("PROXY_PASS must be set for proxy-only operation.")
+    # PROXY_PORT is now an int; ensure it is a positive integer
+    if s.PROXY_PORT is None:
+        raise ValueError("PROXY_PORT must be set for proxy-only operation.")
+    if not isinstance(s.PROXY_PORT, int) or s.PROXY_PORT <= 0:
+        raise ValueError(f"PROXY_PORT must be a positive integer. Got '{s.PROXY_PORT}'.")
+
 
 
 def get_proxy_url(session_id: str | None = None) -> str | None:
@@ -37,16 +57,22 @@ def get_proxy_url(session_id: str | None = None) -> str | None:
 
     # Handle port selection
     port = 8080  # default fallback for proxy-cheap
-    proxy_port_str = s.PROXY_PORT.strip() if s.PROXY_PORT else ""
-    if proxy_port_str:
-        try:
-            port = int(proxy_port_str)
-        except ValueError as e:
-            import logging
-            logging.getLogger(__name__).warning(
-                f"[proxy.py] Failed to parse PROXY_PORT={repr(s.PROXY_PORT)}: {e}. Falling back to 8080."
-            )
-            port = 8080
+    # PROXY_PORT may be an int or str; handle both
+    if s.PROXY_PORT:
+        if isinstance(s.PROXY_PORT, int):
+            port = s.PROXY_PORT
+        else:
+            # Assume string representation
+            proxy_port_str = s.PROXY_PORT.strip()
+            if proxy_port_str:
+                try:
+                    port = int(proxy_port_str)
+                except ValueError as e:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        f"[proxy.py] Failed to parse PROXY_PORT={repr(s.PROXY_PORT)}: {e}. Falling back to 8080."
+                    )
+                    port = 8080
     else:
         ports = _parse_ports(s.PROXY_PORTS)
         if ports:
