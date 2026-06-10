@@ -33,14 +33,6 @@ steps:
       - '--port'
       - '8080'
 
-      # ── Proxy (proxy-cheap residential) ────────────────────────────────────
-      # Non-secret values set directly. PROXY_PASS is a Secret Manager secret.
-      # To update: Cloud Run → shortclipr-api → Edit Revision → Variables & Secrets
-      # Or update _PROXY_* substitution variables in the Cloud Build trigger.
-      - '--update-env-vars'
-      - 'PROXY_HOST=${_PROXY_HOST},PROXY_USER=${_PROXY_USER},PROXY_PORT=${_PROXY_PORT}'
-      # PROXY_PASS is kept in Secret Manager for security — set it there, not here.
-
       # ── Resources ────────────────────────────────────────────────────────
       # 4 GiB RAM: FFmpeg clips run in parallel (asyncio semaphore = 10),
       # MediaPipe face detection, and multiple in-flight pipelines each
@@ -78,9 +70,3 @@ images:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-
-substitutions:
-  _PROXY_HOST: thehub.proxy-cheap.com
-  _PROXY_USER: OyQOEnhVOxIz1Cr
-  _PROXY_PORT: '8080'
-
