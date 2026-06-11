@@ -20,6 +20,7 @@ import logging
 import tempfile
 from pathlib import Path
 
+from app.core.proxy import use_decodo_proxy
 from app.pipeline.ai_clipper import find_sequential_clips
 from app.pipeline.captions import VALID_STYLES, burn_captions, get_clip_captions
 from app.pipeline.extractor import VALID_TEMPLATES, extract_all_clips_parallel, reframe_to_vertical
@@ -56,6 +57,10 @@ async def run_test_pipeline(job_id: str, youtube_url: str, quality: str = "1080p
 
     job_dir = Path(tempfile.mkdtemp(prefix=f"admtest_{job_id[-8:]}_"))
     try:
+        # Admin Test Lab uses the Decodo proxy pool instead of proxy-cheap —
+        # does not affect the user-facing pipeline (orchestrator.py).
+        use_decodo_proxy()
+
         video_id = extract_video_id(youtube_url)
         if not video_id:
             raise ValueError(f"Cannot extract video ID from: {youtube_url}")

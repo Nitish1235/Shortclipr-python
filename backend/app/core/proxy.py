@@ -14,6 +14,7 @@ a port deterministically from PROXY_PORTS (stable routing within a job).
 Returns None when no proxy is configured (dev mode).
 """
 
+import contextvars
 import hashlib
 import logging
 import random
@@ -22,6 +23,19 @@ from urllib.parse import parse_qs, quote_plus, urlparse
 from app.core.config import get_settings
 
 _logger = logging.getLogger(__name__)
+
+# Selects which proxy provider get_proxy_url() returns for the current
+# async task (and any tasks it spawns). Defaults to proxy-cheap (production
+# user pipeline). The admin/test pipeline switches this to "decodo" for the
+# duration of a test run via use_decodo_proxy().
+_proxy_provider: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "proxy_provider", default="proxycheap"
+)
+
+
+def use_decodo_proxy() -> None:
+    """Switch the current task (and children) to the Decodo proxy pool."""
+    _proxy_provider.set("decodo")
 
 def validate_proxy_env() -> None:
     """Validate proxy environment variables.
@@ -42,6 +56,29 @@ def validate_proxy_env() -> None:
 
 
 
+def _get_decodo_proxy_url(session_id: str | None = None) -> str:
+    """
+    Return a Decodo proxy URL, picking a port from DECODO_PORTS.
+
+    If session_id is provided, the port is chosen deterministically from the
+    MD5 hash of session_id, ensuring stable routing within the same job.
+    """
+    s = get_settings()
+    host = s.DECODO_HOST.strip()
+    user = quote_plus(s.DECODO_USER.strip())
+    password = quote_plus(s.DECODO_PASS.strip())
+
+    ports = _parse_ports(s.DECODO_PORTS) or [10001]
+    if session_id:
+        hash_val = int(hashlib.md5(session_id.encode()).hexdigest(), 16)
+        port = ports[hash_val % len(ports)]
+    else:
+        port = random.choice(ports)
+
+    _logger.info(f"[proxy.py] Loaded Decodo proxy settings — host: {host}, user: {user}, port: {port}")
+    return f"http://{user}:{password}@{host}:{port}"
+
+
 def get_proxy_url(session_id: str | None = None) -> str | None:
     """
     Return a proxy URL, or None if proxy is not configured.
@@ -51,6 +88,9 @@ def get_proxy_url(session_id: str | None = None) -> str | None:
     deterministically based on the MD5 hash of the session_id from PROXY_PORTS,
     ensuring stable routing within the same job.
     """
+    if _proxy_provider.get() == "decodo":
+        return _get_decodo_proxy_url(session_id)
+
     s = get_settings()
 
     # Clean leading/trailing whitespaces or newlines (common in Secret Manager)

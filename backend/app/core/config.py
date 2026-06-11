@@ -77,6 +77,12 @@ class Settings(BaseSettings):
     PROXY_PORT: int = 8080              # single port for residential proxy (e.g. 31112)
     PROXY_PORTS: str = "10001-10007"  # port pool for random rotation (ignored if PROXY_PORT is set)
 
+    # ── Proxy (Decodo) — admin/test pipeline only, not used for user jobs ──
+    DECODO_HOST: str = "gate.decodo.com"
+    DECODO_USER: str = "spbou1dr41"
+    DECODO_PASS: str = "7Ur0gi88_hjxhRHEvn"
+    DECODO_PORTS: str = "10001-10010"
+
 
 @lru_cache
 def get_settings() -> Settings:

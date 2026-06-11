@@ -163,6 +163,15 @@ def _ytta_fetch_sync(
         session = requests.Session()
         if proxy_url:
             session.proxies = {"http": proxy_url, "https": proxy_url}
+        # Without an explicit timeout, requests will hang indefinitely (often
+        # 2-3+ min) if the proxy connection is slow/unresponsive, blocking
+        # the whole transcript fallback chain. Cap each request at 15s so a
+        # bad proxy connection fails fast and falls through to method 2/3.
+        _orig_request = session.request
+        def _request_with_timeout(method, url, **kwargs):
+            kwargs.setdefault("timeout", 15)
+            return _orig_request(method, url, **kwargs)
+        session.request = _request_with_timeout
         api = YouTubeTranscriptApi(http_client=session)
 
         # Preferred language, then English fallbacks, then auto-generated English
