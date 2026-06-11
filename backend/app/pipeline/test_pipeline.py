@@ -84,6 +84,7 @@ async def run_test_pipeline(job_id: str, youtube_url: str, quality: str = "1080p
         job["current_step"] = f"Extracting {len(timestamps)} clips..."
         raw_clips = await extract_all_clips_parallel(
             stream_url, timestamps, job_dir, session_id=job_id, audio_url=audio_url, user_agent=user_agent,
+            video_id=video_id,
         )
         if not raw_clips:
             raise RuntimeError("All clip extractions failed")

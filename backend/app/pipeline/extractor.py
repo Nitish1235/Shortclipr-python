@@ -166,8 +166,12 @@ async def download_source(
         raise RuntimeError("FFmpeg source download timed out")
 
     if proc.returncode != 0:
+        err = stderr.decode(errors="ignore")
+        # The last 400 chars are usually just the URL tail — log a longer
+        # window so the actual HTTP error (403/404/EOF) is visible.
+        logger.warning(f"FFmpeg source download stderr (tail): {err[-1500:]}")
         raise RuntimeError(
-            f"FFmpeg source download failed: {stderr.decode(errors='ignore')[-400:]}"
+            f"FFmpeg source download failed: {err[-400:]}"
         )
     if not output_path.exists() or output_path.stat().st_size < 1024:
         raise RuntimeError(f"Source download missing or too small: {output_path}")
@@ -176,6 +180,62 @@ async def download_source(
     logger.info(
         f"Downloaded source → {output_path.name} "
         f"({output_path.stat().st_size / 1e6:.1f} MB) [{via}]"
+    )
+    return output_path
+
+
+def _ytdlp_download_sync(video_id: str, output_path: Path, proxy_url: str | None) -> None:
+    """Blocking yt-dlp download — runs inside a thread pool executor."""
+    import yt_dlp
+
+    opts: dict = {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "socket_timeout": 30,
+        "outtmpl": str(output_path),
+        "format": (
+            "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]"
+            "/best[height<=1080][ext=mp4]/best"
+        ),
+        "merge_output_format": "mp4",
+        "extractor_args": {"youtube": {"player_client": ["android"]}},
+        "concurrent_fragment_downloads": 4,
+    }
+    if proxy_url:
+        opts["proxy"] = proxy_url
+
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+
+
+async def download_source_ytdlp(
+    video_id: str,
+    output_path: Path,
+    proxy_url: str | None = None,
+) -> Path:
+    """
+    Last-resort source download: let yt-dlp resolve AND download in one
+    session through the same proxy connection.
+
+    The ffmpeg path (download_source) mints the CDN URL with one connection
+    (InnerTube via proxy) and downloads with another (ffmpeg) — when the
+    rotating-residential gateway hands the second connection a different
+    exit IP, the IP-bound URL 403s / returns an empty body. yt-dlp avoids
+    the split entirely by minting and downloading itself, and natively
+    handles UA matching and fragmented/DASH formats.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    loop = asyncio.get_running_loop()
+    await asyncio.wait_for(
+        loop.run_in_executor(None, _ytdlp_download_sync, video_id, output_path, proxy_url),
+        timeout=900,
+    )
+    if not output_path.exists() or output_path.stat().st_size < 1024:
+        raise RuntimeError(f"yt-dlp source download missing or too small: {output_path}")
+    logger.info(
+        f"Downloaded source via yt-dlp → {output_path.name} "
+        f"({output_path.stat().st_size / 1e6:.1f} MB) [proxy={bool(proxy_url)}]"
     )
     return output_path
 
@@ -241,23 +301,34 @@ async def extract_all_clips_parallel(
     session_id: str | None = None,
     audio_url: str | None = None,
     user_agent: str | None = None,
+    video_id: str | None = None,
 ) -> list[tuple[ClipTimestamp, Path]]:
     """
     Download the full source video once (direct from Cloud Run's own IP,
     falling back to proxy if the CDN URL is IP-bound and direct download
-    gets HTTP 403), then extract all clips in parallel from that local file.
+    gets HTTP 403, then to a yt-dlp end-to-end download), then extract all
+    clips in parallel from that local file.
 
     audio_url: optional separate audio-only CDN URL, merged into the
     downloaded source when the video stream has no embedded audio
     (see get_stream_urls).
+    video_id: enables the yt-dlp last-resort download when both ffmpeg
+    attempts fail (the pre-minted CDN URL may be bound to an exit IP the
+    proxy gateway no longer routes us through).
     """
     source_path = job_dir / "source.mp4"
+    proxy_url = get_proxy_url(session_id)
     try:
         await download_source(stream_url, source_path, proxy_url=None, audio_url=audio_url, user_agent=user_agent)
     except Exception as exc:
         logger.warning(f"Direct source download failed ({exc}); retrying via proxy")
-        proxy_url = get_proxy_url(session_id)
-        await download_source(stream_url, source_path, proxy_url=proxy_url, audio_url=audio_url, user_agent=user_agent)
+        try:
+            await download_source(stream_url, source_path, proxy_url=proxy_url, audio_url=audio_url, user_agent=user_agent)
+        except Exception as exc2:
+            if not video_id:
+                raise
+            logger.warning(f"Proxied source download failed ({exc2}); falling back to yt-dlp download")
+            await download_source_ytdlp(video_id, source_path, proxy_url=proxy_url)
 
     async def _one(i: int, ts: ClipTimestamp):
         out = job_dir / f"clip_{i:02d}_{int(ts.start)}s_raw.mp4"

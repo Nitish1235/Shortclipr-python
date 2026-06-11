@@ -130,7 +130,7 @@ async def _execute_pipeline(
 
         # ── STEP 6: Extract clips (parallel) ──────────────────
         await db.update_job_progress(job_id, 33, f"Extracting {len(timestamps)} clips...")
-        raw_clips = await extract_all_clips_parallel(stream_url, timestamps, job_dir, session_id=job_id, audio_url=audio_url, user_agent=user_agent)
+        raw_clips = await extract_all_clips_parallel(stream_url, timestamps, job_dir, session_id=job_id, audio_url=audio_url, user_agent=user_agent, video_id=video_id)
 
         if not raw_clips:
             raise RuntimeError("All clip extractions failed")
