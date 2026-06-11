@@ -164,6 +164,26 @@ _ANDROID_HEADERS = {
 
 _ANDROID_API_KEY = "AIzaSyA8eiZmM1FaSbwzBlGmbW3ILtKBNJI41zQ"
 
+# Default desktop UA for the web/unconstrained yt-dlp fallback
+_WEB_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
+# CDN URLs minted by InnerTube/yt-dlp player clients are validated against
+# the User-Agent of the client that requested them — downloading with a
+# different UA (e.g. FFmpeg's default "Lavf/...") gets an empty response
+# ("End of file"). Map each stream-resolution method to the UA it must be
+# downloaded with.
+_STREAM_USER_AGENTS = {
+    "InnerTube ANDROID+proxy": _ANDROID_HEADERS["User-Agent"],
+    "yt-dlp+tv_embedded+proxy": CLIENTS["TV"]["headers"]["User-Agent"],
+    "yt-dlp+android+proxy": _ANDROID_HEADERS["User-Agent"],
+    "yt-dlp+ios+proxy": CLIENTS["IOS"]["headers"]["User-Agent"],
+    "yt-dlp+android-constrained+proxy": _ANDROID_HEADERS["User-Agent"],
+    "yt-dlp+unconstrained+proxy": _WEB_USER_AGENT,
+}
+
 # ── Bot / block detection ──────────────────────────────────────
 
 # InnerTube playabilityStatus values that signal bot detection / hard block
@@ -478,7 +498,7 @@ def _fmt_relaxed(height: int) -> str:
 
 # ── Fallback chain ─────────────────────────────────────────────
 
-async def _resolve_stream_url(video_id: str, quality: str, session_id: str | None = None) -> str:
+async def _resolve_stream_url(video_id: str, quality: str, session_id: str | None = None) -> tuple[str, str]:
     h = int(quality.rstrip("p"))
 
     chain: list[tuple[str, object]] = [
@@ -509,7 +529,8 @@ async def _resolve_stream_url(video_id: str, quality: str, session_id: str | Non
     last_err: Exception | None = None
     for idx, (label, attempt) in enumerate(chain, 1):
         try:
-            return await attempt()
+            url = await attempt()
+            return url, _STREAM_USER_AGENTS[label]
         except Exception as exc:
             logger.warning(f"[{video_id}] stream method {idx} ({label}) failed: {exc}")
             last_err = exc
@@ -521,14 +542,15 @@ async def _resolve_stream_url(video_id: str, quality: str, session_id: str | Non
 
 # ── Public API ─────────────────────────────────────────────────
 
-async def get_stream_url(video_id: str, quality: str = "1080p", session_id: str | None = None) -> str:
+async def get_stream_url(video_id: str, quality: str = "1080p", session_id: str | None = None) -> tuple[str, str]:
+    """Returns (video_url, user_agent). user_agent is the UA the URL must be downloaded with."""
     # 1. Look up job-specific cache first
     if session_id:
         job_cache_key = f"{video_id}:{quality}:{session_id}"
         cached = await _maybe_get_cached(job_cache_key)
         if cached:
             logger.info(f"[{video_id}] stream ← job-specific cache ({session_id})")
-            return cached
+            return cached, _ANDROID_HEADERS["User-Agent"]
 
     # 2. Look up global cache
     global_cache_key = f"{video_id}:{quality}"
@@ -536,12 +558,12 @@ async def get_stream_url(video_id: str, quality: str = "1080p", session_id: str 
     if cached:
         if not url_is_ip_bound(cached):
             logger.info(f"[{video_id}] stream ← global cache (non-IP-bound)")
-            return cached
+            return cached, _ANDROID_HEADERS["User-Agent"]
         else:
             logger.info(f"[{video_id}] ignoring global cache: URL is IP-bound")
 
     # 3. Resolve the URL
-    url = await _resolve_stream_url(video_id, quality, session_id)
+    url, user_agent = await _resolve_stream_url(video_id, quality, session_id)
 
     # 4. Cache appropriately
     if url_is_ip_bound(url):
@@ -551,18 +573,19 @@ async def get_stream_url(video_id: str, quality: str = "1080p", session_id: str 
     else:
         await _maybe_cache(global_cache_key, url)
 
-    return url
+    return url, user_agent
 
 
-async def get_stream_urls(video_id: str, quality: str = "1080p", session_id: str | None = None) -> tuple[str, str | None]:
+async def get_stream_urls(video_id: str, quality: str = "1080p", session_id: str | None = None) -> tuple[str, str | None, str]:
     """
     Resolve both video and audio CDN URLs for clip extraction.
 
     High-resolution adaptive (DASH) video formats (e.g. 1080p) are video-only —
     audio must be fetched as a separate stream and merged during extraction.
-    Returns (video_url, audio_url) where audio_url is None if the picked video
-    stream already has embedded audio (progressive format) or no separate
-    audio stream is available.
+    Returns (video_url, audio_url, user_agent) where audio_url is None if the
+    picked video stream already has embedded audio (progressive format) or no
+    separate audio stream is available, and user_agent is the UA both URLs
+    must be downloaded with (CDN URLs are bound to the requesting client's UA).
 
     Falls back to get_stream_url() (video only, audio=None) if the InnerTube
     ANDROID call fails — the yt-dlp fallback chain returns "best" which is
@@ -588,11 +611,11 @@ async def get_stream_urls(video_id: str, quality: str = "1080p", session_id: str
             f"[{video_id}] stream+audio ← InnerTube ANDROID (proxy={bool(proxy)}, "
             f"audio={'separate' if audio_url else 'embedded/none'})"
         )
-        return video_url, audio_url
+        return video_url, audio_url, _ANDROID_HEADERS["User-Agent"]
     except Exception as exc:
         logger.warning(f"[{video_id}] get_stream_urls InnerTube failed ({exc}); falling back to video-only")
-        video_url = await get_stream_url(video_id, quality, session_id)
-        return video_url, None
+        video_url, user_agent = await get_stream_url(video_id, quality, session_id)
+        return video_url, None, user_agent
 
 
 async def get_audio_stream_url(video_id: str, session_id: str | None = None) -> str:

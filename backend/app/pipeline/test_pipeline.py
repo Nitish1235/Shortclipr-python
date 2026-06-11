@@ -68,7 +68,7 @@ async def run_test_pipeline(job_id: str, youtube_url: str, quality: str = "1080p
         transcript = await get_transcript(video_id, language="English", session_id=job_id)
 
         job["current_step"] = "Resolving video stream..."
-        stream_url, audio_url = await get_stream_urls(video_id, quality=quality, session_id=job_id)
+        stream_url, audio_url, user_agent = await get_stream_urls(video_id, quality=quality, session_id=job_id)
 
         job["current_step"] = "Building sequential 30s segments..."
         timestamps = find_sequential_clips(transcript, segment_duration=SEGMENT_DURATION, count=TOTAL_CLIPS)
@@ -78,7 +78,7 @@ async def run_test_pipeline(job_id: str, youtube_url: str, quality: str = "1080p
         job["progress"] = 10
         job["current_step"] = f"Extracting {len(timestamps)} clips..."
         raw_clips = await extract_all_clips_parallel(
-            stream_url, timestamps, job_dir, session_id=job_id, audio_url=audio_url,
+            stream_url, timestamps, job_dir, session_id=job_id, audio_url=audio_url, user_agent=user_agent,
         )
         if not raw_clips:
             raise RuntimeError("All clip extractions failed")

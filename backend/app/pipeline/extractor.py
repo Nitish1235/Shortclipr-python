@@ -103,6 +103,7 @@ async def download_source(
     output_path: Path,
     proxy_url: str | None = None,
     audio_url: str | None = None,
+    user_agent: str | None = None,
 ) -> Path:
     """
     Sequentially download the full video (+ optional separate audio track,
@@ -119,12 +120,16 @@ async def download_source(
     proxy_url = if set, routes FFmpeg's HTTP traffic through that proxy.
     audio_url = optional separate audio-only CDN URL, merged in when the
                 video stream has no embedded audio (see get_stream_urls).
+    user_agent = UA the CDN URL was issued to (see get_stream_urls) — must
+                  be sent on download or the CDN returns an empty response.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     cmd = ["ffmpeg", "-y"]
     if proxy_url:
         cmd += ["-http_proxy", proxy_url]
+    if user_agent:
+        cmd += ["-user_agent", user_agent]
 
     cmd += ["-i", video_url]
     if audio_url:
@@ -225,6 +230,7 @@ async def extract_all_clips_parallel(
     job_dir: Path,
     session_id: str | None = None,
     audio_url: str | None = None,
+    user_agent: str | None = None,
 ) -> list[tuple[ClipTimestamp, Path]]:
     """
     Download the full source video once (direct from Cloud Run's own IP,
@@ -237,11 +243,11 @@ async def extract_all_clips_parallel(
     """
     source_path = job_dir / "source.mp4"
     try:
-        await download_source(stream_url, source_path, proxy_url=None, audio_url=audio_url)
+        await download_source(stream_url, source_path, proxy_url=None, audio_url=audio_url, user_agent=user_agent)
     except Exception as exc:
         logger.warning(f"Direct source download failed ({exc}); retrying via proxy")
         proxy_url = get_proxy_url(session_id)
-        await download_source(stream_url, source_path, proxy_url=proxy_url, audio_url=audio_url)
+        await download_source(stream_url, source_path, proxy_url=proxy_url, audio_url=audio_url, user_agent=user_agent)
 
     async def _one(i: int, ts: ClipTimestamp):
         out = job_dir / f"clip_{i:02d}_{int(ts.start)}s_raw.mp4"

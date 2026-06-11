@@ -116,7 +116,7 @@ async def _execute_pipeline(
 
         # ── STEP 4: Stream URL ────────────────────────────────
         await db.update_job_progress(job_id, 15, "Connecting to video stream...")
-        stream_url, audio_url = await get_stream_urls(video_id, quality=quality, session_id=job_id)
+        stream_url, audio_url, user_agent = await get_stream_urls(video_id, quality=quality, session_id=job_id)
 
         # ── STEP 5: Find viral clips ──────────────────────────
         await db.update_job_progress(job_id, 20, "AI analyzing best moments...")
@@ -130,7 +130,7 @@ async def _execute_pipeline(
 
         # ── STEP 6: Extract clips (parallel) ──────────────────
         await db.update_job_progress(job_id, 33, f"Extracting {len(timestamps)} clips...")
-        raw_clips = await extract_all_clips_parallel(stream_url, timestamps, job_dir, session_id=job_id, audio_url=audio_url)
+        raw_clips = await extract_all_clips_parallel(stream_url, timestamps, job_dir, session_id=job_id, audio_url=audio_url, user_agent=user_agent)
 
         if not raw_clips:
             raise RuntimeError("All clip extractions failed")
