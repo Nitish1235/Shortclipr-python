@@ -125,14 +125,24 @@ async def download_source(
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # -http_proxy / -user_agent are per-input HTTP-protocol options — each
+    # must be repeated immediately before its own -i, otherwise the second
+    # input (audio_url) is fetched unauthenticated and the CDN returns an
+    # empty response ("End of file").
     cmd = ["ffmpeg", "-y"]
-    if proxy_url:
-        cmd += ["-http_proxy", proxy_url]
-    if user_agent:
-        cmd += ["-user_agent", user_agent]
 
+    def _input_opts() -> list[str]:
+        opts = []
+        if proxy_url:
+            opts += ["-http_proxy", proxy_url]
+        if user_agent:
+            opts += ["-user_agent", user_agent]
+        return opts
+
+    cmd += _input_opts()
     cmd += ["-i", video_url]
     if audio_url:
+        cmd += _input_opts()
         cmd += ["-i", audio_url]
         cmd += ["-map", "0:v:0", "-map", "1:a:0"]
 
