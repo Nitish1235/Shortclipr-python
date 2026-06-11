@@ -81,13 +81,13 @@ RULES:
 5. Avoid: rambling, jargon-heavy sections, mid-story moments, slow introductions
 6. Clip duration: {min_dur}s – {max_dur}s
 7. No two clips may overlap in time
-8. Only include clips with viral_score ≥ 50
+8. Scan the ENTIRE transcript and pick the {clip_count} MOST VIRAL segments, ranked relative to each other
 
-VIRAL SCORE RUBRIC:
-  90–100  Exceptional hook + value — will stop scroll instantly
-  70–89   Good hook, clear value — will likely perform well
-  50–69   Decent clip, some engagement potential
-  < 50    Do NOT include — skip entirely
+VIRAL SCORE = RELATIVE RANK within this transcript (NOT an absolute quality score):
+  - The single most viral segment in the whole transcript → viral_score = 100
+  - The 2nd most viral segment → viral_score = 99
+  - The 3rd most viral segment → viral_score = 98
+  - ...continue in descending order, one point lower per rank, down to the {clip_count}th clip
 
 OUTPUT FORMAT — return ONLY this JSON object, no extra text:
 {{
@@ -96,7 +96,7 @@ OUTPUT FORMAT — return ONLY this JSON object, no extra text:
       "start":           <float — seconds from video start>,
       "end":             <float — seconds from video start>,
       "title":           "<punchy 5-7 word title>",
-      "viral_score":     <integer 50-100>,
+      "viral_score":     <integer — relative rank score per the rule above>,
       "reason":          "<1-2 sentences: what makes this clip viral>",
       "caption_preview": "<first 10-15 spoken words of the clip>"
     }}
@@ -161,7 +161,7 @@ async def find_viral_clips(
     transcript_text = _format_transcript(transcript)
     transcript_text = _truncate_transcript(transcript_text)
 
-    system = _SYSTEM_PROMPT.format(min_dur=int(min_dur), max_dur=int(max_dur))
+    system = _SYSTEM_PROMPT.format(min_dur=int(min_dur), max_dur=int(max_dur), clip_count=clip_count)
 
     topic_line = (
         f"\nFOCUS ONLY on moments related to: '{topic}'. "
@@ -240,10 +240,6 @@ def _parse_response(
             end   = float(item["end"])
             dur   = end - start
             score = int(item.get("viral_score", 50))
-
-            if score < 50:
-                logger.debug(f"Skipping low-score clip {start:.0f}-{end:.0f}s (score={score})")
-                continue
 
             if not (min_dur * 0.8 <= dur <= max_dur * 1.2):
                 logger.debug(
