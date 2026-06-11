@@ -190,6 +190,208 @@ function JobClips({ jobId, onAddToShowcase }) {
   )
 }
 
+function GcsClipBrowser() {
+  const [data, setData]       = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError]     = useState('')
+
+  const check = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const r = await authFetch('/admin/gcs/clips')
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Failed to list clips')
+      setData(await r.json())
+    } catch (e) {
+      setError(e.message)
+      setData(null)
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+        <div>
+          <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111' }}>GCS Clip Browser</h2>
+          <p style={{ fontSize: '0.78rem', color: '#999', marginTop: '2px' }}>
+            Lists every clip stored in the bucket (real jobs + test batches), grouped by job.
+          </p>
+        </div>
+        <button onClick={check} disabled={loading} style={{ ...btnRed, padding: '9px 18px', fontSize: '0.78rem' }}>
+          {loading ? 'Checking…' : '🔎 Check All Videos'}
+        </button>
+      </div>
+
+      {error && <div style={{ ...card, borderColor: '#fecaca', background: '#fef2f2', color: '#cf1322', fontSize: '0.82rem', marginBottom: '14px' }}>{error}</div>}
+
+      {data && (
+        <>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+            <span style={badge('#16a34a', '#f0fdf4')}>{data.total_jobs} jobs</span>
+            <span style={badge('#cf1322', '#fef2f2')}>{data.total_clips} clips</span>
+          </div>
+          {!data.jobs.length ? (
+            <div style={{ textAlign: 'center', padding: '32px', color: '#aaa' }}>No clips found in GCS yet.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {data.jobs.map(j => (
+                <div key={j.job_id} style={card}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#111', fontFamily: 'monospace' }}>{j.job_id}</span>
+                    {j.is_test && <span style={badge('#ca8a04', '#fefce8')}>TEST BATCH</span>}
+                    <span style={badge('#666', '#f4f4f4')}>{j.clip_count} clips</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px' }}>
+                    {j.clips.map(c => (
+                      <div key={c.clip_id} style={{ background: '#111', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
+                        <video src={c.video_url} muted controls poster={c.thumbnail_url}
+                          style={{ width: '100%', aspectRatio: '9/16', objectFit: 'cover', display: 'block' }} />
+                        <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', fontSize: '0.62rem', color: '#fff', background: 'rgba(0,0,0,0.6)', borderRadius: '4px', padding: '2px 5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {c.clip_id}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function TestLabGenerator({ showToast }) {
+  const [url, setUrl]         = useState('')
+  const [jobId, setJobId]     = useState(null)
+  const [job, setJob]         = useState(null)
+  const [starting, setStarting] = useState(false)
+
+  useEffect(() => {
+    if (!jobId) return
+    if (job && (job.status === 'completed' || job.status === 'failed')) return
+    const t = setInterval(async () => {
+      const r = await authFetch(`/admin/test/jobs/${jobId}`)
+      if (r.ok) setJob(await r.json())
+    }, 3000)
+    return () => clearInterval(t)
+  }, [jobId, job])
+
+  const start = async (e) => {
+    e.preventDefault()
+    if (!url.trim()) return
+    setStarting(true)
+    setJob(null)
+    try {
+      const r = await authFetch('/admin/test/generate', { method: 'POST', body: JSON.stringify({ youtube_url: url.trim() }) })
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Failed to start test batch')
+      const d = await r.json()
+      setJobId(d.job_id)
+      setJob({ status: 'processing', progress: 0, current_step: 'Starting...', clips: [], total_clips: d.total_clips })
+    } catch (e) {
+      showToast(e.message, 'error')
+    }
+    setStarting(false)
+  }
+
+  return (
+    <div>
+      <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111', marginBottom: '8px' }}>22-Clip Test Batch</h2>
+      <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '20px', lineHeight: 1.6 }}>
+        Paste a YouTube URL. No AI scoring — clips are sequential 30s segments from the start of the video.
+        Clips 1-11 cycle through every <strong>caption style</strong> (same template), clips 12-22 cycle through
+        every <strong>shorts template</strong> (same caption style).
+      </p>
+
+      <form onSubmit={start} style={{ ...card, marginBottom: '20px' }}>
+        <div style={{ display: 'flex', borderRadius: '8px', border: '2px solid #111', overflow: 'hidden', boxShadow: '2px 2px 0 #cf1322' }}>
+          <input
+            type="url" value={url} onChange={e => setUrl(e.target.value)}
+            placeholder="https://youtube.com/watch?v=..."
+            style={{ flex: 1, padding: '13px 14px', border: 'none', outline: 'none', fontSize: '0.9rem', minWidth: 0 }}
+          />
+          <button type="submit" disabled={starting || (job && job.status === 'processing')} style={{ ...btnRed, borderRadius: '0', border: 'none', padding: '13px 20px', boxShadow: 'none' }}>
+            {starting ? 'Starting…' : '⚡ Generate'}
+          </button>
+        </div>
+      </form>
+
+      {job && (
+        <div style={{ ...card, marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.78rem', color: '#666' }}>
+            <span>{job.current_step || '...'}</span>
+            <span>{job.progress || 0}%</span>
+          </div>
+          <div style={{ background: '#f4f4f4', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', width: `${job.progress || 0}%`,
+              background: job.status === 'failed' ? '#dc2626' : 'linear-gradient(90deg,#cf1322,#ff6b6b)',
+              borderRadius: '4px', transition: 'width 0.5s ease',
+            }} />
+          </div>
+          {job.status === 'failed' && (
+            <div style={{ marginTop: '10px', color: '#dc2626', fontSize: '0.8rem' }}>❌ {job.error}</div>
+          )}
+        </div>
+      )}
+
+      {job && job.clips && job.clips.length > 0 && (
+        <div>
+          {/* Phase 1: caption styles */}
+          <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111', marginBottom: '10px' }}>
+            📝 Caption Styles ({job.clips.filter(c => c.phase === 'caption_style').length}/11)
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+            {job.clips.filter(c => c.phase === 'caption_style').map(c => (
+              <ShortCard key={c.index} clip={c} label={c.style} />
+            ))}
+          </div>
+
+          {/* Phase 2: shorts templates */}
+          {job.clips.some(c => c.phase === 'short_template') && (
+            <>
+              <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111', marginBottom: '10px' }}>
+                🎬 Shorts Templates ({job.clips.filter(c => c.phase === 'short_template').length}/11)
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
+                {job.clips.filter(c => c.phase === 'short_template').map(c => (
+                  <ShortCard key={c.index} clip={c} label={c.template} />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ShortCard({ clip, label }) {
+  return (
+    <div style={{ ...card, padding: '0', overflow: 'hidden', aspectRatio: '1 / 1', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'relative', flex: 1, background: '#111', overflow: 'hidden' }}>
+        {clip.error ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#ff6b6b', fontSize: '0.7rem', padding: '8px', textAlign: 'center' }}>
+            ❌ {clip.error}
+          </div>
+        ) : clip.video_url ? (
+          <video src={clip.video_url} muted controls poster={clip.thumbnail_url}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#666', fontSize: '0.78rem' }}>
+            <div style={{ width: '18px', height: '18px', border: '2px solid #333', borderTopColor: '#cf1322', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}/>
+          </div>
+        )}
+      </div>
+      <div style={{ padding: '7px 10px', fontSize: '0.72rem', fontWeight: 700, color: '#111', textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {String(label).replace(/_/g, ' ')}
+      </div>
+    </div>
+  )
+}
+
 // ── Main Admin Page ────────────────────────────────────────────
 
 export default function Admin() {
@@ -318,6 +520,7 @@ export default function Admin() {
             { key: 'showcase', label: '🎬 Showcase'  },
             { key: 'jobs',     label: '📋 All Jobs'  },
             { key: 'generate', label: '⚡ Generate'  },
+            { key: 'testlab',  label: '🧪 Test Lab'  },
           ].map(t => (
             <button key={t.key} onClick={() => setTab(t.key)} style={tabStyle(tab === t.key)}>
               {t.label}
@@ -478,6 +681,15 @@ export default function Admin() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ── Test Lab tab ── */}
+        {tab === 'testlab' && (
+          <div>
+            <TestLabGenerator showToast={showToast} />
+            <hr style={{ border: 'none', borderTop: '1px solid #e5e5e5', margin: '32px 0' }} />
+            <GcsClipBrowser />
           </div>
         )}
       </div>

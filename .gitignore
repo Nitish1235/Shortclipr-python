@@ -37,3 +37,6 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Local debug/test scripts + downloaded source/clip files
+backend/scratch/

@@ -3,18 +3,26 @@ ai_clipper.py — Step 4 of the ShortClipr pipeline.
 
 Uses GPT-4o-mini for viral clip detection.
   • ~30× cheaper than GPT-4o
-  • Same 128k context window
   • Fast enough for real-time job processing
   • No local models, no extra dependencies
 
 Flow:
-  1. Format transcript with MM:SS.d timestamps
-  2. Truncate to token budget for very long videos
-  3. Single GPT-4o-mini call → clip list with scores
+  1. Split the transcript into `clip_count` equal-duration time chunks
+  2. One parallel GPT-4o-mini call per chunk → best "start" moment + score.
+     gpt-4o-mini has a strong positional bias toward the start of long
+     contexts ("lost in the middle") — a single call over the whole
+     transcript reliably clusters all picks in the first minute, even when
+     explicitly told to spread out. Per-chunk calls are the only reliable
+     way to get clips spread across the whole video.
+  3. Compute each clip's "end" by snapping to a transcript line boundary
+     near start + target_duration — gpt-4o-mini is unreliable at picking
+     "end" timestamps itself (it tends to echo the per-line caption duration,
+     producing sub-second "clips").
   4. Validate + deduplicate overlapping clips
-  5. Return top N sorted by viral_score
+  5. Re-rank by score (100 = most viral, descending) and return top N
 """
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -34,9 +42,8 @@ CLIP_MODEL = "gpt-4o-mini"
 # Built-in SDK retry: 3 attempts, exponential backoff (2s → 4s → 8s)
 _client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, max_retries=3)
 
-# Transcript character budget for GPT-4o-mini
-# 128k context − system prompt − output = ~100k chars safely
-MAX_TRANSCRIPT_CHARS = 100_000
+# Per-chunk transcript character budget for GPT-4o-mini
+MAX_CHUNK_CHARS = 40_000
 
 
 # ── Data model ──────────────────────────────────────────────────
@@ -68,80 +75,97 @@ class ClipTimestamp:
 
 # ── Prompts ──────────────────────────────────────────────────────
 
-_SYSTEM_PROMPT = """\
+_CHUNK_SYSTEM_PROMPT = """\
 You are an expert viral content strategist for TikTok, Instagram Reels, and YouTube Shorts.
 
-Analyse the timestamped transcript and select the most viral clip moments.
+Below is ONE SEGMENT of a longer video's transcript. Each line is prefixed with a line
+number in brackets, like "[42] some spoken text". Find the SINGLE most viral moment within
+THIS SEGMENT to turn into a short clip.
 
 RULES:
-1. Every clip MUST be self-contained — viewers need zero prior context
-2. Start at a natural sentence beginning, end at a natural sentence end — NEVER mid-sentence
-3. The HOOK (first 3 seconds) must grab attention immediately — this is the #1 factor
-4. Prioritise: shocking facts, emotional moments, controversy, humour, clear tips, plot twists
-5. Avoid: rambling, jargon-heavy sections, mid-story moments, slow introductions
-6. Clip duration: {min_dur}s – {max_dur}s
-7. No two clips may overlap in time
-8. Scan the ENTIRE transcript and pick the {clip_count} MOST VIRAL segments, ranked relative to each other
-
-VIRAL SCORE = RELATIVE RANK within this transcript (NOT an absolute quality score):
-  - The single most viral segment in the whole transcript → viral_score = 100
-  - The 2nd most viral segment → viral_score = 99
-  - The 3rd most viral segment → viral_score = 98
-  - ...continue in descending order, one point lower per rank, down to the {clip_count}th clip
-
+1. "start_line" = the [N] line number where the clip should BEGIN — it MUST be the start of
+   a natural sentence/thought, NEVER mid-sentence. Copy the bracketed number EXACTLY as shown
+   on that line — do not compute, guess, or offset it.
+2. The HOOK (the first few seconds right after "start_line") must grab attention immediately —
+   this is the #1 factor
+3. Prioritise: shocking facts, emotional moments, controversy, humour, clear tips, plot twists
+4. Avoid: rambling, jargon-heavy sections, mid-story moments, slow introductions
+5. The clip will run for roughly {min_dur}-{max_dur} seconds starting at "start_line" (a
+   separate system picks the exact end point) — only choose a "start_line" if the content
+   from there stays interesting and self-contained for at least that long
+6. "viral_score": rate THIS moment's viral potential on an absolute 0-100 scale
+   (90-100 exceptional, 70-89 good, 50-69 decent, <50 weak)
+{topic_line}
 OUTPUT FORMAT — return ONLY this JSON object, no extra text:
 {{
-  "clips": [
-    {{
-      "start":           <float — seconds from video start>,
-      "end":             <float — seconds from video start>,
-      "title":           "<punchy 5-7 word title>",
-      "viral_score":     <integer — relative rank score per the rule above>,
-      "reason":          "<1-2 sentences: what makes this clip viral>",
-      "caption_preview": "<first 10-15 spoken words of the clip>"
-    }}
-  ]
+  "start_line":      <integer — the [N] of the transcript line where this clip begins>,
+  "title":           "<punchy 5-7 word title>",
+  "viral_score":     <integer 0-100>,
+  "reason":          "<1-2 sentences: what makes this moment viral>",
+  "caption_preview": "<first 10-15 spoken words starting at this moment>"
 }}"""
 
 
-# ── Transcript formatting ────────────────────────────────────────
+# ── Transcript helpers ────────────────────────────────────────────
 
-def _format_transcript(transcript: list[TranscriptEntry]) -> str:
+def _video_duration(transcript: list[TranscriptEntry]) -> float:
+    if not transcript:
+        return 0.0
+    last = transcript[-1]
+    return last["start"] + last.get("duration", 0)
+
+
+def _format_lines(indexed_chunk: list[tuple[int, TranscriptEntry]]) -> str:
     """
-    Format with sub-second precision timestamps.
-    Format: MM:SS.d  — tenths of a second so GPT picks precise boundaries.
-    Example: 03:45.7 - You won't believe what happened next...
+    Format each line with a [N] index prefix (N = global index into the full
+    transcript) so GPT can return that index instead of having to read/compute
+    a timestamp. Example: [42] You won't believe what happened next...
     """
     lines = []
-    for e in transcript:
-        start   = e["start"]
-        total_s = int(start)
-        mm      = total_s // 60
-        ss      = total_s % 60
-        tenth   = int((start - total_s) * 10)
-        lines.append(f"{mm:02d}:{ss:02d}.{tenth} - {e['text'].strip()}")
+    for idx, e in indexed_chunk:
+        lines.append(f"[{idx}] {e['text'].strip()}")
     return "\n".join(lines)
 
 
-def _truncate_transcript(text: str) -> str:
+def _truncate_lines(text: str) -> str:
     """
-    If transcript exceeds budget: keep first 60 % + last 40 %.
+    If a chunk's transcript exceeds budget: keep first 60% + last 40%.
     Preserves the opening (where hooks usually are) and the ending
     (strong conclusions, reveals) — skips the often-repetitive middle.
     """
-    if len(text) <= MAX_TRANSCRIPT_CHARS:
+    if len(text) <= MAX_CHUNK_CHARS:
         return text
-    split      = int(MAX_TRANSCRIPT_CHARS * 0.6)
-    remainder  = MAX_TRANSCRIPT_CHARS - split
-    truncated  = (
+    split     = int(MAX_CHUNK_CHARS * 0.6)
+    remainder = MAX_CHUNK_CHARS - split
+    truncated = (
         text[:split]
         + "\n\n[... middle section omitted for length ...]\n\n"
         + text[-remainder:]
     )
-    logger.warning(
-        f"Transcript truncated: {len(text):,} → {MAX_TRANSCRIPT_CHARS:,} chars"
-    )
+    logger.warning(f"Chunk transcript truncated: {len(text):,} → {MAX_CHUNK_CHARS:,} chars")
     return truncated
+
+
+def _chunk_transcript(
+    transcript: list[TranscriptEntry],
+    clip_count: int,
+    video_dur:  float,
+) -> list[list[tuple[int, TranscriptEntry]]]:
+    """
+    Split the transcript into `clip_count` equal-duration time chunks.
+    Each entry is paired with its global index into `transcript` so the
+    chunk's GPT response (a line number) can be mapped back to a real
+    timestamp without GPT needing to read/compute one.
+    """
+    if clip_count <= 1 or video_dur <= 0:
+        return [list(enumerate(transcript))]
+
+    segment_size = video_dur / clip_count
+    chunks: list[list[tuple[int, TranscriptEntry]]] = [[] for _ in range(clip_count)]
+    for i, e in enumerate(transcript):
+        idx = min(int(e["start"] // segment_size), clip_count - 1)
+        chunks[idx].append((i, e))
+    return chunks
 
 
 # ── Main function ────────────────────────────────────────────────
@@ -151,43 +175,71 @@ async def find_viral_clips(
     options:    dict,
 ) -> list[ClipTimestamp]:
     """
-    Send transcript to GPT-4o-mini → validate → deduplicate → return top N clips.
+    Split transcript into clip_count chunks → one GPT-4o-mini call per chunk
+    → validate → deduplicate → re-rank → return top N clips.
     """
-    clip_count   = options.get("clip_count",   10)
+    clip_count   = max(1, int(options.get("clip_count", 10)))
     min_dur      = float(options.get("min_duration", 30))
     max_dur      = float(options.get("max_duration", 90))
     topic        = (options.get("topic") or "").strip()
 
-    transcript_text = _format_transcript(transcript)
-    transcript_text = _truncate_transcript(transcript_text)
-
-    system = _SYSTEM_PROMPT.format(min_dur=int(min_dur), max_dur=int(max_dur), clip_count=clip_count)
+    video_dur = _video_duration(transcript)
+    chunks    = _chunk_transcript(transcript, clip_count, video_dur)
 
     topic_line = (
-        f"\nFOCUS ONLY on moments related to: '{topic}'. "
-        "Ignore unrelated sections even if they score higher.\n"
+        f"FOCUS ONLY on moments related to: '{topic}'. If nothing in this segment relates to "
+        f"that topic, still pick the best moment but give it a low viral_score (<30).\n"
         if topic else ""
     )
-
-    user_prompt = (
-        f"Find exactly {clip_count} viral clips from this transcript.\n"
-        f"{topic_line}\n"
-        f"TRANSCRIPT:\n{transcript_text}"
+    system = _CHUNK_SYSTEM_PROMPT.format(
+        min_dur=int(min_dur), max_dur=int(max_dur), topic_line=topic_line,
     )
 
     logger.info(
         f"GPT-4o-mini request — {len(transcript)} entries, "
-        f"{len(transcript_text):,} chars, want {clip_count} clips"
+        f"{len(chunks)} chunks, want {clip_count} clips"
     )
 
-    raw = await _call_gpt(system, user_prompt)
+    tasks = [_find_clip_in_chunk(chunk, system) for chunk in chunks if chunk]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    clips = _parse_response(raw, min_dur, max_dur)
+    candidates: list[dict[str, Any]] = []
+    for r in results:
+        if isinstance(r, Exception):
+            logger.warning(f"Chunk clip search failed: {r}")
+        elif r is not None:
+            candidates.append(r)
+
+    clips = _build_clips(candidates, transcript, min_dur, max_dur)
     clips = _deduplicate(clips)
     clips.sort(key=lambda c: c.viral_score, reverse=True)
 
-    logger.info(f"GPT-4o-mini → {len(clips)} valid clips, returning top {clip_count}")
+    # Each chunk scores its pick independently (0-100 absolute) — re-rank
+    # the combined results into a single relative scale (100 = best overall).
+    for i, c in enumerate(clips):
+        c.viral_score = max(0, 100 - i)
+
+    if not clips:
+        logger.warning("GPT-4o-mini → 0 valid clips across all chunks")
+    else:
+        logger.info(f"GPT-4o-mini → {len(clips)} valid clips, returning top {clip_count}")
     return clips[:clip_count]
+
+
+async def _find_clip_in_chunk(chunk: list[tuple[int, TranscriptEntry]], system: str) -> dict[str, Any] | None:
+    text   = _truncate_lines(_format_lines(chunk))
+    raw    = await _call_gpt(system, f"SEGMENT TRANSCRIPT:\n{text}")
+    result = _parse_single(raw)
+    if result is None:
+        return None
+
+    valid_indices = [i for i, _ in chunk]
+    if result["start_idx"] not in valid_indices:
+        snapped = min(valid_indices, key=lambda i: abs(i - result["start_idx"]))
+        logger.info(f"Chunk returned start_line={result['start_idx']} outside chunk range "
+                    f"({valid_indices[0]}-{valid_indices[-1]}) — snapping to {snapped}")
+        result["start_idx"] = snapped
+    return result
 
 
 # ── GPT call ────────────────────────────────────────────────────
@@ -200,65 +252,158 @@ async def _call_gpt(system: str, user: str) -> str:
             {"role": "user",   "content": user},
         ],
         temperature=0.3,       # low temp → consistent JSON output
-        max_tokens=4096,
+        max_tokens=1024,
         response_format={"type": "json_object"},
     )
-    return response.choices[0].message.content or '{"clips":[]}'
+    choice = response.choices[0]
+    if choice.finish_reason == "length":
+        logger.warning(f"GPT-4o-mini chunk response truncated (usage={response.usage})")
+    return choice.message.content or "{}"
 
 
 # ── Response parsing ─────────────────────────────────────────────
 
-def _parse_response(
-    raw:      str,
-    min_dur:  float,
-    max_dur:  float,
-) -> list[ClipTimestamp]:
+def _parse_single(raw: str) -> dict[str, Any] | None:
+    """Parse a single chunk's JSON into {start, title, viral_score, reason, caption_preview}."""
     try:
-        parsed = json.loads(raw)
+        item = json.loads(raw)
     except json.JSONDecodeError as e:
-        logger.error(f"JSON parse error: {e} | raw={raw[:400]}")
+        logger.warning(f"Chunk JSON parse error: {e} | raw={raw[:300]}")
+        return None
+
+    # Tolerate the model wrapping its answer in {"clips": [...]}
+    if isinstance(item, dict) and isinstance(item.get("clips"), list) and item["clips"]:
+        item = item["clips"][0]
+
+    if not isinstance(item, dict):
+        logger.warning(f"Unexpected chunk output type: {type(item)}")
+        return None
+
+    try:
+        return {
+            "start_idx":       int(item["start_line"]),
+            "title":           str(item.get("title", "Untitled"))[:100],
+            "viral_score":     max(0, min(100, int(item.get("viral_score", 50)))),
+            "reason":          str(item.get("reason", ""))[:500],
+            "caption_preview": str(item.get("caption_preview", ""))[:200],
+        }
+    except (KeyError, ValueError, TypeError) as e:
+        logger.warning(f"Skipping malformed chunk clip: {e} — {item}")
+        return None
+
+
+# ── Clip boundary computation ────────────────────────────────────
+
+def _compute_end(
+    start:      float,
+    transcript: list[TranscriptEntry],
+    min_dur:    float,
+    max_dur:    float,
+    video_dur:  float,
+) -> float:
+    """
+    Snap the clip end to the boundary (start + duration) of a transcript line
+    that lands closest to start + target_duration, within [start+min_dur,
+    start+max_dur] (clamped to the video length).
+    """
+    target = start + (min_dur + max_dur) / 2
+    lo     = start + min_dur
+    hi     = min(start + max_dur, video_dur)
+
+    if hi <= lo:
+        return min(start + min_dur, video_dur)
+
+    best, best_diff = None, None
+    for e in transcript:
+        line_end = e["start"] + e.get("duration", 0)
+        if lo <= line_end <= hi:
+            diff = abs(line_end - target)
+            if best_diff is None or diff < best_diff:
+                best, best_diff = line_end, diff
+
+    return best if best is not None else hi
+
+
+def find_sequential_clips(
+    transcript:       list[TranscriptEntry],
+    segment_duration: float = 30,
+    count:            int   = 22,
+) -> list[ClipTimestamp]:
+    """
+    No AI scoring — split the transcript into up to `count` sequential
+    ~segment_duration-second clips starting from the beginning of the video.
+    Each boundary is snapped to the nearest transcript line end within
+    +/-5s of the target duration (line-wise chunking), so clips don't cut
+    off mid-sentence. Used by the admin test lab to batch-test caption
+    styles / reframe templates against real content without burning AI calls.
+    """
+    video_dur = _video_duration(transcript)
+    if not transcript or video_dur <= 0:
         return []
 
-    # Extract clips array — handles {"clips":[...]} and bare [...]
-    if isinstance(parsed, dict):
-        data = parsed.get("clips") or []
-        if not data:
-            for v in parsed.values():
-                if isinstance(v, list):
-                    data = v
-                    break
-    elif isinstance(parsed, list):
-        data = parsed
-    else:
-        logger.error(f"Unexpected GPT output type: {type(parsed)}")
-        return []
-
+    tolerance = 5.0
     clips: list[ClipTimestamp] = []
-    for item in data:
-        try:
-            start = float(item["start"])
-            end   = float(item["end"])
-            dur   = end - start
-            score = int(item.get("viral_score", 50))
+    cursor = 0.0
+    for i in range(count):
+        if cursor >= video_dur:
+            break
+        end = _compute_end(
+            cursor, transcript,
+            max(segment_duration - tolerance, 1.0),
+            segment_duration + tolerance,
+            video_dur,
+        )
+        if end <= cursor:
+            break
+        preview = next(
+            (e["text"].strip() for e in transcript if e["start"] >= cursor and e["text"].strip()),
+            "",
+        )
+        clips.append(ClipTimestamp(
+            start=cursor,
+            end=end,
+            title=f"Segment {i + 1}",
+            viral_score=0,
+            reason="Sequential test segment (AI scoring skipped)",
+            caption_preview=preview[:200],
+        ))
+        cursor = end
 
-            if not (min_dur * 0.8 <= dur <= max_dur * 1.2):
-                logger.debug(
-                    f"Skipping clip {start:.0f}-{end:.0f}s: "
-                    f"duration {dur:.0f}s outside [{min_dur:.0f}–{max_dur:.0f}s]"
-                )
-                continue
+    return clips
 
-            clips.append(ClipTimestamp(
-                start          = start,
-                end            = end,
-                title          = str(item.get("title", "Untitled"))[:100],
-                viral_score    = max(0, min(100, score)),
-                reason         = str(item.get("reason", ""))[:500],
-                caption_preview= str(item.get("caption_preview", ""))[:200],
-            ))
 
-        except (KeyError, ValueError, TypeError) as e:
-            logger.warning(f"Skipping malformed clip entry: {e} — {item}")
+def _build_clips(
+    candidates: list[dict[str, Any]],
+    transcript: list[TranscriptEntry],
+    min_dur:    float,
+    max_dur:    float,
+) -> list[ClipTimestamp]:
+    video_dur = _video_duration(transcript)
+    clips: list[ClipTimestamp] = []
+
+    for c in candidates:
+        idx = c["start_idx"]
+        if not (0 <= idx < len(transcript)):
+            logger.info(f"Skipping clip start_idx={idx}: outside transcript bounds (0-{len(transcript)})")
+            continue
+        start = transcript[idx]["start"]
+        if not (0 <= start < video_dur):
+            logger.info(f"Skipping clip start={start:.1f}s: outside video bounds (0-{video_dur:.1f}s)")
+            continue
+
+        end = _compute_end(start, transcript, min_dur, max_dur, video_dur)
+        if end - start < min_dur * 0.5:
+            logger.info(f"Skipping clip start={start:.1f}s: not enough content before video end")
+            continue
+
+        clips.append(ClipTimestamp(
+            start           = start,
+            end             = end,
+            title           = c["title"],
+            viral_score     = c["viral_score"],
+            reason          = c["reason"],
+            caption_preview = c["caption_preview"],
+        ))
 
     return clips
 

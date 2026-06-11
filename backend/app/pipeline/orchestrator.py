@@ -29,7 +29,7 @@ from app.db import supabase as db
 from app.pipeline.ai_clipper import ClipTimestamp, find_viral_clips
 from app.pipeline.captions import burn_all_captions_parallel, get_clip_captions
 from app.pipeline.extractor import extract_all_clips_parallel, reframe_to_vertical
-from app.pipeline.stream import extract_video_id, get_stream_url, get_video_metadata
+from app.pipeline.stream import extract_video_id, get_stream_urls, get_video_metadata
 from app.pipeline.transcript import get_transcript
 from app.pipeline.uploader import cleanup_job_files, process_and_upload_clip
 
@@ -116,7 +116,7 @@ async def _execute_pipeline(
 
         # ── STEP 4: Stream URL ────────────────────────────────
         await db.update_job_progress(job_id, 15, "Connecting to video stream...")
-        stream_url = await get_stream_url(video_id, quality=quality, session_id=job_id)
+        stream_url, audio_url = await get_stream_urls(video_id, quality=quality, session_id=job_id)
 
         # ── STEP 5: Find viral clips ──────────────────────────
         await db.update_job_progress(job_id, 20, "AI analyzing best moments...")
@@ -130,7 +130,7 @@ async def _execute_pipeline(
 
         # ── STEP 6: Extract clips (parallel) ──────────────────
         await db.update_job_progress(job_id, 33, f"Extracting {len(timestamps)} clips...")
-        raw_clips = await extract_all_clips_parallel(stream_url, timestamps, job_dir, session_id=job_id)
+        raw_clips = await extract_all_clips_parallel(stream_url, timestamps, job_dir, session_id=job_id, audio_url=audio_url)
 
         if not raw_clips:
             raise RuntimeError("All clip extractions failed")

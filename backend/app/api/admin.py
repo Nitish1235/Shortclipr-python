@@ -30,6 +30,7 @@ from pydantic import BaseModel
 from app.api.deps import CurrentUser, get_current_user
 from app.core.config import get_settings
 from app.db import supabase as db
+from app.pipeline.test_pipeline import TOTAL_CLIPS, get_test_job, run_test_pipeline
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -278,3 +279,88 @@ async def admin_delete_showcase(showcase_id: str, blob_name: str, admin: AdminUs
         return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── ADMIN: Test Lab — GCS clip browser ─────────────────────────
+
+def _list_all_clips_sync() -> dict:
+    """List every clip in GCS clips/ (real jobs + test batches), grouped by job_id."""
+    client = _get_gcs_client()
+    bucket = client.bucket(settings.GCS_BUCKET_NAME)
+    blobs = list(bucket.list_blobs(prefix="clips/"))
+
+    jobs: dict[str, list[dict]] = {}
+    for blob in blobs:
+        if not blob.name.endswith(".mp4"):
+            continue
+        parts = blob.name.split("/")  # clips/{job_id}/{clip_id}.mp4
+        if len(parts) != 3:
+            continue
+        _, job_id, filename = parts
+        clip_id = filename[:-4]
+        thumb_name = f"thumbnails/{job_id}/{clip_id}.jpg"
+        jobs.setdefault(job_id, []).append({
+            "clip_id":       clip_id,
+            "video_url":     blob.public_url,
+            "thumbnail_url": f"{settings.GCS_PUBLIC_BASE_URL}/{settings.GCS_BUCKET_NAME}/{thumb_name}",
+            "size_kb":       (blob.size or 0) // 1024,
+            "updated":       blob.updated.isoformat() if blob.updated else "",
+        })
+
+    result = []
+    for job_id, clips in jobs.items():
+        clips.sort(key=lambda c: c["clip_id"])
+        latest = max((c["updated"] for c in clips), default="")
+        result.append({
+            "job_id":     job_id,
+            "is_test":    job_id.startswith("test_"),
+            "clip_count": len(clips),
+            "updated":    latest,
+            "clips":      clips,
+        })
+    result.sort(key=lambda j: j["updated"], reverse=True)
+
+    return {"jobs": result, "total_jobs": len(result), "total_clips": sum(j["clip_count"] for j in result)}
+
+
+@router.get("/admin/gcs/clips")
+async def admin_list_gcs_clips(admin: AdminUser):
+    """Admin: one-click check of every clip stored in GCS, grouped by job."""
+    loop = asyncio.get_running_loop()
+    try:
+        return await loop.run_in_executor(None, _list_all_clips_sync)
+    except Exception as e:
+        logger.error(f"Failed to list GCS clips: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── ADMIN: Test Lab — batch generation (no AI scoring) ─────────
+
+class TestGenerateRequest(BaseModel):
+    youtube_url: str
+    quality: str = "1080p"
+
+
+@router.post("/admin/test/generate")
+async def admin_test_generate(body: TestGenerateRequest, admin: AdminUser):
+    """
+    Admin: kick off a 22-clip test batch (no AI scoring).
+
+    - Clips 1-11:  sequential 30s segments, one per caption style (all 11)
+    - Clips 12-22: sequential 30s segments, one per shorts template (all 11)
+
+    Returns a job_id to poll via GET /admin/test/jobs/{job_id}.
+    """
+    job_id = f"test_{uuid.uuid4().hex[:12]}"
+    asyncio.create_task(run_test_pipeline(job_id, body.youtube_url, body.quality))
+    logger.info(f"Admin {admin.email} started test batch {job_id} for {body.youtube_url}")
+    return {"job_id": job_id, "total_clips": TOTAL_CLIPS}
+
+
+@router.get("/admin/test/jobs/{job_id}")
+async def admin_test_job_status(job_id: str, admin: AdminUser):
+    """Admin: poll progress of a test batch."""
+    job = get_test_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Test job not found")
+    return job

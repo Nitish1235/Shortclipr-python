@@ -339,6 +339,20 @@ def _pick_best_audio_stream(data: dict) -> str | None:
     return audio[0]["url"]
 
 
+def _format_has_audio(fmt: dict) -> bool:
+    """True if a format's mimeType codecs include an audio codec (combined stream)."""
+    mime = fmt.get("mimeType", "")
+    return "mp4a" in mime or "opus" in mime or "vorbis" in mime
+
+
+def _find_format_by_url(data: dict, url: str) -> dict | None:
+    sd = data.get("streamingData", {})
+    for f in sd.get("formats", []) + sd.get("adaptiveFormats", []):
+        if f.get("url") == url:
+            return f
+    return None
+
+
 def _pick_stream_ytdlp(info: dict | None) -> str | None:
     """Pick a direct CDN stream URL from yt-dlp extract_info output."""
     if not info:
@@ -538,6 +552,47 @@ async def get_stream_url(video_id: str, quality: str = "1080p", session_id: str 
         await _maybe_cache(global_cache_key, url)
 
     return url
+
+
+async def get_stream_urls(video_id: str, quality: str = "1080p", session_id: str | None = None) -> tuple[str, str | None]:
+    """
+    Resolve both video and audio CDN URLs for clip extraction.
+
+    High-resolution adaptive (DASH) video formats (e.g. 1080p) are video-only —
+    audio must be fetched as a separate stream and merged during extraction.
+    Returns (video_url, audio_url) where audio_url is None if the picked video
+    stream already has embedded audio (progressive format) or no separate
+    audio stream is available.
+
+    Falls back to get_stream_url() (video only, audio=None) if the InnerTube
+    ANDROID call fails — the yt-dlp fallback chain returns "best" which is
+    typically a combined audio+video stream already.
+    """
+    h = int(quality.rstrip("p"))
+    try:
+        proxy = get_proxy_url(session_id)
+        data = await call_player_api(video_id, client_name="ANDROID", send_params=True, proxy_url=proxy)
+
+        blocked, reason = _innertube_is_blocked(data)
+        if blocked:
+            raise RuntimeError(f"InnerTube ANDROID blocked — {reason}")
+
+        video_url = _pick_best_stream(data, h)
+        if not video_url:
+            raise RuntimeError("InnerTube ANDROID: no video stream URL in response")
+
+        video_fmt = _find_format_by_url(data, video_url)
+        audio_url = None if (video_fmt and _format_has_audio(video_fmt)) else _pick_best_audio_stream(data)
+
+        logger.info(
+            f"[{video_id}] stream+audio ← InnerTube ANDROID (proxy={bool(proxy)}, "
+            f"audio={'separate' if audio_url else 'embedded/none'})"
+        )
+        return video_url, audio_url
+    except Exception as exc:
+        logger.warning(f"[{video_id}] get_stream_urls InnerTube failed ({exc}); falling back to video-only")
+        video_url = await get_stream_url(video_id, quality, session_id)
+        return video_url, None
 
 
 async def get_audio_stream_url(video_id: str, session_id: str | None = None) -> str:

@@ -60,7 +60,7 @@ from pathlib import Path
 import numpy as np
 
 from app.core.config import get_settings
-from app.core.proxy import get_proxy_url, url_is_ip_bound
+from app.core.proxy import get_proxy_url
 from app.pipeline.ai_clipper import ClipTimestamp
 
 logger = logging.getLogger(__name__)
@@ -98,39 +98,94 @@ def _get_semaphore() -> asyncio.Semaphore:
 # ══════════════════════════════════════════════════════════════
 
 
+async def download_source(
+    video_url: str,
+    output_path: Path,
+    proxy_url: str | None = None,
+    audio_url: str | None = None,
+) -> Path:
+    """
+    Sequentially download the full video (+ optional separate audio track,
+    merged) from a remote CDN URL to a local file with -c copy.
+
+    No -ss/-t — straight sequential read from byte 0, which is fast
+    (~20x realtime observed) since it doesn't require any HTTP seeking.
+    Per-clip extraction then runs on this LOCAL file (see extract_clip),
+    where -ss before -i (input seeking) is instant and reliable —
+    unlike on YouTube's remote fragmented/DASH MP4 CDN URLs, where
+    input seeking reliably hangs regardless of seek position (confirmed
+    via debug scripts at multiple positions).
+
+    proxy_url = if set, routes FFmpeg's HTTP traffic through that proxy.
+    audio_url = optional separate audio-only CDN URL, merged in when the
+                video stream has no embedded audio (see get_stream_urls).
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = ["ffmpeg", "-y"]
+    if proxy_url:
+        cmd += ["-http_proxy", proxy_url]
+
+    cmd += ["-i", video_url]
+    if audio_url:
+        cmd += ["-i", audio_url]
+        cmd += ["-map", "0:v:0", "-map", "1:a:0"]
+
+    cmd += [
+        "-c", "copy",
+        "-avoid_negative_ts", "make_zero",
+        "-movflags", "+faststart",
+        str(output_path),
+    ]
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=600)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise RuntimeError("FFmpeg source download timed out")
+
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"FFmpeg source download failed: {stderr.decode(errors='ignore')[-400:]}"
+        )
+    if not output_path.exists() or output_path.stat().st_size < 1024:
+        raise RuntimeError(f"Source download missing or too small: {output_path}")
+
+    via = f"proxy={proxy_url.split('@')[-1]}" if proxy_url else "direct (Cloud Run)"
+    logger.info(
+        f"Downloaded source → {output_path.name} "
+        f"({output_path.stat().st_size / 1e6:.1f} MB) [{via}]"
+    )
+    return output_path
+
+
 async def extract_clip(
-    stream_url: str,
+    source_path: Path,
     start: float,
     end: float,
     output_path: Path,
-    proxy_url: str | None = None,
 ) -> Path:
     """
-    Extract [start, end] seconds from a remote CDN URL using FFmpeg.
+    Extract [start, end] seconds from a LOCAL source file using FFmpeg.
 
-    -ss before -i   = fast keyframe seek (minimal data pre-read)
-    -c copy         = zero re-encode (stream copy only)
-    proxy_url       = if set, routes FFmpeg's HTTP traffic through that proxy.
-                      Only passed when the stream URL is IP-bound to the proxy IP.
-                      For non-IP-bound URLs this is None → direct Cloud Run download.
+    -ss BEFORE -i = input seeking. On a local file this is instant and
+                     reliable (unlike on remote CDN URLs, where it hangs).
+    -c copy       = zero re-encode (stream copy only)
     """
     duration = end - start
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    cmd = ["ffmpeg", "-y"]
-
-    # ── Proxy injection (only for IP-bound CDN URLs) ───────────
-    # FFmpeg -http_proxy applies to all subsequent -i inputs.
-    # We only add it when the stream URL's signature covers the proxy IP,
-    # i.e. a direct download from Cloud Run would return HTTP 403.
-    if proxy_url:
-        cmd += ["-http_proxy", proxy_url]
-
-    cmd += [
-        "-ss", str(start),
-        "-t",  str(duration),
-        "-i",  stream_url,
-        "-c",  "copy",
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", str(start), "-i", str(source_path),
+        "-t", str(duration),
+        "-c", "copy",
         "-avoid_negative_ts", "make_zero",
         "-movflags", "+faststart",
         str(output_path),
@@ -142,7 +197,12 @@ async def extract_clip(
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )
-        _, stderr = await proc.communicate()
+        try:
+            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise RuntimeError(f"FFmpeg extraction timed out [{start:.0f}-{end:.0f}s]")
 
     if proc.returncode != 0:
         raise RuntimeError(
@@ -152,10 +212,9 @@ async def extract_clip(
     if not output_path.exists() or output_path.stat().st_size < 1024:
         raise RuntimeError(f"Clip output missing or too small: {output_path}")
 
-    via = f"proxy={proxy_url.split('@')[-1]}" if proxy_url else "direct (Cloud Run)"
     logger.info(
         f"Extracted {start:.0f}-{end:.0f}s → {output_path.name} "
-        f"({output_path.stat().st_size // 1024} KB) [{via}]"
+        f"({output_path.stat().st_size // 1024} KB)"
     )
     return output_path
 
@@ -165,34 +224,28 @@ async def extract_all_clips_parallel(
     timestamps: list[ClipTimestamp],
     job_dir: Path,
     session_id: str | None = None,
+    audio_url: str | None = None,
 ) -> list[tuple[ClipTimestamp, Path]]:
     """
-    Extract all clips in parallel.
+    Download the full source video once (direct from Cloud Run's own IP,
+    falling back to proxy if the CDN URL is IP-bound and direct download
+    gets HTTP 403), then extract all clips in parallel from that local file.
 
-    Every clip is first downloaded directly from Cloud Run's own IP
-    (zero proxy bandwidth). If a clip's direct download fails — e.g.
-    the CDN URL is IP-bound to the proxy exit IP and Cloud Run gets
-    HTTP 403 — that clip is retried once through the proxy.
+    audio_url: optional separate audio-only CDN URL, merged into the
+    downloaded source when the video stream has no embedded audio
+    (see get_stream_urls).
     """
-    if url_is_ip_bound(stream_url):
-        logger.info(
-            "Stream URL is IP-bound to proxy exit IP — attempting direct Cloud Run "
-            "download first, will fall back to proxy per-clip on failure."
-        )
-    else:
-        logger.info("Stream URL is NOT IP-bound — downloading directly from Cloud Run. ✅")
+    source_path = job_dir / "source.mp4"
+    try:
+        await download_source(stream_url, source_path, proxy_url=None, audio_url=audio_url)
+    except Exception as exc:
+        logger.warning(f"Direct source download failed ({exc}); retrying via proxy")
+        proxy_url = get_proxy_url(session_id)
+        await download_source(stream_url, source_path, proxy_url=proxy_url, audio_url=audio_url)
 
     async def _one(i: int, ts: ClipTimestamp):
         out = job_dir / f"clip_{i:02d}_{int(ts.start)}s_raw.mp4"
-        try:
-            path = await extract_clip(stream_url, ts.start, ts.end, out, proxy_url=None)
-        except Exception as exc:
-            logger.warning(
-                f"Clip {i} ({ts.start:.0f}-{ts.end:.0f}s) direct download failed "
-                f"({exc}); retrying via proxy"
-            )
-            proxy_url = get_proxy_url(session_id)
-            path = await extract_clip(stream_url, ts.start, ts.end, out, proxy_url=proxy_url)
+        path = await extract_clip(source_path, ts.start, ts.end, out)
         return ts, path
 
     results = await asyncio.gather(
@@ -412,7 +465,10 @@ def _build_crop_expr(
     expr = str(int(positions[-1]))
     for i in range(len(positions) - 2, -1, -1):
         t0, t1, x = i * dt, (i + 1) * dt, int(positions[i])
-        expr = f"if(between(t,{t0:.3f},{t1:.3f}),{x},{expr})"
+        # Commas inside the expression must be escaped — unescaped commas are
+        # parsed as -vf filter-chain separators, e.g. "0.000" gets split off
+        # and ffmpeg errors with "No such filter: '0.000'".
+        expr = f"if(between(t\\,{t0:.3f}\\,{t1:.3f})\\,{x}\\,{expr})"
     return f"crop={crop_w}:{crop_h}:{expr}:0"
 
 
