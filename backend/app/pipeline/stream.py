@@ -1,16 +1,19 @@
 """
 stream.py — Step 3 of the ShortClipr pipeline.
 
-Stream URL extraction: 7-method fallback chain, all via proxy-cheap.
+Stream URL extraction: 6-method fallback chain, all via proxy-cheap.
 
 Priority order (fastest → broadest compatibility):
-  1. InnerTube ANDROID + proxy-cheap   (~2s, highest priority)
-  2. yt-dlp + proxy-cheap + android client
-  3. yt-dlp + proxy-cheap + mweb client
-  4. yt-dlp + proxy-cheap + web client
-  5. yt-dlp + proxy-cheap + ios client
-  6. yt-dlp + proxy-cheap + tv_embedded
-  7. yt-dlp + proxy-cheap (relaxed, no format constraints)
+  1. InnerTube ANDROID + proxy-cheap        (~2-10s, highest priority)
+  2. yt-dlp + proxy-cheap + tv_embedded     (~15-30s, very reliable)
+  3. yt-dlp + proxy-cheap + android client
+  4. yt-dlp + proxy-cheap + ios client
+  5. yt-dlp + proxy-cheap + android (height-constrained format)
+  6. yt-dlp + proxy-cheap (relaxed, no format constraints)
+
+NOTE: mweb/web InnerTube clients are intentionally excluded — they
+require a PoToken that yt-dlp cannot supply, and consistently fail
+with "Requested format is not available" regardless of proxy/region.
 
 Fallback triggers on:
   - playabilityStatus != OK  (LOGIN_REQUIRED, SIGN_IN_REQUIRED, etc.)
@@ -140,23 +143,20 @@ PLAYER_ENDPOINT = f"{settings.INNERTUBE_API_BASE}/player"
 _ANDROID_CTX = {
     "client": {
         "clientName": "ANDROID",
-        "clientVersion": "19.44.41",
-        "androidSdkVersion": 34,
+        "clientVersion": "21.02.35",
+        "androidSdkVersion": 30,
         "hl": "en",
         "gl": "US",
         "osName": "Android",
-        "osVersion": "14",
+        "osVersion": "11",
         "platform": "MOBILE",
     }
 }
 
 _ANDROID_HEADERS = {
-    "User-Agent": (
-        "com.google.android.youtube/19.44.41 "
-        "(Linux; U; Android 14; en_US; Pixel 8 Build/AP2A.240905.003) gzip"
-    ),
+    "User-Agent": "com.google.android.youtube/21.02.35 (Linux; U; Android 11) gzip",
     "X-Youtube-Client-Name": "3",
-    "X-Youtube-Client-Version": "19.44.41",
+    "X-Youtube-Client-Version": "21.02.35",
     "Content-Type": "application/json",
     "X-Goog-Api-Format-Version": "2",
     "Origin": "https://www.youtube.com",
@@ -468,29 +468,25 @@ async def _resolve_stream_url(video_id: str, quality: str, session_id: str | Non
     h = int(quality.rstrip("p"))
 
     chain: list[tuple[str, object]] = [
-        # 1. InnerTube ANDROID + proxy  (~2s, highest priority)
+        # 1. InnerTube ANDROID + proxy  (~2-10s, highest priority)
         ("InnerTube ANDROID+proxy", lambda: _innertube_android_stream(video_id, h, session_id)),
-        # 2. yt-dlp + android client + proxy (most reliable - use "best" format)
+        # 2. yt-dlp + tv_embedded client + proxy (very reliable, ~15-30s)
+        ("yt-dlp+tv_embedded+proxy", lambda: _ytdlp_stream(
+            video_id, "best", client="tv_embedded", label="yt-dlp+tv_embedded", session_id=session_id
+        )),
+        # 3. yt-dlp + android client + proxy (use "best" format)
         ("yt-dlp+android+proxy", lambda: _ytdlp_stream(
             video_id, "best", client="android", label="yt-dlp+android", session_id=session_id
-        )),
-        # 3. yt-dlp + mweb client + proxy (mobile web works well with proxies)
-        ("yt-dlp+mweb+proxy", lambda: _ytdlp_stream(
-            video_id, "best", client="mweb", label="yt-dlp+mweb", session_id=session_id
         )),
         # 4. yt-dlp + ios client + proxy
         ("yt-dlp+ios+proxy", lambda: _ytdlp_stream(
             video_id, "best", client="ios", label="yt-dlp+ios", session_id=session_id
         )),
-        # 5. yt-dlp + web client + proxy (generic web)
-        ("yt-dlp+web+proxy", lambda: _ytdlp_stream(
-            video_id, "best", client="web", label="yt-dlp+web", session_id=session_id
-        )),
-        # 6. yt-dlp with height-constrained format (for android)
+        # 5. yt-dlp with height-constrained format (for android)
         ("yt-dlp+android-constrained+proxy", lambda: _ytdlp_stream(
             video_id, _fmt(h), client="android", label="yt-dlp+android-constrained", session_id=session_id
         )),
-        # 7. yt-dlp unconstrained (any client, any format)
+        # 6. yt-dlp unconstrained (any client, any format)
         ("yt-dlp+unconstrained+proxy", lambda: _ytdlp_stream(
             video_id, "best", label="yt-dlp+unconstrained", session_id=session_id
         )),
@@ -505,7 +501,7 @@ async def _resolve_stream_url(video_id: str, quality: str, session_id: str | Non
             last_err = exc
 
     raise RuntimeError(
-        f"All 7 stream methods failed for {video_id}. Last error: {last_err}"
+        f"All {len(chain)} stream methods failed for {video_id}. Last error: {last_err}"
     )
 
 

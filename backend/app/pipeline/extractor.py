@@ -169,28 +169,30 @@ async def extract_all_clips_parallel(
     """
     Extract all clips in parallel.
 
-    Checks once whether the stream URL is IP-bound. If it is, every
-    FFmpeg worker uses the proxy for download. If not, all workers
-    download directly from Cloud Run — saving 100% of proxy bandwidth
-    on the most expensive part of the pipeline.
+    Every clip is first downloaded directly from Cloud Run's own IP
+    (zero proxy bandwidth). If a clip's direct download fails — e.g.
+    the CDN URL is IP-bound to the proxy exit IP and Cloud Run gets
+    HTTP 403 — that clip is retried once through the proxy.
     """
-    # ── One-time IP-binding check ──────────────────────────────
-    ip_bound = url_is_ip_bound(stream_url)
-    proxy_url = get_proxy_url(session_id) if ip_bound else None
-
-    if ip_bound:
+    if url_is_ip_bound(stream_url):
         logger.info(
-            "Stream URL is IP-bound to proxy — FFmpeg will route downloads via proxy. "
-            "Consider switching to a non-IP-bound client to save proxy bandwidth."
+            "Stream URL is IP-bound to proxy exit IP — attempting direct Cloud Run "
+            "download first, will fall back to proxy per-clip on failure."
         )
     else:
-        logger.info(
-            "Stream URL is NOT IP-bound — FFmpeg downloads directly from Cloud Run. ✅"
-        )
+        logger.info("Stream URL is NOT IP-bound — downloading directly from Cloud Run. ✅")
 
     async def _one(i: int, ts: ClipTimestamp):
         out = job_dir / f"clip_{i:02d}_{int(ts.start)}s_raw.mp4"
-        path = await extract_clip(stream_url, ts.start, ts.end, out, proxy_url=proxy_url)
+        try:
+            path = await extract_clip(stream_url, ts.start, ts.end, out, proxy_url=None)
+        except Exception as exc:
+            logger.warning(
+                f"Clip {i} ({ts.start:.0f}-{ts.end:.0f}s) direct download failed "
+                f"({exc}); retrying via proxy"
+            )
+            proxy_url = get_proxy_url(session_id)
+            path = await extract_clip(stream_url, ts.start, ts.end, out, proxy_url=proxy_url)
         return ts, path
 
     results = await asyncio.gather(

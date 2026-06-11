@@ -2,9 +2,14 @@
 proxy.py — Proxy URL helper for proxy-cheap residential proxies.
 
 PROXY_HOST, PROXY_USER, PROXY_PASS, PROXY_PORT, PROXY_PORTS are read from config/env.
-Supports both single-port configurations and random rotation over a pool of ports.
-When a session_id is provided, routes requests deterministically to a specific port
-and appends a sticky session suffix to the password to maintain the same exit IP.
+PROXY_PASS may include a `_country-XX` suffix (e.g. `..._country-GB`) for
+proxy-cheap's documented geo-targeting. proxy-cheap's rotating residential
+endpoint does NOT support `_session-<id>` stickiness — confirmed via testing
+(returns HTTP 500). True sticky sessions require separate dashboard-issued
+credentials, not a user-composable password suffix.
+
+When session_id is provided and PROXY_PORT is unset, it is used only to pick
+a port deterministically from PROXY_PORTS (stable routing within a job).
 
 Returns None when no proxy is configured (dev mode).
 """
@@ -41,10 +46,10 @@ def get_proxy_url(session_id: str | None = None) -> str | None:
     """
     Return a proxy URL, or None if proxy is not configured.
 
-    If session_id is provided:
-      - For Proxy-Cheap residential stickiness, appends `_session-[session_id]` to the password.
-      - Selects the port deterministically based on the MD5 hash of the session_id
-        if multiple ports are defined, ensuring stable routing within the same job.
+    PROXY_PASS is used as-is (including any `_country-XX` geo-targeting suffix).
+    If session_id is provided and PROXY_PORT is unset, it selects a port
+    deterministically based on the MD5 hash of the session_id from PROXY_PORTS,
+    ensuring stable routing within the same job.
     """
     s = get_settings()
 
