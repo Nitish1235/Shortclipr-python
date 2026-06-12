@@ -2,16 +2,57 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Navigation from '../components/Navigation'
+import CaptionOverlay from '../components/CaptionOverlay'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
 const TEMPLATES = [
-  { id:'full',     name:'Full Screen'       },
-  { id:'blurred',  name:'Blurred Edges'     },
-  { id:'facecam',  name:'Facecam Overlay'   },
-  { id:'gameplay', name:'Gameplay Cam'      },
-  { id:'split',    name:'Split Screen'      },
+  { id:'blur_bg',      name:'Blur BG'      },
+  { id:'zoom_blur',    name:'Zoom Blur'    },
+  { id:'glass',        name:'Glass'        },
+  { id:'color_bars',   name:'Color Bars'   },
+  { id:'gradient',     name:'Gradient'     },
+  { id:'cinema',       name:'Cinema'       },
+  { id:'neon_frame',   name:'Neon Frame'   },
+  { id:'split_screen', name:'Split Screen' },
+  { id:'screenshare',  name:'Screenshare'  },
+  { id:'gameplay',     name:'Gameplay'     },
 ]
+
+const CAPTION_STYLES = [
+  { val:'minimal',    label:'Minimal',    sub:'Clean single-line captions' },
+  { val:'fade',       label:'Fade',       sub:'Smooth fade-in per line' },
+  { val:'word_pop',   label:'Word Pop',   sub:'Each word pops as it’s spoken' },
+  { val:'typewriter', label:'Typewriter', sub:'Characters type in sequentially' },
+  { val:'slide',      label:'Slide',      sub:'Lines slide in from the side' },
+  { val:'zoom',       label:'Zoom',       sub:'Words zoom in for emphasis' },
+  { val:'shake',      label:'Shake',      sub:'Punchy shake on the active word' },
+  { val:'karaoke',    label:'Karaoke',    sub:'1 word at a time — max engagement' },
+  { val:'hormozi',    label:'Hormozi',    sub:'Bold caps with high-contrast highlight' },
+  { val:'mrbeast',    label:'MrBeast',    sub:'Big bouncy text, bright highlight' },
+  { val:'neon',       label:'Neon',       sub:'Glowing neon outline' },
+]
+
+const COLOR_COMBOS = [
+  { val:'white_black',  label:'White / Black'  },
+  { val:'yellow_black', label:'Yellow / Black' },
+  { val:'black_white',  label:'Black / White'  },
+  { val:'green_dark',   label:'Green / Dark'   },
+  { val:'orange_dark',  label:'Orange / Dark'  },
+  { val:'cyan_dark',    label:'Cyan / Dark'    },
+  { val:'red_white',    label:'Red / White'    },
+]
+
+const H_ALIGNS       = ['left', 'center', 'right']
+const V_ALIGNS       = ['top', 'center', 'bottom']
+const WORDS_PER_LINE = [1, 2, 3]
+
+const formatTimestamp = (seconds) => {
+  const s = Math.max(0, Number(seconds) || 0)
+  const m = Math.floor(s / 60)
+  const rem = (s % 60).toFixed(1)
+  return `${String(m).padStart(2, '0')}:${rem.padStart(4, '0')}`
+}
 
 // ── Shared styles ────────────────────────────────────────────────
 const tabBtn = (active) => ({
@@ -35,41 +76,72 @@ export default function Editor() {
   const { user, logout }  = useAuth()
   const userPlan          = user?.plan || 'free'
   const previewRef        = useRef(null)
+  const videoRef          = useRef(null)
 
   const [activeTab,          setActiveTab]          = useState('templates')
   const [showSubtitleEditor, setShowSubtitleEditor] = useState(false)
   const [subtitlePosition,   setSubtitlePosition]   = useState({ x:0.5, y:0.9 })
   const [isSaving,           setIsSaving]           = useState(false)
+  const [isRendering,        setIsRendering]        = useState(false)
   const [loading,            setLoading]            = useState(true)
 
   const [aspect,            setAspect]            = useState('9:16')
-  const [selectedTemplate,  setSelectedTemplate]  = useState('full')
-  const [captionPacing,     setCaptionPacing]     = useState('karaoke')
+  const [selectedTemplate,  setSelectedTemplate]  = useState('blur_bg')
+  const [captionStyle,      setCaptionStyle]      = useState('karaoke')
+  const [colorCombo,        setColorCombo]        = useState('white_black')
+  const [hAlign,            setHAlign]            = useState('center')
+  const [vAlign,            setVAlign]            = useState('bottom')
+  const [wordsPerLine,      setWordsPerLine]      = useState(2)
   const [highlightColor,    setHighlightColor]    = useState('#cf1322')
   const [showCaptions,      setShowCaptions]      = useState(true)
   const [transcriptBlocks,  setTranscriptBlocks]  = useState([])
   const [isAdvanced,        setIsAdvanced]        = useState(false)
+  const [clipUrl,           setClipUrl]           = useState('')
+  const [thumbnailUrl,      setThumbnailUrl]      = useState('')
+  const [rawVideoUrl,       setRawVideoUrl]       = useState('')
+  const [captionsData,      setCaptionsData]      = useState([])
 
   useEffect(() => {
     const fetchClipData = async () => {
       try {
         const token = localStorage.getItem('sc_token')
-        const res   = await fetch(`${API_BASE}/jobs/${jobId}/clips/${clipId}`, {
+        const res   = await fetch(`${API_BASE}/jobs/${jobId}/clips`, {
           headers:{ Authorization:`Bearer ${token}` },
         })
         if (res.status === 401) { logout(); return }
         if (!res.ok) throw new Error('Failed to fetch clip data')
         const data = await res.json()
-        if (data.transcript)        setTranscriptBlocks(data.transcript)
-        if (data.subtitle_position) setSubtitlePosition(data.subtitle_position)
-        if (data.template)          setSelectedTemplate(data.template)
-        if (data.aspect_ratio)      setAspect(data.aspect_ratio)
-      } catch {
-        setTranscriptBlocks([
-          { id:1, start:'00:00.0', end:'00:03.5', text:'Welcome to this viral clip that will definitely pop off.' },
-          { id:2, start:'00:03.5', end:'00:07.2', text:'Notice how the text bounds and highlights dynamically.' },
-          { id:3, start:'00:07.2', end:'00:10.0', text:'Subscribe for more massive insights tomorrow!' },
-        ])
+        const clip = (data.clips || []).find(c => c.clip_id === clipId)
+        if (!clip) throw new Error('Clip not found')
+
+        setClipUrl(clip.video_url || '')
+        setThumbnailUrl(clip.thumbnail_url || '')
+        setRawVideoUrl(clip.raw_video_url || '')
+        setCaptionsData(Array.isArray(clip.captions_data) ? clip.captions_data : [])
+
+        const cfg = clip.editor_config || {}
+        if (cfg.aspect)           setAspect(cfg.aspect)
+        if (cfg.template)         setSelectedTemplate(cfg.template)
+        if (cfg.style)            setCaptionStyle(cfg.style)
+        if (cfg.color)            setColorCombo(cfg.color)
+        if (cfg.h_align)          setHAlign(cfg.h_align)
+        if (cfg.v_align)          setVAlign(cfg.v_align)
+        if (cfg.words_per_line)   setWordsPerLine(cfg.words_per_line)
+        if (cfg.highlightColor)   setHighlightColor(cfg.highlightColor)
+        if (cfg.subtitlePosition) setSubtitlePosition(cfg.subtitlePosition)
+
+        if (Array.isArray(cfg.transcript) && cfg.transcript.length) {
+          setTranscriptBlocks(cfg.transcript)
+        } else {
+          setTranscriptBlocks([{
+            id: 1,
+            start: '00:00.0',
+            end: formatTimestamp(clip.duration),
+            text: clip.transcript_snippet || '',
+          }])
+        }
+      } catch (e) {
+        console.error('Failed to load clip:', e)
       } finally { setLoading(false) }
     }
     fetchClipData()
@@ -82,10 +154,21 @@ export default function Editor() {
     setIsSaving(true)
     try {
       const token = localStorage.getItem('sc_token')
-      const res   = await fetch(`${API_BASE}/jobs/${jobId}/clips/${clipId}/config`, {
+      const res   = await fetch(`${API_BASE}/editor/save/${jobId}/${clipId}`, {
         method:'POST',
         headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
-        body:JSON.stringify({ aspect, template:selectedTemplate, captionPacing, highlightColor, subtitlePosition, transcript:transcriptBlocks }),
+        body:JSON.stringify({
+          aspect,
+          template: selectedTemplate,
+          style: captionStyle,
+          color: colorCombo,
+          h_align: hAlign,
+          v_align: vAlign,
+          words_per_line: wordsPerLine,
+          highlightColor,
+          subtitlePosition,
+          transcript: transcriptBlocks,
+        }),
       })
       if (res.status === 401) { logout(); return }
       if (!res.ok) throw new Error('Save failed')
@@ -93,6 +176,32 @@ export default function Editor() {
       navigate('/dashboard')
     } catch (e) { alert('Error saving configuration') }
     finally     { setIsSaving(false) }
+  }
+
+  const handleRender = async () => {
+    if (!rawVideoUrl) return handleSave()
+    setIsRendering(true)
+    try {
+      const token = localStorage.getItem('sc_token')
+      const res   = await fetch(`${API_BASE}/editor/render/${jobId}/${clipId}`, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
+        body:JSON.stringify({
+          style: captionStyle,
+          color: colorCombo,
+          h_align: hAlign,
+          v_align: vAlign,
+          words_per_line: wordsPerLine,
+          highlightColor,
+        }),
+      })
+      if (res.status === 401) { logout(); return }
+      if (!res.ok) throw new Error('Render failed')
+      const data = await res.json()
+      setClipUrl(data.video_url)
+      alert('Captions rendered — your download is ready.')
+    } catch (e) { alert('Error rendering captions') }
+    finally     { setIsRendering(false) }
   }
 
   // ── Paywall ──────────────────────────────────────────────────────
@@ -192,18 +301,18 @@ export default function Editor() {
               background:'transparent', border:'1.5px solid #e5e5e5', borderRadius:'8px',
               color:'#666', padding:'8px 16px', cursor:'pointer', fontWeight:600, fontSize:'0.8rem',
             }}>← Back</button>
-            <button onClick={handleSave} disabled={isSaving} style={{
+            <button onClick={handleRender} disabled={isSaving || isRendering} style={{
               background:'#cf1322', color:'#fff',
               border:'2px solid #111', borderRadius:'8px',
               padding:'9px 20px', fontWeight:700, fontSize:'0.85rem',
-              cursor: isSaving ? 'wait' : 'pointer',
-              boxShadow:'2px 2px 0 #111', opacity: isSaving ? 0.7 : 1,
+              cursor: (isSaving || isRendering) ? 'wait' : 'pointer',
+              boxShadow:'2px 2px 0 #111', opacity: (isSaving || isRendering) ? 0.7 : 1,
               transition:'transform 0.1s, box-shadow 0.1s',
             }}
-              onMouseEnter={e => { if (!isSaving) { e.currentTarget.style.transform='translate(-1px,-1px)'; e.currentTarget.style.boxShadow='3px 3px 0 #111' }}}
+              onMouseEnter={e => { if (!isSaving && !isRendering) { e.currentTarget.style.transform='translate(-1px,-1px)'; e.currentTarget.style.boxShadow='3px 3px 0 #111' }}}
               onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='2px 2px 0 #111' }}
             >
-              {isSaving ? 'Saving…' : (isAdvanced ? 'Render Changes →' : 'Generate Video →')}
+              {isRendering ? 'Rendering…' : (isSaving ? 'Saving…' : (isAdvanced ? 'Render Changes →' : 'Generate Video →'))}
             </button>
           </div>
         </div>
@@ -235,26 +344,50 @@ export default function Editor() {
               display:'flex', alignItems:'center', justifyContent:'center',
               overflow:'hidden',
             }}>
-              {/* Placeholder */}
-              <span style={{ color:'rgba(255,255,255,0.3)', fontSize:'0.8rem', textAlign:'center', padding:'20px' }}>
-                Video preview<br/>not connected
-              </span>
+              {/* Video */}
+              {clipUrl ? (
+                <video
+                  ref={videoRef}
+                  src={rawVideoUrl || clipUrl}
+                  poster={thumbnailUrl || undefined}
+                  controls
+                  style={{ width:'100%', height:'100%', objectFit:'contain' }}
+                />
+              ) : (
+                <span style={{ color:'rgba(255,255,255,0.3)', fontSize:'0.8rem', textAlign:'center', padding:'20px' }}>
+                  {loading ? 'Loading…' : 'Video preview unavailable'}
+                </span>
+              )}
               {/* REC badge */}
               <div style={{ position:'absolute', top:'10px', left:'10px', background:'#cf1322', color:'#fff', fontSize:'0.6rem', fontWeight:900, padding:'2px 7px', borderRadius:'4px', letterSpacing:'0.05em' }}>REC</div>
               {/* Aspect label */}
               <div style={{ position:'absolute', top:'10px', right:'10px', background:'rgba(0,0,0,0.6)', color:'#fff', fontSize:'0.6rem', padding:'2px 7px', borderRadius:'4px' }}>{aspect}</div>
               {/* Caption overlay */}
               {showCaptions && (
-                <div style={{
-                  position:'absolute', bottom:'18%', width:'90%', textAlign:'center',
-                }}>
-                  <span style={{
-                    fontWeight:800, fontSize:'1.2rem', color:'#fff',
-                    textShadow:'0 2px 6px rgba(0,0,0,0.9)', padding:'4px',
+                rawVideoUrl && captionsData.length > 0 ? (
+                  <CaptionOverlay
+                    synced
+                    videoRef={videoRef}
+                    captionsData={captionsData}
+                    style={captionStyle}
+                    color={colorCombo}
+                    hAlign={hAlign}
+                    vAlign={vAlign}
+                    wordsPerLine={wordsPerLine}
+                    highlightColor={highlightColor}
+                  />
+                ) : (
+                  <div style={{
+                    position:'absolute', bottom:'18%', width:'90%', textAlign:'center',
                   }}>
-                    VIRAL <span style={{ color:highlightColor }}>CAPTIONS</span>
-                  </span>
-                </div>
+                    <span style={{
+                      fontWeight:800, fontSize:'1.2rem', color:'#fff',
+                      textShadow:'0 2px 6px rgba(0,0,0,0.9)', padding:'4px',
+                    }}>
+                      VIRAL <span style={{ color:highlightColor }}>CAPTIONS</span>
+                    </span>
+                  </div>
+                )
               )}
               {/* Draggable subtitle position */}
               {showSubtitleEditor && (
@@ -358,26 +491,78 @@ export default function Editor() {
               {activeTab === 'captions' && (
                 <div style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
 
-                  {/* Pacing */}
+                  {/* Caption style */}
                   <div>
-                    <span style={labelStyle}>Caption Pacing</span>
+                    <span style={labelStyle}>Caption Style</span>
                     <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-                      {[
-                        { val:'karaoke', label:'Fast Karaoke', sub:'1 word at a time — max engagement' },
-                        { val:'chunks',  label:'Standard Phrases', sub:'3–4 words per card — more natural' },
-                      ].map(o => (
+                      {CAPTION_STYLES.map(o => (
                         <label key={o.val} style={{
                           display:'flex', alignItems:'flex-start', gap:'12px',
-                          background: captionPacing === o.val ? '#fef2f2' : '#f9f9f9',
-                          border: captionPacing === o.val ? '1.5px solid #cf1322' : '1.5px solid #e5e5e5',
+                          background: captionStyle === o.val ? '#fef2f2' : '#f9f9f9',
+                          border: captionStyle === o.val ? '1.5px solid #cf1322' : '1.5px solid #e5e5e5',
                           borderRadius:'10px', padding:'14px', cursor:'pointer',
                         }}>
-                          <input type="radio" value={o.val} checked={captionPacing === o.val} onChange={() => setCaptionPacing(o.val)} style={{ marginTop:'2px' }}/>
+                          <input type="radio" value={o.val} checked={captionStyle === o.val} onChange={() => setCaptionStyle(o.val)} style={{ marginTop:'2px' }}/>
                           <div>
                             <div style={{ fontWeight:700, fontSize:'0.875rem', color:'#111', marginBottom:'3px' }}>{o.label}</div>
                             <div style={{ fontSize:'0.78rem', color:'#666' }}>{o.sub}</div>
                           </div>
                         </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Color combo */}
+                  <div>
+                    <span style={labelStyle}>Caption Colors</span>
+                    <select value={colorCombo} onChange={e => setColorCombo(e.target.value)} style={{
+                      width:'100%', background:'#f9f9f9', border:'1.5px solid #e5e5e5',
+                      borderRadius:'8px', padding:'10px 14px', fontSize:'0.875rem',
+                      outline:'none', cursor:'pointer',
+                    }}
+                      onFocus={e => e.target.style.borderColor='#cf1322'}
+                      onBlur={e => e.target.style.borderColor='#e5e5e5'}
+                    >
+                      {COLOR_COMBOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Position */}
+                  <div style={{ display:'flex', gap:'10px' }}>
+                    <div style={{ flex:1 }}>
+                      <span style={labelStyle}>Horizontal</span>
+                      <select value={hAlign} onChange={e => setHAlign(e.target.value)} style={{
+                        width:'100%', background:'#f9f9f9', border:'1.5px solid #e5e5e5',
+                        borderRadius:'8px', padding:'10px 14px', fontSize:'0.875rem',
+                        outline:'none', cursor:'pointer',
+                      }}>
+                        {H_ALIGNS.map(v => <option key={v} value={v}>{v[0].toUpperCase() + v.slice(1)}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ flex:1 }}>
+                      <span style={labelStyle}>Vertical</span>
+                      <select value={vAlign} onChange={e => setVAlign(e.target.value)} style={{
+                        width:'100%', background:'#f9f9f9', border:'1.5px solid #e5e5e5',
+                        borderRadius:'8px', padding:'10px 14px', fontSize:'0.875rem',
+                        outline:'none', cursor:'pointer',
+                      }}>
+                        {V_ALIGNS.map(v => <option key={v} value={v}>{v[0].toUpperCase() + v.slice(1)}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Words per line */}
+                  <div>
+                    <span style={labelStyle}>Words Per Line</span>
+                    <div style={{ display:'flex', gap:'10px' }}>
+                      {WORDS_PER_LINE.map(n => (
+                        <button key={n} onClick={() => setWordsPerLine(n)} style={{
+                          flex:1, padding:'10px', borderRadius:'8px', textAlign:'center',
+                          background: wordsPerLine === n ? '#fef2f2' : '#f9f9f9',
+                          border: wordsPerLine === n ? '2px solid #cf1322' : '1.5px solid #e5e5e5',
+                          color: wordsPerLine === n ? '#cf1322' : '#555',
+                          cursor:'pointer', fontSize:'0.85rem', fontWeight:600,
+                        }}>{n}</button>
                       ))}
                     </div>
                   </div>

@@ -7,6 +7,7 @@ because it listens to WAL (database writes), not the client library.
 """
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -122,12 +123,20 @@ async def insert_clip(clip_data: dict) -> dict:
     Triggers Supabase Realtime INSERT event → frontend card appears.
     """
     cols = list(clip_data.keys())
-    placeholders = ", ".join(f"${i+1}" for i in range(len(cols)))
+    placeholders = []
+    values = []
+    for i, c in enumerate(cols):
+        v = clip_data[c]
+        if isinstance(v, (list, dict)):
+            placeholders.append(f"${i+1}::jsonb")
+            values.append(json.dumps(v))
+        else:
+            placeholders.append(f"${i+1}")
+            values.append(v)
     col_names = ", ".join(cols)
-    values = [clip_data[c] for c in cols]
 
     row = await _fetchrow(
-        f"INSERT INTO clips ({col_names}) VALUES ({placeholders}) RETURNING *",
+        f"INSERT INTO clips ({col_names}) VALUES ({', '.join(placeholders)}) RETURNING *",
         *values,
     )
     return row or {}

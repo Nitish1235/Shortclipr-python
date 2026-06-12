@@ -27,7 +27,7 @@ from pathlib import Path
 from app.core.config import get_settings
 from app.db import supabase as db
 from app.pipeline.ai_clipper import ClipTimestamp, find_viral_clips
-from app.pipeline.captions import burn_all_captions_parallel, get_clip_captions
+from app.pipeline.captions import burn_all_captions_parallel, captions_to_dict, get_clip_captions
 from app.pipeline.extractor import extract_all_clips_parallel, reframe_to_vertical
 from app.pipeline.stream import extract_video_id, get_stream_urls, get_video_metadata
 from app.pipeline.transcript import get_transcript
@@ -78,8 +78,9 @@ async def _execute_pipeline(
     h_align         = options.get("h_align",        "center")
     v_align         = options.get("v_align",        "bottom")
     words_per_line  = options.get("words_per_line", 3)
-    short_template  = options.get("short_template", "smart_crop")
+    short_template  = options.get("short_template", "blur_bg")
     bar_color       = options.get("bar_color",      "#0d0d0d")
+    aspect          = options.get("aspect",         "9:16")
 
     # ── Create temp directory for this job ────────────────────
     job_dir = Path(tempfile.mkdtemp(prefix=f"sc_{job_id[:8]}_"))
@@ -137,14 +138,22 @@ async def _execute_pipeline(
 
         await db.update_job_progress(job_id, 55, "Clips extracted, reframing to vertical...")
 
-        # ── STEP 7: Reframe to 9:16 vertical (parallel) ───────
+        # ── STEP 7: Reframe to chosen aspect ratio (parallel) ─
         reframed = await _reframe_all_parallel(
             raw_clips, job_dir,
-            template=short_template, bar_color=bar_color,
+            template=short_template, bar_color=bar_color, aspect=aspect,
         )
         await db.update_job_progress(job_id, 65, "Adding captions...")
 
         # ── STEP 8: Burn captions (parallel) ──────────────────
+        # Pre-compute phrase-level caption timing for each clip (used both
+        # for burning and saved alongside the clip for editor preview).
+        raw_path_by_ts = {id(ts): raw_path for ts, raw_path in reframed}
+        captions_by_ts = {
+            id(ts): get_clip_captions(transcript, ts.start, ts.end)
+            for ts, _ in reframed
+        }
+
         captioned = await burn_all_captions_parallel(
             reframed, transcript, clip_style, job_dir,
             color=color_combo, h_align=h_align, v_align=v_align,
@@ -163,6 +172,8 @@ async def _execute_pipeline(
                 clip_idx=i,
                 ts=ts,
                 clip_path=clip_path,
+                raw_path=raw_path_by_ts.get(id(ts)),
+                captions=captions_by_ts.get(id(ts), []),
                 style=clip_style,
                 job_dir=job_dir,
             )
@@ -198,15 +209,16 @@ async def _execute_pipeline(
 async def _reframe_all_parallel(
     raw_clips: list[tuple[ClipTimestamp, Path]],
     job_dir:   Path,
-    template:  str = "smart_crop",
+    template:  str = "blur_bg",
     bar_color: str = "#0d0d0d",
+    aspect:    str = "9:16",
 ) -> list[tuple[ClipTimestamp, Path]]:
-    """Reframe all clips to 9:16 vertical concurrently."""
+    """Reframe all clips to the chosen aspect ratio concurrently."""
     async def _reframe_one(i: int, ts: ClipTimestamp, raw_path: Path):
         output = job_dir / f"clip_{i:02d}_vertical.mp4"
         reframed = await reframe_to_vertical(
             raw_path, output,
-            template=template, bar_color=bar_color,
+            template=template, bar_color=bar_color, aspect=aspect,
         )
         return ts, reframed
 
@@ -228,6 +240,8 @@ async def _upload_and_save_clip(
     clip_idx: int,
     ts: ClipTimestamp,
     clip_path: Path,
+    raw_path: Path | None,
+    captions: list,
     style: str,
     job_dir: Path,
 ) -> dict:
@@ -236,8 +250,8 @@ async def _upload_and_save_clip(
     Supabase Realtime fires INSERT event → frontend card appears instantly.
     """
     clip_id = str(uuid.uuid4())
-    clip_url, thumbnail_url = await process_and_upload_clip(
-        clip_path, job_id, clip_id, job_dir
+    clip_url, thumbnail_url, raw_url = await process_and_upload_clip(
+        clip_path, job_id, clip_id, job_dir, raw_path=raw_path,
     )
 
     clip_data = {
@@ -246,6 +260,8 @@ async def _upload_and_save_clip(
         "user_id": user_id,
         "video_url": clip_url,          # column name matches DB schema and frontend
         "thumbnail_url": thumbnail_url,
+        "raw_video_url": raw_url,       # reframed-but-uncaptioned clip (for re-render)
+        "captions_data": captions_to_dict(captions),  # phrase-level timing for editor preview
         "duration": ts.duration,
         "start_time": ts.start,
         "end_time": ts.end,

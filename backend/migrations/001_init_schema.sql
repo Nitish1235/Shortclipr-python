@@ -152,6 +152,8 @@ ALTER TABLE clips ADD COLUMN IF NOT EXISTS top_title          TEXT  DEFAULT '';
 ALTER TABLE clips ADD COLUMN IF NOT EXISTS bottom_tag         TEXT  DEFAULT '';
 ALTER TABLE clips ADD COLUMN IF NOT EXISTS ai_reason          TEXT  DEFAULT '';
 ALTER TABLE clips ADD COLUMN IF NOT EXISTS editor_config      JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE clips ADD COLUMN IF NOT EXISTS raw_video_url      TEXT  DEFAULT '';
+ALTER TABLE clips ADD COLUMN IF NOT EXISTS captions_data      JSONB NOT NULL DEFAULT '[]';
 
 
 -- ────────────────────────────────────────────────────────────

@@ -29,7 +29,7 @@ from app.pipeline.captions import (
     VALID_COLORS, VALID_HALIGNS, VALID_STYLES,
     VALID_VALIGNS, VALID_WORDS_PER_LINE,
 )
-from app.pipeline.extractor import VALID_TEMPLATES
+from app.pipeline.extractor import VALID_TEMPLATES, VALID_ASPECTS
 from app.pipeline.orchestrator import run_pipeline
 from app.pipeline.stream import extract_video_id, get_video_metadata
 from app.pipeline.uploader import delete_job_from_gcs
@@ -51,8 +51,9 @@ class JobOptions(BaseModel):
     h_align:      str = "center"        # horizontal position
     v_align:      str = "bottom"        # vertical position
     words_per_line:  int = 3             # 1 | 2 | 3  — words per screen
-    short_template:  str = "smart_crop" # 9:16 layout template
+    short_template:  str = "blur_bg"    # 9:16 layout template
     bar_color:       str = "#0d0d0d"    # hex colour for bars / frame / gradient
+    aspect:          str = "9:16"       # output aspect ratio — 9:16 | 16:9 | 1:1
     topic:           str = ""
     quality:         str = "1080p"      # capped at 1080p; degrades gracefully
 
@@ -89,13 +90,18 @@ class JobOptions(BaseModel):
     @field_validator("short_template")
     @classmethod
     def validate_short_template(cls, v: str) -> str:
-        return v if v in VALID_TEMPLATES else "smart_crop"
+        return v if v in VALID_TEMPLATES else "blur_bg"
 
     @field_validator("bar_color")
     @classmethod
     def validate_bar_color(cls, v: str) -> str:
         import re
         return v if re.fullmatch(r"#[0-9a-fA-F]{6}", v) else "#0d0d0d"
+
+    @field_validator("aspect")
+    @classmethod
+    def validate_aspect(cls, v: str) -> str:
+        return v if v in VALID_ASPECTS else "9:16"
 
     @field_validator("quality")
     @classmethod

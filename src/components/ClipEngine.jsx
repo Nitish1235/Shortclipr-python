@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { GoogleLogin } from '@react-oauth/google'
+import CaptionOverlay, { COLOR_COMBOS } from './CaptionOverlay'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
@@ -34,6 +35,41 @@ const labelStyle = {
   textTransform:'uppercase', letterSpacing:'0.1em',
   flexShrink:0, minWidth:'130px',
 }
+const sectionCard = {
+  background:'#fff', border:'1.5px solid #e5e5e5', borderRadius:'12px',
+  padding:'16px 18px 4px', marginBottom:'16px',
+}
+const sectionTitle = {
+  fontSize:'0.78rem', fontWeight:800, color:'#111',
+  textTransform:'uppercase', letterSpacing:'0.1em',
+  marginBottom:'4px', display:'flex', alignItems:'center', gap:'6px',
+}
+
+// ── Caption style swatch options ────────────────────────────────
+const STYLE_OPTIONS = [
+  { val:'word_pop',   label:'Word Pop',   sub:'🔥 Trending', preview:'POP!',  upper:true,  weight:800 },
+  { val:'hormozi',    label:'Hormozi',    sub:'Bold Box',     preview:'BOLD', upper:true,  weight:900, box:true },
+  { val:'karaoke',    label:'Karaoke',    sub:'Colour Sweep', preview:'Sing', upper:false, weight:600 },
+  { val:'mrbeast',    label:'MrBeast',    sub:'Giant',        preview:'WOW',  upper:true,  weight:900 },
+  { val:'typewriter', label:'Typewriter', sub:'Reveal',       preview:'Type…', upper:false, weight:600 },
+  { val:'slide',      label:'Slide In',   sub:'Motion',       preview:'SLIDE', upper:true, weight:800 },
+  { val:'fade',       label:'Fade',       sub:'Smooth',       preview:'Fade', upper:false, weight:500 },
+  { val:'zoom',       label:'Zoom',       sub:'Punchy',       preview:'Zoom', upper:false, weight:700 },
+  { val:'shake',      label:'Shake',      sub:'Energy',       preview:'SHAKE', upper:true, weight:800 },
+  { val:'neon',       label:'Neon Glow',  sub:'Glow',         preview:'Neon', upper:false, weight:700 },
+  { val:'minimal',    label:'Minimal',    sub:'Clean',        preview:'Aa',   upper:false, weight:500 },
+]
+
+// ── Caption colour swatch options ───────────────────────────────
+const COLOR_OPTIONS = [
+  { val:'white_black',  label:'White + Black',  sub:'Classic' },
+  { val:'yellow_black', label:'Yellow + Black', sub:'🔥 Trending' },
+  { val:'black_white',  label:'Black + White',  sub:'' },
+  { val:'cyan_dark',    label:'Cyan + Dark',    sub:'' },
+  { val:'orange_dark',  label:'Orange + Dark',  sub:'' },
+  { val:'green_dark',   label:'Green + Dark',   sub:'' },
+  { val:'red_white',    label:'Red + White',    sub:'' },
+]
 
 export default function ClipEngine({ onJobCreated }) {
   const [url, setUrl]               = useState('')
@@ -51,8 +87,9 @@ export default function ClipEngine({ onJobCreated }) {
   const [captionStyle,  setCaptionStyle]  = useState('word_pop')
   const [colorCombo,    setColorCombo]    = useState('white_black')
   const [wordsPerLine,  setWordsPerLine]  = useState(2)
-  const [shortTemplate, setShortTemplate] = useState('smart_crop')
+  const [shortTemplate, setShortTemplate] = useState('blur_bg')
   const [barColor,      setBarColor]      = useState('#0d0d0d')
+  const [aspect,        setAspect]        = useState('9:16')
 
   const { user, loginWithGoogleToken } = useAuth()
   const navigate = useNavigate()
@@ -116,6 +153,7 @@ export default function ClipEngine({ onJobCreated }) {
             words_per_line: wordsPerLine,
             short_template: shortTemplate,
             bar_color:      barColor,
+            aspect:         aspect,
             h_align:'center', v_align:'bottom', quality:'1080p', topic:'',
           },
         }),
@@ -224,7 +262,6 @@ export default function ClipEngine({ onJobCreated }) {
   /* ── Config phase ── */
   if (mode === 'config' && videoData) {
     const templates = [
-      { val:'smart_crop',   label:'🎯 Smart Crop',   sub:'TikTok / Reels' },
       { val:'blur_bg',      label:'🌫 Blur BG',       sub:'Most Popular' },
       { val:'zoom_blur',    label:'🔍 Zoom Blur',     sub:'Dramatic' },
       { val:'glass',        label:'🪟 Glass',          sub:'Premium' },
@@ -271,134 +308,237 @@ export default function ClipEngine({ onJobCreated }) {
           }}>✕</button>
         </div>
 
-        {/* Config rows */}
-        <div style={{ marginBottom:'20px' }}>
+        {/* Config + Live Preview */}
+        <div style={{ display:'flex', gap:'20px', flexWrap:'wrap', alignItems:'flex-start', marginBottom:'20px' }}>
 
-          <div style={rowStyle}>
-            <span style={labelStyle}>Language</span>
-            <select style={selectStyle} value={lang} onChange={e => setLang(e.target.value)}
-              onFocus={e => e.target.style.borderColor='#cf1322'} onBlur={e => e.target.style.borderColor='#e5e5e5'}>
-              <option>Auto / No translation</option>
-              <option>English</option><option>Spanish</option>
-              <option>French</option><option>German</option>
-            </select>
-          </div>
+          {/* Left: sectioned config */}
+          <div style={{ flex:'1 1 360px', minWidth:0 }}>
 
-          <div style={rowStyle}>
-            <span style={labelStyle}>Clip Length</span>
-            <select style={selectStyle} value={clipLen} onChange={e => setClipLen(e.target.value)}
-              onFocus={e => e.target.style.borderColor='#cf1322'} onBlur={e => e.target.style.borderColor='#e5e5e5'}>
-              <option>Auto (&lt;90s)</option>
-              <option>&lt;30s (Hooks)</option>
-              <option>30s – 60s</option>
-              <option>60s – 90s</option>
-            </select>
-          </div>
+            {/* 🎬 Source */}
+            <div style={sectionCard}>
+              <div style={sectionTitle}>🎬 Source</div>
 
-          <div style={rowStyle}>
-            <span style={labelStyle}>Clip Count</span>
-            <select style={selectStyle} value={clipCount} onChange={e => setClipCount(e.target.value)}
-              onFocus={e => e.target.style.borderColor='#cf1322'} onBlur={e => e.target.style.borderColor='#e5e5e5'}>
-              <option value="5">5 Shorts</option>
-              <option value="10">10 Shorts (default)</option>
-              <option value="15">15 Shorts</option>
-              <option value="20">20 Shorts (max)</option>
-            </select>
-          </div>
+              <div style={rowStyle}>
+                <span style={labelStyle}>Language</span>
+                <select style={selectStyle} value={lang} onChange={e => setLang(e.target.value)}
+                  onFocus={e => e.target.style.borderColor='#cf1322'} onBlur={e => e.target.style.borderColor='#e5e5e5'}>
+                  <option>Auto / No translation</option>
+                  <option>English</option><option>Spanish</option>
+                  <option>French</option><option>German</option>
+                </select>
+              </div>
 
-          <div style={rowStyle}>
-            <span style={labelStyle}>Caption Style</span>
-            <select style={selectStyle} value={captionStyle} onChange={e => setCaptionStyle(e.target.value)}
-              onFocus={e => e.target.style.borderColor='#cf1322'} onBlur={e => e.target.style.borderColor='#e5e5e5'}>
-              <option value="word_pop">Word Pop 🔥 (Trending)</option>
-              <option value="hormozi">Hormozi — Bold Box</option>
-              <option value="karaoke">Karaoke — Colour Sweep</option>
-              <option value="mrbeast">MrBeast — Giant</option>
-              <option value="typewriter">Typewriter</option>
-              <option value="slide">Slide In</option>
-              <option value="fade">Fade</option>
-              <option value="zoom">Zoom</option>
-              <option value="shake">Shake</option>
-              <option value="neon">Neon Glow</option>
-              <option value="minimal">Minimal</option>
-            </select>
-          </div>
+              <div style={rowStyle}>
+                <span style={labelStyle}>Clip Length</span>
+                <select style={selectStyle} value={clipLen} onChange={e => setClipLen(e.target.value)}
+                  onFocus={e => e.target.style.borderColor='#cf1322'} onBlur={e => e.target.style.borderColor='#e5e5e5'}>
+                  <option>Auto (&lt;90s)</option>
+                  <option>&lt;30s (Hooks)</option>
+                  <option>30s – 60s</option>
+                  <option>60s – 90s</option>
+                </select>
+              </div>
 
-          <div style={rowStyle}>
-            <span style={labelStyle}>Caption Colour</span>
-            <select style={selectStyle} value={colorCombo} onChange={e => setColorCombo(e.target.value)}
-              onFocus={e => e.target.style.borderColor='#cf1322'} onBlur={e => e.target.style.borderColor='#e5e5e5'}>
-              <option value="white_black">White + Black (Classic)</option>
-              <option value="yellow_black">Yellow + Black 🔥</option>
-              <option value="black_white">Black + White</option>
-              <option value="cyan_dark">Cyan + Dark</option>
-              <option value="orange_dark">Orange + Dark</option>
-              <option value="green_dark">Green + Dark</option>
-              <option value="red_white">Red + White</option>
-            </select>
-          </div>
-
-          {/* Words per line */}
-          <div style={rowStyle}>
-            <span style={labelStyle}>Words / Screen</span>
-            <div style={{ display:'flex', gap:'8px', flex:1 }}>
-              {[
-                { val:1, label:'1 Word', sub:'Max Impact' },
-                { val:2, label:'2 Words', sub:'Balanced'  },
-                { val:3, label:'3 Words', sub:'Natural'   },
-              ].map(({ val, label, sub }) => (
-                <button key={val} onClick={() => setWordsPerLine(val)} style={{
-                  flex:1, padding:'8px 6px', borderRadius:'8px',
-                  background: wordsPerLine === val ? '#cf1322' : '#f9f9f9',
-                  color: wordsPerLine === val ? '#fff' : '#666',
-                  border: wordsPerLine === val ? '1.5px solid #cf1322' : '1.5px solid #e5e5e5',
-                  cursor:'pointer', fontSize:'0.75rem', fontWeight:700, textAlign:'center',
-                  transition:'all 0.15s',
-                }}>
-                  {label}<br/><span style={{ opacity:0.7, fontSize:'0.68rem', fontWeight:400 }}>{sub}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Short template */}
-          <div style={{ padding:'12px 0' }}>
-            <span style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>Short Style</span>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'6px' }}>
-              {templates.map(({ val, label, sub }) => (
-                <button key={val} onClick={() => setShortTemplate(val)} style={{
-                  padding:'8px 6px', borderRadius:'8px', textAlign:'center',
-                  background: shortTemplate === val ? '#fef2f2' : '#f9f9f9',
-                  color: shortTemplate === val ? '#cf1322' : '#555',
-                  border: shortTemplate === val ? '1.5px solid #cf1322' : '1.5px solid #e5e5e5',
-                  cursor:'pointer', fontSize:'0.72rem', fontWeight:600,
-                  lineHeight:1.3, transition:'all 0.15s',
-                }}>
-                  {label}<br/><span style={{ opacity:0.6, fontSize:'0.65rem', fontWeight:400 }}>{sub}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Bar/frame color picker */}
-          {['color_bars','gradient','neon_frame'].includes(shortTemplate) && (
-            <div style={rowStyle}>
-              <span style={labelStyle}>Frame Color</span>
-              <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap' }}>
-                {['#0d0d0d','#1a1a2e','#ffffff','#39ff14','#cf1322','#00cfff','#ff9900','#a855f7'].map(c => (
-                  <button key={c} onClick={() => setBarColor(c)} style={{
-                    width:'26px', height:'26px', background:c, borderRadius:'6px',
-                    border: barColor === c ? '2.5px solid #111' : '1.5px solid #e5e5e5',
-                    cursor:'pointer', flexShrink:0,
-                  }}/>
-                ))}
-                <input type="color" value={barColor} onChange={e => setBarColor(e.target.value)} style={{
-                  width:'26px', height:'26px', padding:0, border:'1.5px solid #e5e5e5',
-                  background:'none', cursor:'pointer', borderRadius:'6px',
-                }}/>
+              <div style={{ ...rowStyle, borderBottom:'none' }}>
+                <span style={labelStyle}>Clip Count</span>
+                <select style={selectStyle} value={clipCount} onChange={e => setClipCount(e.target.value)}
+                  onFocus={e => e.target.style.borderColor='#cf1322'} onBlur={e => e.target.style.borderColor='#e5e5e5'}>
+                  <option value="5">5 Shorts</option>
+                  <option value="10">10 Shorts (default)</option>
+                  <option value="15">15 Shorts</option>
+                  <option value="20">20 Shorts (max)</option>
+                </select>
               </div>
             </div>
-          )}
+
+            {/* 💬 Captions */}
+            <div style={sectionCard}>
+              <div style={sectionTitle}>💬 Captions</div>
+
+              {/* Caption style swatches */}
+              <div style={{ padding:'10px 0 4px' }}>
+                <span style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>Caption Style</span>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px' }}>
+                  {STYLE_OPTIONS.map(opt => {
+                    const combo = COLOR_COMBOS[colorCombo] || COLOR_COMBOS.white_black
+                    const active = captionStyle === opt.val
+                    return (
+                      <button key={opt.val} onClick={() => setCaptionStyle(opt.val)} style={{
+                        display:'flex', flexDirection:'column', alignItems:'center', gap:'6px',
+                        padding:'10px 4px', borderRadius:'10px',
+                        background: active ? '#fef2f2' : '#f9f9f9',
+                        border: active ? '1.5px solid #cf1322' : '1.5px solid #e5e5e5',
+                        cursor:'pointer', transition:'all 0.15s',
+                      }}>
+                        <span style={{
+                          fontWeight: opt.weight, fontSize:'0.75rem',
+                          textTransform: opt.upper ? 'uppercase' : 'none',
+                          color: opt.box ? combo.highlight : combo.primary,
+                          background: opt.box ? combo.back : 'transparent',
+                          padding: opt.box ? '2px 8px' : 0,
+                          borderRadius: opt.box ? '4px' : 0,
+                          textShadow: opt.box ? 'none' : `0 0 2px ${combo.outline}, 0 1px 3px rgba(0,0,0,0.5)`,
+                          fontFamily:'"Arial Black", Arial, sans-serif',
+                          letterSpacing: opt.upper ? '0.04em' : 'normal',
+                          whiteSpace:'nowrap',
+                        }}>{opt.preview}</span>
+                        <span style={{ fontSize:'0.66rem', fontWeight:700, color: active ? '#cf1322' : '#555' }}>{opt.label}</span>
+                        <span style={{ fontSize:'0.6rem', color:'#aaa' }}>{opt.sub}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Caption colour swatches */}
+              <div style={{ padding:'12px 0 4px' }}>
+                <span style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>Caption Colour</span>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px' }}>
+                  {COLOR_OPTIONS.map(opt => {
+                    const combo = COLOR_COMBOS[opt.val]
+                    const active = colorCombo === opt.val
+                    return (
+                      <button key={opt.val} onClick={() => setColorCombo(opt.val)} style={{
+                        display:'flex', flexDirection:'column', alignItems:'center', gap:'4px',
+                        padding:'8px 4px', borderRadius:'10px',
+                        background: active ? '#fef2f2' : '#f9f9f9',
+                        border: active ? '1.5px solid #cf1322' : '1.5px solid #e5e5e5',
+                        cursor:'pointer', transition:'all 0.15s',
+                      }}>
+                        <span style={{
+                          fontWeight:800, fontSize:'0.76rem',
+                          color: combo.primary, background: combo.back,
+                          padding:'2px 8px', borderRadius:'4px',
+                          textShadow:`0 0 2px ${combo.outline}`,
+                          fontFamily:'"Arial Black", Arial, sans-serif',
+                        }}>Aa</span>
+                        <span style={{ fontSize:'0.6rem', fontWeight:700, color: active ? '#cf1322' : '#555', textAlign:'center', lineHeight:1.2 }}>{opt.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Words per line */}
+              <div style={{ ...rowStyle, borderBottom:'none' }}>
+                <span style={labelStyle}>Words / Screen</span>
+                <div style={{ display:'flex', gap:'8px', flex:1 }}>
+                  {[
+                    { val:1, label:'1 Word', sub:'Max Impact' },
+                    { val:2, label:'2 Words', sub:'Balanced'  },
+                    { val:3, label:'3 Words', sub:'Natural'   },
+                  ].map(({ val, label, sub }) => (
+                    <button key={val} onClick={() => setWordsPerLine(val)} style={{
+                      flex:1, padding:'8px 6px', borderRadius:'8px',
+                      background: wordsPerLine === val ? '#cf1322' : '#f9f9f9',
+                      color: wordsPerLine === val ? '#fff' : '#666',
+                      border: wordsPerLine === val ? '1.5px solid #cf1322' : '1.5px solid #e5e5e5',
+                      cursor:'pointer', fontSize:'0.75rem', fontWeight:700, textAlign:'center',
+                      transition:'all 0.15s',
+                    }}>
+                      {label}<br/><span style={{ opacity:0.7, fontSize:'0.68rem', fontWeight:400 }}>{sub}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 📐 Layout */}
+            <div style={sectionCard}>
+              <div style={sectionTitle}>📐 Layout</div>
+
+              {/* Aspect ratio */}
+              <div style={rowStyle}>
+                <span style={labelStyle}>Aspect Ratio</span>
+                <div style={{ display:'flex', gap:'8px', flex:1 }}>
+                  {[
+                    { val:'9:16', label:'9:16', sub:'Shorts / Reels' },
+                    { val:'16:9', label:'16:9', sub:'YouTube / X' },
+                    { val:'1:1',  label:'1:1',  sub:'Square' },
+                  ].map(({ val, label, sub }) => (
+                    <button key={val} onClick={() => setAspect(val)} style={{
+                      flex:1, padding:'8px 6px', borderRadius:'8px',
+                      background: aspect === val ? '#cf1322' : '#f9f9f9',
+                      color: aspect === val ? '#fff' : '#666',
+                      border: aspect === val ? '1.5px solid #cf1322' : '1.5px solid #e5e5e5',
+                      cursor:'pointer', fontSize:'0.75rem', fontWeight:700, textAlign:'center',
+                      transition:'all 0.15s',
+                    }}>
+                      {label}<br/><span style={{ opacity:0.7, fontSize:'0.68rem', fontWeight:400 }}>{sub}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Short template */}
+              <div style={{ padding:'12px 0' }}>
+                <span style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>Short Style</span>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'6px' }}>
+                  {templates.map(({ val, label, sub }) => (
+                    <button key={val} onClick={() => setShortTemplate(val)} style={{
+                      padding:'8px 6px', borderRadius:'8px', textAlign:'center',
+                      background: shortTemplate === val ? '#fef2f2' : '#f9f9f9',
+                      color: shortTemplate === val ? '#cf1322' : '#555',
+                      border: shortTemplate === val ? '1.5px solid #cf1322' : '1.5px solid #e5e5e5',
+                      cursor:'pointer', fontSize:'0.72rem', fontWeight:600,
+                      lineHeight:1.3, transition:'all 0.15s',
+                    }}>
+                      {label}<br/><span style={{ opacity:0.6, fontSize:'0.65rem', fontWeight:400 }}>{sub}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Bar/frame color picker */}
+              {['color_bars','gradient','neon_frame'].includes(shortTemplate) && (
+                <div style={{ ...rowStyle, borderBottom:'none' }}>
+                  <span style={labelStyle}>Frame Color</span>
+                  <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap' }}>
+                    {['#0d0d0d','#1a1a2e','#ffffff','#39ff14','#cf1322','#00cfff','#ff9900','#a855f7'].map(c => (
+                      <button key={c} onClick={() => setBarColor(c)} style={{
+                        width:'26px', height:'26px', background:c, borderRadius:'6px',
+                        border: barColor === c ? '2.5px solid #111' : '1.5px solid #e5e5e5',
+                        cursor:'pointer', flexShrink:0,
+                      }}/>
+                    ))}
+                    <input type="color" value={barColor} onChange={e => setBarColor(e.target.value)} style={{
+                      width:'26px', height:'26px', padding:0, border:'1.5px solid #e5e5e5',
+                      background:'none', cursor:'pointer', borderRadius:'6px',
+                    }}/>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right: live preview */}
+          <div style={{ flex:'0 0 200px', minWidth:'160px' }}>
+            <div style={{ ...sectionTitle, marginBottom:'10px' }}>👀 Live Preview</div>
+            <div style={{
+              position:'relative', width:'100%',
+              aspectRatio: aspect.replace(':','/'),
+              background:'#111', borderRadius:'10px', overflow:'hidden',
+              border:'2px solid #111', boxShadow:'3px 3px 0 #cf1322',
+            }}>
+              {videoData.thumbnail && (
+                <img src={videoData.thumbnail} alt="" style={{
+                  width:'100%', height:'100%', objectFit:'cover', opacity:0.55,
+                }}/>
+              )}
+              <CaptionOverlay
+                mode="static"
+                previewText="YOUR CAPTION HERE"
+                style={captionStyle}
+                color={colorCombo}
+                hAlign="center"
+                vAlign="bottom"
+                wordsPerLine={wordsPerLine}
+              />
+            </div>
+            <p style={{ fontSize:'0.66rem', color:'#bbb', marginTop:'8px', textAlign:'center' }}>
+              Live preview — updates as you adjust styles
+            </p>
+          </div>
         </div>
 
         {/* Submit */}

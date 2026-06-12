@@ -35,8 +35,7 @@ steps:
 
       # ── Resources ────────────────────────────────────────────────────────
       # 4 GiB RAM: FFmpeg clips run in parallel (asyncio semaphore = 10),
-      # MediaPipe face detection, and multiple in-flight pipelines each
-      # hold temp video frames in memory.
+      # and multiple in-flight pipelines each hold temp video data in memory.
       - '--memory'
       - '4096Mi'
       # 2 vCPU: FFmpeg is CPU-intensive. Gives headroom for parallel encodes

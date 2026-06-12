@@ -38,15 +38,15 @@ def _public_url(blob_name: str) -> str:
 async def generate_thumbnail(clip_path: Path, output_path: Path) -> Path:
     """
     Extract a single frame at 1 second from the clip.
-    Produces a JPEG thumbnail at 540x960 (9:16).
+    Produces a JPEG thumbnail at half the clip's resolution, preserving
+    whichever aspect ratio (9:16 / 16:9 / 1:1) the clip was rendered at.
     """
     cmd = [
         "ffmpeg", "-y",
         "-ss", "1",
         "-i", str(clip_path),
         "-vframes", "1",
-        "-vf", "scale=540:960:force_original_aspect_ratio=decrease,"
-               "pad=540:960:(ow-iw)/2:(oh-ih)/2",
+        "-vf", "scale=trunc(iw/4)*2:trunc(ih/4)*2",
         "-q:v", "3",
         str(output_path),
     ]
@@ -86,6 +86,32 @@ async def upload_thumbnail(
     blob_name = f"thumbnails/{job_id}/{clip_id}.jpg"
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _upload_to_gcs, local_path, blob_name, "image/jpeg")
+
+
+async def upload_raw_clip(
+    local_path: Path,
+    job_id: str,
+    clip_id: str,
+) -> str:
+    """Upload the reframed-but-uncaptioned clip to GCS. Returns public URL."""
+    blob_name = f"clips/{job_id}/{clip_id}_raw.mp4"
+    loop = asyncio.get_running_loop()
+    url = await loop.run_in_executor(None, _upload_to_gcs, local_path, blob_name, "video/mp4")
+    logger.info(f"Uploaded raw clip → {url}")
+    return url
+
+
+async def download_to_file(url: str, dest: Path) -> Path:
+    """Stream-download a (public GCS) URL to a local file. Used by the
+    editor's re-render endpoint to fetch the raw clip back down."""
+    import httpx
+    async with httpx.AsyncClient(timeout=60) as client:
+        async with client.stream("GET", url) as resp:
+            resp.raise_for_status()
+            with open(dest, "wb") as f:
+                async for chunk in resp.aiter_bytes():
+                    f.write(chunk)
+    return dest
 
 
 async def delete_job_from_gcs(job_id: str) -> None:
@@ -135,12 +161,14 @@ async def process_and_upload_clip(
     job_id: str,
     clip_id: str,
     tmp_dir: Path,
-) -> tuple[str, str]:
+    raw_path: Path | None = None,
+) -> tuple[str, str, str]:
     """
     1. Generate thumbnail (non-blocking failure — won't break clip delivery)
     2. Upload clip to GCS
     3. Upload thumbnail to GCS (if generated successfully)
-    4. Return (clip_url, thumbnail_url)
+    4. Upload the uncaptioned raw clip to GCS (if provided)
+    5. Return (clip_url, thumbnail_url, raw_url)
     """
     thumb_path = tmp_dir / f"{clip_id}_thumb.jpg"
 
@@ -150,17 +178,19 @@ async def process_and_upload_clip(
     # Always upload the clip — upload thumbnail only if it was generated
     thumb_exists = thumb_path.exists() and thumb_path.stat().st_size > 0
 
-    if thumb_exists:
-        clip_url, thumb_url = await asyncio.gather(
-            upload_clip(clip_path, job_id, clip_id),
-            upload_thumbnail(thumb_path, job_id, clip_id),
-        )
-    else:
-        logger.warning(f"[{clip_id}] Thumbnail generation failed — uploading clip only")
-        clip_url = await upload_clip(clip_path, job_id, clip_id)
-        thumb_url = ""
+    uploads = [upload_clip(clip_path, job_id, clip_id)]
+    uploads.append(upload_thumbnail(thumb_path, job_id, clip_id) if thumb_exists else _empty_str())
+    uploads.append(upload_raw_clip(raw_path, job_id, clip_id) if raw_path else _empty_str())
 
-    return clip_url, thumb_url
+    if not thumb_exists:
+        logger.warning(f"[{clip_id}] Thumbnail generation failed — uploading clip only")
+
+    clip_url, thumb_url, raw_url = await asyncio.gather(*uploads)
+    return clip_url, thumb_url, raw_url
+
+
+async def _empty_str() -> str:
+    return ""
 
 
 # ── Cleanup ────────────────────────────────────────────────────

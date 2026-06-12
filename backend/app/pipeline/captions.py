@@ -696,6 +696,11 @@ def get_clip_captions(
     return captions
 
 
+def captions_to_dict(captions: list[Caption]) -> list[dict]:
+    """Serialize a list of Caption to plain dicts for JSON/JSONB storage."""
+    return [{"start": c.start, "end": c.end, "text": c.text} for c in captions]
+
+
 # ══════════════════════════════════════════════════════════════
 #  CAPTION BURNING
 # ══════════════════════════════════════════════════════════════
