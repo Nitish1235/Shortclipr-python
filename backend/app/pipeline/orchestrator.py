@@ -6,12 +6,13 @@ Manages the full flow for a single job:
   2. Transcript via InnerTube captions
   3. Stream URL resolution
   4. GPT-4o viral clip finding
-  5. Parallel clip extraction (HTTP range requests)
-  6. Vertical reframe (9:16)
-  7. Parallel caption burning
-  8. Upload to GCS + thumbnail
-  9. Insert each clip to Supabase as it completes (streaming UX)
- 10. Mark job complete
+  5. Download source video (parallel ranged HTTP, falling back to
+     sequential ffmpeg / yt-dlp — see extractor._get_source)
+  6. Per-clip pipeline, all clips run concurrently:
+       extract clip -> reframe + burn captions (one ffmpeg pass) ->
+       upload to GCS + thumbnail -> insert clip row in Supabase
+       (streaming UX — each clip appears as soon as it's ready)
+  7. Mark job complete
 
 Progress is emitted to Supabase after EVERY step so frontend
 Realtime channel can update the UI in real-time.
@@ -27,8 +28,11 @@ from pathlib import Path
 from app.core.config import get_settings
 from app.db import supabase as db
 from app.pipeline.ai_clipper import ClipTimestamp, find_viral_clips
-from app.pipeline.captions import burn_all_captions_parallel, captions_to_dict, get_clip_captions
-from app.pipeline.extractor import extract_all_clips_parallel, reframe_to_vertical
+from app.pipeline.captions import (
+    captions_to_dict, clamp_captions_to_silence, detect_silences, get_clip_captions,
+)
+from app.pipeline.extractor import _compute_zoom_beats, _get_source, extract_clip, reframe_and_caption
+from app.pipeline.face_tracker import compute_face_track
 from app.pipeline.stream import extract_video_id, get_stream_urls, get_video_metadata
 from app.pipeline.transcript import get_transcript
 from app.pipeline.uploader import cleanup_job_files, process_and_upload_clip
@@ -129,63 +133,71 @@ async def _execute_pipeline(
         logger.info(f"[{job_id}] AI found {len(timestamps)} clips")
         await db.update_job_progress(job_id, 30, f"Found {len(timestamps)} viral moments...")
 
-        # ── STEP 6: Extract clips (parallel) ──────────────────
-        await db.update_job_progress(job_id, 33, f"Extracting {len(timestamps)} clips...")
-        raw_clips = await extract_all_clips_parallel(stream_url, timestamps, job_dir, session_id=job_id, audio_url=audio_url, user_agent=user_agent, video_id=video_id)
+        # ── STEPS 6-9: Per-clip pipeline (extract → reframe+caption →
+        # upload + insert DB row), all clips pipelined concurrently so
+        # the first clip can land long before the last one finishes
+        # extraction.
+        await db.update_job_progress(job_id, 33, f"Processing {len(timestamps)} clips...")
 
-        if not raw_clips:
-            raise RuntimeError("All clip extractions failed")
-
-        await db.update_job_progress(job_id, 55, "Clips extracted, reframing to vertical...")
-
-        # ── STEP 7: Reframe to chosen aspect ratio (parallel) ─
-        reframed = await _reframe_all_parallel(
-            raw_clips, job_dir,
-            template=short_template, bar_color=bar_color, aspect=aspect,
+        source_path = await _get_source(
+            stream_url, audio_url, user_agent, video_id, job_dir, session_id=job_id,
         )
-        await db.update_job_progress(job_id, 65, "Adding captions...")
 
-        # ── STEP 8: Burn captions (parallel) ──────────────────
-        # Pre-compute phrase-level caption timing for each clip (used both
-        # for burning and saved alongside the clip for editor preview).
-        raw_path_by_ts = {id(ts): raw_path for ts, raw_path in reframed}
-        captions_by_ts = {
-            id(ts): get_clip_captions(transcript, ts.start, ts.end)
-            for ts, _ in reframed
-        }
+        total = len(timestamps)
+        completed = 0
 
-        captioned = await burn_all_captions_parallel(
-            reframed, transcript, clip_style, job_dir,
-            color=color_combo, h_align=h_align, v_align=v_align,
-            words_per_line=words_per_line,
+        async def _process_one_clip(i: int, ts: ClipTimestamp) -> dict:
+            nonlocal completed
+            try:
+                # Check if job was cancelled before starting this clip
+                job = await db.get_job(job_id)
+                if job and job.get("status") == "cancelled":
+                    raise RuntimeError(f"Job {job_id} was cancelled by user")
+
+                raw_clip_path = await extract_clip(
+                    source_path, ts.start, ts.end, job_dir / f"clip_{i:02d}_raw.mp4"
+                )
+                captions = get_clip_captions(transcript, ts.start, ts.end)
+                silences, (src_w, src_h, face_track) = await asyncio.gather(
+                    detect_silences(raw_clip_path),
+                    compute_face_track(raw_clip_path, ts.duration),
+                )
+                if silences:
+                    captions = clamp_captions_to_silence(captions, silences)
+                zoom_beats = _compute_zoom_beats(captions, ts.duration)
+                reframed_path, captioned_path = await reframe_and_caption(
+                    raw_clip_path,
+                    job_dir / f"clip_{i:02d}_vertical.mp4",
+                    job_dir / f"clip_{i:02d}_captioned.mp4",
+                    template=short_template, bar_color=bar_color, zoom_beats=zoom_beats, aspect=aspect,
+                    captions=captions, style=clip_style, color=color_combo,
+                    h_align=h_align, v_align=v_align, words_per_line=words_per_line,
+                    hook_title=ts.title,
+                    face_track=face_track, src_w=src_w, src_h=src_h,
+                )
+                return await _upload_and_save_clip(
+                    job_id=job_id, user_id=user_id, clip_idx=i, ts=ts,
+                    clip_path=captioned_path, raw_path=reframed_path,
+                    captions=captions, style=clip_style, job_dir=job_dir,
+                )
+            finally:
+                completed += 1
+                pct = 30 + int(60 * completed / total)
+                await db.update_job_progress(job_id, pct, f"Processed {completed}/{total} clips...")
+
+        results = await asyncio.gather(
+            *[_process_one_clip(i, ts) for i, ts in enumerate(timestamps)],
+            return_exceptions=True,
         )
-        await db.update_job_progress(job_id, 80, "Uploading clips...")
-
-        # ── STEP 9: Upload each clip + insert DB row immediately
-        # KEY UX: Each clip is inserted to Supabase as it finishes →
-        # Supabase Realtime fires INSERT event → frontend renders card
-        uploaded_count = 0
-        upload_tasks = [
-            _upload_and_save_clip(
-                job_id=job_id,
-                user_id=user_id,
-                clip_idx=i,
-                ts=ts,
-                clip_path=clip_path,
-                raw_path=raw_path_by_ts.get(id(ts)),
-                captions=captions_by_ts.get(id(ts), []),
-                style=clip_style,
-                job_dir=job_dir,
-            )
-            for i, (ts, clip_path) in enumerate(captioned)
-        ]
-
-        # Upload all concurrently and count successes
-        results = await asyncio.gather(*upload_tasks, return_exceptions=True)
         uploaded_count = sum(1 for r in results if not isinstance(r, Exception))
         for i, r in enumerate(results):
             if isinstance(r, Exception):
-                logger.error(f"[{job_id}] Clip {i} upload failed: {r}")
+                logger.error(f"[{job_id}] Clip {i} pipeline failed: {r}")
+
+        if not uploaded_count:
+            raise RuntimeError("All clip extractions failed")
+
+        await db.update_job_progress(job_id, 90, "Finalizing...")
 
         # ── STEP 10: Complete ─────────────────────────────────
         await db.complete_job(job_id, uploaded_count)
@@ -204,34 +216,6 @@ async def _execute_pipeline(
         # Always clean up temp files — Cloud Run disk is limited
         cleanup_job_files(job_dir)
 
-
-
-async def _reframe_all_parallel(
-    raw_clips: list[tuple[ClipTimestamp, Path]],
-    job_dir:   Path,
-    template:  str = "blur_bg",
-    bar_color: str = "#0d0d0d",
-    aspect:    str = "9:16",
-) -> list[tuple[ClipTimestamp, Path]]:
-    """Reframe all clips to the chosen aspect ratio concurrently."""
-    async def _reframe_one(i: int, ts: ClipTimestamp, raw_path: Path):
-        output = job_dir / f"clip_{i:02d}_vertical.mp4"
-        reframed = await reframe_to_vertical(
-            raw_path, output,
-            template=template, bar_color=bar_color, aspect=aspect,
-        )
-        return ts, reframed
-
-    tasks = [_reframe_one(i, ts, p) for i, (ts, p) in enumerate(raw_clips)]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    ok = []
-    for i, r in enumerate(results):
-        if isinstance(r, Exception):
-            logger.error(f"Reframe clip {i} failed: {r}")
-        else:
-            ok.append(r)
-    return ok
 
 
 async def _upload_and_save_clip(

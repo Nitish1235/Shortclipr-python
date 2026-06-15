@@ -22,8 +22,8 @@ from pathlib import Path
 
 from app.core.proxy import use_decodo_proxy
 from app.pipeline.ai_clipper import find_sequential_clips
-from app.pipeline.captions import VALID_STYLES, burn_captions, get_clip_captions
-from app.pipeline.extractor import VALID_TEMPLATES, extract_all_clips_parallel, reframe_to_vertical
+from app.pipeline.captions import VALID_STYLES, get_clip_captions
+from app.pipeline.extractor import VALID_TEMPLATES, _get_source, extract_clip, reframe_and_caption
 from app.pipeline.stream import extract_video_id, get_stream_urls, get_video_metadata
 from app.pipeline.transcript import get_transcript
 from app.pipeline.uploader import cleanup_job_files, process_and_upload_clip
@@ -81,18 +81,13 @@ async def run_test_pipeline(job_id: str, youtube_url: str, quality: str = "1080p
             raise RuntimeError("Could not build sequential segments from transcript")
 
         job["progress"] = 10
-        job["current_step"] = f"Extracting {len(timestamps)} clips..."
-        raw_clips = await extract_all_clips_parallel(
-            stream_url, timestamps, job_dir, session_id=job_id, audio_url=audio_url, user_agent=user_agent,
-            video_id=video_id,
-        )
-        if not raw_clips:
-            raise RuntimeError("All clip extractions failed")
+        job["current_step"] = "Downloading source video..."
+        source_path = await _get_source(stream_url, audio_url, user_agent, video_id, job_dir, session_id=job_id)
 
         job["progress"] = 25
-        n = len(raw_clips)
+        n = len(timestamps)
 
-        for i, (ts, raw_path) in enumerate(raw_clips):
+        for i, ts in enumerate(timestamps):
             if i < len(VALID_STYLES):
                 template = DEFAULT_TEMPLATE
                 style    = VALID_STYLES[i]
@@ -107,15 +102,18 @@ async def run_test_pipeline(job_id: str, youtube_url: str, quality: str = "1080p
             job["current_step"] = f"[{i + 1}/{n}] {phase}={label.split('_', 1)[1]}"
 
             try:
-                vertical_path = job_dir / f"clip_{i:02d}_vertical.mp4"
-                await reframe_to_vertical(raw_path, vertical_path, template=template, bar_color="#0d0d0d")
-
+                raw_path = await extract_clip(source_path, ts.start, ts.end, job_dir / f"clip_{i:02d}_raw.mp4")
                 captions = get_clip_captions(transcript, ts.start, ts.end)
+                vertical_path = job_dir / f"clip_{i:02d}_vertical.mp4"
                 final_path = job_dir / f"clip_{i:02d}_final.mp4"
-                await burn_captions(vertical_path, captions, final_path, style=style)
+                _, captioned_path = await reframe_and_caption(
+                    raw_path, vertical_path, final_path,
+                    template=template, bar_color="#0d0d0d",
+                    captions=captions, style=style,
+                )
 
                 clip_id = f"{i:02d}_{label}"
-                clip_url, thumb_url = await process_and_upload_clip(final_path, job_id, clip_id, job_dir)
+                clip_url, thumb_url, _raw_url = await process_and_upload_clip(captioned_path, job_id, clip_id, job_dir)
 
                 job["clips"].append({
                     "index": i,

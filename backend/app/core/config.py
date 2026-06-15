@@ -59,9 +59,20 @@ class Settings(BaseSettings):
     DODO_PRODUCT_PRO_2000: str = ""      # $145 — 2000 shorts
 
     # ── Worker / Pipeline ─────────────────────────────────────
-    MAX_CONCURRENT_CLIPS: int = 10          # asyncio semaphore for FFmpeg
+    MAX_CONCURRENT_CLIPS: int = 10          # asyncio semaphore for cheap -c copy extraction
+    MAX_CONCURRENT_ENCODES: int = 3         # asyncio semaphore for libx264 reframe+caption encodes
+    SOURCE_DOWNLOAD_CHUNKS: int = 8         # parallel ranged-download chunk count
     MAX_CONCURRENT_JOBS_PER_USER: int = 2   # prevent spam-submit
     # Note: per-video duration limits are now plan-based — see app/core/plan_limits.py
+
+    # ── Cloud Tasks (optional pipeline queue) ─────────────────
+    # Leave GCP_PROJECT_ID / CLOUD_TASKS_SERVICE_URL empty to keep the
+    # default in-process asyncio.create_task pipeline (local dev / no queue).
+    GCP_PROJECT_ID: str = ""
+    CLOUD_TASKS_LOCATION: str = "us-central1"
+    CLOUD_TASKS_QUEUE: str = "shortclipr-pipeline"
+    CLOUD_TASKS_SERVICE_URL: str = ""       # e.g. https://shortclipr-api-xxxx.run.app
+    INTERNAL_TASK_SECRET: str = ""          # shared secret for /internal/pipeline/run
 
     # ── InnerTube ──────────────────────────────────────────────
     INNERTUBE_API_KEY: str = "AIzaSyA8eiZmM1FaSbwzBlGmbW3ILtKBNJI41zQ"
@@ -78,10 +89,16 @@ class Settings(BaseSettings):
     PROXY_PORTS: str = "10001-10007"  # port pool for random rotation (ignored if PROXY_PORT is set)
 
     # ── Proxy (Decodo) — admin/test pipeline only, not used for user jobs ──
-    DECODO_HOST: str = "gate.decodo.com"
-    DECODO_USER: str = "spbou1dr41"
-    DECODO_PASS: str = "7Ur0gi88_hjxhRHEvn"
+    # Dedicated ISP IPs: each port maps to a fixed IP + country-tagged username.
+    DECODO_HOST: str = "isp.decodo.com"
+    DECODO_USER: str = "user-sp87mxq9dm"
+    DECODO_PASS: str = "Rhxw383q0PFxapeEq_"
     DECODO_PORTS: str = "10001-10010"
+    # port:country pairs — username becomes "{DECODO_USER}-country-{country}"
+    DECODO_PORT_COUNTRIES: str = (
+        "10001:gb,10002:us,10003:gb,10004:us,10005:gb,"
+        "10006:us,10007:gb,10008:us,10009:gb,10010:us"
+    )
 
 
 @lru_cache

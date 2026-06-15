@@ -127,6 +127,10 @@ COLOR_COMBOS: dict[str, dict[str, str]] = {
 
 DEFAULT_COLOR = "white_black"
 
+# Hook title card — shown for the first N seconds of every clip, burned
+# from ClipTimestamp.title (the AI-generated 5-7 word hook).
+HOOK_TITLE_DURATION = 1.8
+
 
 # ══════════════════════════════════════════════════════════════
 #  POSITION PRESETS  (x, y, ASS alignment code)
@@ -253,6 +257,28 @@ def _style_line(style: str, color: str, alignment: int) -> str:
     )
 
 
+def _hook_style_line(color: str) -> str:
+    """
+    ASS style for the hook-title card — bold ALL CAPS text on a translucent
+    boxed background (BorderStyle 3), pinned top-center regardless of the
+    user's chosen caption position.
+    """
+    clr = COLOR_COMBOS.get(color, COLOR_COMBOS[DEFAULT_COLOR])
+    return (
+        f"Style: Hook,"
+        f"Arial Black,60,"
+        f"{clr['primary']},{clr['secondary']},{clr['highlight']},{clr['back']},"
+        f"1,0,0,0,"
+        f"100,100,"
+        f"1,0,"
+        f"3,"     # BorderStyle 3 — opaque box
+        f"10,"    # Outline = box padding
+        f"0,"     # Shadow
+        f"8,"     # Alignment 8 = top-center
+        f"60,60,90,1"
+    )
+
+
 # ══════════════════════════════════════════════════════════════
 #  WORD / PHRASE SPLITTING
 # ══════════════════════════════════════════════════════════════
@@ -338,9 +364,9 @@ def _t(secs: float) -> str:
     return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
 
-def _dlg(start: float, end: float, text: str) -> str:
+def _dlg(start: float, end: float, text: str, style: str = "Default", layer: int = 0) -> str:
     """Bare dialogue line (no tags)."""
-    return f"Dialogue: 0,{_t(start)},{_t(end)},Default,,0,0,0,,{text}"
+    return f"Dialogue: {layer},{_t(start)},{_t(end)},{style},,0,0,0,,{text}"
 
 
 def _pos_tag(x: int, y: int) -> str:
@@ -551,6 +577,26 @@ def _lines_neon(captions: list[Caption], x: int, y: int, wpl: int = 3) -> list[s
     return lines
 
 
+# ── hook title card ────────────────────────────────────────────
+
+def _lines_hook_title(title: str, duration: float = HOOK_TITLE_DURATION) -> list[str]:
+    """
+    One boxed, ALL-CAPS title card pinned to the top-center for the first
+    `duration` seconds — pops in (90% -> 104% -> 100% scale) with a fade,
+    then fades out at the end of its window via \\fad's built-in tail fade.
+    Rendered on Layer 1 so it never z-fights with phrase/word captions.
+    """
+    text = _esc(_safe_upper(title.strip()))
+    if not text:
+        return []
+    tag = (
+        "{\\fscx90\\fscy90\\fad(200,250)"
+        "\\t(0,200,\\fscx104\\fscy104)"
+        "\\t(200,350,\\fscx100\\fscy100)}"
+    )
+    return [_dlg(0, duration, f"{tag}{text}", style="Hook", layer=1)]
+
+
 # ── dispatcher ────────────────────────────────────────────────
 
 _BUILDERS = {
@@ -602,7 +648,7 @@ YCbCr Matrix: TV.709
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-{style_line}
+{style_lines}
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -617,6 +663,7 @@ def build_ass_content(
     h_align:       str = "center",
     v_align:       str = "bottom",
     words_per_line: int = 3,
+    hook_title:    str | None = None,
 ) -> str:
     """
     Build a complete .ass subtitle file string.
@@ -628,18 +675,25 @@ def build_ass_content(
         h_align:        left | center | right
         v_align:        top  | center | bottom
         words_per_line: 1 | 2 | 3  — words shown per screen at once
+        hook_title:     AI-generated hook (ClipTimestamp.title) burned as a
+                         boxed title card for the first HOOK_TITLE_DURATION
+                         seconds. None/empty skips the hook card entirely.
     """
     x, y, alignment = _resolve_pos(h_align, v_align)
     style_key = style if style in _BASE_STYLES else "minimal"
     color_key = color if color in COLOR_COMBOS else DEFAULT_COLOR
     wpl       = max(1, min(int(words_per_line), 4))   # clamp 1-4
 
-    sline  = _style_line(style_key, color_key, alignment)
+    style_lines = [_style_line(style_key, color_key, alignment)]
     build  = _BUILDERS.get(style_key, _lines_minimal)
     events = build(captions, x, y, wpl)
 
+    if hook_title and hook_title.strip():
+        style_lines.append(_hook_style_line(color_key))
+        events = _lines_hook_title(hook_title) + events
+
     return _ASS_HEADER.format(
-        style_line=sline,
+        style_lines="\n".join(style_lines),
         events="\n".join(events),
     )
 
@@ -701,6 +755,34 @@ def captions_to_dict(captions: list[Caption]) -> list[dict]:
     return [{"start": c.start, "end": c.end, "text": c.text} for c in captions]
 
 
+def clamp_captions_to_silence(
+    captions: list[Caption],
+    silences: list[tuple[float, float]],
+) -> list[Caption]:
+    """
+    Trim each caption's `end` back to the start of any long silence window
+    (from detect_silences) it overlaps, so the on-screen text disappears the
+    instant speech actually stops instead of lingering through dead air.
+
+    Pure caption-timing adjustment — no video cuts. Captions that collapse
+    to < MIN_DISPLAY after trimming are dropped.
+    """
+    if not silences:
+        return captions
+
+    MIN_DISPLAY = 0.05
+    result: list[Caption] = []
+    for c in captions:
+        clamp_to = min(
+            (s_start for s_start, _ in silences if c.start < s_start < c.end),
+            default=None,
+        )
+        end = min(c.end, clamp_to) if clamp_to is not None else c.end
+        if end - c.start >= MIN_DISPLAY:
+            result.append(Caption(start=c.start, end=end, text=c.text))
+    return result
+
+
 # ══════════════════════════════════════════════════════════════
 #  CAPTION BURNING
 # ══════════════════════════════════════════════════════════════
@@ -742,7 +824,7 @@ async def burn_captions(
             "-i", str(clip_path),
             "-vf", f"ass={safe_ass}",
             "-c:v", "libx264",
-            "-preset", "fast",
+            "-preset", "veryfast",
             "-crf", "22",
             "-c:a", "copy",
             "-movflags", "+faststart",
@@ -753,7 +835,12 @@ async def burn_captions(
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )
-        _, stderr = await proc.communicate()
+        try:
+            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=180)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise RuntimeError(f"Caption burn timed out [{style}] {clip_path.name}")
 
         if proc.returncode != 0:
             raise RuntimeError(
@@ -768,44 +855,60 @@ async def burn_captions(
     return output_path
 
 
-async def burn_all_captions_parallel(
-    clips:          list[tuple],      # (ClipTimestamp, Path)
-    transcript:     list[TranscriptEntry],
-    style:          str,
-    job_dir:        Path,
-    color:          str = DEFAULT_COLOR,
-    h_align:        str = "center",
-    v_align:        str = "bottom",
-    words_per_line: int = 3,
-) -> list[tuple]:
+# ══════════════════════════════════════════════════════════════
+#  SILENCE DETECTION
+# ══════════════════════════════════════════════════════════════
+
+async def detect_silences(
+    clip_path:          Path,
+    min_silence_dur:    float = 3.0,
+    noise_threshold_db: float = -30.0,
+) -> list[tuple[float, float]]:
     """
-    Burn captions into all clips simultaneously via asyncio.gather().
-    Returns list of (ClipTimestamp, captioned_path) tuples.
+    Run FFmpeg's silencedetect over the clip's audio track and return every
+    silence window >= min_silence_dur as (start, end) seconds.
+
+    Audio-only (-vn, -f null) — decodes no video, so this is a cheap pass
+    even on long clips. Used to clamp caption display time to where speech
+    actually stops (see clamp_captions_to_silence), without cutting video.
     """
-    async def _one(i: int, ts, raw_path: Path):
-        captions   = get_clip_captions(transcript, ts.start, ts.end)
-        out_path   = job_dir / f"clip_{i:02d}_captioned.mp4"
-        final_path = await burn_captions(
-            raw_path, captions, out_path,
-            style=style, color=color,
-            h_align=h_align, v_align=v_align,
-            words_per_line=words_per_line,
-        )
-        return ts, final_path
+    cmd = [
+        "ffmpeg", "-i", str(clip_path),
+        "-af", f"silencedetect=noise={noise_threshold_db}dB:d={min_silence_dur}",
+        "-vn", "-f", "null", "-",
+    ]
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        logger.warning(f"Silence detection timed out for {clip_path.name} — skipping")
+        return []
 
-    tasks   = [_one(i, ts, p) for i, (ts, p) in enumerate(clips)]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    silences: list[tuple[float, float]] = []
+    pending_start: float | None = None
+    for line in stderr.decode(errors="ignore").splitlines():
+        if "silence_start" in line:
+            m = re.search(r"silence_start:\s*(-?[\d.]+)", line)
+            if m:
+                pending_start = float(m.group(1))
+        elif "silence_end" in line and pending_start is not None:
+            m = re.search(r"silence_end:\s*(-?[\d.]+)", line)
+            if m:
+                silences.append((pending_start, float(m.group(1))))
+                pending_start = None
 
-    ok, failed = [], 0
-    for i, r in enumerate(results):
-        if isinstance(r, Exception):
-            logger.error(f"Caption burn clip {i} failed: {r}")
-            failed += 1
-        else:
-            ok.append(r)
+    # Trailing silence that runs to EOF has no silence_end line — still
+    # useful as a clamp point, so record it with an open-ended end.
+    if pending_start is not None:
+        silences.append((pending_start, float("inf")))
 
-    logger.info(f"Burned captions {len(ok)}/{len(clips)} clips ({failed} failed)")
-    return ok
+    return silences
 
 
 # ══════════════════════════════════════════════════════════════

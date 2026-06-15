@@ -666,7 +666,10 @@ async def get_video_metadata(video_id: str, session_id: str | None = None) -> di
     Order:
       1. YouTube oEmbed  — public endpoint, no proxy, fastest
                            (no duration field — triggers InnerTube for duration)
-      2. InnerTube ANDROID + proxy-cheap  — full metadata including duration
+      2. InnerTube ANDROID, no proxy — full metadata including duration
+
+    Metadata calls are cheap/low-risk and don't need proxy bandwidth or IP
+    rotation — only transcript + stream/download routes go through the proxy.
     """
     # ── 1. oEmbed (fast, no proxy) ─────────────────────────────
     oembed_url = f"https://www.youtube.com/oembed?url=https://youtu.be/{video_id}&format=json"
@@ -686,10 +689,9 @@ async def get_video_metadata(video_id: str, session_id: str | None = None) -> di
     except Exception as e:
         logger.warning(f"[{video_id}] oEmbed metadata failed: {e}")
 
-    # ── 2. InnerTube ANDROID + proxy (for duration, or if oEmbed failed) ──
-    proxy = get_proxy_url(session_id)
+    # ── 2. InnerTube ANDROID, no proxy (for duration, or if oEmbed failed) ──
     try:
-        data = await call_player_api(video_id, client_name="ANDROID", proxy_url=proxy)
+        data = await call_player_api(video_id, client_name="ANDROID", proxy_url=None)
         details = data.get("videoDetails", {})
         if details:
             return {

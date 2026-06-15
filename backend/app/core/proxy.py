@@ -56,16 +56,34 @@ def validate_proxy_env() -> None:
 
 
 
+def _parse_port_countries(spec: str) -> dict[int, str]:
+    """Parse 'port:country,port:country,...' → {port: country}."""
+    result: dict[int, str] = {}
+    for pair in spec.split(","):
+        pair = pair.strip()
+        if not pair or ":" not in pair:
+            continue
+        port_str, country = pair.split(":", 1)
+        port_str, country = port_str.strip(), country.strip()
+        if port_str.isdigit() and country:
+            result[int(port_str)] = country
+    return result
+
+
 def _get_decodo_proxy_url(session_id: str | None = None) -> str:
     """
     Return a Decodo proxy URL, picking a port from DECODO_PORTS.
+
+    Each dedicated ISP port has a fixed IP tied to a specific country —
+    DECODO_PORT_COUNTRIES maps port -> country, and the username becomes
+    "{DECODO_USER}-country-{country}" for that port.
 
     If session_id is provided, the port is chosen deterministically from the
     MD5 hash of session_id, ensuring stable routing within the same job.
     """
     s = get_settings()
     host = s.DECODO_HOST.strip()
-    user = quote_plus(s.DECODO_USER.strip())
+    base_user = s.DECODO_USER.strip()
     password = quote_plus(s.DECODO_PASS.strip())
 
     ports = _parse_ports(s.DECODO_PORTS) or [10001]
@@ -74,6 +92,11 @@ def _get_decodo_proxy_url(session_id: str | None = None) -> str:
         port = ports[hash_val % len(ports)]
     else:
         port = random.choice(ports)
+
+    port_countries = _parse_port_countries(s.DECODO_PORT_COUNTRIES)
+    country = port_countries.get(port)
+    user = f"{base_user}-country-{country}" if country else base_user
+    user = quote_plus(user)
 
     _logger.info(f"[proxy.py] Loaded Decodo proxy settings — host: {host}, user: {user}, port: {port}")
     return f"http://{user}:{password}@{host}:{port}"

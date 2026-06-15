@@ -14,6 +14,7 @@ Cloud Run keeps the CPU alive as long as the task is running.
 """
 
 import asyncio
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -202,14 +203,38 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
         options["prefetched_duration"] = video_duration_seconds
         options["prefetched_title"]    = video_meta.get("title", "")
 
-    asyncio.create_task(
-        run_pipeline(job_id, current_user.user_id, body.youtube_url, options),
-        name=f"pipeline-{job_id[:8]}",
-    )
-    logger.info(
-        f"[{job_id}] Pipeline started — user={current_user.user_id} "
-        f"plan={current_user.plan} duration={video_duration_seconds}s"
-    )
+    if settings.GCP_PROJECT_ID and settings.CLOUD_TASKS_SERVICE_URL:
+        from google.cloud import tasks_v2
+
+        client = tasks_v2.CloudTasksClient()
+        parent = client.queue_path(settings.GCP_PROJECT_ID, settings.CLOUD_TASKS_LOCATION, settings.CLOUD_TASKS_QUEUE)
+        task = {
+            "http_request": {
+                "http_method": tasks_v2.HttpMethod.POST,
+                "url": f"{settings.CLOUD_TASKS_SERVICE_URL}/internal/pipeline/run",
+                "headers": {"Content-Type": "application/json", "X-Internal-Secret": settings.INTERNAL_TASK_SECRET},
+                "body": json.dumps({
+                    "job_id": job_id, "user_id": current_user.user_id,
+                    "youtube_url": body.youtube_url, "options": options,
+                }).encode(),
+            },
+            "dispatch_deadline": {"seconds": 1800},  # > PIPELINE_TIMEOUT_SECONDS=1200
+        }
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, client.create_task, parent, task)
+        logger.info(
+            f"[{job_id}] Pipeline queued via Cloud Tasks — user={current_user.user_id} "
+            f"plan={current_user.plan} duration={video_duration_seconds}s"
+        )
+    else:
+        asyncio.create_task(
+            run_pipeline(job_id, current_user.user_id, body.youtube_url, options),
+            name=f"pipeline-{job_id[:8]}",
+        )
+        logger.info(
+            f"[{job_id}] Pipeline started — user={current_user.user_id} "
+            f"plan={current_user.plan} duration={video_duration_seconds}s"
+        )
 
     # ── 6. Return instantly ────────────────────────────────────
     return {"job_id": job_id, "status": "processing"}
@@ -317,6 +342,35 @@ async def get_job_clips(job_id: str, current_user: CurrentUser):
         "clips": [_serialize_clip(c) for c in clips],
         "total": len(clips),
     }
+
+
+# ── POST /jobs/{job_id}/cancel ────────────────────────────────
+
+@router.post("/{job_id}/cancel", status_code=200)
+async def cancel_job(job_id: str, current_user: CurrentUser):
+    """
+    Cancel a running or queued job. Marks it as 'cancelled' and stops
+    further clip processing. Already-completed clips remain.
+    """
+    job = await db.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if str(job["user_id"]) != current_user.user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    status_val = job.get("status")
+    if status_val not in ("processing", "queued"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel a job with status '{status_val}' (only 'processing'/'queued' jobs can be cancelled)"
+        )
+
+    await db._execute(
+        "UPDATE jobs SET status='cancelled', updated_at=NOW() WHERE job_id=$1",
+        job_id,
+    )
+    logger.info(f"[{job_id}] Job cancelled by user {current_user.user_id}")
+    return {"status": "cancelled", "message": f"Job {job_id} will stop processing"}
 
 
 # ── DELETE /jobs/{job_id} ──────────────────────────────────────

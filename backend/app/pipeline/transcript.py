@@ -65,6 +65,15 @@ class _TranscriptsDisabledError(Exception):
     """Video has transcripts disabled — no point trying other methods."""
 
 
+def _transcript_proxy_session(session_id: str | None) -> str | None:
+    """
+    Derive a proxy session key distinct from the job's stream/download
+    session — gives transcript fetches a different proxy IP than the
+    stream resolution + source download for the same job.
+    """
+    return f"{session_id}:transcript" if session_id else None
+
+
 # ── Public API ─────────────────────────────────────────────────
 
 async def get_transcript(video_id: str, language: str = "en", session_id: str | None = None) -> list[TranscriptEntry]:
@@ -219,7 +228,7 @@ def _ytta_fetch_sync(
 
 
 async def _ytta_proxy(video_id: str, lang_code: str, session_id: str | None = None) -> list[TranscriptEntry]:
-    proxy = get_proxy_url(session_id)
+    proxy = get_proxy_url(_transcript_proxy_session(session_id))
     loop = asyncio.get_running_loop()
     # _TranscriptsDisabledError and _VideoUnavailableError propagate naturally
     return await loop.run_in_executor(
@@ -238,7 +247,7 @@ async def _innertube_android_proxy(video_id: str, lang_code: str, session_id: st
     Fetch caption track list via InnerTube ANDROID player call, then download
     the timedtext URL — both via the SAME proxy URL.
     """
-    proxy = get_proxy_url(session_id)
+    proxy = get_proxy_url(_transcript_proxy_session(session_id))
     data = await call_player_api(video_id, client_name="ANDROID", proxy_url=proxy)
 
     ps = data.get("playabilityStatus", {})
@@ -431,7 +440,7 @@ def _ytdlp_subs_sync(
 
 
 async def _ytdlp_subs_proxy(video_id: str, lang_code: str, session_id: str | None = None) -> list[TranscriptEntry]:
-    proxy = get_proxy_url(session_id)
+    proxy = get_proxy_url(_transcript_proxy_session(session_id))
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
         _TRANSCRIPT_POOL,

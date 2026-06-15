@@ -34,14 +34,20 @@ steps:
       - '8080'
 
       # ── Resources ────────────────────────────────────────────────────────
-      # 4 GiB RAM: FFmpeg clips run in parallel (asyncio semaphore = 10),
-      # and multiple in-flight pipelines each hold temp video data in memory.
+      # 8 GiB RAM / 8 vCPU: FFmpeg encodes run with MAX_CONCURRENT_ENCODES
+      # concurrent libx264 processes, plus cheap -c copy extraction
+      # (asyncio semaphore = 10) and in-flight temp video data.
       - '--memory'
-      - '4096Mi'
-      # 2 vCPU: FFmpeg is CPU-intensive. Gives headroom for parallel encodes
-      # without throttling the async event loop.
+      - '8192Mi'
       - '--cpu'
-      - '2'
+      - '8'
+
+      # CPU-boost speeds up cold starts; no-cpu-throttling keeps full CPU
+      # available to background asyncio tasks (the pipeline runs via
+      # asyncio.create_task AFTER the HTTP response, which Cloud Run would
+      # otherwise throttle toward near-zero CPU).
+      - '--cpu-boost'
+      - '--no-cpu-throttling'
 
       # ── Timeout ──────────────────────────────────────────────────────────
       # 1200s = 20 min — matches PIPELINE_TIMEOUT_SECONDS in orchestrator.py.
@@ -50,12 +56,11 @@ steps:
       - '1200'
 
       # ── Concurrency ──────────────────────────────────────────────────────
-      # 10 concurrent requests per instance. Each pipeline spawns up to
-      # MAX_CONCURRENT_CLIPS (10) FFmpeg subprocesses — so 10 concurrent
-      # requests would already saturate 2 vCPUs. Cloud Run auto-scales
-      # new instances beyond this.
+      # 5 concurrent requests per instance. MAX_CONCURRENT_ENCODES caps the
+      # real CPU-bound work per instance — keeping concurrency lower lets
+      # the autoscaler add instances instead of deep-queueing jobs.
       - '--concurrency'
-      - '10'
+      - '5'
 
       # ── Scaling ──────────────────────────────────────────────────────────
       - '--min-instances'

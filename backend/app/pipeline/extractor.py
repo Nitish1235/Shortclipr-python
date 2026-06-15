@@ -3,12 +3,13 @@ extractor.py — Steps 5 & 6 of the ShortClipr pipeline.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STEP 5 — Clip extraction
-  FFmpeg HTTP range requests on CDN URL.
-  Never downloads the full video — only exact bytes per clip.
-  All clips extracted in parallel via asyncio.gather().
+  -c copy extraction from a local source file (see _get_source /
+  download_source / download_source_ytdlp). Each clip is then run
+  through reframe_and_caption() independently — the orchestrator
+  pipelines all clip stages per-clip rather than batching by stage.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 6 — Reframe  (16:9 source → 9:16 / 16:9 / 1:1, default 9:16)
+STEP 6 — Reframe + caption burn (16:9 source → 9:16 / 16:9 / 1:1, default 9:16)
 
 OUTPUT ASPECT RATIOS  (ASPECT_DIMENSIONS):
   9:16  1080×1920  Portrait — TikTok / Reels / Shorts (default)
@@ -47,7 +48,9 @@ OUTPUT ASPECT RATIOS  (ASPECT_DIMENSIONS):
                Portrait crop fills top 30 %, full-width video in bottom 70 %.
 
 All templates are pure FFmpeg-filter-complex — no frame sampling
-or extra models needed, just one ffmpeg subprocess per clip.
+or extra models needed. reframe_and_caption() runs ONE ffmpeg
+subprocess per clip, producing both the raw reframed output and
+(if captions are present) a captioned copy via filter-graph split.
 
 COLOUR PARAMETER  (bar_color):
   Hex string  "#RRGGBB"  e.g.  "#0d0d0d"  "#39ff14"  "#1a1a2e"
@@ -56,11 +59,14 @@ COLOUR PARAMETER  (bar_color):
 
 import asyncio
 import logging
+import shutil
+import tempfile
 from pathlib import Path
 
 from app.core.config import get_settings
 from app.core.proxy import get_proxy_url
-from app.pipeline.ai_clipper import ClipTimestamp
+from app.pipeline.captions import Caption, build_ass_content
+from app.pipeline.downloader import download_source_parallel
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -301,60 +307,41 @@ async def extract_clip(
     return output_path
 
 
-async def extract_all_clips_parallel(
+async def _get_source(
     stream_url: str,
-    timestamps: list[ClipTimestamp],
+    audio_url: str | None,
+    user_agent: str | None,
+    video_id: str | None,
     job_dir: Path,
     session_id: str | None = None,
-    audio_url: str | None = None,
-    user_agent: str | None = None,
-    video_id: str | None = None,
-) -> list[tuple[ClipTimestamp, Path]]:
+) -> Path:
     """
-    Download the full source video once (direct from Cloud Run's own IP,
-    falling back to proxy if the CDN URL is IP-bound and direct download
-    gets HTTP 403, then to a yt-dlp end-to-end download), then extract all
-    clips in parallel from that local file.
+    Resolve a local copy of the full source video — always routed through
+    the proxy (same IP that resolved the stream URL, for IP-bound CDN URLs).
 
-    audio_url: optional separate audio-only CDN URL, merged into the
-    downloaded source when the video stream has no embedded audio
-    (see get_stream_urls).
-    video_id: enables the yt-dlp last-resort download when both ffmpeg
-    attempts fail (the pre-minted CDN URL may be bound to an exit IP the
-    proxy gateway no longer routes us through).
+    Tries a parallel ranged HTTP download first (fast). If the CDN URL
+    doesn't support Range requests or otherwise fails, falls back to the
+    existing sequential chain: proxied ffmpeg download -> yt-dlp.
     """
     source_path = job_dir / "source.mp4"
     proxy_url = get_proxy_url(session_id)
+
     try:
-        await download_source(stream_url, source_path, proxy_url=None, audio_url=audio_url, user_agent=user_agent)
+        return await download_source_parallel(
+            stream_url, source_path, audio_url=audio_url, user_agent=user_agent,
+            num_chunks=settings.SOURCE_DOWNLOAD_CHUNKS, proxy_url=proxy_url,
+        )
     except Exception as exc:
-        logger.warning(f"Direct source download failed ({exc}); retrying via proxy")
-        try:
-            await download_source(stream_url, source_path, proxy_url=proxy_url, audio_url=audio_url, user_agent=user_agent)
-        except Exception as exc2:
-            if not video_id:
-                raise
-            logger.warning(f"Proxied source download failed ({exc2}); falling back to yt-dlp download")
-            await download_source_ytdlp(video_id, source_path, proxy_url=proxy_url)
+        logger.warning(f"Parallel ranged download failed ({exc}); falling back to sequential")
 
-    async def _one(i: int, ts: ClipTimestamp):
-        out = job_dir / f"clip_{i:02d}_{int(ts.start)}s_raw.mp4"
-        path = await extract_clip(source_path, ts.start, ts.end, out)
-        return ts, path
-
-    results = await asyncio.gather(
-        *[_one(i, ts) for i, ts in enumerate(timestamps)],
-        return_exceptions=True,
-    )
-    ok, failed = [], 0
-    for i, r in enumerate(results):
-        if isinstance(r, Exception):
-            logger.error(f"Clip {i} extraction failed: {r}")
-            failed += 1
-        else:
-            ok.append(r)
-    logger.info(f"Extracted {len(ok)}/{len(timestamps)} clips ({failed} failed)")
-    return ok
+    try:
+        await download_source(stream_url, source_path, proxy_url=proxy_url, audio_url=audio_url, user_agent=user_agent)
+    except Exception as exc:
+        if not video_id:
+            raise
+        logger.warning(f"Proxied source download failed ({exc}); falling back to yt-dlp download")
+        await download_source_ytdlp(video_id, source_path, proxy_url=proxy_url)
+    return source_path
 
 
 # ══════════════════════════════════════════════════════════════
@@ -378,16 +365,213 @@ def _darken(color: str, factor: float = 0.3) -> str:
     return f"0x{int(r*factor):02X}{int(g*factor):02X}{int(b*factor):02X}"
 
 
-def _ken_burns_filter(input_label: str, out_label: str, width: int, height: int) -> str:
-    """FFmpeg zoompan for subtle 1.0× → 1.08× push-in."""
+# Beat-synced punch-zoom tuning constants
+_ZOOM_FPS       = 30
+_ZOOM_ATTACK    = 0.12   # seconds to punch in
+_ZOOM_DECAY     = 0.35   # seconds to ease back to baseline
+_ZOOM_PEAK      = 1.08   # zoom level at the peak of a punch
+_ZOOM_BASE_MAX  = 1.05   # ambient drift ceiling when no punch is active
+_ZOOM_BASE_RATE = 0.0006
+
+
+def _zoom_expr(beats: list[float]) -> str:
+    """
+    Build a zoompan `z=` expression that is a pure function of the output
+    frame number (`on`) — no cumulative drift across frames.
+
+    Baseline is a slow ambient drift up to _ZOOM_BASE_MAX. At each beat time
+    `b` (seconds, typically a caption's start time), the zoom punches in to
+    _ZOOM_PEAK over _ZOOM_ATTACK seconds then eases back to baseline over
+    _ZOOM_DECAY seconds — the "camera reacts to each new line" effect.
+    """
+    t = f"(on/{_ZOOM_FPS})"
+    expr = f"min({_ZOOM_BASE_MAX},1+{_ZOOM_BASE_RATE}*{t})"
+    window = _ZOOM_ATTACK + _ZOOM_DECAY
+    peak_delta = _ZOOM_PEAK - 1
+    for b in sorted(beats, reverse=True):
+        rise = f"(1+{peak_delta:.3f}*({t}-{b:.3f})/{_ZOOM_ATTACK})"
+        fall = f"(1+{peak_delta:.3f}*(1-(({t}-{b:.3f}-{_ZOOM_ATTACK})/{_ZOOM_DECAY})))"
+        pulse = f"if(lt({t}-{b:.3f},{_ZOOM_ATTACK}),{rise},{fall})"
+        expr = f"if(between({t},{b:.3f},{b + window:.3f}),{pulse},{expr})"
+    return expr
+
+
+def _dynamic_zoom_filter(
+    input_label: str,
+    out_label: str,
+    width: int,
+    height: int,
+    zoom_beats: list[float] | None,
+    pan_x: str = "0.5",
+    pan_y: str = "0.5",
+) -> str:
+    """
+    FFmpeg zoompan that drifts gently and punches in on each `zoom_beats`
+    timestamp — the camera-reacts-to-each-line look used by trending
+    TikTok/Reels edits. Falls back to a slow ambient drift if `zoom_beats`
+    is empty/None.
+
+    `pan_x`/`pan_y` are ffmpeg expressions (in terms of `on`/`t`) for the
+    canvas-normalized (0-1) pan target — i.e. where the crop window centres.
+    Defaults to "0.5" (frame centre), reproducing the previous fixed
+    `iw/2-(iw/zoom/2)` / `ih/2-(ih/zoom/2)` formulas exactly.
+    """
     return (
         f"[{input_label}]zoompan="
-        f"z='min(zoom+0.0010,1.08)':"
-        f"x='iw/2-(iw/zoom/2)':"
-        f"y='ih/2-(ih/zoom/2)':"
-        f"d=1:s={width}x{height}:fps=30"
+        f"z='{_zoom_expr(zoom_beats or [])}':"
+        f"x='clip(({pan_x})*iw-iw/(2*zoom),0,iw-iw/zoom)':"
+        f"y='clip(({pan_y})*ih-ih/(2*zoom),0,ih-ih/zoom)':"
+        f"d=1:s={width}x{height}:fps={_ZOOM_FPS}"
         f"[{out_label}]"
     )
+
+
+def _pan_expr(face_track_canvas: list[tuple[float, float, float]], axis: str, t_var: str | None = None) -> str:
+    """
+    Build a piecewise-linear pan-target expression (normalized 0-1) from
+    `face_track_canvas` keyframes — (t, cx, cy) triples (see
+    `_face_track_to_canvas` for the zoompan/Mechanism-A case, or raw
+    source-normalized face_track for the crop/Mechanism-B case).
+
+    Linearly interpolates between consecutive keyframes; holds the nearest
+    edge value outside the track's time range. Returns the constant "0.5"
+    if the track is empty.
+
+    `t_var`: the ffmpeg time expression to compare keyframe times against —
+    defaults to zoompan's output-frame-derived `(on/_ZOOM_FPS)`; pass `"t"`
+    for filters (e.g. `crop`) that expose a `t` (seconds) variable directly.
+    """
+    if not face_track_canvas:
+        return "0.5"
+
+    val_idx = 2 if axis == "y" else 1
+    times = [p[0] for p in face_track_canvas]
+    vals = [p[val_idx] for p in face_track_canvas]
+    t = t_var or f"(on/{_ZOOM_FPS})"
+
+    expr = f"{vals[-1]:.4f}"
+    for i in range(len(times) - 2, -1, -1):
+        t0, t1 = times[i], times[i + 1]
+        v0, v1 = vals[i], vals[i + 1]
+        if t1 - t0 > 1e-6:
+            interp = f"({v0:.4f}+({v1 - v0:.4f})*(({t}-{t0:.3f})/{(t1 - t0):.4f}))"
+        else:
+            interp = f"{v1:.4f}"
+        expr = f"if(lt({t},{t1:.3f}),{interp},{expr})"
+
+    return f"if(lt({t},{times[0]:.3f}),{vals[0]:.4f},{expr})"
+
+
+def _fg_geometry(template: str, width: int, height: int, src_w: int, src_h: int) -> tuple[float, float, float, float]:
+    """
+    Returns (fg_w, fg_h, fg_x, fg_y) — the size and top-left offset of the
+    foreground video box within the `width x height` `[pre]` canvas for
+    `template`. Used to map a source-frame-normalized face position into
+    canvas-normalized pan coordinates.
+
+    Only covers templates whose `[pre]` canvas places the source video in a
+    single rectangular box (the `_dynamic_zoom_filter` pan templates) —
+    `gameplay`/`screenshare` use face-driven crop offsets instead (Mechanism
+    B) and keep the zoompan pan centred.
+    """
+    if template in ("blur_bg", "glass"):
+        # scale={width}:-2:force_original_aspect_ratio=decrease, overlay centred
+        fg_w = float(width)
+        fg_h = fg_w * src_h / src_w
+        return fg_w, fg_h, 0.0, (height - fg_h) / 2
+    if template == "zoom_blur":
+        # scale={width*1.2}:-2:force_original_aspect_ratio=decrease, overlay centred
+        fg_w = float(_even_round(width * 1.2))
+        fg_h = fg_w * src_h / src_w
+        return fg_w, fg_h, (width - fg_w) / 2, (height - fg_h) / 2
+    if template == "neon_frame":
+        # scale to inner_w x inner_h (decrease), padded centred, overlay at (20,20)
+        inner_w, inner_h = width - 40, height - 40
+        scale = min(inner_w / src_w, inner_h / src_h)
+        fg_w, fg_h = src_w * scale, src_h * scale
+        return fg_w, fg_h, 20 + (inner_w - fg_w) / 2, 20 + (inner_h - fg_h) / 2
+    if template == "split_screen":
+        # top half: scale to width x half_h (decrease), padded centred
+        half_h = height // 2
+        scale = min(width / src_w, half_h / src_h)
+        fg_w, fg_h = src_w * scale, src_h * scale
+        return fg_w, fg_h, (width - fg_w) / 2, (half_h - fg_h) / 2
+    # color_bars / gradient / cinema: scale to width x vid_h (decrease), padded
+    # centred horizontally, top-aligned (y=0) within the vid box at y=bar_h
+    bar_h = _even_round(height * 656 / 1920)
+    vid_h = height - 2 * bar_h
+    scale = min(width / src_w, vid_h / src_h)
+    fg_w, fg_h = src_w * scale, src_h * scale
+    return fg_w, fg_h, (width - fg_w) / 2, bar_h
+
+
+def _face_track_to_canvas(
+    face_track: list[tuple[float, float, float]] | None,
+    template: str,
+    width: int,
+    height: int,
+    src_w: int,
+    src_h: int,
+) -> list[tuple[float, float, float]]:
+    """Map a source-frame-normalized face track into `[pre]`-canvas-normalized
+    (t, cx, cy) keyframes for `template`, clamped to [0,1]. Returns [] if
+    `face_track`/`src_w`/`src_h` are unavailable."""
+    if not face_track or src_w <= 0 or src_h <= 0:
+        return []
+    fg_w, fg_h, fg_x, fg_y = _fg_geometry(template, width, height, src_w, src_h)
+    canvas: list[tuple[float, float, float]] = []
+    for t, nx, ny in face_track:
+        cx = (nx * fg_w + fg_x) / width
+        cy = (ny * fg_h + fg_y) / height
+        canvas.append((t, min(1.0, max(0.0, cx)), min(1.0, max(0.0, cy))))
+    return canvas
+
+
+def _fc_crop_offset(
+    face_track: list[tuple[float, float, float]] | None,
+    axis: str,
+    in_dim: str,
+    box_dim: str,
+    fallback: str,
+) -> str:
+    """
+    Build a `crop` x/y offset expression that follows the face, in terms of
+    `in_dim` (the `crop` filter's `in_w`/`in_h`) and `box_dim` (the crop
+    box's width/height). `face_track` is source-frame-normalized — under
+    `force_original_aspect_ratio=increase`, normalized coordinates map
+    directly onto `in_w`/`in_h`, so no source-resolution lookup is needed.
+
+    Returns `fallback` verbatim if `face_track` is empty (reproduces the
+    previous static crop offset exactly).
+    """
+    if not face_track:
+        return fallback
+    pos_expr = _pan_expr(face_track, axis, t_var="t")
+    return f"clip(({pos_expr})*{in_dim}-({box_dim})/2,0,{in_dim}-({box_dim}))"
+
+
+def _compute_zoom_beats(
+    captions: list[Caption],
+    clip_duration: float,
+    max_beats: int = 10,
+    min_gap: float = 2.5,
+) -> list[float]:
+    """
+    Derive "zoom beat" timestamps from caption start times — one punch-in
+    per new line/phrase, thinned so beats are >= min_gap seconds apart
+    (avoids a seizure-inducing zoom on every word) and capped at max_beats.
+    Skips beats too close to the very start or end of the clip.
+    """
+    beats: list[float] = []
+    for c in captions:
+        if c.start < 0.5 or c.start > clip_duration - 0.5:
+            continue
+        if beats and c.start - beats[-1] < min_gap:
+            continue
+        beats.append(c.start)
+        if len(beats) >= max_beats:
+            break
+    return beats
 
 
 def _even_round(x: float) -> int:
@@ -396,53 +580,22 @@ def _even_round(x: float) -> int:
     return n if n % 2 == 0 else n + 1
 
 
-async def _run_ffmpeg_complex(
-    input_path: Path,
-    output_path: Path,
-    filter_complex: str,
-) -> None:
-    """Run FFmpeg with -filter_complex and map [out] + audio."""
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", str(input_path),
-        "-filter_complex", filter_complex,
-        "-map", "[out]",
-        "-map", "0:a?",          # optional audio
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "23",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
-        str(output_path),
-    ]
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    _, stderr = await proc.communicate()
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"FFmpeg reframe failed [{input_path.name}]: "
-            f"{stderr.decode(errors='ignore')[-400:]}"
-        )
-
-
 # ══════════════════════════════════════════════════════════════
-#  TEMPLATE IMPLEMENTATIONS
+#  TEMPLATE FILTER BUILDERS — pure string construction, no I/O
 # ══════════════════════════════════════════════════════════════
 
 # ── Template 1: blur_bg ────────────────────────────────────────
 
-async def _template_blur_bg(
-    input_path: Path,
-    output_path: Path,
-    ken_burns: bool,
+def _fc_blur_bg(
     width: int,
     height: int,
+    zoom_beats: list[float] | None,
+    face_track: list[tuple[float, float, float]] | None,
+    src_w: int,
+    src_h: int,
     blur_radius: int = 25,
-) -> Path:
+    out_label: str = "out",
+) -> str:
     """
     Main video centred, blurred copy fills top+bottom.
     blur_radius: 25 = standard, 40 = zoom_blur heavy effect.
@@ -455,23 +608,22 @@ async def _template_blur_bg(
         f"[0:v]scale={width}:-2:force_original_aspect_ratio=decrease[fg];"
         f"[bg][fg]overlay=(W-w)/2:(H-h)/2[pre]"
     )
-    if ken_burns:
-        fc += ";" + _ken_burns_filter("pre", "out", width, height)
-    else:
-        fc = fc.replace("[pre]", "[out]")
-    await _run_ffmpeg_complex(input_path, output_path, fc)
-    return output_path
+    canvas_track = _face_track_to_canvas(face_track, "blur_bg", width, height, src_w, src_h)
+    pan_x, pan_y = _pan_expr(canvas_track, "x"), _pan_expr(canvas_track, "y")
+    return fc + ";" + _dynamic_zoom_filter("pre", out_label, width, height, zoom_beats, pan_x, pan_y)
 
 
 # ── Template 2: zoom_blur ─────────────────────────────────────
 
-async def _template_zoom_blur(
-    input_path: Path,
-    output_path: Path,
-    ken_burns: bool,
+def _fc_zoom_blur(
     width: int,
     height: int,
-) -> Path:
+    zoom_beats: list[float] | None,
+    face_track: list[tuple[float, float, float]] | None,
+    src_w: int,
+    src_h: int,
+    out_label: str = "out",
+) -> str:
     """120 % zoomed foreground + heavy blur background — dramatic feel."""
     zoom_w = _even_round(width * 1.2)
     fc = (
@@ -482,23 +634,22 @@ async def _template_zoom_blur(
         f"[0:v]scale={zoom_w}:-2:force_original_aspect_ratio=decrease[fg];"
         "[bg][fg]overlay=(W-w)/2:(H-h)/2[pre]"
     )
-    if ken_burns:
-        fc += ";" + _ken_burns_filter("pre", "out", width, height)
-    else:
-        fc = fc.replace("[pre]", "[out]")
-    await _run_ffmpeg_complex(input_path, output_path, fc)
-    return output_path
+    canvas_track = _face_track_to_canvas(face_track, "zoom_blur", width, height, src_w, src_h)
+    pan_x, pan_y = _pan_expr(canvas_track, "x"), _pan_expr(canvas_track, "y")
+    return fc + ";" + _dynamic_zoom_filter("pre", out_label, width, height, zoom_beats, pan_x, pan_y)
 
 
 # ── Template 3: glass ─────────────────────────────────────────
 
-async def _template_glass(
-    input_path: Path,
-    output_path: Path,
-    ken_burns: bool,
+def _fc_glass(
     width: int,
     height: int,
-) -> Path:
+    zoom_beats: list[float] | None,
+    face_track: list[tuple[float, float, float]] | None,
+    src_w: int,
+    src_h: int,
+    out_label: str = "out",
+) -> str:
     """
     Glassmorphism — blurred + slightly brightened, desaturated bg;
     crisp main video centred giving a frosted-glass depth effect.
@@ -512,24 +663,23 @@ async def _template_glass(
         f"[0:v]scale={width}:-2:force_original_aspect_ratio=decrease[fg];"
         "[bg][fg]overlay=(W-w)/2:(H-h)/2[pre]"
     )
-    if ken_burns:
-        fc += ";" + _ken_burns_filter("pre", "out", width, height)
-    else:
-        fc = fc.replace("[pre]", "[out]")
-    await _run_ffmpeg_complex(input_path, output_path, fc)
-    return output_path
+    canvas_track = _face_track_to_canvas(face_track, "glass", width, height, src_w, src_h)
+    pan_x, pan_y = _pan_expr(canvas_track, "x"), _pan_expr(canvas_track, "y")
+    return fc + ";" + _dynamic_zoom_filter("pre", out_label, width, height, zoom_beats, pan_x, pan_y)
 
 
 # ── Template 4: colour_bars ───────────────────────────────────
 
-async def _template_colour_bars(
-    input_path: Path,
-    output_path: Path,
+def _fc_colour_bars(
     bar_color: str,
-    ken_burns: bool,
+    zoom_beats: list[float] | None,
     width: int,
     height: int,
-) -> Path:
+    face_track: list[tuple[float, float, float]] | None,
+    src_w: int,
+    src_h: int,
+    out_label: str = "out",
+) -> str:
     """
     Solid-colour bars fill top + bottom letterbox gaps.
     bar_color: e.g. "#0d0d0d", "#1a1a2e", "#ffffff"
@@ -545,24 +695,23 @@ async def _template_colour_bars(
         f"pad={width}:{vid_h}:(ow-iw)/2:0:color=black[vid];"
         "[topbar][vid][botbar]vstack=inputs=3[pre]"
     )
-    if ken_burns:
-        fc += ";" + _ken_burns_filter("pre", "out", width, height)
-    else:
-        fc = fc.replace("[pre]", "[out]")
-    await _run_ffmpeg_complex(input_path, output_path, fc)
-    return output_path
+    canvas_track = _face_track_to_canvas(face_track, "color_bars", width, height, src_w, src_h)
+    pan_x, pan_y = _pan_expr(canvas_track, "x"), _pan_expr(canvas_track, "y")
+    return fc + ";" + _dynamic_zoom_filter("pre", out_label, width, height, zoom_beats, pan_x, pan_y)
 
 
 # ── Template 5: gradient ──────────────────────────────────────
 
-async def _template_gradient(
-    input_path: Path,
-    output_path: Path,
+def _fc_gradient(
     bar_color: str,
-    ken_burns: bool,
+    zoom_beats: list[float] | None,
     width: int,
     height: int,
-) -> Path:
+    face_track: list[tuple[float, float, float]] | None,
+    src_w: int,
+    src_h: int,
+    out_label: str = "out",
+) -> str:
     """
     Gradient bars — top bar is dark, bottom bar is the accent colour.
     Creates a visual depth / branded look.
@@ -579,39 +728,38 @@ async def _template_gradient(
         f"pad={width}:{vid_h}:(ow-iw)/2:0:color=black[vid];"
         "[topbar][vid][botbar]vstack=inputs=3[pre]"
     )
-    if ken_burns:
-        fc += ";" + _ken_burns_filter("pre", "out", width, height)
-    else:
-        fc = fc.replace("[pre]", "[out]")
-    await _run_ffmpeg_complex(input_path, output_path, fc)
-    return output_path
+    canvas_track = _face_track_to_canvas(face_track, "gradient", width, height, src_w, src_h)
+    pan_x, pan_y = _pan_expr(canvas_track, "x"), _pan_expr(canvas_track, "y")
+    return fc + ";" + _dynamic_zoom_filter("pre", out_label, width, height, zoom_beats, pan_x, pan_y)
 
 
 # ── Template 6: cinema ────────────────────────────────────────
 
-async def _template_cinema(
-    input_path: Path,
-    output_path: Path,
-    ken_burns: bool,
+def _fc_cinema(
+    zoom_beats: list[float] | None,
     width: int,
     height: int,
-) -> Path:
+    face_track: list[tuple[float, float, float]] | None,
+    src_w: int,
+    src_h: int,
+    out_label: str = "out",
+) -> str:
     """Classic cinematic black bars — letterbox portrait."""
-    return await _template_colour_bars(
-        input_path, output_path, "#000000", ken_burns, width, height
-    )
+    return _fc_colour_bars("#000000", zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
 
 
 # ── Template 7: neon_frame ────────────────────────────────────
 
-async def _template_neon_frame(
-    input_path: Path,
-    output_path: Path,
+def _fc_neon_frame(
     bar_color: str,
-    ken_burns: bool,
+    zoom_beats: list[float] | None,
     width: int,
     height: int,
-) -> Path:
+    face_track: list[tuple[float, float, float]] | None,
+    src_w: int,
+    src_h: int,
+    out_label: str = "out",
+) -> str:
     """
     Solid coloured border around the video — neon / branded frame.
     20 px border on all sides → video area = (width-40) × (height-40).
@@ -624,23 +772,22 @@ async def _template_neon_frame(
         f"pad={inner_w}:{inner_h}:(ow-iw)/2:(oh-ih)/2:black[vid];"
         "[frame][vid]overlay=20:20[pre]"
     )
-    if ken_burns:
-        fc += ";" + _ken_burns_filter("pre", "out", width, height)
-    else:
-        fc = fc.replace("[pre]", "[out]")
-    await _run_ffmpeg_complex(input_path, output_path, fc)
-    return output_path
+    canvas_track = _face_track_to_canvas(face_track, "neon_frame", width, height, src_w, src_h)
+    pan_x, pan_y = _pan_expr(canvas_track, "x"), _pan_expr(canvas_track, "y")
+    return fc + ";" + _dynamic_zoom_filter("pre", out_label, width, height, zoom_beats, pan_x, pan_y)
 
 
 # ── Template 8: split_screen ──────────────────────────────────
 
-async def _template_split_screen(
-    input_path: Path,
-    output_path: Path,
-    ken_burns: bool,
+def _fc_split_screen(
+    zoom_beats: list[float] | None,
     width: int,
     height: int,
-) -> Path:
+    face_track: list[tuple[float, float, float]] | None,
+    src_w: int,
+    src_h: int,
+    out_label: str = "out",
+) -> str:
     """
     Top half  = video (letterboxed to width × height/2)
     Bottom half = same video vertically flipped — eye-catching dual layout.
@@ -653,144 +800,297 @@ async def _template_split_screen(
         f"pad={width}:{half_h}:(ow-iw)/2:(oh-ih)/2:black,vflip[bot];"
         "[top][bot]vstack[pre]"
     )
-    if ken_burns:
-        fc += ";" + _ken_burns_filter("pre", "out", width, height)
-    else:
-        fc = fc.replace("[pre]", "[out]")
-    await _run_ffmpeg_complex(input_path, output_path, fc)
-    return output_path
+    canvas_track = _face_track_to_canvas(face_track, "split_screen", width, height, src_w, src_h)
+    pan_x, pan_y = _pan_expr(canvas_track, "x"), _pan_expr(canvas_track, "y")
+    return fc + ";" + _dynamic_zoom_filter("pre", out_label, width, height, zoom_beats, pan_x, pan_y)
 
 
 # ── Template 9: screenshare ──────────────────────────────────
 
-async def _template_screenshare(
-    input_path: Path,
-    output_path: Path,
-    ken_burns: bool,
+def _fc_screenshare(
+    zoom_beats: list[float] | None,
     width: int,
     height: int,
-) -> Path:
+    face_track: list[tuple[float, float, float]] | None,
+    src_w: int,
+    src_h: int,
+    out_label: str = "out",
+) -> str:
     """
     Tutorial / screenshare layout:
       Top half    — full-width letterboxed video (shows entire frame)
-      Bottom half — crop of the source filling the bottom half (shows centre / speaker)
+      Bottom half — crop of the source filling the bottom half (shows centre / speaker,
+                     or the face-tracked speaker position when `face_track` is available)
     """
     half_h  = height // 2
     inner_h = _even_round(half_h * 9 / 16)
+    crop_x = _fc_crop_offset(face_track, "x", "in_w", str(width), "0")
+    crop_y = _fc_crop_offset(face_track, "y", "in_h", str(half_h), f"(in_h-{half_h})/2")
     fc = (
         f"[0:v]scale={width}:{inner_h}:force_original_aspect_ratio=decrease,"
         f"pad={width}:{half_h}:(ow-iw)/2:(oh-ih)/2:black[top];"
         f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{half_h}:0:(in_h-{half_h})/2[bot];"
+        f"crop={width}:{half_h}:'{crop_x}':'{crop_y}'[bot];"
         "[top][bot]vstack[pre]"
     )
-    if ken_burns:
-        fc += ";" + _ken_burns_filter("pre", "out", width, height)
-    else:
-        fc = fc.replace("[pre]", "[out]")
-    await _run_ffmpeg_complex(input_path, output_path, fc)
-    return output_path
+    return fc + ";" + _dynamic_zoom_filter("pre", out_label, width, height, zoom_beats)
 
 
 # ── Template 10: gameplay ─────────────────────────────────────
 
-async def _template_gameplay(
-    input_path: Path,
-    output_path: Path,
-    ken_burns: bool,
+def _fc_gameplay(
+    zoom_beats: list[float] | None,
     width: int,
     height: int,
-) -> Path:
+    face_track: list[tuple[float, float, float]] | None,
+    src_w: int,
+    src_h: int,
+    out_label: str = "out",
+) -> str:
     """
     Gaming / podcast layout:
-      Top 30 %    — portrait crop  (webcam / speaker)
+      Top 30 %    — portrait crop  (webcam / speaker — face-tracked when
+                     `face_track` is available)
       Bottom 70 % — full-width     (gameplay / slides)
     """
     top_h = _even_round(height * 0.3)
     bot_h = height - top_h
+    crop_x = _fc_crop_offset(face_track, "x", "in_w", str(width), "0")
+    crop_y = _fc_crop_offset(face_track, "y", "in_h", str(top_h), f"(in_h-{top_h})/2")
     fc = (
         f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{top_h}:0:(in_h-{top_h})/2[top];"
+        f"crop={width}:{top_h}:'{crop_x}':'{crop_y}'[top];"
         f"[0:v]scale={width}:{bot_h}:force_original_aspect_ratio=decrease,"
         f"pad={width}:{bot_h}:(ow-iw)/2:(oh-ih)/2:black[bot];"
         "[top][bot]vstack[pre]"
     )
-    if ken_burns:
-        fc += ";" + _ken_burns_filter("pre", "out", width, height)
-    else:
-        fc = fc.replace("[pre]", "[out]")
-    await _run_ffmpeg_complex(input_path, output_path, fc)
-    return output_path
+    return fc + ";" + _dynamic_zoom_filter("pre", out_label, width, height, zoom_beats)
 
 
-# ══════════════════════════════════════════════════════════════
-#  PUBLIC ENTRY POINT — reframe_to_vertical
-# ══════════════════════════════════════════════════════════════
+def _build_template_filter(
+    template: str,
+    bar_color: str,
+    zoom_beats: list[float] | None,
+    width: int,
+    height: int,
+    face_track: list[tuple[float, float, float]] | None = None,
+    src_w: int = 0,
+    src_h: int = 0,
+    out_label: str = "out",
+) -> str:
+    """Dispatch to the filter-string builder for `template`, ending in [{out_label}].
 
-async def reframe_to_vertical(
-    input_path: Path,
-    output_path: Path,
-    template:   str  = "blur_bg",
-    bar_color:  str  = "#0d0d0d",
-    ken_burns:  bool = True,
-    aspect:     str  = "9:16",
-) -> Path:
+    `face_track`/`src_w`/`src_h` come from `face_tracker.compute_face_track()`
+    — empty/None reproduces the previous centre-default behaviour exactly.
     """
-    Reframe a 16:9 source clip into the chosen aspect ratio using the
-    selected template.
+    if template == "blur_bg":
+        return _fc_blur_bg(width, height, zoom_beats, face_track, src_w, src_h, out_label=out_label)
+    elif template == "zoom_blur":
+        return _fc_zoom_blur(width, height, zoom_beats, face_track, src_w, src_h, out_label=out_label)
+    elif template == "glass":
+        return _fc_glass(width, height, zoom_beats, face_track, src_w, src_h, out_label=out_label)
+    elif template == "color_bars":
+        return _fc_colour_bars(bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
+    elif template == "gradient":
+        return _fc_gradient(bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
+    elif template == "cinema":
+        return _fc_cinema(zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
+    elif template == "neon_frame":
+        return _fc_neon_frame(bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
+    elif template == "split_screen":
+        return _fc_split_screen(zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
+    elif template == "screenshare":
+        return _fc_screenshare(zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
+    elif template == "gameplay":
+        return _fc_gameplay(zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
+    return _fc_blur_bg(width, height, zoom_beats, face_track, src_w, src_h, out_label=out_label)
+
+
+# ══════════════════════════════════════════════════════════════
+#  Encode semaphore
+# ══════════════════════════════════════════════════════════════
+
+_ENCODE_SEMAPHORE: asyncio.Semaphore | None = None
+
+
+def _get_encode_semaphore() -> asyncio.Semaphore:
+    global _ENCODE_SEMAPHORE
+    if _ENCODE_SEMAPHORE is None:
+        _ENCODE_SEMAPHORE = asyncio.Semaphore(settings.MAX_CONCURRENT_ENCODES)
+    return _ENCODE_SEMAPHORE
+
+
+# ══════════════════════════════════════════════════════════════
+#  PUBLIC ENTRY POINT — reframe_and_caption
+# ══════════════════════════════════════════════════════════════
+
+async def _encode_reframed_and_captioned(
+    input_path: Path,
+    raw_output_path: Path,
+    captioned_output_path: Path,
+    template: str,
+    bar_color: str,
+    zoom_beats: list[float] | None,
+    width: int,
+    height: int,
+    captions: list[Caption] | None,
+    style: str,
+    color: str,
+    h_align: str,
+    v_align: str,
+    words_per_line: int,
+    hook_title: str | None = None,
+    face_track: list[tuple[float, float, float]] | None = None,
+    src_w: int = 0,
+    src_h: int = 0,
+) -> None:
+    """One ffmpeg invocation: reframe + (optionally) burn captions, producing
+    both the raw reframed output and the captioned output."""
+    ass_path: str | None = None
+    try:
+        if captions or hook_title:
+            fc = _build_template_filter(template, bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label="reframed")
+            ass_content = build_ass_content(captions or [], style, color, h_align, v_align, words_per_line, hook_title)
+            with tempfile.NamedTemporaryFile(suffix=".ass", mode="w", encoding="utf-8", delete=False) as f:
+                f.write(ass_content)
+                ass_path = f.name
+            safe_ass = ass_path.replace("\\", "/").replace(":", "\\:")
+            fc += f";[reframed]split=2[rawv][capv];[capv]ass={safe_ass}[capout]"
+
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", str(input_path),
+                "-filter_complex", fc,
+                "-map", "[rawv]", "-map", "0:a?",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
+                str(raw_output_path),
+                "-map", "[capout]", "-map", "0:a?",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
+                "-c:a", "copy", "-movflags", "+faststart",
+                str(captioned_output_path),
+            ]
+        else:
+            fc = _build_template_filter(template, bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label="out")
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", str(input_path),
+                "-filter_complex", fc,
+                "-map", "[out]", "-map", "0:a?",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
+                str(raw_output_path),
+            ]
+
+        async with _get_encode_semaphore():
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                _, stderr = await asyncio.wait_for(proc.communicate(), timeout=180)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+                raise RuntimeError(f"FFmpeg reframe+caption timed out [{input_path.name}]")
+
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"FFmpeg reframe+caption failed [{input_path.name}]: "
+                f"{stderr.decode(errors='ignore')[-400:]}"
+            )
+
+        if not (captions or hook_title):
+            shutil.copy(raw_output_path, captioned_output_path)
+
+        for out in (raw_output_path, captioned_output_path):
+            if not out.exists() or out.stat().st_size < 1024:
+                raise RuntimeError(f"Reframe+caption output missing or too small: {out}")
+    finally:
+        if ass_path:
+            Path(ass_path).unlink(missing_ok=True)
+
+
+async def reframe_and_caption(
+    input_path: Path,
+    raw_output_path: Path,
+    captioned_output_path: Path,
+    template: str = "blur_bg",
+    bar_color: str = "#0d0d0d",
+    zoom_beats: list[float] | None = None,
+    aspect: str = "9:16",
+    captions: list[Caption] | None = None,
+    style: str = "minimal",
+    color: str = "white_black",
+    h_align: str = "center",
+    v_align: str = "bottom",
+    words_per_line: int = 3,
+    hook_title: str | None = None,
+    face_track: list[tuple[float, float, float]] | None = None,
+    src_w: int = 0,
+    src_h: int = 0,
+) -> tuple[Path, Path]:
+    """
+    Reframe a 16:9 clip into the chosen aspect ratio and (if `captions` or
+    `hook_title` is non-empty) burn an ASS overlay onto a second copy —
+    both in ONE ffmpeg pass.
 
     Args:
-        input_path:  raw extracted clip (any res, 16:9)
-        output_path: where to write the reframed mp4
+        input_path:             raw extracted clip (any res, 16:9)
+        raw_output_path:        where to write the reframed (uncaptioned) mp4
+        captioned_output_path:  where to write the reframed + captioned mp4
+                                 (a plain copy of raw_output_path if both
+                                 `captions` and `hook_title` are empty)
         template:    one of VALID_TEMPLATES
         bar_color:   hex colour for bars / frame / gradient  (#RRGGBB)
-        ken_burns:   add subtle 1.0× → 1.08× zoom push-in
+        zoom_beats:  caption-start timestamps (seconds) to punch-zoom on —
+                     see _compute_zoom_beats(). Empty/None = ambient drift only.
         aspect:      one of VALID_ASPECTS — "9:16" (default), "16:9", "1:1"
+        captions, style, color, h_align, v_align, words_per_line:
+                     passed to build_ass_content() when captions is non-empty
+        hook_title:  AI-generated hook (ClipTimestamp.title), burned as a
+                     boxed title card for the first HOOK_TITLE_DURATION
+                     seconds regardless of `captions`
+        face_track, src_w, src_h:
+                     dominant-face position track and source resolution from
+                     face_tracker.compute_face_track() — drives the zoompan
+                     pan target / speaker-box crop offset. Empty/None falls
+                     back to centre-default framing.
 
-    Returns output_path on success.
+    Returns (raw_output_path, captioned_output_path) on success.
     """
-    # Normalise / validate template + aspect
     tpl = template if template in VALID_TEMPLATES else "blur_bg"
     asp = aspect if aspect in VALID_ASPECTS else "9:16"
     width, height = ASPECT_DIMENSIONS[asp]
 
     logger.info(
-        f"{input_path.name} → template={tpl}  aspect={asp} ({width}x{height})  "
-        f"bar={bar_color}  ken_burns={ken_burns}"
+        f"{input_path.name} → template={tpl} aspect={asp} ({width}x{height}) "
+        f"bar={bar_color} zoom_beats={len(zoom_beats or [])} captions={len(captions or [])} "
+        f"face_track={len(face_track or [])}"
     )
 
     try:
-        if tpl == "blur_bg":
-            return await _template_blur_bg(input_path, output_path, ken_burns, width, height)
-        elif tpl == "zoom_blur":
-            return await _template_zoom_blur(input_path, output_path, ken_burns, width, height)
-        elif tpl == "glass":
-            return await _template_glass(input_path, output_path, ken_burns, width, height)
-        elif tpl == "color_bars":
-            return await _template_colour_bars(input_path, output_path, bar_color, ken_burns, width, height)
-        elif tpl == "gradient":
-            return await _template_gradient(input_path, output_path, bar_color, ken_burns, width, height)
-        elif tpl == "cinema":
-            return await _template_cinema(input_path, output_path, ken_burns, width, height)
-        elif tpl == "neon_frame":
-            return await _template_neon_frame(input_path, output_path, bar_color, ken_burns, width, height)
-        elif tpl == "split_screen":
-            return await _template_split_screen(input_path, output_path, ken_burns, width, height)
-        elif tpl == "screenshare":
-            return await _template_screenshare(input_path, output_path, ken_burns, width, height)
-        elif tpl == "gameplay":
-            return await _template_gameplay(input_path, output_path, ken_burns, width, height)
-
+        await _encode_reframed_and_captioned(
+            input_path, raw_output_path, captioned_output_path,
+            tpl, bar_color, zoom_beats, width, height,
+            captions, style, color, h_align, v_align, words_per_line,
+            hook_title, face_track, src_w, src_h,
+        )
     except Exception as exc:
         logger.error(
-            f"{input_path.name}: template '{tpl}' failed ({exc}); "
-            "falling back to blur_bg"
+            f"{input_path.name}: template '{tpl}' failed ({exc}); falling back to blur_bg"
         )
         try:
-            return await _template_blur_bg(input_path, output_path, False, width, height)
+            await _encode_reframed_and_captioned(
+                input_path, raw_output_path, captioned_output_path,
+                "blur_bg", bar_color, None, width, height,
+                captions, style, color, h_align, v_align, words_per_line,
+                hook_title, None, 0, 0,
+            )
         except Exception as exc2:
             raise RuntimeError(
-                f"All reframe attempts failed for {input_path.name}: {exc2}"
+                f"All reframe+caption attempts failed for {input_path.name}: {exc2}"
             ) from exc2
 
-    raise RuntimeError(f"Unknown template: {tpl}")
+    return raw_output_path, captioned_output_path
