@@ -11,15 +11,18 @@ import tempfile
 import time
 from pathlib import Path
 
+import httpx
 from fastapi import APIRouter, Body, HTTPException, status
 from fastapi.responses import RedirectResponse
 
 from app.api.deps import CurrentUser
+from app.core.config import get_settings
 from app.db import supabase as db
 from app.pipeline.captions import Caption, burn_captions
 from app.pipeline.uploader import download_to_file, upload_clip
 
 router = APIRouter(tags=["editor"])
+settings = get_settings()
 
 # Keys allowed in the editor config payload
 _ALLOWED_KEYS = {
@@ -81,6 +84,44 @@ async def save_editor_config(
 
 
 # ── Re-render captions onto the raw (uncaptioned) clip ────────
+#
+# The ffmpeg work (download + burn_captions + upload) is CPU-heavy and
+# runs on the worker service when WORKER_SERVICE_URL is configured
+# (see _burn_and_upload_from_url, called directly here in single-service
+# mode and via /internal/editor/render in split mode).
+
+async def _burn_and_upload_from_url(
+    raw_url: str,
+    captions: list[Caption],
+    config: dict,
+    job_id: str,
+    clip_id: str,
+) -> str:
+    """Download raw clip, burn captions per `config`, upload, return the new video_url."""
+    tmp_dir = Path(tempfile.mkdtemp(prefix=f"render_{clip_id[:8]}_"))
+    try:
+        raw_path = tmp_dir / "raw.mp4"
+        out_path = tmp_dir / "captioned.mp4"
+
+        await download_to_file(raw_url, raw_path)
+
+        await burn_captions(
+            raw_path, captions, out_path,
+            style=config.get("style", "minimal"),
+            color=config.get("color", "white_black"),
+            h_align=config.get("h_align", "center"),
+            v_align=config.get("v_align", "bottom"),
+            words_per_line=config.get("words_per_line", 3),
+        )
+
+        clip_url = await upload_clip(out_path, job_id, clip_id)
+        # Cache-bust — same GCS object, new query string
+        return f"{clip_url}?t={int(time.time())}"
+    finally:
+        for f in tmp_dir.glob("*"):
+            f.unlink(missing_ok=True)
+        tmp_dir.rmdir()
+
 
 @router.post("/editor/render/{job_id}/{clip_id}")
 async def render_clip(
@@ -126,38 +167,33 @@ async def render_clip(
         captions_data = json.loads(captions_data)
     captions = [Caption(start=c["start"], end=c["end"], text=c["text"]) for c in captions_data]
 
-    tmp_dir = Path(tempfile.mkdtemp(prefix=f"render_{clip_id[:8]}_"))
-    try:
-        raw_path = tmp_dir / "raw.mp4"
-        out_path = tmp_dir / "captioned.mp4"
+    if settings.WORKER_SERVICE_URL:
+        # Heavy ffmpeg work runs on the worker service.
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            resp = await client.post(
+                f"{settings.WORKER_SERVICE_URL}/internal/editor/render",
+                json={
+                    "job_id": job_id,
+                    "clip_id": clip_id,
+                    "raw_url": raw_url,
+                    "captions": captions_data,
+                    "config": config,
+                },
+                headers={"X-Internal-Secret": settings.INTERNAL_TASK_SECRET},
+            )
+            resp.raise_for_status()
+            clip_url = resp.json()["video_url"]
+    else:
+        clip_url = await _burn_and_upload_from_url(raw_url, captions, config, job_id, clip_id)
 
-        await download_to_file(raw_url, raw_path)
-
-        await burn_captions(
-            raw_path, captions, out_path,
-            style=config.get("style", "minimal"),
-            color=config.get("color", "white_black"),
-            h_align=config.get("h_align", "center"),
-            v_align=config.get("v_align", "bottom"),
-            words_per_line=config.get("words_per_line", 3),
-        )
-
-        clip_url = await upload_clip(out_path, job_id, clip_id)
-        # Cache-bust — same GCS object, new query string
-        clip_url = f"{clip_url}?t={int(time.time())}"
-
-        await db._execute(
-            "UPDATE clips SET video_url=$1 WHERE clip_id=$2",
-            clip_url, clip_id,
-        )
-        await db._execute(
-            "UPDATE clips SET editor_config = editor_config || $1::jsonb WHERE clip_id=$2",
-            json.dumps(config), clip_id,
-        )
-    finally:
-        for f in tmp_dir.glob("*"):
-            f.unlink(missing_ok=True)
-        tmp_dir.rmdir()
+    await db._execute(
+        "UPDATE clips SET video_url=$1 WHERE clip_id=$2",
+        clip_url, clip_id,
+    )
+    await db._execute(
+        "UPDATE clips SET editor_config = editor_config || $1::jsonb WHERE clip_id=$2",
+        json.dumps(config), clip_id,
+    )
 
     return {"video_url": clip_url}
 

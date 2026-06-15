@@ -1,0 +1,86 @@
+steps:
+  # ── 1. Build image ──────────────────────────────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:latest'
+      - './backend'
+
+  # ── 2. Push both tags to Artifact Registry ─────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker'
+
+  # ── 3. Deploy to Cloud Run ──────────────────────────────────────────────────
+  # shortclipr-worker — the SAME image as shortclipr-api, but sized for
+  # ffmpeg encoding and only ever called via:
+  #   - /internal/pipeline/run   (fire-and-forget call from POST /jobs)
+  #   - /internal/editor/render  (direct call from POST /editor/render)
+  # Both routes are gated on X-Internal-Secret == INTERNAL_TASK_SECRET.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'shortclipr-worker'
+      - '--image'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      # Allow-unauthenticated like shortclipr-api — /internal/* routes are
+      # gated on X-Internal-Secret, matching the existing internal.py model.
+      - '--allow-unauthenticated'
+      - '--port'
+      - '8080'
+
+      # ── Resources ────────────────────────────────────────────────────────
+      # 8 GiB RAM / 8 vCPU: FFmpeg encodes run with MAX_CONCURRENT_ENCODES
+      # concurrent libx264 processes, plus cheap -c copy extraction
+      # (asyncio semaphore = 10) and in-flight temp video data.
+      - '--memory'
+      - '8192Mi'
+      - '--cpu'
+      - '8'
+
+      # CPU-boost speeds up cold starts; no-cpu-throttling keeps full CPU
+      # available to background asyncio tasks (the pipeline runs via
+      # asyncio.create_task AFTER the HTTP response, which Cloud Run would
+      # otherwise throttle toward near-zero CPU).
+      - '--cpu-boost'
+      - '--no-cpu-throttling'
+
+      # ── Timeout ──────────────────────────────────────────────────────────
+      # 1200s = 20 min — matches PIPELINE_TIMEOUT_SECONDS in orchestrator.py.
+      # A 3-hour video with 15 clips can take up to 15 min end-to-end.
+      - '--timeout'
+      - '1200'
+
+      # ── Concurrency ──────────────────────────────────────────────────────
+      # 5 concurrent requests per instance. MAX_CONCURRENT_ENCODES caps the
+      # real CPU-bound work per instance — keeping concurrency lower lets
+      # the autoscaler add instances instead of deep-queueing jobs.
+      - '--concurrency'
+      - '5'
+
+      # ── Scaling ──────────────────────────────────────────────────────────
+      # Capped at 2: region CPU quota is 20 vCPU/40GiB, and at 8 vCPU/8GiB
+      # per instance with --no-cpu-throttling, only 2 instances fit
+      # (CpuAllocPerProjectRegion = 20000m / 8000m = 2.5 → 2).
+      - '--min-instances'
+      - '0'
+      - '--max-instances'
+      - '2'
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

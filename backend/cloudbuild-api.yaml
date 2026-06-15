@@ -34,39 +34,40 @@ steps:
       - '8080'
 
       # ── Resources ────────────────────────────────────────────────────────
-      # 8 GiB RAM / 8 vCPU: FFmpeg encodes run with MAX_CONCURRENT_ENCODES
-      # concurrent libx264 processes, plus cheap -c copy extraction
-      # (asyncio semaphore = 10) and in-flight temp video data.
+      # 1 GiB RAM / 1 vCPU: this service handles auth, job CRUD, payments,
+      # webhooks, and metadata — all I/O-bound, no ffmpeg. Heavy work
+      # (pipeline runs, clip re-renders) is dispatched to shortclipr-worker
+      # (see cloudbuild-worker.yaml) via the env vars below.
       - '--memory'
-      - '8192Mi'
+      - '1024Mi'
       - '--cpu'
-      - '8'
+      - '1'
 
-      # CPU-boost speeds up cold starts; no-cpu-throttling keeps full CPU
-      # available to background asyncio tasks (the pipeline runs via
-      # asyncio.create_task AFTER the HTTP response, which Cloud Run would
-      # otherwise throttle toward near-zero CPU).
+      # Normal CPU throttling is fine here — no background asyncio work
+      # runs after the response on this service once WORKER_SERVICE_URL
+      # is set (pipeline dispatch is a quick fire-and-forget HTTP call).
       - '--cpu-boost'
-      - '--no-cpu-throttling'
 
       # ── Timeout ──────────────────────────────────────────────────────────
-      # 1200s = 20 min — matches PIPELINE_TIMEOUT_SECONDS in orchestrator.py.
-      # A 3-hour video with 15 clips can take up to 15 min end-to-end.
       - '--timeout'
-      - '1200'
+      - '300'
 
       # ── Concurrency ──────────────────────────────────────────────────────
-      # 5 concurrent requests per instance. MAX_CONCURRENT_ENCODES caps the
-      # real CPU-bound work per instance — keeping concurrency lower lets
-      # the autoscaler add instances instead of deep-queueing jobs.
       - '--concurrency'
-      - '5'
+      - '40'
 
       # ── Scaling ──────────────────────────────────────────────────────────
+      # 1 vCPU/1Gi per instance — region quota (20 vCPU/40GiB) allows up to
+      # 20 instances; capped at 10 with headroom for shortclipr-worker.
       - '--min-instances'
       - '0'
       - '--max-instances'
       - '10'
+
+      # NOTE: WORKER_SERVICE_URL, INTERNAL_TASK_SECRET are set once via the
+      # Cloud Run Console (Variables & Secrets) — NOT here. `--set-env-vars`
+      # would replace ALL existing env vars (DB URL, JWT secret, etc.) on
+      # every deploy, so it's intentionally omitted. See deployment.md.
 
 images:
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-api:$COMMIT_SHA'

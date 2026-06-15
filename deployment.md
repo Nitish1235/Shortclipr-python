@@ -2,7 +2,7 @@
 
 This guide provides step-by-step instructions for deploying ShortClipr to production manually using the Google Cloud Console, Supabase Dashboard, and Upstash Console. No CLI commands are required for deployment.
 
-> **Architecture note**: ShortClipr runs as **two** Cloud Run services — `shortclipr-frontend` (static React/Vite bundle behind Nginx) and `shortclipr-api` (FastAPI backend). There is **no separate worker service** — clip-processing jobs run in-process on the API service via `asyncio.create_task()` on the same event loop (see `backend/app/api/jobs.py`). Auth is **not** Supabase Auth — the backend implements its own Google OAuth + JWT flow (`backend/app/api/auth.py`) and talks to Postgres directly via `asyncpg`/`SUPABASE_DB_URL`. Keep this in mind: you do not need `SUPABASE_URL`/`SUPABASE_ANON_KEY`/`SUPABASE_SERVICE_KEY`, and `auth.uid()`-based RLS policies will not work since rows aren't owned by Supabase Auth users.
+> **Architecture note**: ShortClipr runs as **three** Cloud Run services — `shortclipr-frontend` (static React/Vite bundle behind Nginx), `shortclipr-api` (FastAPI backend — auth, job CRUD, payments, webhooks; 1 vCPU/1Gi), and `shortclipr-worker` (same image as `shortclipr-api`, but 8 vCPU/8Gi/`--no-cpu-throttling` — runs the ffmpeg pipeline and clip re-renders, see `backend/cloudbuild-worker.yaml`). `shortclipr-api` dispatches heavy work to `shortclipr-worker` via direct fire-and-forget HTTP calls (`POST /jobs` → `/internal/pipeline/run`, `POST /editor/render` → `/internal/editor/render`), both gated on a shared `INTERNAL_TASK_SECRET` header (see `backend/app/api/internal.py`). Each `/internal/*` route returns immediately and continues the work via `asyncio.create_task()` — the worker's `--no-cpu-throttling` keeps it running after the response. If `WORKER_SERVICE_URL` is unset, `shortclipr-api` falls back to running everything in-process via `asyncio.create_task()` (single-service mode, original behavior). Auth is **not** Supabase Auth — the backend implements its own Google OAuth + JWT flow (`backend/app/api/auth.py`) and talks to Postgres directly via `asyncpg`/`SUPABASE_DB_URL`. Keep this in mind: you do not need `SUPABASE_URL`/`SUPABASE_ANON_KEY`/`SUPABASE_SERVICE_KEY`, and `auth.uid()`-based RLS policies will not work since rows aren't owned by Supabase Auth users.
 
 ## 1. Google Cloud Platform (GCP) Setup (Console)
 
@@ -75,7 +75,7 @@ Before deploying anything, create a Docker repository to store your container im
 4. Connect your GitHub repository and select the `main` branch.
 5. In the Build Configuration, select **Cloud Build configuration file (yaml or json)**.
 6. Set the location to `backend/cloudbuild-api.yaml` and click **Save**.
-   - This config already builds the Docker image (multi-stage, FFmpeg + Python deps baked in — see `backend/Dockerfile`), pushes both a `$COMMIT_SHA` and `latest` tag to Artifact Registry, and deploys to Cloud Run with production-tuned resources: **4096Mi memory, 2 vCPU, 1200s timeout, concurrency 10, min-instances 0 / max-instances 10**. These values matter — FFmpeg runs multiple parallel encodes per job and the pipeline can legitimately run for several minutes on long videos (`PIPELINE_TIMEOUT_SECONDS = 1200` in `app/pipeline/orchestrator.py`).
+   - This config builds the Docker image (multi-stage, FFmpeg + Python deps baked in — see `backend/Dockerfile`), pushes both a `$COMMIT_SHA` and `latest` tag to Artifact Registry, and deploys to Cloud Run with **1024Mi memory, 1 vCPU, 300s timeout, concurrency 40, min-instances 0 / max-instances 10**. This service is I/O-bound only (auth, job CRUD, payments, webhooks, metadata) — all ffmpeg work is dispatched to `shortclipr-worker` (see section 4.2 below).
 7. Set the service name to `shortclipr-api` and region to `us-central1` (must match your Artifact Registry region).
 8. Under **Authentication**, choose **Allow unauthenticated invocations** (the frontend and Dodo webhooks both need to reach it directly; auth is handled per-route via JWT inside the app).
 9. Expand **Container, Networking, Security** → **Variables & Secrets** and add every backend environment variable. Use `backend/.env.example` as your checklist — at minimum:
@@ -89,10 +89,24 @@ Before deploying anything, create a Docker repository to store your container im
    - `PROXY_HOST`, `PROXY_USER` (Secret), `PROXY_PASS` (Secret), `PROXY_PORTS` — residential proxy used for InnerTube/stream resolution. The pipeline only routes the actual FFmpeg *download* through this proxy when the signed CDN URL is cryptographically IP-bound to it (see `_url_is_ip_bound` in `app/pipeline/extractor.py`); otherwise it downloads directly from the Cloud Run instance's IP to minimize proxy bandwidth costs.
    - `DODO_PAYMENTS_API_KEY` (Secret), `DODO_PAYMENTS_WEBHOOK_SECRET` (Secret), and all five product IDs: `DODO_PRODUCT_STARTER_100`, `DODO_PRODUCT_STARTER_250`, `DODO_PRODUCT_PRO_500`, `DODO_PRODUCT_PRO_1000`, `DODO_PRODUCT_PRO_2000`
    - `MAX_CONCURRENT_CLIPS`, `MAX_CONCURRENT_JOBS_PER_USER`
+   - **Worker dispatch** (new — see 4.2): `WORKER_SERVICE_URL` (the `shortclipr-worker` URL from step 4.2), `INTERNAL_TASK_SECRET` (Secret — any random string, must match the same value on `shortclipr-worker`)
 10. Attach the `shortclipr-sa` service account from step 1.3 (grants GCS access without a credentials file).
 11. Click **Create**. Cloud Run will build and deploy your API using the configuration file.
 
-> There is intentionally **no step to deploy a worker service** — the old multi-service design (separate `shortclipr-worker`) has been removed. All clip processing happens inside the API service's event loop.
+### 4.2 Deploy the worker service
+
+`shortclipr-worker` runs the same image as `shortclipr-api` but sized for ffmpeg, and is only ever called internally via a direct fire-and-forget HTTP call from the API — it has no end-user-facing routes.
+
+1. In **Cloud Run**, click **Create Service** → **Continuously deploy from a repository** → same GitHub repo/branch as the API.
+2. Build Configuration: **Cloud Build configuration file**, location `backend/cloudbuild-worker.yaml`.
+   - Deploys with **8192Mi memory, 8 vCPU, `--cpu-boost --no-cpu-throttling`, 1200s timeout, concurrency 5, min-instances 0 / max-instances 2** (capped at 2 by the same `us-central1` CPU quota that affects the API — see `backend/cloudbuild-worker.yaml` comments).
+3. Service name `shortclipr-worker`, region `us-central1`.
+4. Under **Authentication**, choose **Allow unauthenticated invocations** — the `/internal/*` routes are gated by the `INTERNAL_TASK_SECRET` header instead of IAM.
+5. Add **all the same environment variables as `shortclipr-api`** (step 4.1.9) — the worker runs the full pipeline and needs the same DB/GCS/proxy/OpenAI/etc. config. Set `INTERNAL_TASK_SECRET` to the **same value** as on `shortclipr-api`. `WORKER_SERVICE_URL` is not needed on the worker itself (only the API uses it to dispatch).
+6. Attach the `shortclipr-sa` service account (same as the API).
+7. Click **Create**. Once deployed, copy its URL and set it as `WORKER_SERVICE_URL` on `shortclipr-api` (step 4.1.9), then redeploy/update the API service so the new env var takes effect.
+
+> If `WORKER_SERVICE_URL` is left unset on `shortclipr-api`, it falls back to running the pipeline in-process via `asyncio.create_task()` (single-service mode) — useful for local dev, but on the right-sized 1 vCPU/1Gi API service this will be slow/throttled in production.
 
 ---
 

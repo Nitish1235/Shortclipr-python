@@ -65,14 +65,14 @@ class Settings(BaseSettings):
     MAX_CONCURRENT_JOBS_PER_USER: int = 2   # prevent spam-submit
     # Note: per-video duration limits are now plan-based — see app/core/plan_limits.py
 
-    # ── Cloud Tasks (optional pipeline queue) ─────────────────
-    # Leave GCP_PROJECT_ID / CLOUD_TASKS_SERVICE_URL empty to keep the
-    # default in-process asyncio.create_task pipeline (local dev / no queue).
-    GCP_PROJECT_ID: str = ""
-    CLOUD_TASKS_LOCATION: str = "us-central1"
-    CLOUD_TASKS_QUEUE: str = "shortclipr-pipeline"
-    CLOUD_TASKS_SERVICE_URL: str = ""       # e.g. https://shortclipr-api-xxxx.run.app
-    INTERNAL_TASK_SECRET: str = ""          # shared secret for /internal/pipeline/run
+    # ── Worker dispatch (optional second Cloud Run service) ───
+    # Leave WORKER_SERVICE_URL empty to run the pipeline in-process via
+    # asyncio.create_task (single-service mode, original behavior).
+    # If set, POST /jobs and POST /editor/render fire-and-forget to
+    # {WORKER_SERVICE_URL}/internal/pipeline/run and /internal/editor/render
+    # on a separate (heavier) Cloud Run service, gated by INTERNAL_TASK_SECRET.
+    WORKER_SERVICE_URL: str = ""            # e.g. https://shortclipr-worker-xxxx.run.app
+    INTERNAL_TASK_SECRET: str = ""          # shared secret for /internal/* routes
 
     # ── InnerTube ──────────────────────────────────────────────
     INNERTUBE_API_KEY: str = "AIzaSyA8eiZmM1FaSbwzBlGmbW3ILtKBNJI41zQ"

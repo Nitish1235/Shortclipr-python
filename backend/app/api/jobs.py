@@ -14,11 +14,11 @@ Cloud Run keeps the CPU alive as long as the task is running.
 """
 
 import asyncio
-import json
 import logging
 import uuid
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
@@ -203,27 +203,28 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
         options["prefetched_duration"] = video_duration_seconds
         options["prefetched_title"]    = video_meta.get("title", "")
 
-    if settings.GCP_PROJECT_ID and settings.CLOUD_TASKS_SERVICE_URL:
-        from google.cloud import tasks_v2
+    if settings.WORKER_SERVICE_URL:
+        # Fire-and-forget HTTP call to the worker service — /internal/pipeline/run
+        # itself does asyncio.create_task() and returns immediately, so this
+        # call returns fast and doesn't hold the API instance open.
+        async def _dispatch_to_worker():
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.post(
+                        f"{settings.WORKER_SERVICE_URL}/internal/pipeline/run",
+                        json={
+                            "job_id": job_id, "user_id": current_user.user_id,
+                            "youtube_url": body.youtube_url, "options": options,
+                        },
+                        headers={"X-Internal-Secret": settings.INTERNAL_TASK_SECRET},
+                    )
+                    resp.raise_for_status()
+            except Exception:
+                logger.exception(f"[{job_id}] Failed to dispatch pipeline to worker")
 
-        client = tasks_v2.CloudTasksClient()
-        parent = client.queue_path(settings.GCP_PROJECT_ID, settings.CLOUD_TASKS_LOCATION, settings.CLOUD_TASKS_QUEUE)
-        task = {
-            "http_request": {
-                "http_method": tasks_v2.HttpMethod.POST,
-                "url": f"{settings.CLOUD_TASKS_SERVICE_URL}/internal/pipeline/run",
-                "headers": {"Content-Type": "application/json", "X-Internal-Secret": settings.INTERNAL_TASK_SECRET},
-                "body": json.dumps({
-                    "job_id": job_id, "user_id": current_user.user_id,
-                    "youtube_url": body.youtube_url, "options": options,
-                }).encode(),
-            },
-            "dispatch_deadline": {"seconds": 1800},  # > PIPELINE_TIMEOUT_SECONDS=1200
-        }
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, client.create_task, parent, task)
+        asyncio.create_task(_dispatch_to_worker(), name=f"dispatch-{job_id[:8]}")
         logger.info(
-            f"[{job_id}] Pipeline queued via Cloud Tasks — user={current_user.user_id} "
+            f"[{job_id}] Pipeline dispatched to worker — user={current_user.user_id} "
             f"plan={current_user.plan} duration={video_duration_seconds}s"
         )
     else:
