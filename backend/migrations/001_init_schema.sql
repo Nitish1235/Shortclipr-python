@@ -154,6 +154,8 @@ ALTER TABLE clips ADD COLUMN IF NOT EXISTS ai_reason          TEXT  DEFAULT '';
 ALTER TABLE clips ADD COLUMN IF NOT EXISTS editor_config      JSONB NOT NULL DEFAULT '{}';
 ALTER TABLE clips ADD COLUMN IF NOT EXISTS raw_video_url      TEXT  DEFAULT '';
 ALTER TABLE clips ADD COLUMN IF NOT EXISTS captions_data      JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE clips ADD COLUMN IF NOT EXISTS preview_url        TEXT  DEFAULT '';
+ALTER TABLE clips ADD COLUMN IF NOT EXISTS clip_ready         BOOLEAN NOT NULL DEFAULT FALSE;
 
 
 -- ────────────────────────────────────────────────────────────

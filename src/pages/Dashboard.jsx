@@ -28,7 +28,8 @@ export default function Dashboard() {
   // const [showPublishModal, setShowPublishModal] = useState(false)  // hidden — coming soon
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [upgradeReason, setUpgradeReason]   = useState('')
-  const activeSseJobs = useRef(new Set())
+  const activeSseJobs  = useRef(new Set())
+  const clipPollRef    = useRef(null)   // interval for polling clips while processing
 
   const isPaid = user?.plan && user.plan !== 'free'
 
@@ -83,17 +84,57 @@ export default function Dashboard() {
     })
   }, [jobs])
 
-  const handleViewClips = async (jobId) => {
-    if (selectedJob === jobId) return setSelectedJob(null)
-    setSelectedJob(jobId); setLoadingClips(true)
+  const fetchClips = async (jobId) => {
     try {
       const token = localStorage.getItem('sc_token')
       const res = await fetch(`${API_BASE}/jobs/${jobId}/clips`, { headers: { Authorization: `Bearer ${token}` } })
       if (res.status === 401) { logout(); return }
-      if (res.ok) { const data = await res.json(); setClips(data.clips || []) }
+      if (res.ok) {
+        const data = await res.json()
+        // Merge new clips preserving selection; upgrade existing cards (preview → HD)
+        setClips(prev => {
+          const byId = Object.fromEntries(prev.map(c => [c.clip_id || c.id, c]))
+          const incoming = data.clips || []
+          incoming.forEach(c => { byId[c.clip_id || c.id] = c })
+          return Object.values(byId).sort((a, b) => b.viral_score - a.viral_score)
+        })
+      }
     } catch (err) { console.error(err) }
-    finally { setLoadingClips(false) }
   }
+
+  const handleViewClips = async (jobId) => {
+    if (selectedJob === jobId) {
+      // Collapse: stop polling
+      clearInterval(clipPollRef.current)
+      clipPollRef.current = null
+      return setSelectedJob(null)
+    }
+    setSelectedJob(jobId); setLoadingClips(true)
+    await fetchClips(jobId)
+    setLoadingClips(false)
+
+    // Poll every 3s while job is processing so new previews appear and HD upgrades land
+    const job = jobs.find(j => j.job_id === jobId)
+    if (job && ['queued', 'processing'].includes(job.status)) {
+      clearInterval(clipPollRef.current)
+      clipPollRef.current = setInterval(() => fetchClips(jobId), 3000)
+    }
+  }
+
+  // Stop clip polling once job leaves processing state
+  useEffect(() => {
+    if (!selectedJob) return
+    const job = jobs.find(j => j.job_id === selectedJob)
+    if (job && !['queued', 'processing'].includes(job.status)) {
+      clearInterval(clipPollRef.current)
+      clipPollRef.current = null
+      // Final fetch to pick up any last clips
+      fetchClips(selectedJob)
+    }
+  }, [jobs, selectedJob])
+
+  // Cleanup on unmount
+  useEffect(() => () => clearInterval(clipPollRef.current), [])
 
   const toggleClipSelection = (clipId) => {
     setSelectedClipIds(prev => { const n = new Set(prev); n.has(clipId) ? n.delete(clipId) : n.add(clipId); return n })
@@ -273,8 +314,8 @@ export default function Dashboard() {
                         </div>
                       )}
 
-                      {/* Actions */}
-                      {job.status === 'completed' && (
+                      {/* Actions — show for processing too so live previews appear */}
+                      {(job.status === 'completed' || job.status === 'processing') && (
                         <button onClick={() => handleViewClips(job.job_id)} style={{
                           ...btnRed,
                           background: selectedJob === job.job_id ? '#111' : '#cf1322',
@@ -282,7 +323,11 @@ export default function Dashboard() {
                           onMouseEnter={e => { e.currentTarget.style.transform='translate(-1px,-1px)'; e.currentTarget.style.boxShadow='3px 3px 0 #111' }}
                           onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='2px 2px 0 #111' }}
                         >
-                          {selectedJob === job.job_id ? '↑ Hide Clips' : `▶ View Clips`}
+                          {selectedJob === job.job_id
+                            ? '↑ Hide Clips'
+                            : job.status === 'processing'
+                              ? '▶ Watch Live'
+                              : '▶ View Clips'}
                         </button>
                       )}
 
@@ -298,14 +343,20 @@ export default function Dashboard() {
                             <p style={{ color:'#999', fontSize:'0.875rem' }}>No clips found.</p>
                           ) : (
                             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:'16px' }}>
-                              {clips.map((clip, i) => (
-                                <div key={clip.id} onClick={() => toggleClipSelection(clip.id)} style={{
-                                  background:'#f9f9f9', border: selectedClipIds.has(clip.id) ? '2px solid #cf1322' : '1px solid #e5e5e5',
+                              {clips.map((clip) => {
+                                const clipId   = clip.clip_id || clip.id
+                                const isReady  = clip.clip_ready === true
+                                const videoSrc = isReady ? clip.video_url : (clip.preview_url || clip.video_url)
+                                const isSelected = selectedClipIds.has(clipId)
+                                return (
+                                <div key={clipId} onClick={() => toggleClipSelection(clipId)} style={{
+                                  background:'#f9f9f9', border: isSelected ? '2px solid #cf1322' : '1px solid #e5e5e5',
                                   borderRadius:'10px', overflow:'hidden', cursor:'pointer',
-                                  boxShadow: selectedClipIds.has(clip.id) ? '0 0 0 3px rgba(207,19,34,0.15)' : 'none',
+                                  boxShadow: isSelected ? '0 0 0 3px rgba(207,19,34,0.15)' : 'none',
                                   position:'relative', transition:'border-color 0.15s',
                                 }}>
-                                  {selectedClipIds.has(clip.id) && (
+                                  {/* Selection checkmark */}
+                                  {isSelected && (
                                     <div style={{
                                       position:'absolute', top:'8px', right:'8px', zIndex:10,
                                       background:'#cf1322', color:'#fff', width:'22px', height:'22px',
@@ -321,34 +372,60 @@ export default function Dashboard() {
                                     fontSize:'0.62rem', fontWeight:700, padding:'2px 7px', borderRadius:'100px',
                                   }}>🔥 {clip.viral_score}/100</div>
 
+                                  {/* HD / Preview quality badge */}
+                                  <div style={{
+                                    position:'absolute', top:'8px', right: isSelected ? '38px' : '8px', zIndex:10,
+                                    background: isReady ? 'rgba(22,163,74,0.9)' : 'rgba(202,138,4,0.9)',
+                                    color:'#fff', fontSize:'0.58rem', fontWeight:700,
+                                    padding:'2px 6px', borderRadius:'100px', letterSpacing:'0.05em',
+                                  }}>
+                                    {isReady ? 'HD' : 'Preview'}
+                                  </div>
+
+                                  {/* Encoding spinner overlay when preview is showing */}
+                                  {!isReady && (
+                                    <div style={{
+                                      position:'absolute', bottom:'50px', left:0, right:0, zIndex:9,
+                                      display:'flex', alignItems:'center', justifyContent:'center',
+                                      gap:'6px', padding:'6px 0',
+                                      background:'rgba(0,0,0,0.5)',
+                                      fontSize:'0.65rem', color:'#fff', fontWeight:600,
+                                    }}>
+                                      <div style={{ width:'10px', height:'10px', border:'2px solid rgba(255,255,255,0.3)', borderTopColor:'#fff', borderRadius:'50%', animation:'spin 0.8s linear infinite' }}/>
+                                      Encoding HD...
+                                    </div>
+                                  )}
+
                                   <video
-                                    src={clip.video_url}
+                                    key={videoSrc}
+                                    src={videoSrc}
                                     controls
-                                    poster={clip.thumbnail_url}
+                                    poster={clip.thumbnail_url || undefined}
                                     onClick={e => e.stopPropagation()}
-                                    style={{ width:'100%', aspectRatio:'9/16', objectFit:'cover', display:'block' }}
+                                    style={{ width:'100%', aspectRatio: isReady ? '9/16' : '16/9', objectFit:'cover', display:'block' }}
                                   />
 
                                   <div style={{ padding:'10px 12px', display:'flex', justifyContent:'space-between' }}>
-                                    <button onClick={e => handleEditClip(e, job.job_id, clip.clip_id || clip.id)} style={{
+                                    <button onClick={e => handleEditClip(e, job.job_id, clipId)} style={{
                                       background:'none', border:'none', cursor:'pointer',
                                       fontSize:'0.78rem', fontWeight:600,
-                                      color: isPaid ? '#cf1322' : '#bbb',
+                                      color: (isPaid && isReady) ? '#cf1322' : '#bbb',
                                       padding:0,
                                     }}>
-                                      {isPaid ? '✏ Edit' : '🔒 Edit'}
+                                      {isPaid && isReady ? '✏ Edit' : '🔒 Edit'}
                                     </button>
                                     <button onClick={e => handleSingleDownload(e, clip)} style={{
                                       background:'none', border:'none', cursor:'pointer',
                                       fontSize:'0.78rem', fontWeight:600,
-                                      color: isPaid ? '#16a34a' : '#bbb',
+                                      color: (isPaid && isReady) ? '#16a34a' : '#bbb',
                                       padding:0,
                                     }}>
-                                      {isPaid ? '⬇ Download' : '🔒 Download'}
+                                      {isPaid && isReady ? '⬇ Download' : '🔒 Download'}
                                     </button>
                                   </div>
                                 </div>
-                              ))}
+                                )
+                              })}
                             </div>
                           )}
                         </div>

@@ -1,24 +1,31 @@
 """
-downloader.py — Parallel ranged-HTTP source download.
+downloader.py — Parallel ranged-HTTP source download + DASH-segment clip download.
 
-Downloads the source video (and optional separate audio-only track) using
-several concurrent HTTP Range requests against the CDN URL — much faster
-than ffmpeg's single-connection sequential read when the CDN supports
-byte-range requests.
+Two strategies:
 
-If the CDN doesn't support Range requests (or anything else goes wrong),
-download_source_parallel() raises and the caller falls back to the
-existing sequential ffmpeg-based chain (see extractor.py::_get_source).
+1. download_source_parallel() — downloads the full source video using parallel
+   HTTP Range requests (8 concurrent chunks). Used as the primary full-download
+   path when we need all clips from a long video.
+
+2. download_clip_segments() — parses the MP4 sidx (Segment Index) box from the
+   first few KB of the CDN URL to build a time→byte map, then downloads ONLY the
+   byte ranges that cover the requested clip window. Dramatically faster for
+   targeted single-clip downloads:
+     - 60s clip from a 33-min video → 3.9 MB instead of 131 MB (~37x less data)
+   Falls back to full-download path on any parsing or fetch error.
 """
 
 import asyncio
 import logging
+import struct
 from pathlib import Path
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
 
 async def _probe_range_support(client: httpx.AsyncClient, url: str, headers: dict) -> int:
     """Return the total content length if `url` supports byte-range requests, else raise."""
@@ -27,7 +34,6 @@ async def _probe_range_support(client: httpx.AsyncClient, url: str, headers: dic
         if resp.status_code != 206:
             raise RuntimeError(f"Range requests not supported (status {resp.status_code})")
         content_range = resp.headers.get("Content-Range", "")
-
     try:
         total = int(content_range.rsplit("/", 1)[-1])
     except (ValueError, IndexError):
@@ -113,6 +119,81 @@ async def _mux(video_path: Path, audio_path: Path, output_path: Path) -> None:
         raise RuntimeError(f"FFmpeg mux failed: {stderr.decode(errors='ignore')[-400:]}")
 
 
+# ── DASH sidx parser ───────────────────────────────────────────────────────────
+
+def _parse_sidx(data: bytes) -> tuple[int, list[dict]]:
+    """
+    Scan `data` for an MP4 sidx (Segment Index) box and return:
+      (init_end_byte, segments)
+
+    Each segment dict has:
+      start_t, end_t   — presentation time range (seconds, float)
+      start_b, end_b   — byte range in the full CDN file (inclusive)
+
+    init_end_byte is the byte offset where the first moof+mdat segment begins
+    (i.e. everything before this offset is the init segment that ffmpeg needs
+    to understand the stream — typically ftyp + moov + sidx, ~5 KB).
+
+    Raises RuntimeError if no sidx found or the box can't be parsed.
+    """
+    # Walk top-level boxes to find sidx
+    i = 0
+    sidx_offset = -1
+    while i < len(data) - 8:
+        size = struct.unpack(">I", data[i : i + 4])[0]
+        name = data[i + 4 : i + 8].decode("latin1", errors="replace")
+        if name == "sidx":
+            sidx_offset = i
+            break
+        if size < 8:
+            break
+        i += size
+
+    if sidx_offset < 0:
+        raise RuntimeError("sidx box not found in first probe bytes")
+
+    box = data[sidx_offset:]
+    version = box[8]
+    timescale = struct.unpack(">I", box[16:20])[0]
+
+    if version == 0:
+        earliest_pt = struct.unpack(">I", box[20:24])[0]
+        first_offset = struct.unpack(">I", box[24:28])[0]
+        ref_count = struct.unpack(">H", box[30:32])[0]
+        entry_start = 32
+    else:
+        earliest_pt = struct.unpack(">Q", box[20:28])[0]
+        first_offset = struct.unpack(">Q", box[28:36])[0]
+        ref_count = struct.unpack(">H", box[36:38])[0]
+        entry_start = 38
+
+    sidx_size = struct.unpack(">I", data[sidx_offset : sidx_offset + 4])[0]
+    # First moof starts right after sidx + first_offset
+    init_end = sidx_offset + sidx_size + first_offset
+
+    segments = []
+    byte_pos = init_end
+    time_pos = earliest_pt / timescale
+
+    for idx in range(ref_count):
+        p = entry_start + idx * 12
+        ref_sz = struct.unpack(">I", box[p : p + 4])[0] & 0x7FFFFFFF
+        duration = struct.unpack(">I", box[p + 4 : p + 8])[0]
+        seg_dur = duration / timescale
+        segments.append({
+            "start_t": time_pos,
+            "end_t": time_pos + seg_dur,
+            "start_b": byte_pos,
+            "end_b": byte_pos + ref_sz - 1,
+        })
+        time_pos += seg_dur
+        byte_pos += ref_sz
+
+    return init_end, segments
+
+
+# ── Public API ─────────────────────────────────────────────────────────────────
+
 async def download_source_parallel(
     video_url: str,
     output_path: Path,
@@ -164,3 +245,217 @@ async def download_source_parallel(
         f"({output_path.stat().st_size / 1e6:.1f} MB, {num_chunks} chunks)"
     )
     return output_path
+
+
+async def _fetch_clip_segments_for_url(
+    client: httpx.AsyncClient,
+    url: str,
+    clip_start: float,
+    clip_end: float,
+    headers: dict,
+    out_path: Path,
+) -> float:
+    """
+    Parse the sidx box from `url`, download init + relevant segment byte ranges,
+    and write a valid fMP4 to `out_path`. Used for both video and audio tracks.
+
+    Returns the actual start time (seconds) of the first downloaded segment —
+    callers need this to compute the correct ffmpeg -ss offset, since the fMP4
+    preserves original absolute PTS values (e.g. starts at t=60s, not t=0).
+    """
+    # Probe first 8 KB for sidx; expand to 64 KB if not found
+    probe_headers = {**headers, "Range": "bytes=0-8191"}
+    resp = await client.get(url, headers=probe_headers)
+    if resp.status_code not in (200, 206):
+        raise RuntimeError(f"sidx probe failed: HTTP {resp.status_code}")
+    probe_data = resp.content
+
+    if b"sidx" not in probe_data:
+        probe_headers = {**headers, "Range": "bytes=0-65535"}
+        resp = await client.get(url, headers=probe_headers)
+        probe_data = resp.content
+
+    init_end, segments = _parse_sidx(probe_data)
+
+    relevant = [s for s in segments if s["end_t"] > clip_start and s["start_t"] < clip_end]
+    if not relevant:
+        raise RuntimeError(f"No segments found for clip {clip_start}-{clip_end}s")
+
+    seg_start_b = relevant[0]["start_b"]
+    seg_end_b   = relevant[-1]["end_b"]
+    actual_start_t = relevant[0]["start_t"]  # PTS of first sample in this fMP4
+
+    logger.info(
+        f"DASH {clip_start:.0f}-{clip_end:.0f}s: {len(relevant)} segs, "
+        f"{(init_end + seg_end_b - seg_start_b + 1) / 1024:.0f} KB, "
+        f"seg_start={actual_start_t:.2f}s"
+    )
+
+    # Fetch init segment + clip data concurrently
+    init_resp, segs_resp = await asyncio.gather(
+        client.get(url, headers={**headers, "Range": f"bytes=0-{init_end-1}"}),
+        client.get(url, headers={**headers, "Range": f"bytes={seg_start_b}-{seg_end_b}"}),
+    )
+    for r in (init_resp, segs_resp):
+        if r.status_code not in (200, 206):
+            raise RuntimeError(f"Segment fetch failed: HTTP {r.status_code}")
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "wb") as f:
+        f.write(init_resp.content)
+        f.write(segs_resp.content)
+
+    return actual_start_t
+
+
+async def _parse_sidx_from_url(
+    client: httpx.AsyncClient,
+    url: str,
+    headers: dict,
+) -> tuple[int, list[dict]]:
+    """Download the minimum bytes needed to parse sidx from a CDN URL."""
+    probe_headers = {**headers, "Range": "bytes=0-8191"}
+    resp = await client.get(url, headers=probe_headers)
+    if resp.status_code not in (200, 206):
+        raise RuntimeError(f"sidx probe failed: HTTP {resp.status_code}")
+    probe_data = resp.content
+    if b"sidx" not in probe_data:
+        probe_headers = {**headers, "Range": "bytes=0-65535"}
+        resp = await client.get(url, headers=probe_headers)
+        probe_data = resp.content
+    return _parse_sidx(probe_data)
+
+
+async def download_clip_segments(
+    video_url: str,
+    clip_start: float,
+    clip_end: float,
+    output_path: Path,
+    audio_url: str | None = None,
+    user_agent: str | None = None,
+    proxy_url: str | None = None,
+) -> tuple[Path, float]:
+    """
+    Download ONLY the bytes covering [clip_start, clip_end] seconds.
+    Returns (output_path, actual_start_t) where actual_start_t is the
+    PTS of the first downloaded segment (used to compute the correct ffmpeg -ss offset).
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    headers = {"User-Agent": user_agent} if user_agent else {}
+    timeout = httpx.Timeout(120.0, connect=30.0)
+    limits = httpx.Limits(max_connections=20, max_keepalive_connections=10)
+
+    client_kwargs: dict = {"timeout": timeout, "limits": limits, "follow_redirects": True}
+    if proxy_url:
+        client_kwargs["proxy"] = proxy_url
+
+    async with httpx.AsyncClient(**client_kwargs) as client:
+        if audio_url:
+            video_tmp = output_path.with_suffix(".v.tmp")
+            audio_tmp = output_path.with_suffix(".a.tmp")
+            try:
+                actual_start_t, _ = await asyncio.gather(
+                    _fetch_clip_segments_for_url(client, video_url, clip_start, clip_end, headers, video_tmp),
+                    _fetch_clip_segments_for_url(client, audio_url, clip_start, clip_end, headers, audio_tmp),
+                )
+                await _mux(video_tmp, audio_tmp, output_path)
+            finally:
+                video_tmp.unlink(missing_ok=True)
+                audio_tmp.unlink(missing_ok=True)
+        else:
+            actual_start_t = await _fetch_clip_segments_for_url(
+                client, video_url, clip_start, clip_end, headers, output_path
+            )
+
+    if not output_path.exists() or output_path.stat().st_size < 1024:
+        raise RuntimeError(f"DASH clip download produced missing/small file: {output_path}")
+
+    return output_path, actual_start_t
+
+
+async def download_all_clips_parallel(
+    video_url: str,
+    clips: list[tuple[float, float]],
+    out_dir: Path,
+    audio_url: str | None = None,
+    user_agent: str | None = None,
+    proxy_url: str | None = None,
+    max_concurrent: int = 5,
+) -> list[tuple[Path, float]]:
+    """
+    Download multiple clips in parallel, sharing one httpx client and
+    parsing each track's sidx ONCE (not once per clip).
+
+    clips: list of (start_sec, end_sec)
+    Returns: list of (raw_mp4_path, actual_start_t) per clip, same order as input.
+    max_concurrent: caps simultaneous downloads to avoid saturating proxy connections.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    headers = {"User-Agent": user_agent} if user_agent else {}
+    timeout = httpx.Timeout(120.0, connect=30.0)
+    # One connection per active clip (video+audio = 2 per clip), plus headroom
+    limits = httpx.Limits(max_connections=max_concurrent * 3, max_keepalive_connections=max_concurrent * 2)
+
+    client_kwargs: dict = {"timeout": timeout, "limits": limits, "follow_redirects": True}
+    if proxy_url:
+        client_kwargs["proxy"] = proxy_url
+
+    sem = asyncio.Semaphore(max_concurrent)
+
+    async with httpx.AsyncClient(**client_kwargs) as client:
+        # Parse sidx for video (and audio) ONCE, then reuse for all clips
+        if audio_url:
+            (v_init_end, v_segs), (a_init_end, a_segs) = await asyncio.gather(
+                _parse_sidx_from_url(client, video_url, headers),
+                _parse_sidx_from_url(client, audio_url, headers),
+            )
+        else:
+            v_init_end, v_segs = await _parse_sidx_from_url(client, video_url, headers)
+            a_init_end, a_segs = None, None
+
+        logger.info(f"sidx parsed: {len(v_segs)} video segs, {len(a_segs) if a_segs else 0} audio segs")
+
+        async def _dl_one(i: int, start: float, end: float) -> tuple[Path, float]:
+            async with sem:
+                video_tmp = out_dir / f"clip_{i:02d}.v.tmp"
+                audio_tmp = out_dir / f"clip_{i:02d}.a.tmp"
+                output   = out_dir / f"clip_{i:02d}_raw.mp4"
+
+                async def _dl_track(url, init_end, segs, out_path):
+                    relevant = [s for s in segs if s["end_t"] > start and s["start_t"] < end]
+                    if not relevant:
+                        raise RuntimeError(f"No segments for clip {start}-{end}s")
+                    sb, eb = relevant[0]["start_b"], relevant[-1]["end_b"]
+                    actual_t = relevant[0]["start_t"]
+                    init_r, seg_r = await asyncio.gather(
+                        client.get(url, headers={**headers, "Range": f"bytes=0-{init_end-1}"}),
+                        client.get(url, headers={**headers, "Range": f"bytes={sb}-{eb}"}),
+                    )
+                    for r in (init_r, seg_r):
+                        if r.status_code not in (200, 206):
+                            raise RuntimeError(f"Fetch failed HTTP {r.status_code}")
+                    out_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(out_path, "wb") as f:
+                        f.write(init_r.content)
+                        f.write(seg_r.content)
+                    return actual_t
+
+                try:
+                    if audio_url and a_segs:
+                        actual_start_t, _ = await asyncio.gather(
+                            _dl_track(video_url, v_init_end, v_segs, video_tmp),
+                            _dl_track(audio_url, a_init_end, a_segs, audio_tmp),
+                        )
+                        await _mux(video_tmp, audio_tmp, output)
+                    else:
+                        actual_start_t = await _dl_track(video_url, v_init_end, v_segs, output)
+                finally:
+                    video_tmp.unlink(missing_ok=True)
+                    audio_tmp.unlink(missing_ok=True)
+
+                logger.info(f"Clip {i} ({start:.0f}-{end:.0f}s): {output.stat().st_size//1024}KB")
+                return output, actual_start_t
+
+        results = await asyncio.gather(*[_dl_one(i, s, e) for i, (s, e) in enumerate(clips)])
+
+    return list(results)

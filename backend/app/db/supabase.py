@@ -142,6 +142,30 @@ async def insert_clip(clip_data: dict) -> dict:
     return row or {}
 
 
+async def update_clip_final_url(
+    clip_id: str,
+    video_url: str,
+    raw_video_url: str,
+    thumbnail_url: str,
+    captions_data: list | None = None,
+) -> None:
+    """
+    Called after the full vertical encode + upload completes.
+    Marks clip as ready (clip_ready=TRUE) and sets final URLs.
+    Supabase Realtime fires UPDATE event → frontend card swaps from
+    360p preview to full HD vertical clip.
+    """
+    await _execute(
+        """UPDATE clips
+           SET video_url=$2, raw_video_url=$3, thumbnail_url=$4,
+               captions_data=COALESCE($5::jsonb, captions_data),
+               clip_ready=TRUE
+           WHERE clip_id=$1""",
+        clip_id, video_url, raw_video_url, thumbnail_url,
+        json.dumps(captions_data) if captions_data is not None else None,
+    )
+
+
 async def get_clips_for_job(job_id: str) -> list[dict]:
     return await _fetch(
         "SELECT * FROM clips WHERE job_id=$1 ORDER BY viral_score DESC",

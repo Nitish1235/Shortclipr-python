@@ -66,7 +66,7 @@ from pathlib import Path
 from app.core.config import get_settings
 from app.core.proxy import get_proxy_url
 from app.pipeline.captions import Caption, build_ass_content
-from app.pipeline.downloader import download_source_parallel
+from app.pipeline.downloader import download_clip_segments, download_source_parallel
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -342,6 +342,83 @@ async def _get_source(
         logger.warning(f"Proxied source download failed ({exc}); falling back to yt-dlp download")
         await download_source_ytdlp(video_id, source_path, proxy_url=proxy_url)
     return source_path
+
+
+async def get_clip_via_dash(
+    stream_url: str,
+    start: float,
+    end: float,
+    output_path: Path,
+    audio_url: str | None = None,
+    user_agent: str | None = None,
+    session_id: str | None = None,
+) -> Path:
+    """
+    Download and extract a single clip [start, end] using the DASH sidx approach —
+    fetches only the MP4 segments covering the clip window (~3-5% of the full file)
+    instead of downloading the entire video.
+
+    Flow:
+      1. Parse sidx box from first 8-64 KB of CDN URL → time→byte segment map
+      2. Download init segment (moov/ftyp, ~5 KB) + clip segments concurrently
+      3. Write as a valid fMP4, then ffmpeg -ss/-t to trim to exact timestamps
+
+    Falls back to RuntimeError on any sidx parse or fetch failure — callers
+    should catch and fall back to _get_source + extract_clip.
+    """
+    proxy_url = get_proxy_url(session_id)
+    raw_path  = output_path.with_suffix(".dash_raw.mp4")
+
+    try:
+        _, actual_start_t = await download_clip_segments(
+            stream_url, start, end, raw_path,
+            audio_url=audio_url, user_agent=user_agent, proxy_url=proxy_url,
+        )
+    except Exception as exc:
+        raw_path.unlink(missing_ok=True)
+        raise RuntimeError(f"DASH segment download failed: {exc}") from exc
+
+    # The fMP4 preserves original absolute PTS (e.g. starts at t=60s for a clip
+    # at 60s in the video). The correct seek offset is relative to the first
+    # segment's start, not the clip_start — otherwise we'd overshoot.
+    duration = end - start
+    ss_offset = max(0.0, start - actual_start_t)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", str(ss_offset), "-i", str(raw_path),
+        "-t", str(duration),
+        "-c", "copy",
+        "-avoid_negative_ts", "make_zero",
+        "-movflags", "+faststart",
+        str(output_path),
+    ]
+    async with _get_semaphore():
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise RuntimeError(f"FFmpeg DASH trim timed out [{start:.0f}-{end:.0f}s]")
+        finally:
+            raw_path.unlink(missing_ok=True)
+
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"FFmpeg DASH trim failed [{start:.0f}-{end:.0f}s]: "
+            f"{stderr.decode(errors='ignore')[-400:]}"
+        )
+    if not output_path.exists() or output_path.stat().st_size < 1024:
+        raise RuntimeError(f"DASH clip output missing or too small: {output_path}")
+
+    logger.info(f"DASH clip {start:.0f}-{end:.0f}s → {output_path.name} ({output_path.stat().st_size // 1024} KB)")
+    return output_path
 
 
 # ══════════════════════════════════════════════════════════════

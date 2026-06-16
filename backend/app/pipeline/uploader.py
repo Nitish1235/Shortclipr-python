@@ -1,9 +1,12 @@
 """
-uploader.py — Step 7 of the ShortClipr pipeline.
+uploader.py — GCS upload/delete helpers for the ShortClipr pipeline.
 
-Uploads processed clips + thumbnails to Google Cloud Storage.
-Generates a thumbnail for every clip via FFmpeg (frame at 1 second).
-Cleans up local /tmp files after successful upload.
+GCS layout:
+  raw/{job_id}/{clip_id}.mp4        — original 1080p horizontal (deleted after encode)
+  previews/{job_id}/{clip_id}.mp4   — 360p horizontal preview (for fast card display)
+  clips/{job_id}/{clip_id}.mp4      — final vertical captioned clip
+  clips/{job_id}/{clip_id}_raw.mp4  — reframed uncaptioned vertical (for re-renders)
+  thumbnails/{job_id}/{clip_id}.jpg — card thumbnail
 """
 
 import asyncio
@@ -33,7 +36,32 @@ def _public_url(blob_name: str) -> str:
     return f"{settings.GCS_PUBLIC_BASE_URL}/{settings.GCS_BUCKET_NAME}/{blob_name}"
 
 
-# ── Thumbnail generation ───────────────────────────────────────
+# ── Preview + Thumbnail generation ────────────────────────────
+
+async def generate_preview(source_path: Path, output_path: Path) -> Path:
+    """
+    Generate a 360p preview from the raw horizontal clip.
+    Fast encode (libx264 ultrafast, low bitrate) for quick card display.
+    """
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(source_path),
+        "-vf", "scale=-2:360",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+        "-c:a", "aac", "-b:a", "64k",
+        "-movflags", "+faststart",
+        str(output_path),
+    ]
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+    if proc.returncode != 0:
+        logger.warning(f"Preview generation failed: {stderr.decode()[-200:]}")
+    return output_path
+
 
 async def generate_thumbnail(clip_path: Path, output_path: Path) -> Path:
     """
@@ -93,12 +121,57 @@ async def upload_raw_clip(
     job_id: str,
     clip_id: str,
 ) -> str:
-    """Upload the reframed-but-uncaptioned clip to GCS. Returns public URL."""
+    """Upload the reframed-but-uncaptioned vertical clip to GCS. Returns public URL."""
     blob_name = f"clips/{job_id}/{clip_id}_raw.mp4"
     loop = asyncio.get_running_loop()
     url = await loop.run_in_executor(None, _upload_to_gcs, local_path, blob_name, "video/mp4")
     logger.info(f"Uploaded raw clip → {url}")
     return url
+
+
+async def upload_source_clip(
+    local_path: Path,
+    job_id: str,
+    clip_id: str,
+) -> str:
+    """Upload the original 1080p horizontal clip to GCS /raw/. Returns public URL.
+    This is deleted from GCS as soon as the final vertical encode is uploaded."""
+    blob_name = f"raw/{job_id}/{clip_id}.mp4"
+    loop = asyncio.get_running_loop()
+    url = await loop.run_in_executor(None, _upload_to_gcs, local_path, blob_name, "video/mp4")
+    logger.info(f"Uploaded source clip → {url}")
+    return url
+
+
+async def upload_preview(
+    local_path: Path,
+    job_id: str,
+    clip_id: str,
+) -> str:
+    """Upload 360p horizontal preview to GCS /previews/. Returns public URL."""
+    blob_name = f"previews/{job_id}/{clip_id}.mp4"
+    loop = asyncio.get_running_loop()
+    url = await loop.run_in_executor(None, _upload_to_gcs, local_path, blob_name, "video/mp4")
+    logger.info(f"Uploaded preview → {url}")
+    return url
+
+
+async def delete_source_clip(job_id: str, clip_id: str) -> None:
+    """Delete the raw horizontal source clip from GCS after encode completes."""
+    blob_name = f"raw/{job_id}/{clip_id}.mp4"
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, _delete_blob_sync, blob_name)
+
+
+def _delete_blob_sync(blob_name: str) -> None:
+    try:
+        client = _get_gcs_client()
+        bucket = client.bucket(settings.GCS_BUCKET_NAME)
+        blob = bucket.blob(blob_name)
+        blob.delete()
+        logger.info(f"Deleted GCS object: {blob_name}")
+    except Exception as e:
+        logger.warning(f"GCS delete failed for {blob_name}: {e}")
 
 
 async def download_to_file(url: str, dest: Path) -> Path:
@@ -128,7 +201,7 @@ def _delete_job_blobs_sync(job_id: str) -> None:
     try:
         client = _get_gcs_client()
         bucket = client.bucket(settings.GCS_BUCKET_NAME)
-        prefixes = [f"clips/{job_id}/", f"thumbnails/{job_id}/"]
+        prefixes = [f"clips/{job_id}/", f"thumbnails/{job_id}/", f"raw/{job_id}/", f"previews/{job_id}/"]
         deleted = 0
         for prefix in prefixes:
             blobs = list(bucket.list_blobs(prefix=prefix))
