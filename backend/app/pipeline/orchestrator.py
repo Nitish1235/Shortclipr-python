@@ -167,7 +167,9 @@ async def _execute_pipeline(
             nonlocal phase1_done, phase2_done
 
             # ── Trim raw clip ──────────────────────────────────────
-            raw_clip_path = job_dir / f"clip_{i:02d}_raw.mp4"
+            # Downloader writes clip_{i:02d}_raw.mp4 — use a different
+            # name for the trimmed output so ffmpeg input ≠ output.
+            raw_clip_path = job_dir / f"clip_{i:02d}_trimmed.mp4"
 
             if raw_clip_results is not None:
                 raw_path_dash, actual_start_t = raw_clip_results[i]
@@ -188,8 +190,8 @@ async def _execute_pipeline(
                 )
                 _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
                 if proc.returncode != 0:
-                    raise RuntimeError(f"DASH trim failed: {stderr.decode(errors='ignore')[-200:]}")
-                raw_path_dash.unlink(missing_ok=True)
+                    raise RuntimeError(f"DASH trim failed: {stderr.decode(errors='ignore')[-300:]}")
+                raw_path_dash.unlink(missing_ok=True)  # free disk: dash file no longer needed
             else:
                 raw_clip_path = await extract_clip(source_path, ts.start, ts.end, raw_clip_path)
 
