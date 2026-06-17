@@ -67,11 +67,14 @@ class _TranscriptsDisabledError(Exception):
 
 def _transcript_proxy_session(session_id: str | None) -> str | None:
     """
-    Derive a proxy session key distinct from the job's stream/download
-    session — gives transcript fetches a different proxy IP than the
-    stream resolution + source download for the same job.
+    Use the same session key as the stream fetch so transcript requests
+    land on the same proxy port. The stream port is pre-validated as
+    reachable by the time transcript fetching begins (they run concurrently
+    in the orchestrator, but the stream's yt-dlp+tv_embedded path has already
+    confirmed the port is not IP-blocked by YouTube). A separate `:transcript`
+    suffix gave a DIFFERENT port that was more likely to be flagged.
     """
-    return f"{session_id}:transcript" if session_id else None
+    return session_id
 
 
 # ── Public API ─────────────────────────────────────────────────
@@ -371,6 +374,8 @@ def _ytdlp_subs_sync(
         "skip_download": True,
         "noplaylist": True,
         "socket_timeout": 25,
+        # tv_embedded client bypasses YouTube bot-detection (same as stream URL fetch)
+        "extractor_args": {"youtube": {"player_client": ["tv_embedded"]}},
     }
     if proxy_url:
         opts["proxy"] = proxy_url
