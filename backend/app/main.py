@@ -6,6 +6,7 @@ Health check endpoint included for Cloud Run readiness probe.
 """
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,12 +35,58 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
+_logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ── Startup: warm up DB pool ──────────────────────────────────────────
+    try:
+        from app.db.supabase import get_pool
+        await get_pool()
+        _logger.info("DB pool warmed up at startup")
+    except Exception as e:
+        _logger.error(f"STARTUP: DB connection failed — {e}")
+
+    # ── Startup: verify OpenAI reachability ───────────────────────────────
+    if settings.OPENAI_API_KEY:
+        try:
+            import httpx
+            async with httpx.AsyncClient(proxies=None, timeout=8) as c:
+                r = await c.get("https://api.openai.com/v1/models",
+                                headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"})
+            if r.status_code in (200, 401):  # 401 = key issue but network OK
+                _logger.info(f"OpenAI reachable (status={r.status_code})")
+            else:
+                _logger.warning(f"STARTUP: OpenAI returned {r.status_code}")
+        except Exception as e:
+            _logger.error(
+                f"STARTUP: Cannot reach api.openai.com — {e}. "
+                f"If HTTPS_PROXY is set in Cloud Run env vars it may be routing "
+                f"OpenAI traffic through a restricted proxy. Unset it or scope it "
+                f"to YouTube domains only."
+            )
+    else:
+        _logger.error("STARTUP: OPENAI_API_KEY is not set — AI clipper will fail")
+
+    yield
+    # ── Shutdown: close pool cleanly ───────────────────────────────────────
+    try:
+        from app.db import supabase as _db
+        if _db._pool is not None:
+            await _db._pool.close()
+            _logger.info("DB pool closed")
+    except Exception:
+        pass
+
+
 app = FastAPI(
     title="ShortClipr API",
     version="1.0.0",
     description="AI-powered short clip generation from YouTube videos",
     docs_url="/docs" if settings.APP_ENV == "development" else None,
     redoc_url=None,
+    lifespan=lifespan,
 )
 
 
@@ -88,7 +135,17 @@ if settings.APP_ENV == "development":
 # ── Health check (Cloud Run readiness probe) ───────────────────
 @app.get("/health", tags=["system"])
 async def health():
-    return {"status": "ok", "version": "1.0.0"}
+    from fastapi.responses import JSONResponse
+    try:
+        from app.db.supabase import get_pool
+        pool = await get_pool()
+        await pool.fetchval("SELECT 1")
+        return {"status": "ok", "db": "connected", "version": "1.0.0"}
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "db": "unreachable", "error": str(e)[:200]},
+        )
 
 
 @app.get("/", tags=["system"])

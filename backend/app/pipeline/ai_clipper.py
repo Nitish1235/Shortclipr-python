@@ -39,8 +39,18 @@ settings = get_settings()
 # GPT-4o-mini: $0.15/1M input tokens vs GPT-4o's $5/1M — 33× cheaper
 CLIP_MODEL = "gpt-4o-mini"
 
-# Built-in SDK retry: 3 attempts, exponential backoff (2s → 4s → 8s)
-_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, max_retries=3)
+# Built-in SDK retry handles 429 + 5xx — connection errors need our own retry.
+# http_client=None lets httpx use system env (no proxy) — OpenAI must NOT go
+# through the Decodo residential proxy; it's YouTube-specific.
+import httpx as _httpx
+_client = AsyncOpenAI(
+    api_key=settings.OPENAI_API_KEY,
+    max_retries=2,
+    http_client=_httpx.AsyncClient(
+        proxies=None,   # explicitly ignore HTTP_PROXY / HTTPS_PROXY env vars
+        timeout=_httpx.Timeout(connect=10, read=60, write=10, pool=10),
+    ),
+)
 
 # Per-chunk transcript character budget for GPT-4o-mini
 MAX_CHUNK_CHARS = 40_000
@@ -245,20 +255,37 @@ async def _find_clip_in_chunk(chunk: list[tuple[int, TranscriptEntry]], system: 
 # ── GPT call ────────────────────────────────────────────────────
 
 async def _call_gpt(system: str, user: str) -> str:
-    response = await _client.chat.completions.create(
-        model=CLIP_MODEL,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user",   "content": user},
-        ],
-        temperature=0.3,       # low temp → consistent JSON output
-        max_tokens=1024,
-        response_format={"type": "json_object"},
-    )
-    choice = response.choices[0]
-    if choice.finish_reason == "length":
-        logger.warning(f"GPT-4o-mini chunk response truncated (usage={response.usage})")
-    return choice.message.content or "{}"
+    from openai import APIConnectionError, APIStatusError
+    _CONNECT_RETRIES = 3
+    _CONNECT_DELAY   = 3.0
+
+    last_err: Exception | None = None
+    for attempt in range(1, _CONNECT_RETRIES + 1):
+        try:
+            response = await _client.chat.completions.create(
+                model=CLIP_MODEL,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user",   "content": user},
+                ],
+                temperature=0.3,
+                max_tokens=1024,
+                response_format={"type": "json_object"},
+            )
+            choice = response.choices[0]
+            if choice.finish_reason == "length":
+                logger.warning(f"GPT-4o-mini chunk response truncated (usage={response.usage})")
+            return choice.message.content or "{}"
+        except APIConnectionError as e:
+            last_err = e
+            logger.warning(f"OpenAI connection error (attempt {attempt}/{_CONNECT_RETRIES}): {e}")
+            if attempt < _CONNECT_RETRIES:
+                await asyncio.sleep(_CONNECT_DELAY * attempt)
+        except APIStatusError as e:
+            # 5xx or unexpected — re-raise, SDK's own retry already ran
+            raise
+
+    raise RuntimeError(f"OpenAI unreachable after {_CONNECT_RETRIES} attempts: {last_err}")
 
 
 # ── Response parsing ─────────────────────────────────────────────

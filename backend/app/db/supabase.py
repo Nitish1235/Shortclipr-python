@@ -23,18 +23,59 @@ settings = get_settings()
 # ── Connection pool singleton ─────────────────────────────────
 _pool: asyncpg.Pool | None = None
 
+_DB_CONNECT_RETRIES = 3
+_DB_CONNECT_DELAY   = 2.0   # seconds between retries
+
 
 async def get_pool() -> asyncpg.Pool:
     global _pool
-    if _pool is None:
-        _pool = await asyncpg.create_pool(
-            dsn=settings.SUPABASE_DB_URL,
-            min_size=1,
-            max_size=10,
-            command_timeout=30,
-            statement_cache_size=0,
+    if _pool is not None:
+        return _pool
+
+    url = settings.SUPABASE_DB_URL
+    if not url:
+        raise RuntimeError(
+            "SUPABASE_DB_URL is not set. "
+            "For Cloud Run: add the env var in the service configuration. "
+            "Use the Supabase connection-pooler URL (port 6543) for serverless."
         )
-    return _pool
+
+    # Mask credentials for safe logging
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        masked = url.replace(parsed.password or "", "****") if parsed.password else url
+    except Exception:
+        masked = url[:30] + "..."
+
+    last_err: Exception | None = None
+    for attempt in range(1, _DB_CONNECT_RETRIES + 1):
+        try:
+            logger.info(f"DB pool connecting (attempt {attempt}/{_DB_CONNECT_RETRIES}): {masked}")
+            _pool = await asyncpg.create_pool(
+                dsn=url,
+                min_size=1,
+                max_size=10,
+                command_timeout=30,
+                statement_cache_size=0,
+                # Supabase requires SSL — enforce it even if not in URL
+                ssl="require",
+            )
+            logger.info("DB pool ready")
+            return _pool
+        except Exception as e:
+            last_err = e
+            logger.warning(f"DB pool attempt {attempt} failed: {e}")
+            if attempt < _DB_CONNECT_RETRIES:
+                await asyncio.sleep(_DB_CONNECT_DELAY)
+
+    raise RuntimeError(
+        f"Could not connect to Supabase after {_DB_CONNECT_RETRIES} attempts. "
+        f"URL tried: {masked}. "
+        f"If using a direct URL (port 5432) switch to the connection-pooler URL "
+        f"(port 6543) — Supabase → Project Settings → Database → Connection pooling. "
+        f"Last error: {last_err}"
+    ) from last_err
 
 
 # ── Helpers ───────────────────────────────────────────────────
