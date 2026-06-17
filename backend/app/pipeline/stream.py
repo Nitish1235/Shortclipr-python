@@ -40,9 +40,6 @@ from app.core.redis import cache_stream_url, get_cached_stream_url
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-# Validate proxy environment variables early – will raise a clear error if mis‑configured
-from app.core.proxy import validate_proxy_env
-validate_proxy_env()
 
 # Helper functions for optional Redis caching – skip if Redis not configured
 def _redis_enabled() -> bool:

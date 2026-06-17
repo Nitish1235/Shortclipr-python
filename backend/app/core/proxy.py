@@ -38,21 +38,20 @@ def use_decodo_proxy() -> None:
     _proxy_provider.set("decodo")
 
 def validate_proxy_env() -> None:
-    """Validate proxy environment variables.
-    Ensures PROXY_HOST, PROXY_USER, PROXY_PASS are non‑empty strings and
-    PROXY_PORT is a positive integer. Raises ValueError on any problem.
+    """
+    Validate proxy environment variables.
+    PROXY_PORT=0 is valid — it means 'use PROXY_PORTS range for rotation'.
+    Raises ValueError only if host/user/pass are missing.
     """
     s = get_settings()
     if not s.PROXY_HOST or not s.PROXY_HOST.strip():
-        raise ValueError("PROXY_HOST must be set for proxy-only operation.")
+        raise ValueError("PROXY_HOST must be set.")
     if not s.PROXY_USER or not s.PROXY_USER.strip():
-        raise ValueError("PROXY_USER must be set for proxy-only operation.")
+        raise ValueError("PROXY_USER must be set.")
     if not s.PROXY_PASS or not s.PROXY_PASS.strip():
-        raise ValueError("PROXY_PASS must be set for proxy-only operation.")
-    if s.PROXY_PORT is None:
-        raise ValueError("PROXY_PORT must be set for proxy-only operation.")
-    if not isinstance(s.PROXY_PORT, int) or s.PROXY_PORT <= 0:
-        raise ValueError(f"PROXY_PORT must be a positive integer. Got '{s.PROXY_PORT}'.")
+        raise ValueError("PROXY_PASS must be set.")
+    if s.PROXY_PORT < 0:
+        raise ValueError(f"PROXY_PORT must be >= 0 (0 = use PROXY_PORTS rotation). Got '{s.PROXY_PORT}'.")
 
 
 
