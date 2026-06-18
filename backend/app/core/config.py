@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     JWT_EXPIRY_DAYS: int = 7
     SOCIAL_REDIRECT_URI: str = "http://localhost:8080/social/auth/youtube/callback"
 
+    # ── TikTok OAuth (Content Posting API v2) ─────────────────
+    TIKTOK_CLIENT_KEY:    str = ""   # "Client Key" from TikTok dev portal
+    TIKTOK_CLIENT_SECRET: str = ""   # "Client Secret" from TikTok dev portal
+    # Must be registered in dev portal under Login Kit → Redirect URIs
+    # Dev:  http://localhost:8080/social/auth/tiktok/callback
+    # Prod: https://shortclipr.com/social/auth/tiktok/callback
+    TIKTOK_REDIRECT_URI:  str = "http://localhost:8080/social/auth/tiktok/callback"
+
     # ── Dodo Payments ─────────────────────────────────────────
     DODO_PAYMENTS_API_KEY: str = ""
     DODO_PAYMENTS_WEBHOOK_SECRET: str = ""
