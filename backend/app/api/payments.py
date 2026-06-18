@@ -25,7 +25,7 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-DODO_API_BASE = "https://api.dodopayments.com/v1"
+DODO_API_BASE = "https://live.dodopayments.com"
 
 # ── Plan → Dodo Product ID mapping ──────────────────────────────
 # Each key maps to a Product ID set in your Dodo dashboard.
@@ -95,31 +95,46 @@ async def _create_dodo_checkout_session(
 
     payload = {
         "product_id": product_id,
+        "quantity": 1,
+        "payment_link": True,
         "customer": {
             "email": user_email,
         },
-        "success_url": success_url,
-        "cancel_url": cancel_url,
+        "return_url": success_url,
         "metadata": metadata,
-        "allow_promotion_codes": True,
     }
 
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"{DODO_API_BASE}/checkout/sessions",
-            json=payload,
-            headers=headers,
-        )
-        if resp.status_code not in (200, 201):
-            logger.error(f"Dodo API error: {resp.status_code} — {resp.text[:500]}")
-            raise HTTPException(
-                status_code=502,
-                detail="Failed to create checkout session. Please try again.",
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{DODO_API_BASE}/subscriptions",
+                json=payload,
+                headers=headers,
             )
-        data = resp.json()
+    except httpx.ConnectError as exc:
+        logger.error(f"Dodo API DNS/connect failure: {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail="Payment service unreachable. Please try again.",
+        )
+    except httpx.TimeoutException as exc:
+        logger.error(f"Dodo API timeout: {exc}")
+        raise HTTPException(status_code=504, detail="Payment service timed out. Please try again.")
+    except httpx.RequestError as exc:
+        logger.error(f"Dodo API request error: {exc}")
+        raise HTTPException(status_code=502, detail="Payment service connection failed. Please try again.")
 
-    checkout_url = data.get("url") or data.get("checkout_url")
+    if resp.status_code not in (200, 201):
+        logger.error(f"Dodo API error: {resp.status_code} — {resp.text[:500]}")
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to create checkout session. Please try again.",
+        )
+    data = resp.json()
+
+    checkout_url = data.get("payment_link") or data.get("url") or data.get("checkout_url")
     if not checkout_url:
+        logger.error(f"Dodo response missing payment_link. Keys: {list(data.keys())}")
         raise HTTPException(status_code=502, detail="No checkout URL in Dodo response")
 
     logger.info(f"Created Dodo checkout session for {user_email} → {plan_from_metadata(metadata)}")
