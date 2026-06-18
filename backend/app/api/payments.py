@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 DODO_API_BASE = "https://live.dodopayments.com"
+DODO_CHECKOUT_ENDPOINT = f"{DODO_API_BASE}/checkouts"
 
 # ── Plan → Dodo Product ID mapping ──────────────────────────────
 # Each key maps to a Product ID set in your Dodo dashboard.
@@ -94,9 +95,9 @@ async def _create_dodo_checkout_session(
     }
 
     payload = {
-        "product_id": product_id,
-        "quantity": 1,
-        "payment_link": True,
+        "product_cart": [
+            {"product_id": product_id, "quantity": 1},
+        ],
         "customer": {
             "email": user_email,
         },
@@ -107,7 +108,7 @@ async def _create_dodo_checkout_session(
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
-                f"{DODO_API_BASE}/subscriptions",
+                DODO_CHECKOUT_ENDPOINT,
                 json=payload,
                 headers=headers,
             )
@@ -132,9 +133,9 @@ async def _create_dodo_checkout_session(
         )
     data = resp.json()
 
-    checkout_url = data.get("payment_link") or data.get("url") or data.get("checkout_url")
+    checkout_url = data.get("checkout_url") or data.get("url") or data.get("payment_link")
     if not checkout_url:
-        logger.error(f"Dodo response missing payment_link. Keys: {list(data.keys())}")
+        logger.error(f"Dodo response missing checkout_url. Keys: {list(data.keys())}")
         raise HTTPException(status_code=502, detail="No checkout URL in Dodo response")
 
     logger.info(f"Created Dodo checkout session for {user_email} → {plan_from_metadata(metadata)}")
