@@ -45,9 +45,12 @@ DODO_PLAN_MAP = {
 async def dodo_webhook(request: Request):
     """Receive and process Dodo Payments webhook events."""
     body = await request.body()
-    signature = request.headers.get("dodo-signature", "")
 
-    if not _verify_signature(body, signature):
+    webhook_id        = request.headers.get("webhook-id", "")
+    webhook_timestamp = request.headers.get("webhook-timestamp", "")
+    webhook_signature = request.headers.get("webhook-signature", "")
+
+    if not _verify_signature(body, webhook_id, webhook_timestamp, webhook_signature):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid webhook signature",
@@ -59,35 +62,58 @@ async def dodo_webhook(request: Request):
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
     event_type = event.get("type", "")
-    payload = event.get("data", {})
+    payload    = event.get("data", {})
 
     logger.info(f"Dodo webhook: {event_type}")
 
-    if event_type == "payment.succeeded":
+    # Subscription activated (first payment) or plan changed or renewed → upgrade/reset
+    if event_type in (
+        "payment.succeeded",
+        "subscription.active",
+        "subscription.renewed",
+        "subscription.plan_changed",
+    ):
         await _handle_payment_succeeded(payload)
-    elif event_type in ("payment.refunded", "subscription.cancelled"):
+    elif event_type in (
+        "payment.refunded",
+        "subscription.cancelled",
+        "subscription.expired",
+    ):
         await _handle_downgrade(payload)
+    elif event_type == "subscription.on_hold":
+        logger.warning(f"Subscription on hold: {payload.get('subscription_id', '')}")
     else:
         logger.debug(f"Unhandled Dodo event type: {event_type}")
 
     return {"received": True}
 
 
-def _verify_signature(body: bytes, signature: str) -> bool:
-    """Verify Dodo HMAC-SHA256 signature."""
+def _verify_signature(
+    body: bytes, webhook_id: str, webhook_timestamp: str, webhook_signature: str
+) -> bool:
+    """
+    Verify Dodo webhook using Standard Webhooks spec.
+    Signed message: "{webhook-id}.{webhook-timestamp}.{raw-body}"
+    """
     if settings.APP_ENV == "development" and not settings.DODO_PAYMENTS_WEBHOOK_SECRET:
         logger.warning("DODO_PAYMENTS_WEBHOOK_SECRET not set — skipping verification (DEV ONLY)")
         return True
-    
+
     if not settings.DODO_PAYMENTS_WEBHOOK_SECRET:
         logger.error("DODO_PAYMENTS_WEBHOOK_SECRET missing in production!")
         return False
+
+    if not webhook_id or not webhook_timestamp or not webhook_signature:
+        logger.error("Missing webhook headers (webhook-id / webhook-timestamp / webhook-signature)")
+        return False
+
+    signed_content = f"{webhook_id}.{webhook_timestamp}.{body.decode()}"
     expected = hmac.new(
         settings.DODO_PAYMENTS_WEBHOOK_SECRET.encode(),
-        body,
+        signed_content.encode(),
         hashlib.sha256,
     ).hexdigest()
-    return hmac.compare_digest(f"sha256={expected}", signature)
+    return hmac.compare_digest(expected, webhook_signature)
 
 
 async def _handle_payment_succeeded(payload: dict) -> None:

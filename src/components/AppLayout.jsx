@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { YTLogo, TTLogo } from './PlatformLogos'
+import Logo from './Logo'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 export const SIDEBAR_W = 228
@@ -222,17 +223,7 @@ export default function AppLayout({ children }) {
         {/* Brand */}
         <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid rgba(255,255,255,.06)' }}>
           <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
-            {/* Film-strip + lightning bolt logo */}
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style={{ flexShrink: 0 }}>
-              <rect width="28" height="28" rx="7" fill="#cf1322"/>
-              <rect x="2.5"  y="4.5"  width="3" height="3.5" rx=".7" fill="rgba(255,255,255,.45)"/>
-              <rect x="2.5"  y="12"   width="3" height="3.5" rx=".7" fill="rgba(255,255,255,.45)"/>
-              <rect x="2.5"  y="19.5" width="3" height="3.5" rx=".7" fill="rgba(255,255,255,.45)"/>
-              <rect x="22.5" y="4.5"  width="3" height="3.5" rx=".7" fill="rgba(255,255,255,.45)"/>
-              <rect x="22.5" y="12"   width="3" height="3.5" rx=".7" fill="rgba(255,255,255,.45)"/>
-              <rect x="22.5" y="19.5" width="3" height="3.5" rx=".7" fill="rgba(255,255,255,.45)"/>
-              <path d="M16.5 5.5L9.5 15.5h5.8L13 23 21.5 12H15.7z" fill="#fff"/>
-            </svg>
+            <span style={{ flexShrink: 0, display: 'flex' }}><Logo size={28} /></span>
             <div>
               <div style={{ fontSize: '.9rem', fontWeight: 700, color: '#fff', letterSpacing: '-.01em', lineHeight: 1.1 }}>
                 ShortClipr

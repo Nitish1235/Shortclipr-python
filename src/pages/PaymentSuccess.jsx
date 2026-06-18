@@ -2,20 +2,25 @@ import { useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import Navigation from '../components/Navigation'
 import Footer from '../components/Footer'
+import { useAuth } from '../context/AuthContext'
 
 export default function PaymentSuccess() {
   const [params] = useSearchParams()
   const plan = params.get('plan') || 'Pro'
+  const { fetchUser } = useAuth()
 
   useEffect(() => {
     const token = localStorage.getItem('sc_token')
     if (token) {
-      fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8080'}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then(r => r.json())
-        .then(data => { if (data.plan) localStorage.setItem('sc_plan', data.plan) })
-        .catch(() => {})
+      // Webhook may take a few seconds — poll /auth/me until plan upgrades (max 10s)
+      let attempts = 0
+      const poll = () => {
+        fetchUser(token).then(data => {
+          if (data?.plan && data.plan !== 'free') return  // upgraded, done
+          if (++attempts < 5) setTimeout(poll, 2000)      // retry up to 5× every 2s
+        })
+      }
+      setTimeout(poll, 1500) // initial delay — give webhook time to land
     }
   }, [])
 
