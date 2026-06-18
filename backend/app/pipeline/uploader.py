@@ -223,8 +223,10 @@ def _upload_to_gcs(local_path: Path, blob_name: str, content_type: str) -> str:
         str(local_path),
         content_type=content_type,
     )
-    blob.make_public()
-    return blob.public_url
+    # Do NOT call blob.make_public() — bucket has Uniform Bucket-Level Access
+    # enabled which disables legacy per-object ACLs. Public access is controlled
+    # via IAM (allUsers:Storage Object Viewer) at the bucket level.
+    return f"{settings.GCS_PUBLIC_BASE_URL}/{settings.GCS_BUCKET_NAME}/{blob_name}"
 
 
 # ── Full clip processing: upload + thumbnail ───────────────────
