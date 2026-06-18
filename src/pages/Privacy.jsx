@@ -3,7 +3,7 @@ import Navigation from '../components/Navigation'
 import Footer from '../components/Footer'
 
 export default function Privacy() {
-  const effective = 'April 21, 2026'
+  const effective = 'June 18, 2026'
   return (
     <>
       <Navigation />
@@ -17,8 +17,9 @@ export default function Privacy() {
           </div>
 
           <div className="legal-alert">
-            This Privacy Policy is required under Google's OAuth API Services User Data Policy.
-            By using ShortClipr with Google Sign-In, you acknowledge this policy.
+            This Privacy Policy is required under Google's OAuth API Services User Data Policy
+            and YouTube API Services Terms of Service.
+            By using ShortClipr with Google Sign-In or connecting your YouTube channel, you acknowledge this policy.
           </div>
 
           {/* 1 */}
@@ -33,10 +34,36 @@ export default function Privacy() {
               <li><strong>Google account ID (sub)</strong> — used to link your identity across logins</li>
             </ul>
             <p>
-              We do <strong>not</strong> request or receive access to your Google Drive, Gmail,
-              YouTube channel data, contacts, or any other Google services beyond basic profile
-              information. Our OAuth scope is limited to <code>openid</code>, <code>email</code>,
-              and <code>profile</code>.
+              Our base OAuth scope is limited to <code>openid</code>, <code>email</code>, and <code>profile</code>.
+              If you choose to connect your YouTube channel (optional), we additionally request the
+              <code>https://www.googleapis.com/auth/youtube.upload</code> scope as described below.
+            </p>
+
+            <h3>B. YouTube Channel Data (Optional — only if you connect YouTube)</h3>
+            <p>
+              ShortClipr offers an optional feature to publish generated clips directly to your YouTube channel.
+              If you choose to connect your YouTube account, we request the following additional OAuth scope:
+            </p>
+            <ul>
+              <li><code>https://www.googleapis.com/auth/youtube.upload</code> — allows ShortClipr to upload videos to your YouTube channel on your behalf</li>
+            </ul>
+            <p>When this permission is granted, we store:</p>
+            <ul>
+              <li><strong>YouTube OAuth refresh token</strong> — stored securely in our database, used solely to upload clips you explicitly request to publish</li>
+              <li><strong>YouTube OAuth access token</strong> — short-lived token generated at upload time, never stored persistently</li>
+            </ul>
+            <p>
+              We do <strong>not</strong> read your YouTube videos, subscribers, analytics, comments,
+              playlists, or any other YouTube data. We only upload videos when you explicitly click
+              "Post to YouTube" on a specific clip.
+            </p>
+            <p>
+              You can disconnect your YouTube account at any time from the ShortClipr dashboard
+              (Settings → Social Accounts → Disconnect YouTube), which immediately deletes your
+              stored OAuth tokens from our servers. You can also revoke access directly via{' '}
+              <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">
+                Google Account Permissions
+              </a>.
             </p>
 
             <h3>B. Usage Data</h3>
@@ -80,7 +107,7 @@ export default function Privacy() {
 
           {/* 3 */}
           <div className="legal-section">
-            <h2>3. Google API Services — Limited Use Disclosure</h2>
+            <h2>3. Google API Services &amp; YouTube API — Limited Use Disclosure</h2>
             <div className="legal-alert">
               ShortClipr's use and transfer of information received from Google APIs adheres to
               the{' '}
@@ -91,14 +118,47 @@ export default function Privacy() {
               >
                 Google API Services User Data Policy
               </a>
-              , including the Limited Use requirements.
+              , including the Limited Use requirements. Our use of YouTube API Services is also
+              subject to the{' '}
+              <a
+                href="https://www.youtube.com/t/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                YouTube Terms of Service
+              </a>.
             </div>
-            <p>Specifically:</p>
+            <p>Specifically, ShortClipr:</p>
             <ul>
-              <li>We only use Google user data to authenticate you and provide the ShortClipr service</li>
-              <li>We do not transfer Google user data to third parties except as necessary to provide the service</li>
-              <li>We do not use Google user data for advertising</li>
-              <li>We do not allow humans to read your Google user data except for security or legal compliance purposes</li>
+              <li>Only uses Google user data to authenticate you and provide the ShortClipr service</li>
+              <li>Only uploads videos to YouTube when you explicitly request it by clicking "Post to YouTube"</li>
+              <li>Does not transfer Google or YouTube user data to third parties except as necessary to provide the service</li>
+              <li>Does not use Google or YouTube user data for advertising or marketing purposes</li>
+              <li>Does not allow humans to read your Google or YouTube user data except for security or legal compliance purposes</li>
+              <li>Does not read, store, or analyze your existing YouTube videos, channel statistics, subscribers, or comments</li>
+            </ul>
+
+            <h3>YouTube API Services — Data Deletion</h3>
+            <p>
+              Data obtained via YouTube API Services (OAuth tokens) can be deleted in two ways:
+            </p>
+            <ul>
+              <li>
+                <strong>From ShortClipr dashboard:</strong> Settings → Social Accounts → Disconnect YouTube.
+                This immediately and permanently deletes your stored YouTube OAuth tokens from our database.
+              </li>
+              <li>
+                <strong>From Google directly:</strong> Visit{' '}
+                <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">
+                  myaccount.google.com/permissions
+                </a>{' '}
+                → find ShortClipr → Remove Access.
+              </li>
+              <li>
+                <strong>Account deletion:</strong> Email{' '}
+                <a href="mailto:privacy@shortclipr.com">privacy@shortclipr.com</a> to delete your
+                entire account, which removes all YouTube tokens within 30 days.
+              </li>
             </ul>
           </div>
 
