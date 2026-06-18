@@ -28,6 +28,8 @@ import Contact        from './pages/Contact'
 import About          from './pages/About'
 import PaymentSuccess from './pages/PaymentSuccess'
 import Dashboard      from './pages/Dashboard'
+import ClipsHistory   from './pages/ClipsHistory'
+import Billing        from './pages/Billing'
 import Changelog      from './pages/Changelog'
 import PressKit       from './pages/PressKit'
 import Careers        from './pages/Careers'
@@ -168,6 +170,8 @@ export default function App() {
 
             {/* Protected — user must be logged in */}
             <Route path="/dashboard"             element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/clips"                 element={<ProtectedRoute><ClipsHistory /></ProtectedRoute>} />
+            <Route path="/billing"               element={<ProtectedRoute><Billing /></ProtectedRoute>} />
             <Route path="/editor/:jobId/:clipId" element={<ProtectedRoute><Editor /></ProtectedRoute>} />
             <Route path="/lab"                   element={<ProtectedRoute><Lab /></ProtectedRoute>} />
 

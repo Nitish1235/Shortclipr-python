@@ -1,15 +1,12 @@
-/**
- * AppLayout — dark sidebar + main content wrapper for all logged-in pages.
- * Used by Dashboard, Editor (replaces top Navigation on /dashboard, /editor).
- */
-
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { YTLogo, TTLogo } from './PlatformLogos'
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 export const SIDEBAR_W = 228
 
-// ── SVG icons (inline, no deps) ─────────────────────────────────
+// ── Inline icons ────────────────────────────────────────────────
 const Icon = {
   dashboard: (
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
@@ -17,12 +14,6 @@ const Icon = {
       <rect x="9" y="1" width="6" height="6" rx="1.5" fill="currentColor" opacity=".85"/>
       <rect x="1" y="9" width="6" height="6" rx="1.5" fill="currentColor" opacity=".85"/>
       <rect x="9" y="9" width="6" height="6" rx="1.5" fill="currentColor" opacity=".45"/>
-    </svg>
-  ),
-  generate: (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-      <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4"/>
-      <polygon points="6.5,5.2 11.5,8 6.5,10.8" fill="currentColor"/>
     </svg>
   ),
   clips: (
@@ -49,11 +40,15 @@ const Icon = {
   ),
 }
 
-const NAV = [
-  { icon: Icon.dashboard, label: 'Dashboard', path: '/dashboard', exact: true },
+const NAV_WORKSPACE = [
+  { icon: Icon.dashboard, label: 'Dashboard',     path: '/dashboard', exact: true },
+  { icon: Icon.clips,     label: 'Clips History', path: '/clips',     exact: true },
+]
+const NAV_ACCOUNT = [
+  { icon: Icon.billing, label: 'Billing', path: '/billing', exact: true },
 ]
 
-// ── Sidebar nav item ─────────────────────────────────────────────
+// ── Nav item ─────────────────────────────────────────────────────
 function NavItem({ item, location }) {
   const active = item.exact
     ? location.pathname === item.path
@@ -92,16 +87,123 @@ function NavItem({ item, location }) {
   )
 }
 
+// ── Section label ─────────────────────────────────────────────────
+function SectionLabel({ children }) {
+  return (
+    <div style={{
+      fontSize: '.6rem', fontWeight: 700,
+      color: 'rgba(255,255,255,.2)',
+      textTransform: 'uppercase', letterSpacing: '.1em',
+      padding: '4px 11px 8px',
+    }}>{children}</div>
+  )
+}
+
+// ── Social account row ────────────────────────────────────────────
+function SocialRow({ icon, label, connected, onConnect, onDisconnect }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '7px 11px', borderRadius: 8, marginBottom: 1,
+    }}>
+      <span style={{ flexShrink: 0 }}>{icon}</span>
+      <span style={{
+        flex: 1, fontSize: '.8rem',
+        color: 'rgba(255,255,255,.55)', userSelect: 'none',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>{label}</span>
+      {connected ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4ade80' }}/>
+          <span style={{ fontSize: '.6rem', color: 'rgba(255,255,255,.3)' }}>On</span>
+          <button
+            onClick={onDisconnect}
+            title={`Disconnect ${label}`}
+            style={{
+              marginLeft: 1, width: 15, height: 15, borderRadius: 3,
+              background: 'rgba(255,255,255,.06)',
+              border: '1px solid rgba(255,255,255,.08)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'rgba(255,255,255,.3)', fontSize: '.52rem', padding: 0, transition: 'all .12s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.2)'; e.currentTarget.style.color = '#f87171' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,.06)'; e.currentTarget.style.color = 'rgba(255,255,255,.3)' }}
+          >✕</button>
+        </div>
+      ) : (
+        <button
+          onClick={onConnect}
+          style={{
+            flexShrink: 0, fontSize: '.62rem', fontWeight: 700, color: '#cf1322',
+            background: 'none', border: 'none', cursor: 'pointer', padding: 0, transition: 'color .12s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.color = '#ff5555'}
+          onMouseLeave={e => e.currentTarget.style.color = '#cf1322'}
+        >Connect →</button>
+      )}
+    </div>
+  )
+}
+
+// ── AppLayout ─────────────────────────────────────────────────────
 export default function AppLayout({ children }) {
   const { user, logout } = useAuth()
   const location = useLocation()
 
-  const isPaid   = user?.plan && user.plan !== 'free'
-  const used     = user?.credits_used || 0
-  const limit    = user?.credits_limit || 3
-  const usedPct  = Math.min(100, Math.round((used / limit) * 100))
+  const [ytConn, setYtConn] = useState(localStorage.getItem('yt_connected') === 'true')
+  const [ttConn, setTtConn] = useState(localStorage.getItem('tt_connected') === 'true')
+
+  const isPaid    = user?.plan && user.plan !== 'free'
+  const used      = user?.credits_used || 0
+  const limit     = user?.credits_limit || 3
+  const usedPct   = Math.min(100, Math.round((used / limit) * 100))
   const remaining = user?.videos_remaining ?? (limit - used)
-  const initials = (user?.full_name || user?.email || 'U')[0].toUpperCase()
+  const initials  = (user?.full_name || user?.email || 'U')[0].toUpperCase()
+
+  useEffect(() => {
+    const token = localStorage.getItem('sc_token')
+    if (!token) return
+    fetch(`${API_BASE}/social/status`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return
+        setYtConn(d.youtube)
+        setTtConn(d.tiktok)
+        if (d.youtube) localStorage.setItem('yt_connected', 'true')
+        else localStorage.removeItem('yt_connected')
+        if (d.tiktok) localStorage.setItem('tt_connected', 'true')
+        else localStorage.removeItem('tt_connected')
+      })
+      .catch(() => {})
+  }, [])
+
+  const connectYT = async () => {
+    try {
+      const token = localStorage.getItem('sc_token')
+      const r = await fetch(`${API_BASE}/social/auth/youtube`, { headers: { Authorization: `Bearer ${token}` } })
+      if (r.ok) { const d = await r.json(); window.location.href = d.url }
+    } catch {}
+  }
+
+  const connectTT = async () => {
+    try {
+      const token = localStorage.getItem('sc_token')
+      const r = await fetch(`${API_BASE}/social/auth/tiktok`, { headers: { Authorization: `Bearer ${token}` } })
+      if (r.ok) { const d = await r.json(); window.location.href = d.url }
+    } catch {}
+  }
+
+  const disconnect = async (platform) => {
+    try {
+      const token = localStorage.getItem('sc_token')
+      await fetch(`${API_BASE}/social/disconnect/${platform}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (platform === 'youtube') { setYtConn(false); localStorage.removeItem('yt_connected') }
+      else { setTtConn(false); localStorage.removeItem('tt_connected') }
+    } catch {}
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -114,43 +216,63 @@ export default function AppLayout({ children }) {
         position: 'fixed', inset: '0 auto 0 0',
         zIndex: 300,
         borderRight: '1px solid rgba(255,255,255,.07)',
+        overflow: 'hidden',
       }}>
 
         {/* Brand */}
-        <div style={{
-          padding: '20px 16px 16px',
-          borderBottom: '1px solid rgba(255,255,255,.06)',
-        }}>
-          <Link to="/" style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            textDecoration: 'none',
-          }}>
-            <div style={{
-              width: 30, height: 30, borderRadius: 8,
-              background: '#cf1322',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0,
-            }}>
-              <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-                <polygon points="3.5,2 12.5,7 3.5,12" fill="#fff"/>
-              </svg>
-            </div>
+        <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid rgba(255,255,255,.06)' }}>
+          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+            {/* Film-strip + lightning bolt logo */}
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style={{ flexShrink: 0 }}>
+              <rect width="28" height="28" rx="7" fill="#cf1322"/>
+              <rect x="2.5"  y="4.5"  width="3" height="3.5" rx=".7" fill="rgba(255,255,255,.45)"/>
+              <rect x="2.5"  y="12"   width="3" height="3.5" rx=".7" fill="rgba(255,255,255,.45)"/>
+              <rect x="2.5"  y="19.5" width="3" height="3.5" rx=".7" fill="rgba(255,255,255,.45)"/>
+              <rect x="22.5" y="4.5"  width="3" height="3.5" rx=".7" fill="rgba(255,255,255,.45)"/>
+              <rect x="22.5" y="12"   width="3" height="3.5" rx=".7" fill="rgba(255,255,255,.45)"/>
+              <rect x="22.5" y="19.5" width="3" height="3.5" rx=".7" fill="rgba(255,255,255,.45)"/>
+              <path d="M16.5 5.5L9.5 15.5h5.8L13 23 21.5 12H15.7z" fill="#fff"/>
+            </svg>
             <div>
-              <div style={{ fontSize: '.9rem', fontWeight: 700, color: '#fff', letterSpacing: '-.01em', lineHeight: 1.1 }}>ShortClipr</div>
-              <div style={{ fontSize: '.6rem', color: 'rgba(255,255,255,.3)', letterSpacing: '.06em', textTransform: 'uppercase', marginTop: 1 }}>Studio</div>
+              <div style={{ fontSize: '.9rem', fontWeight: 700, color: '#fff', letterSpacing: '-.01em', lineHeight: 1.1 }}>
+                ShortClipr
+              </div>
+              <div style={{ fontSize: '.6rem', color: 'rgba(255,255,255,.3)', letterSpacing: '.06em', textTransform: 'uppercase', marginTop: 1 }}>
+                Studio
+              </div>
             </div>
           </Link>
         </div>
 
         {/* Nav links */}
-        <nav style={{
-          flex: 1, padding: '12px 8px',
-          display: 'flex', flexDirection: 'column', gap: 2,
-        }}>
-          <div style={{ fontSize: '.6rem', fontWeight: 700, color: 'rgba(255,255,255,.2)', textTransform: 'uppercase', letterSpacing: '.1em', padding: '4px 11px 8px' }}>
-            Workspace
+        <nav style={{ flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 0, overflowY: 'auto' }}>
+
+          <SectionLabel>Workspace</SectionLabel>
+          {NAV_WORKSPACE.map(item => <NavItem key={item.path} item={item} location={location} />)}
+
+          <div style={{ marginTop: 16 }}>
+            <SectionLabel>Social Accounts</SectionLabel>
+            <SocialRow
+              icon={<YTLogo size={13} />}
+              label="YouTube"
+              connected={ytConn}
+              onConnect={connectYT}
+              onDisconnect={() => disconnect('youtube')}
+            />
+            <SocialRow
+              icon={<TTLogo size={13} />}
+              label="TikTok"
+              connected={ttConn}
+              onConnect={connectTT}
+              onDisconnect={() => disconnect('tiktok')}
+            />
           </div>
-          {NAV.map(item => <NavItem key={item.path} item={item} location={location} />)}
+
+          <div style={{ marginTop: 16 }}>
+            <SectionLabel>Account</SectionLabel>
+            {NAV_ACCOUNT.map(item => <NavItem key={item.path} item={item} location={location} />)}
+          </div>
+
         </nav>
 
         {/* Plan card */}
@@ -166,19 +288,16 @@ export default function AppLayout({ children }) {
                 <span style={{ fontSize: '.68rem', color: 'rgba(255,255,255,.35)' }}>{used}/{limit}</span>
               </div>
               <div style={{ background: 'rgba(255,255,255,.08)', borderRadius: 4, height: 3, overflow: 'hidden', marginBottom: 10 }}>
-                <div style={{
-                  height: '100%', width: `${usedPct}%`,
-                  background: 'linear-gradient(90deg,#cf1322,#ff6b6b)',
-                  borderRadius: 4, transition: 'width .4s',
-                }}/>
+                <div style={{ height: '100%', width: `${usedPct}%`, background: 'linear-gradient(90deg,#cf1322,#ff6b6b)', borderRadius: 4, transition: 'width .4s' }}/>
               </div>
-              <Link to="/#pricing" style={{
-                display: 'block', padding: '7px 0',
-                borderRadius: 7, background: '#cf1322',
-                color: '#fff', fontSize: '.74rem', fontWeight: 700,
-                textAlign: 'center', textDecoration: 'none',
-                transition: 'background .15s',
-              }}
+              <Link
+                to="/billing"
+                style={{
+                  display: 'block', padding: '7px 0', borderRadius: 7,
+                  background: '#cf1322', color: '#fff',
+                  fontSize: '.74rem', fontWeight: 700, textAlign: 'center', textDecoration: 'none',
+                  transition: 'background .15s',
+                }}
                 onMouseEnter={e => e.currentTarget.style.background = '#a10e1b'}
                 onMouseLeave={e => e.currentTarget.style.background = '#cf1322'}
               >

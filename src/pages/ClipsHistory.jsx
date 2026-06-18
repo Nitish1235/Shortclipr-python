@@ -1,0 +1,534 @@
+import { useState, useEffect, useCallback } from 'react'
+import { useAuth } from '../context/AuthContext'
+import AppLayout, { SIDEBAR_W } from '../components/AppLayout'
+import { YTLogo, TTLogo } from '../components/PlatformLogos'
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+
+function fmtDur(sec) {
+  if (!sec) return null
+  const m = Math.floor(sec / 60), s = sec % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+function fmtDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso), now = new Date(), diff = now - d
+  if (diff < 60000)     return 'just now'
+  if (diff < 3600000)   return `${Math.floor(diff / 60000)}m ago`
+  if (diff < 86400000)  return `${Math.floor(diff / 3600000)}h ago`
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+export default function ClipsHistory() {
+  const { user, logout } = useAuth()
+
+  const [loading, setLoading]   = useState(true)
+  const [groups, setGroups]     = useState([])   // [{ job, clips[] }]
+  const [filter, setFilter]     = useState('24h') // '24h' | '7d' | 'all'
+  const [modalOpen, setModalOpen]   = useState(false)
+  const [modalClip, setModalClip]   = useState(null)
+  const [modalJob, setModalJob]     = useState(null)
+
+  const [ytConn, setYtConn]             = useState(localStorage.getItem('yt_connected') === 'true')
+  const [ttConn, setTtConn]             = useState(localStorage.getItem('tt_connected') === 'true')
+  const [publishingYT, setPublishingYT] = useState(new Set())
+  const [publishingTT, setPublishingTT] = useState(new Set())
+  const [publishedYT, setPublishedYT]   = useState(new Set())
+  const [publishedTT, setPublishedTT]   = useState(new Set())
+  const [toast, setToast]               = useState(null)
+
+  const isPaid = user?.plan && user.plan !== 'free'
+
+  const showToast = useCallback((msg, type = 'success') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3500)
+  }, [])
+
+  // Load jobs + clips
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      try {
+        const token = localStorage.getItem('sc_token')
+        if (!token) return
+        const res = await fetch(`${API_BASE}/jobs`, { headers: { Authorization: `Bearer ${token}` } })
+        if (res.status === 401) { logout(); return }
+        if (!res.ok) return
+        const { jobs } = await res.json()
+
+        const cutoffMs = filter === '24h' ? 86400000 : filter === '7d' ? 604800000 : Infinity
+        const now = Date.now()
+        const relevant = jobs
+          .filter(j => j.status === 'completed' && (now - new Date(j.created_at)) < cutoffMs)
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+          .slice(0, 25)
+
+        const results = await Promise.all(
+          relevant.map(job =>
+            fetch(`${API_BASE}/jobs/${job.job_id}/clips`, { headers: { Authorization: `Bearer ${token}` } })
+              .then(r => r.ok ? r.json() : { clips: [] })
+              .then(data => ({
+                job,
+                clips: (data.clips || [])
+                  .filter(c => c.clip_ready === true)
+                  .sort((a, b) => (b.viral_score || 0) - (a.viral_score || 0)),
+              }))
+          )
+        )
+        setGroups(results.filter(g => g.clips.length > 0))
+      } catch (err) {
+        console.error('ClipsHistory load failed', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [filter, logout])
+
+  // Social status
+  useEffect(() => {
+    const token = localStorage.getItem('sc_token')
+    if (!token) return
+    fetch(`${API_BASE}/social/status`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) { setYtConn(d.youtube); setTtConn(d.tiktok) } })
+      .catch(() => {})
+  }, [])
+
+  // Keyboard nav for modal
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') setModalOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // ── Publish handlers ───────────────────────────────────────────
+  const handlePublishYT = async (e, clip) => {
+    e.stopPropagation()
+    if (!isPaid) { showToast('Upgrade to publish to YouTube', 'error'); return }
+    if (!ytConn) {
+      const token = localStorage.getItem('sc_token')
+      const r = await fetch(`${API_BASE}/social/auth/youtube`, { headers: { Authorization: `Bearer ${token}` } })
+      if (r.ok) { const d = await r.json(); window.location.href = d.url }
+      return
+    }
+    const clipId = clip.clip_id || clip.id
+    setPublishingYT(p => new Set([...p, clipId]))
+    try {
+      const token = localStorage.getItem('sc_token')
+      const r = await fetch(`${API_BASE}/social/publish/youtube`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clip_id: clipId, title: clip.top_title || 'ShortClipr Video' }),
+      })
+      const d = await r.json()
+      if (r.ok && d.status !== 'error') {
+        setPublishedYT(p => new Set([...p, clipId]))
+        showToast('Published to YouTube!')
+      } else {
+        showToast(d.detail || 'Publish failed', 'error')
+      }
+    } catch { showToast('Network error', 'error') }
+    finally { setPublishingYT(p => { const n = new Set(p); n.delete(clipId); return n }) }
+  }
+
+  const handlePublishTT = async (e, clip) => {
+    e.stopPropagation()
+    if (!isPaid) { showToast('Upgrade to publish to TikTok', 'error'); return }
+    if (!ttConn) {
+      const token = localStorage.getItem('sc_token')
+      const r = await fetch(`${API_BASE}/social/auth/tiktok`, { headers: { Authorization: `Bearer ${token}` } })
+      if (r.ok) { const d = await r.json(); window.location.href = d.url }
+      return
+    }
+    const clipId = clip.clip_id || clip.id
+    setPublishingTT(p => new Set([...p, clipId]))
+    try {
+      const token = localStorage.getItem('sc_token')
+      const r = await fetch(`${API_BASE}/social/publish/tiktok`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clip_id: clipId, title: clip.top_title || 'ShortClipr Video' }),
+      })
+      const d = await r.json()
+      if (r.ok) {
+        setPublishedTT(p => new Set([...p, clipId]))
+        showToast('Queued for TikTok!')
+      } else {
+        showToast(d.detail || 'Publish failed', 'error')
+      }
+    } catch { showToast('Network error', 'error') }
+    finally { setPublishingTT(p => { const n = new Set(p); n.delete(clipId); return n }) }
+  }
+
+  const handleDownload = (e, clip) => {
+    e.stopPropagation()
+    if (!isPaid) { showToast('Upgrade to download clips', 'error'); return }
+    const token = localStorage.getItem('sc_token')
+    const clipId = clip.clip_id || clip.id
+    const a = document.createElement('a')
+    a.href = `${API_BASE}/clips/${clipId}/download?token=${token}`
+    a.download = `ShortClipr_${clipId.split('-')[0]}.mp4`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  }
+
+  const totalClips = groups.reduce((acc, g) => acc + g.clips.length, 0)
+
+  return (
+    <AppLayout>
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: 'fixed', top: 20, right: 20, zIndex: 9999,
+          background: toast.type === 'error' ? '#fef2f2' : '#f0fdf4',
+          border: `1px solid ${toast.type === 'error' ? '#fecaca' : '#bbf7d0'}`,
+          color: toast.type === 'error' ? '#dc2626' : '#16a34a',
+          borderRadius: 10, padding: '10px 16px',
+          fontSize: '.82rem', fontWeight: 600,
+          boxShadow: '0 4px 20px rgba(0,0,0,.1)',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          {toast.type === 'error' ? '✕' : '✓'} {toast.msg}
+        </div>
+      )}
+
+      <main style={{ flex: 1, background: '#f7f8fa', paddingBottom: 60 }}>
+        {/* Header bar */}
+        <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb' }}>
+          <div style={{ maxWidth: 1140, margin: '0 auto', padding: '0 24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', height: 56, gap: 20 }}>
+              <div>
+                <h1 style={{ fontSize: '1rem', fontWeight: 700, color: '#111', margin: 0, lineHeight: 1 }}>Clips Library</h1>
+                <p style={{ fontSize: '.72rem', color: '#9ca3af', margin: 0, marginTop: 2 }}>All your generated shorts</p>
+              </div>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 0, borderLeft: '1px solid #e5e7eb' }}>
+                {[
+                  { n: totalClips,                        l: 'Total clips',  c: '#111' },
+                  { n: publishedYT.size + publishedTT.size, l: 'Published', c: '#16a34a' },
+                ].map((s, i) => (
+                  <div key={i} style={{
+                    padding: '0 20px', borderRight: '1px solid #e5e7eb',
+                    display: 'flex', flexDirection: 'column', justifyContent: 'center', height: 56,
+                  }}>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, letterSpacing: '-.04em', color: s.c, lineHeight: 1 }}>{s.n}</div>
+                    <div style={{ fontSize: '.62rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '.08em', marginTop: 2 }}>{s.l}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ maxWidth: 1140, margin: '0 auto', padding: '20px 24px' }}>
+          {/* Filter tabs */}
+          <div style={{
+            display: 'flex', gap: 4, marginBottom: 20,
+            background: '#fff', borderRadius: 10, padding: 4,
+            width: 'fit-content', border: '1px solid #e5e7eb',
+          }}>
+            {[
+              { k: '24h', l: 'Last 24h' },
+              { k: '7d',  l: 'Last 7 days' },
+              { k: 'all', l: 'All time' },
+            ].map(f => (
+              <button
+                key={f.k}
+                onClick={() => setFilter(f.k)}
+                style={{
+                  padding: '6px 14px', borderRadius: 7, border: 'none',
+                  background: filter === f.k ? '#111' : 'transparent',
+                  color: filter === f.k ? '#fff' : '#6b7280',
+                  fontSize: '.76rem', fontWeight: filter === f.k ? 700 : 500,
+                  cursor: 'pointer', transition: 'all .15s',
+                }}
+              >{f.l}</button>
+            ))}
+          </div>
+
+          {/* Content */}
+          {loading ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
+              <div style={{
+                width: 32, height: 32, border: '3px solid #fecaca',
+                borderTopColor: '#cf1322', borderRadius: '50%', animation: 'spin 0.8s linear infinite',
+              }}/>
+            </div>
+          ) : groups.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '64px 24px' }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🎬</div>
+              <div style={{ fontSize: '1rem', fontWeight: 700, color: '#374151', marginBottom: 8 }}>No clips found</div>
+              <p style={{ fontSize: '.85rem', color: '#9ca3af', marginBottom: 20, maxWidth: 320, margin: '0 auto 20px' }}>
+                {filter === '24h'
+                  ? 'No clips generated in the last 24 hours.'
+                  : 'Generate your first shorts from the Dashboard.'}
+              </p>
+              <a href="/dashboard" style={{
+                display: 'inline-block', padding: '9px 20px', background: '#cf1322',
+                color: '#fff', borderRadius: 8, fontWeight: 700, fontSize: '.83rem', textDecoration: 'none',
+              }}>Go to Dashboard →</a>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+              {groups.map(({ job, clips }) => (
+                <div key={job.job_id}>
+                  {/* Job header */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#cf1322', flexShrink: 0 }}/>
+                    <h2 style={{
+                      fontSize: '.88rem', fontWeight: 700, color: '#111', margin: 0,
+                      flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {job.video_title || job.youtube_url || 'Untitled Video'}
+                    </h2>
+                    <span style={{ fontSize: '.7rem', color: '#9ca3af', flexShrink: 0 }}>{fmtDate(job.created_at)}</span>
+                    <span style={{
+                      fontSize: '.68rem', color: '#6b7280',
+                      background: '#f3f4f6', borderRadius: 5, padding: '2px 8px', flexShrink: 0,
+                    }}>
+                      {clips.length} clip{clips.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+
+                  {/* Clips grid */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                    gap: 10,
+                  }}>
+                    {clips.map(clip => {
+                      const clipId  = clip.clip_id || clip.id
+                      const ytDone  = publishedYT.has(clipId)
+                      const ttDone  = publishedTT.has(clipId)
+                      const ytPub   = publishingYT.has(clipId)
+                      const ttPub   = publishingTT.has(clipId)
+                      const dur     = fmtDur(clip.duration_sec)
+
+                      return (
+                        <div key={clipId} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                          {/* Square card */}
+                          <div
+                            onClick={() => { setModalClip(clip); setModalJob(job); setModalOpen(true) }}
+                            style={{
+                              aspectRatio: '1/1', position: 'relative', overflow: 'hidden',
+                              borderRadius: 10, cursor: 'pointer',
+                              background: clip.thumbnail_url ? 'transparent' : '#f3f4f6',
+                              border: '1px solid #e5e7eb',
+                              transition: 'transform .15s, box-shadow .15s',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,.12)' }}
+                            onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none' }}
+                          >
+                            {clip.thumbnail_url && (
+                              <img src={clip.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
+                            )}
+                            {/* Viral score */}
+                            {clip.viral_score != null && (
+                              <div style={{
+                                position: 'absolute', top: 6, right: 6,
+                                background: 'rgba(0,0,0,.72)', color: '#fbbf24',
+                                borderRadius: 5, padding: '2px 6px',
+                                fontSize: '.6rem', fontWeight: 900,
+                              }}>🔥 {clip.viral_score}</div>
+                            )}
+                            {/* HD badge */}
+                            <div style={{
+                              position: 'absolute', top: 6, left: 6,
+                              background: 'rgba(22,163,74,.9)', color: '#fff',
+                              borderRadius: 4, padding: '2px 5px',
+                              fontSize: '.55rem', fontWeight: 900,
+                            }}>HD</div>
+                            {/* Duration */}
+                            {dur && (
+                              <div style={{
+                                position: 'absolute', bottom: 6, right: 6,
+                                background: 'rgba(0,0,0,.65)', color: '#fff',
+                                borderRadius: 4, padding: '2px 6px',
+                                fontSize: '.6rem', fontWeight: 700,
+                              }}>{dur}</div>
+                            )}
+                            {/* Published badges */}
+                            {(ytDone || ttDone) && (
+                              <div style={{ position: 'absolute', bottom: 6, left: 6, display: 'flex', gap: 3 }}>
+                                {ytDone && (
+                                  <div style={{ background: 'rgba(220,38,38,.9)', borderRadius: 4, padding: '2px 5px', fontSize: '.55rem', fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: 2 }}>
+                                    <YTLogo size={7} /> ✓
+                                  </div>
+                                )}
+                                {ttDone && (
+                                  <div style={{ background: 'rgba(1,1,1,.9)', borderRadius: 4, padding: '2px 5px', fontSize: '.55rem', fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: 2 }}>
+                                    <TTLogo size={7} /> ✓
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {/* Play overlay */}
+                            <div className="play-overlay" style={{
+                              position: 'absolute', inset: 0,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              opacity: 0, transition: 'opacity .15s', pointerEvents: 'none',
+                            }}>
+                              <div style={{
+                                width: 40, height: 40, borderRadius: '50%',
+                                background: 'rgba(255,255,255,.92)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                boxShadow: '0 4px 16px rgba(0,0,0,.25)',
+                              }}>
+                                <span style={{ fontSize: 14, marginLeft: 2, color: '#111' }}>▶</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Title */}
+                          <p style={{
+                            margin: 0, fontSize: '.67rem', fontWeight: 700, color: '#374151',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>{clip.top_title || 'Clip'}</p>
+
+                          {/* Action buttons */}
+                          <div style={{ display: 'flex', gap: 3 }}>
+                            <button
+                              onClick={e => handlePublishYT(e, clip)}
+                              title={ytDone ? 'Published to YouTube' : ytConn ? 'Publish to YouTube' : 'Connect YouTube first'}
+                              style={{
+                                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+                                padding: '5px 4px', borderRadius: 7, fontSize: '.6rem', fontWeight: 700,
+                                border: `1px solid ${ytDone ? '#bbf7d0' : '#fca5a5'}`,
+                                background: ytDone ? '#f0fdf4' : '#fff5f5',
+                                color: ytDone ? '#16a34a' : ytPub ? '#9ca3af' : '#dc2626',
+                                cursor: ytPub ? 'wait' : 'pointer', transition: '.1s',
+                              }}
+                            >
+                              <YTLogo size={10} /> {ytPub ? '…' : ytDone ? '✓' : 'Post'}
+                            </button>
+                            <button
+                              onClick={e => handlePublishTT(e, clip)}
+                              title={ttDone ? 'Published to TikTok' : ttConn ? 'Publish to TikTok' : 'Connect TikTok first'}
+                              style={{
+                                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+                                padding: '5px 4px', borderRadius: 7, fontSize: '.6rem', fontWeight: 700,
+                                border: `1px solid ${ttDone ? '#bbf7d0' : ttConn ? '#c4b5fd' : '#e5e7eb'}`,
+                                background: ttDone ? '#f0fdf4' : ttConn ? '#faf5ff' : '#f9fafb',
+                                color: ttDone ? '#16a34a' : ttPub ? '#9ca3af' : '#010101',
+                                cursor: ttPub ? 'wait' : 'pointer', transition: '.1s',
+                              }}
+                            >
+                              <TTLogo size={10} /> {ttPub ? '…' : ttDone ? '✓' : 'Post'}
+                            </button>
+                            <button
+                              onClick={e => handleDownload(e, clip)}
+                              title={isPaid ? 'Download MP4' : 'Upgrade to download'}
+                              style={{
+                                padding: '5px 7px', borderRadius: 7,
+                                border: '1px solid #e5e7eb', background: '#f9fafb',
+                                color: isPaid ? '#374151' : '#d1d5db', cursor: 'pointer', fontSize: '.7rem',
+                              }}
+                            >{isPaid ? '⬇' : '🔒'}</button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* ── Video modal ── */}
+      {modalOpen && modalClip && (
+        <div
+          onClick={() => setModalOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)',
+            zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 20, backdropFilter: 'blur(4px)',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 16,
+              width: '100%', maxWidth: 540,
+              overflow: 'hidden', display: 'flex', flexDirection: 'column',
+              boxShadow: '0 24px 80px rgba(0,0,0,.3)',
+            }}
+          >
+            {/* Modal header */}
+            <div style={{
+              padding: '13px 18px', borderBottom: '1px solid #e5e7eb',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <span style={{
+                flex: 1, fontSize: '.88rem', fontWeight: 700, color: '#111',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {modalClip.top_title || 'Clip Preview'}
+              </span>
+              {modalClip.viral_score != null && (
+                <span style={{
+                  background: '#fff0f3', color: '#cf1322',
+                  border: '1px solid #fecaca', borderRadius: 7,
+                  padding: '3px 10px', fontSize: '.76rem', fontWeight: 800,
+                }}>🔥 {modalClip.viral_score}</span>
+              )}
+              <button
+                onClick={() => setModalOpen(false)}
+                style={{
+                  width: 30, height: 30, borderRadius: 7, border: '1px solid #e5e7eb',
+                  background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 14, color: '#6b7280',
+                }}
+              >✕</button>
+            </div>
+            {/* Video */}
+            <div style={{ background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+              <div style={{ width: 200, aspectRatio: '9/16', overflow: 'hidden', borderRadius: 10 }}>
+                <video
+                  key={modalClip.clip_id || modalClip.id}
+                  src={modalClip.video_url || modalClip.preview_url}
+                  controls
+                  poster={modalClip.thumbnail_url || undefined}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              </div>
+            </div>
+            {/* Actions */}
+            <div style={{ padding: '14px 18px', display: 'flex', gap: 8 }}>
+              <button
+                onClick={e => handlePublishYT(e, modalClip)}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  padding: '9px 12px', borderRadius: 9, fontSize: '.78rem', fontWeight: 700,
+                  border: '1px solid #fca5a5', background: '#fff5f5', color: '#dc2626', cursor: 'pointer',
+                }}
+              ><YTLogo size={13} /> Post to YouTube</button>
+              <button
+                onClick={e => handlePublishTT(e, modalClip)}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  padding: '9px 12px', borderRadius: 9, fontSize: '.78rem', fontWeight: 700,
+                  border: '1px solid #c4b5fd', background: '#faf5ff', color: '#010101', cursor: 'pointer',
+                }}
+              ><TTLogo size={13} /> Post to TikTok</button>
+              <button
+                onClick={e => handleDownload(e, modalClip)}
+                style={{
+                  padding: '9px 14px', borderRadius: 9,
+                  border: '1px solid #e5e7eb', background: '#f9fafb',
+                  color: isPaid ? '#374151' : '#d1d5db', cursor: 'pointer', fontSize: '.78rem',
+                }}
+              >{isPaid ? '⬇ Download' : '🔒'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg) } }
+        div:hover > .play-overlay { opacity: 1 !important; background: rgba(0,0,0,.28) !important; }
+      `}</style>
+    </AppLayout>
+  )
+}
