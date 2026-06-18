@@ -282,10 +282,10 @@ async def tiktok_auth_init(current_user: CurrentUser):
     state = f"{current_user.user_id}"
 
     params = (
-        f"?client_key={settings.TIKTOK_CLIENT_KEY}"
+        f"?client_key={settings.TIKTOK_CLIENT_KEY.strip()}"
         f"&scope={TIKTOK_SCOPES}"
         f"&response_type=code"
-        f"&redirect_uri={settings.TIKTOK_REDIRECT_URI}"
+        f"&redirect_uri={settings.TIKTOK_REDIRECT_URI.strip()}"
         f"&state={state}"
     )
     return {"url": f"{TIKTOK_AUTH_URL}{params}"}
@@ -323,21 +323,23 @@ async def tiktok_auth_callback(code: str, state: str, error: str = None):
         logger.error(f"TikTok token exchange network error: {exc}")
         raise HTTPException(status_code=502, detail="TikTok token exchange failed (network)")
 
-    # TikTok v2 returns { data: { access_token, refresh_token, open_id, ... }, error: {...} }
-    if resp.status_code != 200 or not data.get("data", {}).get("access_token"):
-        err_msg = data.get("error", {}).get("message", "unknown")
+    # TikTok v2 returns tokens either flat OR nested under "data" depending on API version
+    td = data.get("data") if isinstance(data.get("data"), dict) else data
+
+    if resp.status_code != 200 or not td.get("access_token"):
+        err = data.get("error", {})
+        err_msg = err.get("message", data.get("message", "unknown")) if isinstance(err, dict) else str(err)
         logger.error(f"TikTok token error for user {user_id}: {err_msg} — raw: {data}")
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/dashboard?status=tiktok_error&reason={err_msg}"
         )
 
-    td = data["data"]
     tiktok_token = {
         "access_token":       td["access_token"],
         "refresh_token":      td.get("refresh_token", ""),
         "open_id":            td.get("open_id", ""),
         "scope":              td.get("scope", ""),
-        "expires_in":         td.get("expires_in", 86400),        # default 24h
+        "expires_in":         td.get("expires_in", 86400),
         "refresh_expires_in": td.get("refresh_expires_in", 0),
         "token_type":         td.get("token_type", "Bearer"),
     }
@@ -372,12 +374,12 @@ async def _tiktok_refresh_token(user_id: str, tt_tokens: dict) -> dict:
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
     data = resp.json()
-    if resp.status_code != 200 or not data.get("data", {}).get("access_token"):
+    td = data.get("data") if isinstance(data.get("data"), dict) else data
+    if resp.status_code != 200 or not td.get("access_token"):
         raise HTTPException(
             status_code=401,
             detail="TikTok token refresh failed — please reconnect TikTok.",
         )
-    td = data["data"]
     new_tokens = {
         **tt_tokens,
         "access_token":  td["access_token"],
