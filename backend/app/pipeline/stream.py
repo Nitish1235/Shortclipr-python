@@ -35,7 +35,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 
 from app.core.config import get_settings
-from app.core.proxy import get_proxy_url, url_is_ip_bound
+from app.core.proxy import get_dataimpulse_proxy, get_proxy_url, url_is_ip_bound
 from app.core.redis import cache_stream_url, get_cached_stream_url
 
 logger = logging.getLogger(__name__)
@@ -381,10 +381,10 @@ def _pick_stream_ytdlp(info: dict | None) -> str | None:
     return info.get("url")
 
 
-# ── Method 1: InnerTube ANDROID + proxy-cheap ─────────────────
+# ── Method 1: InnerTube ANDROID + DataImpulse ─────────────────
 
 async def _innertube_android_stream(video_id: str, target_height: int, session_id: str | None = None) -> str:
-    proxy = get_proxy_url(session_id)
+    proxy = get_dataimpulse_proxy()
     data = await call_player_api(video_id, client_name="ANDROID", send_params=True, proxy_url=proxy)
 
     blocked, reason = _innertube_is_blocked(data)
@@ -399,7 +399,7 @@ async def _innertube_android_stream(video_id: str, target_height: int, session_i
     return url
 
 
-# ── Methods 2-5: yt-dlp variants via proxy-cheap ──────────────
+# ── Methods 2-5: yt-dlp variants via DataImpulse ─────────────
 
 def _ytdlp_run_sync(opts: dict, video_url: str) -> dict | None:
     import yt_dlp
@@ -433,7 +433,7 @@ async def _ytdlp_stream(
 ) -> str:
     import yt_dlp
 
-    proxy = get_proxy_url(session_id)
+    proxy = get_dataimpulse_proxy()
     opts = _ytdlp_base_opts(proxy)
     opts["format"] = format_str
     if client:
@@ -590,7 +590,7 @@ async def get_stream_urls(video_id: str, quality: str = "1080p", session_id: str
     """
     h = int(quality.rstrip("p"))
     try:
-        proxy = get_proxy_url(session_id)
+        proxy = get_dataimpulse_proxy()
         data = await call_player_api(video_id, client_name="ANDROID", send_params=True, proxy_url=proxy)
 
         blocked, reason = _innertube_is_blocked(data)
@@ -636,7 +636,7 @@ async def get_audio_stream_url(video_id: str, session_id: str | None = None) -> 
             logger.info(f"[{video_id}] ignoring global audio cache: URL is IP-bound")
 
     # 3. Resolve
-    proxy = get_proxy_url(session_id)
+    proxy = get_dataimpulse_proxy()
     for client_name in ["ANDROID", "TV", "IOS"]:
         try:
             data = await call_player_api(video_id, client_name=client_name, send_params=True, proxy_url=proxy)

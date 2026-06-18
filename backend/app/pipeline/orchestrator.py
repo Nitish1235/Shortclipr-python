@@ -145,11 +145,11 @@ async def _execute_pipeline(
         raw_clip_results = None
 
         try:
-            from app.core.proxy import get_proxy_url
+            from app.core.proxy import get_decodo_proxy
             raw_clip_results = await download_all_clips_parallel(
                 stream_url, clip_ranges, job_dir,
                 audio_url=audio_url, user_agent=user_agent,
-                proxy_url=get_proxy_url(job_id),
+                proxy_url=get_decodo_proxy(job_id),   # Decodo ISP: fixed IP per job for DASH
                 max_concurrent=5,
             )
         except Exception as dash_exc:

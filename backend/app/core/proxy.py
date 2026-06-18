@@ -101,6 +101,56 @@ def _get_decodo_proxy_url(session_id: str | None = None) -> str:
     return f"http://{user}:{password}@{host}:{port}"
 
 
+def get_dataimpulse_proxy() -> str | None:
+    """
+    DataImpulse rotating residential proxy — use for transcript + stream URL.
+
+    Rotating means each new connection gets a fresh IP automatically.
+    No session stickiness needed: transcript and stream URL are independent
+    requests that don't need to share an IP.
+
+    Returns None if DATAIMPULSE_USER is not configured.
+    """
+    s = get_settings()
+    if not s.DATAIMPULSE_USER or not s.DATAIMPULSE_PASS:
+        _logger.warning("[proxy.py] DataImpulse not configured — transcript/stream running without residential proxy")
+        return None
+    user = quote_plus(s.DATAIMPULSE_USER.strip())
+    pw   = quote_plus(s.DATAIMPULSE_PASS.strip())
+    host = s.DATAIMPULSE_HOST.strip()
+    port = s.DATAIMPULSE_PORT
+    safe_pw = f"{pw[:3]}...{pw[-2:]} (len={len(pw)})" if len(pw) > 5 else f"len={len(pw)}"
+    _logger.info(f"[proxy.py] DataImpulse residential — {host}:{port} user={user[:10]}... pass={safe_pw}")
+    return f"http://{user}:{pw}@{host}:{port}"
+
+
+def get_decodo_proxy(session_id: str | None = None) -> str | None:
+    """
+    Decodo ISP dedicated proxy — use ONLY for DASH segment downloads.
+
+    Each port maps to a fixed IP (port = location). The port is chosen
+    deterministically from the pool using MD5(session_id) so all DASH
+    byte-range requests within one job use the same IP.
+
+    Returns None if DECODO_USER/DECODO_PASS are not configured.
+    """
+    s = get_settings()
+    if not s.DECODO_USER or not s.DECODO_PASS:
+        _logger.warning("[proxy.py] Decodo ISP not configured — DASH downloads running without proxy")
+        return None
+    host  = s.DECODO_HOST.strip()
+    user  = quote_plus(s.DECODO_USER.strip())
+    pw    = quote_plus(s.DECODO_PASS.strip())
+    ports = _parse_ports(s.DECODO_PORTS) or [10001]
+    if session_id:
+        port = ports[int(hashlib.md5(session_id.encode()).hexdigest(), 16) % len(ports)]
+    else:
+        port = ports[0]
+    safe_pw = f"{pw[:3]}...{pw[-2:]} (len={len(pw)})" if len(pw) > 5 else f"len={len(pw)}"
+    _logger.info(f"[proxy.py] Decodo ISP — {host}:{port} user={user} pass={safe_pw}")
+    return f"http://{user}:{pw}@{host}:{port}"
+
+
 def get_proxy_url(session_id: str | None = None) -> str | None:
     """
     Return a proxy URL, or None if proxy is not configured.

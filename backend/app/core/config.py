@@ -86,27 +86,31 @@ class Settings(BaseSettings):
     INNERTUBE_API_KEY: str = "AIzaSyA8eiZmM1FaSbwzBlGmbW3ILtKBNJI41zQ"
     INNERTUBE_API_BASE: str = "https://www.youtube.com/youtubei/v1"
 
-    # ── Proxy (proxy-cheap residential) ───────────────────────────
-    # Production proxy is proxy-cheap. Set in .env / Cloud Run secrets.
-    # PROXY_PORTS: range "10001-10007" or CSV "10001,10002,10003".
-    # Leave PROXY_HOST empty to run without proxy (local dev / CI).
-    PROXY_HOST: str = ""              # e.g. gate.proxy-cheap.com
-    PROXY_USER: str = ""              # proxy username / customer ID
-    PROXY_PASS: str = ""              # proxy password
-    PROXY_PORT: int = 8080              # single port for residential proxy (e.g. 31112)
-    PROXY_PORTS: str = "10001-10007"  # port pool for random rotation (ignored if PROXY_PORT is set)
+    # ── DataImpulse (rotating residential) — transcript + stream URL ─
+    # Rotating residential: each request gets a fresh IP automatically.
+    # Used ONLY for transcript fetching and stream URL resolution.
+    # Leave DATAIMPULSE_USER empty to skip (falls back to no residential proxy).
+    DATAIMPULSE_HOST: str = "gw.dataimpulse.com"
+    DATAIMPULSE_PORT: int = 823
+    DATAIMPULSE_USER: str = ""   # login from DataImpulse dashboard
+    DATAIMPULSE_PASS: str = ""   # password from DataImpulse dashboard
 
-    # ── Proxy (Decodo) — admin/test pipeline only, not used for user jobs ──
-    # Dedicated ISP IPs: each port maps to a fixed IP + country-tagged username.
+    # ── Decodo ISP dedicated — DASH segment downloads only ────────
+    # Fixed IP per port: port = location. Used for DASH downloads so the
+    # CDN byte-range requests share a stable IP within a job.
+    # Avoid port 10002 (LonConnect IP flagged by YouTube CDN).
     DECODO_HOST: str = "isp.decodo.com"
-    DECODO_USER: str = "user-sp87mxq9dm"
-    DECODO_PASS: str = "Rhxw383q0PFxapeEq_"
-    DECODO_PORTS: str = "10001-10010"
-    # port:country pairs — username becomes "{DECODO_USER}-country-{country}"
-    DECODO_PORT_COUNTRIES: str = (
-        "10001:gb,10002:us,10003:gb,10004:us,10005:gb,"
-        "10006:us,10007:gb,10008:us,10009:gb,10010:us"
-    )
+    DECODO_USER: str = "sp87mxq9dm"
+    DECODO_PASS: str = ""
+    DECODO_PORTS: str = "10001,10003,10004,10005,10006,10007,10008,10009,10010"
+
+    # ── Legacy proxy-cheap (kept for fallback / admin test lab) ───
+    PROXY_HOST: str = ""
+    PROXY_USER: str = ""
+    PROXY_PASS: str = ""
+    PROXY_PORT: int = 8080
+    PROXY_PORTS: str = ""
+    DECODO_PORT_COUNTRIES: str = ""  # unused — ISP ports don't need geo-suffix
 
 
 @lru_cache
