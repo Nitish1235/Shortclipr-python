@@ -138,7 +138,6 @@ async def youtube_auth_init(current_user: CurrentUser):
     flow = _make_yt_flow()
     auth_url, _ = flow.authorization_url(
         access_type="offline",
-        include_granted_scopes="true",
         prompt="consent",
         state=current_user.user_id,
     )
@@ -154,6 +153,8 @@ async def youtube_auth_callback(code: str, state: str):
     user_id = state
 
     def _fetch_token_sync() -> dict:
+        import os
+        os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"  # allow Google to return superset of requested scopes
         flow = _make_yt_flow()
         flow.fetch_token(code=code)
         creds = flow.credentials
@@ -169,14 +170,16 @@ async def youtube_auth_callback(code: str, state: str):
     try:
         token_data = await loop.run_in_executor(None, _fetch_token_sync)
     except Exception as exc:
-        logger.error(f"YouTube OAuth token exchange failed: {exc}")
-        raise HTTPException(status_code=400, detail="OAuth token exchange failed")
+        logger.error(f"YouTube OAuth token exchange failed: {type(exc).__name__}: {exc}")
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/dashboard?status=youtube_error&reason=token_exchange_failed"
+        )
 
     tokens = await _get_social_tokens(user_id)
     tokens["youtube"] = token_data
     await _save_social_tokens(user_id, tokens)
 
-    return RedirectResponse(url=f"{settings.FRONTEND_URL}/dashboard?status=social_connected")
+    return RedirectResponse(url=f"{settings.FRONTEND_URL}/dashboard?status=youtube_connected")
 
 
 @router.post("/publish/youtube")
