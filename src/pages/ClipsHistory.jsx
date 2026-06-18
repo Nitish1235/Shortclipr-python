@@ -25,7 +25,6 @@ export default function ClipsHistory() {
 
   const [loading, setLoading]   = useState(true)
   const [groups, setGroups]     = useState([])   // [{ job, clips[] }]
-  const [filter, setFilter]     = useState('24h') // '24h' | '7d' | 'all'
   const [modalOpen, setModalOpen]   = useState(false)
   const [modalClip, setModalClip]   = useState(null)
   const [modalJob, setModalJob]     = useState(null)
@@ -45,7 +44,7 @@ export default function ClipsHistory() {
     setTimeout(() => setToast(null), 3500)
   }, [])
 
-  // Load jobs + clips
+  // Load jobs + clips (last 24 hours only)
   useEffect(() => {
     const load = async () => {
       setLoading(true)
@@ -57,10 +56,9 @@ export default function ClipsHistory() {
         if (!res.ok) return
         const { jobs } = await res.json()
 
-        const cutoffMs = filter === '24h' ? 86400000 : filter === '7d' ? 604800000 : Infinity
         const now = Date.now()
         const relevant = jobs
-          .filter(j => j.status === 'completed' && (now - new Date(j.created_at)) < cutoffMs)
+          .filter(j => j.status === 'completed' && (now - new Date(j.created_at)) < 86400000)
           .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
           .slice(0, 25)
 
@@ -84,7 +82,7 @@ export default function ClipsHistory() {
       }
     }
     load()
-  }, [filter, logout])
+  }, [logout])
 
   // Social status
   useEffect(() => {
@@ -221,31 +219,6 @@ export default function ClipsHistory() {
         </div>
 
         <div style={{ maxWidth: 1140, margin: '0 auto', padding: '20px 24px' }}>
-          {/* Filter tabs */}
-          <div style={{
-            display: 'flex', gap: 4, marginBottom: 20,
-            background: '#fff', borderRadius: 10, padding: 4,
-            width: 'fit-content', border: '1px solid #e5e7eb',
-          }}>
-            {[
-              { k: '24h', l: 'Last 24h' },
-              { k: '7d',  l: 'Last 7 days' },
-              { k: 'all', l: 'All time' },
-            ].map(f => (
-              <button
-                key={f.k}
-                onClick={() => setFilter(f.k)}
-                style={{
-                  padding: '6px 14px', borderRadius: 7, border: 'none',
-                  background: filter === f.k ? '#111' : 'transparent',
-                  color: filter === f.k ? '#fff' : '#6b7280',
-                  fontSize: '.76rem', fontWeight: filter === f.k ? 700 : 500,
-                  cursor: 'pointer', transition: 'all .15s',
-                }}
-              >{f.l}</button>
-            ))}
-          </div>
-
           {/* Content */}
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
@@ -259,9 +232,7 @@ export default function ClipsHistory() {
               <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🎬</div>
               <div style={{ fontSize: '1rem', fontWeight: 700, color: '#374151', marginBottom: 8 }}>No clips found</div>
               <p style={{ fontSize: '.85rem', color: '#9ca3af', marginBottom: 20, maxWidth: 320, margin: '0 auto 20px' }}>
-                {filter === '24h'
-                  ? 'No clips generated in the last 24 hours.'
-                  : 'Generate your first shorts from the Dashboard.'}
+                No clips generated in the last 24 hours. Head to the Dashboard to create some.
               </p>
               <a href="/dashboard" style={{
                 display: 'inline-block', padding: '9px 20px', background: '#cf1322',
