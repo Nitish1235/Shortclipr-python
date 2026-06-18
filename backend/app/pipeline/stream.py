@@ -321,8 +321,9 @@ def _pick_best_stream(data: dict, target_height: int) -> str | None:
     """
     Pick best video stream URL from InnerTube response.
 
-    Prefers the highest quality at or below target_height (e.g. 1080p → 720p → 480p).
-    Only falls back above the cap if the video has no streams at or below it at all.
+    Prefers H.264 (avc1) → VP9 → any non-AV1, all within target_height cap.
+    AV1 (av01) is excluded: Cloud Run has no hardware AV1 decoder and software
+    decoding fails with "Missing Sequence Header" / "Failed to get pixel format".
     """
     sd = data.get("streamingData", {})
     formats = sd.get("formats", []) + sd.get("adaptiveFormats", [])
@@ -334,12 +335,32 @@ def _pick_best_stream(data: dict, target_height: int) -> str | None:
     if not video_streams:
         return None
 
-    # Best quality within the cap (1080p → 720p → 480p → ...)
-    within_cap = [s for s in video_streams if s.get("height", 0) <= target_height]
-    if within_cap:
-        return within_cap[0]["url"]
+    def _codec(f: dict) -> str:
+        return f.get("mimeType", "")
 
-    # Video has no streams at or below cap — return lowest available rather than nothing
+    def _not_av1(f: dict) -> bool:
+        return "av01" not in _codec(f)
+
+    def _is_h264(f: dict) -> bool:
+        return "avc1" in _codec(f)
+
+    def _is_vp9(f: dict) -> bool:
+        return "vp9" in _codec(f)
+
+    within_cap = [s for s in video_streams if s.get("height", 0) <= target_height]
+
+    # Prefer H.264 → VP9 → any non-AV1 within cap
+    for pred in (_is_h264, _is_vp9, _not_av1):
+        candidates = [s for s in within_cap if pred(s)]
+        if candidates:
+            return candidates[0]["url"]
+
+    # Nothing within cap — try non-AV1 above cap before giving up
+    non_av1_above = [s for s in video_streams if _not_av1(s)]
+    if non_av1_above:
+        return non_av1_above[-1]["url"]
+
+    # Last resort: AV1 (will likely fail on Cloud Run but at least returns something)
     return video_streams[-1]["url"]
 
 
@@ -463,12 +484,13 @@ async def _ytdlp_stream(
 def _fmt(height: int) -> str:
     """
     yt-dlp format selector capped at height.
-    Tries mp4 first, then any container, then any combined stream at or below cap.
-    Never returns above the cap unless the video literally has no streams below it.
+    AV1 (av01) is excluded: Cloud Run has no hardware AV1 decoder.
+    Tries H.264 mp4 first, then any non-AV1 container, then last-resort without codec filter.
     """
     return (
-        f"bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]"
-        f"/bestvideo[height<={height}]+bestaudio"
+        f"bestvideo[height<={height}][ext=mp4][vcodec!=av01]+bestaudio[ext=m4a]"
+        f"/bestvideo[height<={height}][vcodec!=av01]+bestaudio"
+        f"/best[height<={height}][vcodec!=av01]"
         f"/best[height<={height}]"
         f"/best"
     )
@@ -479,7 +501,7 @@ def _fmt_unconstrained() -> str:
     Most permissive format selector - no height or extension constraints.
     Used as final fallback when all else fails.
     """
-    return "best"
+    return "bestvideo[vcodec!=av01]+bestaudio/best"
 
 
 def _fmt_relaxed(height: int) -> str:
@@ -488,8 +510,10 @@ def _fmt_relaxed(height: int) -> str:
     Used as an additional fallback when strict mp4 selector fails.
     """
     return (
-        f"bestvideo[height<={height}]+bestaudio/best[height<={height}]"
-        f"/bestvideo+bestaudio/best"
+        f"bestvideo[height<={height}][vcodec!=av01]+bestaudio"
+        f"/best[height<={height}][vcodec!=av01]"
+        f"/bestvideo[vcodec!=av01]+bestaudio"
+        f"/best"
     )
 
 
