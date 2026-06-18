@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import Navigation from '../components/Navigation'
+import AppLayout, { SIDEBAR_W } from '../components/AppLayout'
 import ClipEngine from '../components/ClipEngine'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
@@ -467,13 +467,12 @@ export default function Dashboard() {
   // RENDER
   // ─────────────────────────────────────────────────────────────
   return (
-    <>
-      <Navigation />
+    <AppLayout>
 
       {/* ── Toast ── */}
       {toast && (
         <div style={{
-          position:'fixed', top:'72px', right:'20px', zIndex:9999,
+          position:'fixed', top:'20px', right:'20px', zIndex:9999,
           background: toast.type === 'error' ? '#fef2f2' : toast.type === 'info' ? '#eff6ff' : '#f0fdf4',
           border: `1px solid ${toast.type === 'error' ? '#fecaca' : toast.type === 'info' ? '#bfdbfe' : '#bbf7d0'}`,
           color: toast.type === 'error' ? '#dc2626' : toast.type === 'info' ? '#1d4ed8' : '#16a34a',
@@ -487,7 +486,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <main style={{ background:'#f9fafb', minHeight:'calc(100vh - 58px)', paddingBottom:'90px' }}>
+      <main style={{ background:'#f7f8fa', flex:1, paddingBottom:'90px' }}>
 
         {/* ── Platform status + stats bar ── */}
         <div style={{ background:'#fff', borderBottom:'1px solid #e5e7eb' }}>
@@ -996,7 +995,7 @@ export default function Dashboard() {
       {/* ── Bulk action bar ── */}
       {selectedClipIds.size > 0 && (
         <div style={{
-          position:'fixed', bottom:0, left:0, right:0,
+          position:'fixed', bottom:0, left:SIDEBAR_W, right:0,
           background:'rgba(255,255,255,.97)', borderTop:'1.5px solid #e5e7eb',
           padding:'11px 24px', zIndex:500,
           display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap',
@@ -1338,6 +1337,6 @@ export default function Dashboard() {
         @keyframes slideIn { from { transform: translateY(-8px); opacity:0 } to { transform: translateY(0); opacity:1 } }
         div:hover > .play-overlay { opacity: 1 !important; background: rgba(0,0,0,.28) !important; }
       `}</style>
-    </>
+    </AppLayout>
   )
 }
