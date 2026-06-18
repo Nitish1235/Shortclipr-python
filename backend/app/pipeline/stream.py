@@ -392,13 +392,27 @@ def _find_format_by_url(data: dict, url: str) -> dict | None:
 
 
 def _pick_stream_ytdlp(info: dict | None) -> str | None:
-    """Pick a direct CDN stream URL from yt-dlp extract_info output."""
+    """Pick the video CDN URL from yt-dlp extract_info output.
+
+    Checks requested_formats first so the format selector (which excludes av01)
+    is actually honoured. Falling back to the raw formats list was the bug that
+    returned AV1 URLs even when _fmt() excluded them.
+    """
     if not info:
         return None
-    # Prefer formats with googlevideo.com URLs (direct CDN, supports range requests)
+    # requested_formats: the format(s) yt-dlp selected to match our format string.
+    # For a video+audio combo, the video stream has vcodec != 'none'.
+    for fmt in info.get("requested_formats", []):
+        if fmt.get("vcodec", "none") != "none" and fmt.get("url"):
+            return fmt["url"]
+    # Single-format selection: info['url'] is already the chosen stream.
+    if info.get("url") and "googlevideo.com" in info.get("url", ""):
+        return info["url"]
+    # Last resort: scan all formats but skip AV1.
     for f in reversed(info.get("formats", [])):
-        if f.get("url") and "googlevideo.com" in f.get("url", ""):
-            return f["url"]
+        url = f.get("url", "")
+        if url and "googlevideo.com" in url and "av01" not in f.get("vcodec", ""):
+            return url
     return info.get("url")
 
 
