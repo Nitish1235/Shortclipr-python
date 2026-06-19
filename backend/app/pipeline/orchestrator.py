@@ -33,7 +33,7 @@ from app.pipeline.ai_clipper import ClipTimestamp, find_viral_clips
 from app.pipeline.captions import (
     captions_to_dict, clamp_captions_to_silence, detect_silences, get_clip_captions,
 )
-from app.pipeline.extractor import _compute_zoom_beats, _get_source, extract_clip, reframe_and_caption
+from app.pipeline.extractor import _compute_zoom_beats, _get_source, extract_clip, probe_clip_start_offset, reframe_and_caption
 from app.pipeline.face_tracker import compute_face_track
 from app.pipeline.stream import extract_video_id, get_stream_urls, get_video_metadata
 from app.pipeline.transcript import get_transcript
@@ -205,6 +205,8 @@ async def _execute_pipeline(
                 caption_base = actual_start_t
             else:
                 raw_clip_path = await extract_clip(source_path, ts.start, ts.end, raw_clip_path)
+                kf_offset = await probe_clip_start_offset(raw_clip_path, ts.end - ts.start)
+                caption_base = ts.start - kf_offset
 
             clip_id = str(uuid.uuid4())
 

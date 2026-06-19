@@ -125,7 +125,7 @@ COLOR_COMBOS: dict[str, dict[str, str]] = {
     },
 }
 
-DEFAULT_COLOR = "white_black"
+DEFAULT_COLOR = "yellow_black"
 
 # Hook title card — shown for the first N seconds of every clip, burned
 # from ClipTimestamp.title (the AI-generated 5-7 word hook).
@@ -169,23 +169,23 @@ def _resolve_pos(h_align: str, v_align: str) -> tuple[int, int, int]:
 # Colours are placeholders — overridden per-combo in _style_line()
 _BASE_STYLES: dict[str, dict] = {
     "minimal": dict(
-        font="Liberation Sans", size=72, bold=0,
-        border_style=1, outline=3, shadow=1,
+        font="Liberation Sans", size=76, bold=1,
+        border_style=1, outline=4, shadow=1,
         scale_x=100, scale_y=100, spacing=0,
     ),
     "fade": dict(
-        font="Liberation Sans", size=72, bold=0,
-        border_style=1, outline=3, shadow=1,
+        font="Liberation Sans", size=76, bold=1,
+        border_style=1, outline=4, shadow=1,
         scale_x=100, scale_y=100, spacing=0,
     ),
     "word_pop": dict(
-        font="Liberation Sans", size=80, bold=1,
-        border_style=1, outline=4, shadow=0,
+        font="Liberation Sans", size=84, bold=1,
+        border_style=1, outline=5, shadow=0,
         scale_x=100, scale_y=100, spacing=1,
     ),
     "typewriter": dict(
-        font="Liberation Sans", size=72, bold=0,
-        border_style=1, outline=3, shadow=1,
+        font="Liberation Sans", size=76, bold=1,
+        border_style=1, outline=4, shadow=1,
         scale_x=100, scale_y=100, spacing=0,
     ),
     "slide": dict(
@@ -204,8 +204,8 @@ _BASE_STYLES: dict[str, dict] = {
         scale_x=100, scale_y=100, spacing=0,
     ),
     "karaoke": dict(
-        font="Liberation Sans", size=76, bold=0,
-        border_style=1, outline=3, shadow=1,
+        font="Liberation Sans", size=76, bold=1,
+        border_style=1, outline=4, shadow=1,
         scale_x=100, scale_y=100, spacing=0,
     ),
     "hormozi": dict(

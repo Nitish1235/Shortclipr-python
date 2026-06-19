@@ -24,7 +24,7 @@ from pathlib import Path
 from app.core.proxy import use_decodo_proxy
 from app.pipeline.ai_clipper import find_sequential_clips
 from app.pipeline.captions import VALID_STYLES, detect_silences, get_clip_captions
-from app.pipeline.extractor import VALID_TEMPLATES, _compute_zoom_beats, _get_source, extract_clip, reframe_and_caption
+from app.pipeline.extractor import VALID_TEMPLATES, _compute_zoom_beats, _get_source, extract_clip, probe_clip_start_offset, reframe_and_caption
 from app.pipeline.face_tracker import compute_face_track
 from app.pipeline.stream import extract_video_id, get_stream_urls, get_video_metadata
 from app.pipeline.transcript import get_transcript
@@ -106,7 +106,9 @@ async def run_test_pipeline(job_id: str, youtube_url: str, quality: str = "1080p
             try:
                 raw_path = await extract_clip(source_path, ts.start, ts.end, job_dir / f"clip_{i:02d}_raw.mp4")
                 clip_dur = ts.end - ts.start
-                captions = get_clip_captions(transcript, ts.start, ts.end)
+                kf_offset = await probe_clip_start_offset(raw_path, clip_dur)
+                caption_base = ts.start - kf_offset
+                captions = get_clip_captions(transcript, caption_base, ts.end)
                 silences, (src_w, src_h, face_track) = await asyncio.gather(
                     detect_silences(raw_path),
                     compute_face_track(raw_path, clip_dur),

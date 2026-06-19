@@ -30,6 +30,17 @@ import re
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 
+_NOISE_RE = re.compile(
+    r"\[.*?\]"          # [Music] [Applause] [Laughter] etc.
+    r"|\(.*?\)"         # (laughs) (clapping) etc.
+    r"|[*♪♫♬]"         # * emphasis markers, music notes
+    r"|<[^>]+>"         # any leftover HTML/ASS tags
+)
+
+def _clean(text: str) -> str:
+    """Remove transcript noise characters before display."""
+    return _NOISE_RE.sub("", text).strip()
+
 import httpx
 
 from app.core.proxy import get_dataimpulse_proxy
@@ -217,9 +228,9 @@ def _ytta_fetch_sync(
                 raise  # let outer handler catch it
 
         return [
-            {"text": s.text.strip(), "start": s.start, "duration": s.duration}
+            {"text": _clean(s.text), "start": s.start, "duration": s.duration}
             for s in fetched
-            if s.text.strip()
+            if _clean(s.text)
         ]
 
     except TranscriptsDisabled:
@@ -316,7 +327,7 @@ async def _fetch_timedtext(
                 segs = ev.get("segs")
                 if not segs:
                     continue
-                text = "".join(s.get("utf8", "") for s in segs).strip()
+                text = _clean("".join(s.get("utf8", "") for s in segs))
                 if not text or text == "\n":
                     continue
                 entries.append({
@@ -345,7 +356,7 @@ def _parse_caption_xml(xml_text: str, video_id: str) -> list[TranscriptEntry]:
             raw = (raw
                    .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
                    .replace("&quot;", '"').replace("&#39;", "'").replace("\n", " "))
-            raw = re.sub(r"<[^>]+>", "", raw).strip()
+            raw = _clean(re.sub(r"<[^>]+>", "", raw))
             if not raw:
                 continue
             entries.append({
@@ -434,7 +445,7 @@ def _ytdlp_subs_sync(
 
     entries = []
     for ev in resp.json().get("events", []):
-        text = "".join(s.get("utf8", "") for s in ev.get("segs", [])).strip()
+        text = _clean("".join(s.get("utf8", "") for s in ev.get("segs", [])))
         if text and text != "\n":
             entries.append({
                 "text": text,

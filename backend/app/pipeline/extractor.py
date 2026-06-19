@@ -309,6 +309,36 @@ async def extract_clip(
     return output_path
 
 
+async def probe_clip_start_offset(clip_path: Path, requested_duration: float) -> float:
+    """
+    Return how many seconds BEFORE the requested start the clip actually begins.
+
+    When -ss is used before -i (input seeking), ffmpeg snaps to the nearest
+    keyframe earlier than the requested start.  The output is PTS-zeroed with
+    -avoid_negative_ts make_zero, so the keyframe offset equals the difference
+    between the actual clip duration and the requested duration.
+
+        keyframe_offset = actual_duration - requested_duration
+
+    Use this to adjust caption_base for the full-source-fallback path so
+    captions don't appear before the corresponding audio.
+    """
+    proc = await asyncio.create_subprocess_exec(
+        "ffprobe", "-v", "quiet",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        str(clip_path),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    out, _ = await proc.communicate()
+    try:
+        actual = float(out.strip())
+        return max(0.0, actual - requested_duration)
+    except (ValueError, TypeError):
+        return 0.0
+
+
 async def _get_source(
     stream_url: str,
     audio_url: str | None,
@@ -1107,12 +1137,12 @@ async def _encode_reframed_and_captioned(
                 "-i", str(input_path),
                 "-filter_complex", fc,
                 "-map", "[rawv]", "-map", "0:a?",
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
                 "-threads", "2",
                 "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
                 str(raw_output_path),
                 "-map", "[capout]", "-map", "0:a?",
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
                 "-threads", "2",
                 "-c:a", "copy", "-movflags", "+faststart",
                 str(captioned_output_path),
@@ -1124,7 +1154,7 @@ async def _encode_reframed_and_captioned(
                 "-i", str(input_path),
                 "-filter_complex", fc,
                 "-map", "[out]", "-map", "0:a?",
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
                 "-threads", "2",
                 "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
                 str(raw_output_path),

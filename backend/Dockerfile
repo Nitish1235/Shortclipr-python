@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
         fonts-liberation \
         fonts-noto-core \
+        fonts-noto-extra \
         fontconfig \
     && fc-cache -fv \
     && rm -rf /var/lib/apt/lists/*
