@@ -478,9 +478,14 @@ def _darken(color: str, factor: float = 0.3) -> str:
 _ZOOM_FPS       = 30
 _ZOOM_ATTACK    = 0.12   # seconds to punch in
 _ZOOM_DECAY     = 0.35   # seconds to ease back to baseline
-_ZOOM_PEAK      = 1.08   # zoom level at the peak of a punch
-_ZOOM_BASE_MAX  = 1.05   # ambient drift ceiling when no punch is active
-_ZOOM_BASE_RATE = 0.0006
+_ZOOM_PEAK      = 1.04   # zoom level at the peak of a punch (was 1.08 — subtler)
+_ZOOM_BASE_MAX  = 1.02   # ambient drift ceiling when no punch is active (was 1.05)
+_ZOOM_BASE_RATE = 0.0003
+
+# crop_fill scale: 1.0 = fully fills 9:16 (tightest crop), <1.0 = shows
+# slightly more context with thin blurred strips on top/bottom.
+# 0.90 means 10% of height becomes blur strips (~96 px each side on 1080×1920).
+_CROP_FILL_SCALE = 0.90
 
 
 def _zoom_expr(beats: list[float]) -> str:
@@ -533,7 +538,7 @@ def _fast_crop_pan(
     face_track: list[tuple[float, float, float]] | None = None,
 ) -> str:
     """
-    Fast alternative to zoompan: scale up 4 % then crop with a face-following
+    Fast alternative to zoompan: scale up 2 % then crop with a face-following
     offset. Produces the same mild zoom-in and face pan as zoompan but is
     ~15× faster because crop+scale require zero per-frame expression
     evaluation — the CPU just copies pixels.
@@ -541,8 +546,8 @@ def _fast_crop_pan(
     face_track: canvas-normalised (t, cx, cy) keyframes from
     _face_track_to_canvas(). When absent, the crop is centred.
     """
-    scale_w = _even_round(width * 1.04)
-    scale_h = _even_round(height * 1.04)
+    scale_w = _even_round(width * 1.02)
+    scale_h = _even_round(height * 1.02)
     ex = scale_w - width   # excess pixels horizontally
     ey = scale_h - height  # excess pixels vertically
 
@@ -741,19 +746,31 @@ def _fc_crop_fill(
     Face tracking pans the crop window to keep the speaker centred.
     Falls back to a centred crop when no face track is available.
     """
-    # scale=width:height:force_original_aspect_ratio=increase makes ffmpeg scale
-    # the 16:9 source until it COVERS the 9:16 canvas in both dimensions.
-    # For 1080×1920 output from a 1920×1080 source the height constraint
-    # dominates → output is ~3413×1920.  The enormous horizontal excess
-    # (3413-1080=2333 px) gives the face-tracking crop all the pan room it
-    # needs — no artificial 4 % over-zoom is required.
+    # When _CROP_FILL_SCALE < 1.0 the main video is scaled to (scale * height)
+    # so slightly more of the 16:9 frame is visible, with thin blurred strips
+    # filling the leftover top/bottom.  At 1.0 the video fully covers the canvas
+    # (pure crop, no bars).
+    vid_h = _even_round(height * _CROP_FILL_SCALE)
     cx = _fc_crop_offset(face_track, "x", "iw", "ow", "(iw-ow)/2")
     cy = _fc_crop_offset(face_track, "y", "ih", "oh", "(ih-oh)/2")
 
+    if _CROP_FILL_SCALE >= 1.0:
+        return (
+            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
+            f"crop={width}:{height}:'{cx}':'{cy}',"
+            f"unsharp=lx=5:ly=5:la=0.8:cx=5:cy=5:ca=0.0"
+            f"[{out_label}]"
+        )
+    # Blurred background fills the thin top/bottom strips; main video is the
+    # slightly-zoomed-out crop in the centre.
     return (
         f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{height}:'{cx}':'{cy}'"
-        f"[{out_label}]"
+        f"crop={width}:{height},"
+        f"boxblur=luma_radius=25:luma_power=1:chroma_radius=25:chroma_power=1[_cf_bg];"
+        f"[0:v]scale={width}:{vid_h}:force_original_aspect_ratio=increase:flags=lanczos,"
+        f"crop={width}:{vid_h}:'{cx}':'{cy}',"
+        f"unsharp=lx=5:ly=5:la=0.8:cx=5:cy=5:ca=0.0[_cf_fg];"
+        f"[_cf_bg][_cf_fg]overlay=(W-w)/2:(H-h)/2[{out_label}]"
     )
 
 
@@ -864,8 +881,9 @@ def _fc_colour_bars(
     return (
         f"color=c={c}:s={width}x{bar_h}[topbar];"
         f"color=c={c}:s={width}x{bar_h}[botbar];"
-        f"[0:v]scale={width}:{vid_h}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{vid_h}:'{cx}':'{cy}'[vid];"
+        f"[0:v]scale={width}:{vid_h}:force_original_aspect_ratio=increase:flags=lanczos,"
+        f"crop={width}:{vid_h}:'{cx}':'{cy}',"
+        f"unsharp=lx=5:ly=5:la=0.8:cx=5:cy=5:ca=0.0[vid];"
         f"[topbar][vid][botbar]vstack=inputs=3[{out_label}]"
     )
 
@@ -895,8 +913,9 @@ def _fc_gradient(
     return (
         f"color=c={dark}:s={width}x{bar_h}[topbar];"
         f"color=c={bright}:s={width}x{bar_h}[botbar];"
-        f"[0:v]scale={width}:{vid_h}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{vid_h}:'{cx}':'{cy}'[vid];"
+        f"[0:v]scale={width}:{vid_h}:force_original_aspect_ratio=increase:flags=lanczos,"
+        f"crop={width}:{vid_h}:'{cx}':'{cy}',"
+        f"unsharp=lx=5:ly=5:la=0.8:cx=5:cy=5:ca=0.0[vid];"
         f"[topbar][vid][botbar]vstack=inputs=3[{out_label}]"
     )
 
@@ -945,8 +964,9 @@ def _fc_neon_frame(
     cy = _fc_crop_offset(face_track, "y", "ih", "oh", "(ih-oh)/2")
     return (
         f"color=c={c}:s={width}x{height}[frame];"
-        f"[0:v]scale={inner_w}:{inner_h}:force_original_aspect_ratio=increase,"
-        f"crop={inner_w}:{inner_h}:'{cx}':'{cy}'[vid];"
+        f"[0:v]scale={inner_w}:{inner_h}:force_original_aspect_ratio=increase:flags=lanczos,"
+        f"crop={inner_w}:{inner_h}:'{cx}':'{cy}',"
+        f"unsharp=lx=5:ly=5:la=0.8:cx=5:cy=5:ca=0.0[vid];"
         f"[frame][vid]overlay={border}:{border}[{out_label}]"
     )
 
@@ -1002,8 +1022,9 @@ def _fc_screenshare(
     fc = (
         f"[0:v]scale={width}:{inner_h}:force_original_aspect_ratio=decrease,"
         f"pad={width}:{half_h}:(ow-iw)/2:(oh-ih)/2:black[top];"
-        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{half_h}:'{crop_x}':'{crop_y}'[bot];"
+        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
+        f"crop={width}:{half_h}:'{crop_x}':'{crop_y}',"
+        f"unsharp=lx=5:ly=5:la=0.8:cx=5:cy=5:ca=0.0[bot];"
         "[top][bot]vstack[pre]"
     )
     return fc + ";" + _fast_crop_pan("pre", out_label, width, height)
@@ -1031,8 +1052,9 @@ def _fc_gameplay(
     crop_x = _fc_crop_offset(face_track, "x", "in_w", str(width), f"(in_w-{width})/2")
     crop_y = _fc_crop_offset(face_track, "y", "in_h", str(top_h), f"(in_h-{top_h})/2")
     fc = (
-        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{top_h}:'{crop_x}':'{crop_y}'[top];"
+        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
+        f"crop={width}:{top_h}:'{crop_x}':'{crop_y}',"
+        f"unsharp=lx=5:ly=5:la=0.8:cx=5:cy=5:ca=0.0[top];"
         f"[0:v]scale={width}:{bot_h}:force_original_aspect_ratio=decrease,"
         f"pad={width}:{bot_h}:(ow-iw)/2:(oh-ih)/2:black[bot];"
         "[top][bot]vstack[pre]"
@@ -1139,7 +1161,7 @@ async def _encode_reframed_and_captioned(
                 "-map", "[rawv]", "-map", "0:a?",
                 "-c:v", "libx264", "-preset", "fast", "-crf", "18",
                 "-threads", "2",
-                "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
+                "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
                 str(raw_output_path),
                 "-map", "[capout]", "-map", "0:a?",
                 "-c:v", "libx264", "-preset", "fast", "-crf", "18",
@@ -1156,7 +1178,7 @@ async def _encode_reframed_and_captioned(
                 "-map", "[out]", "-map", "0:a?",
                 "-c:v", "libx264", "-preset", "fast", "-crf", "18",
                 "-threads", "2",
-                "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
+                "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
                 str(raw_output_path),
             ]
 
