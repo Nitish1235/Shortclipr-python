@@ -22,6 +22,7 @@ from app.api.editor import _burn_and_upload_from_url
 from app.core.config import get_settings
 from app.pipeline.captions import Caption
 from app.pipeline.orchestrator import run_pipeline
+from app.pipeline.test_pipeline import run_test_pipeline
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -47,6 +48,22 @@ async def internal_run_pipeline(body: InternalRunRequest, x_internal_secret: str
     asyncio.create_task(
         run_pipeline(body.job_id, body.user_id, body.youtube_url, body.options),
         name=f"pipeline-{body.job_id[:8]}",
+    )
+    return {"status": "accepted"}
+
+
+class InternalTestRequest(BaseModel):
+    job_id: str
+    youtube_url: str
+    quality: str = "1080p"
+
+
+@router.post("/test/run", status_code=202)
+async def internal_run_test(body: InternalTestRequest, x_internal_secret: str = Header(default="")):
+    _require_internal_secret(x_internal_secret)
+    asyncio.create_task(
+        run_test_pipeline(body.job_id, body.youtube_url, body.quality),
+        name=f"test-{body.job_id[:8]}",
     )
     return {"status": "accepted"}
 

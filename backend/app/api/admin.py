@@ -352,7 +352,26 @@ async def admin_test_generate(body: TestGenerateRequest, admin: AdminUser):
     Returns a job_id to poll via GET /admin/test/jobs/{job_id}.
     """
     job_id = f"test_{uuid.uuid4().hex[:12]}"
-    asyncio.create_task(run_test_pipeline(job_id, body.youtube_url, body.quality))
+
+    if settings.WORKER_SERVICE_URL:
+        # Dispatch to worker — same pattern as normal jobs.
+        # Worker has the proxy env vars and 8 vCPU for ffmpeg.
+        async def _dispatch():
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.post(
+                        f"{settings.WORKER_SERVICE_URL}/internal/test/run",
+                        json={"job_id": job_id, "youtube_url": body.youtube_url, "quality": body.quality},
+                        headers={"X-Internal-Secret": settings.INTERNAL_TASK_SECRET},
+                    )
+                    resp.raise_for_status()
+            except Exception:
+                logger.exception(f"[{job_id}] Failed to dispatch test batch to worker")
+        asyncio.create_task(_dispatch(), name=f"test-dispatch-{job_id[:8]}")
+    else:
+        asyncio.create_task(run_test_pipeline(job_id, body.youtube_url, body.quality))
+
     logger.info(f"Admin {admin.email} started test batch {job_id} for {body.youtube_url}")
     return {"job_id": job_id, "total_clips": TOTAL_CLIPS}
 
