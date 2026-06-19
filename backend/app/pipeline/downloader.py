@@ -442,11 +442,16 @@ async def download_all_clips_parallel(
 
                 try:
                     if audio_url and a_segs:
-                        actual_start_t, _ = await asyncio.gather(
+                        v_start_t, a_start_t = await asyncio.gather(
                             _dl_track(video_url, v_init_end, v_segs, video_tmp),
                             _dl_track(audio_url, a_init_end, a_segs, audio_tmp),
                         )
                         await _mux(video_tmp, audio_tmp, output)
+                        # _mux uses -avoid_negative_ts make_zero which shifts all
+                        # PTS by min(v_start_t, a_start_t).  Return the min so the
+                        # orchestrator's ss_offset = ts.start - min_start stays
+                        # aligned with the muxed file's PTS-0 anchor.
+                        actual_start_t = min(v_start_t, a_start_t)
                     else:
                         actual_start_t = await _dl_track(video_url, v_init_end, v_segs, output)
                 finally:

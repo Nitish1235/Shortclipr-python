@@ -10,12 +10,13 @@ import json
 import tempfile
 import time
 from pathlib import Path
+from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Body, HTTPException, status
+from fastapi import APIRouter, Body, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 
-from app.api.deps import CurrentUser
+from app.api.deps import CurrentUser, decode_access_token
 from app.core.config import get_settings
 from app.db import supabase as db
 from app.pipeline.captions import Caption, burn_captions
@@ -203,13 +204,23 @@ async def render_clip(
 @router.get("/clips/{clip_id}/download")
 async def download_clip(
     clip_id: str,
-    current_user: CurrentUser = ...,
+    token: Optional[str] = Query(None),
 ):
     """
     Redirect to the GCS video URL.
+    Accepts ?token= query param — browsers can't send Authorization headers
+    when opening a URL directly (e.g. anchor click / window.open).
     Free users → 403.  Paid users → 302 redirect to the MP4.
     """
-    user = await db.get_user(current_user.user_id)
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        payload = decode_access_token(token)
+    except HTTPException:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    user = await db.get_user(payload.sub)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
@@ -223,7 +234,7 @@ async def download_clip(
         raise HTTPException(status_code=404, detail="Clip not found")
 
     clip = rows[0]
-    if str(clip["user_id"]) != current_user.user_id:
+    if str(clip["user_id"]) != payload.sub:
         raise HTTPException(status_code=403, detail="Access denied")
 
     return RedirectResponse(url=clip["video_url"], status_code=302)

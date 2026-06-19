@@ -171,6 +171,14 @@ async def _execute_pipeline(
             # name for the trimmed output so ffmpeg input ≠ output.
             raw_clip_path = job_dir / f"clip_{i:02d}_trimmed.mp4"
 
+            # caption_base: the actual start of the trimmed clip content in
+            # original-video time.  In the DASH path the clip starts at the
+            # SIDX segment boundary (actual_start_t ≤ ts.start), which is
+            # where ffmpeg's -c copy keyframe snap lands.  In the full-source
+            # fallback we can't know the exact keyframe without probing, so we
+            # use ts.start and accept a minor caption drift (< 1 GOP).
+            caption_base: float = ts.start
+
             if raw_clip_results is not None:
                 raw_path_dash, actual_start_t = raw_clip_results[i]
                 ss_offset = max(0.0, ts.start - actual_start_t)
@@ -192,6 +200,9 @@ async def _execute_pipeline(
                 if proc.returncode != 0:
                     raise RuntimeError(f"DASH trim failed: {stderr.decode(errors='ignore')[-300:]}")
                 raw_path_dash.unlink(missing_ok=True)  # free disk: dash file no longer needed
+                # The -c copy seek snapped back to actual_start_t; captions must
+                # be relative to that (not ts.start) or they appear early.
+                caption_base = actual_start_t
             else:
                 raw_clip_path = await extract_clip(source_path, ts.start, ts.end, raw_clip_path)
 
@@ -244,14 +255,20 @@ async def _execute_pipeline(
             if job_check and job_check.get("status") == "cancelled":
                 raise RuntimeError(f"Job {job_id} cancelled")
 
-            captions = get_clip_captions(transcript, ts.start, ts.end)
+            # caption_base is actual clip content start (actual_start_t for DASH,
+            # ts.start for full-source).  All caption times are relative to it so
+            # they stay in sync with the clip's PTS-0 frame.
+            clip_actual_dur = ts.end - caption_base
+            captions = get_clip_captions(transcript, caption_base, ts.end)
             silences, (src_w, src_h, face_track) = await asyncio.gather(
                 detect_silences(raw_clip_path),
-                compute_face_track(raw_clip_path, ts.duration),
+                compute_face_track(raw_clip_path, clip_actual_dur),
             )
+            # silences come from the trimmed clip (PTS relative to caption_base),
+            # captions are also relative to caption_base — time bases match.
             if silences:
                 captions = clamp_captions_to_silence(captions, silences)
-            zoom_beats = _compute_zoom_beats(captions, ts.duration)
+            zoom_beats = _compute_zoom_beats(captions, clip_actual_dur)
 
             reframed_path, captioned_path = await reframe_and_caption(
                 raw_clip_path,
