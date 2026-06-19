@@ -38,13 +38,8 @@ OUTPUT ASPECT RATIOS  (ASPECT_DIMENSIONS):
   neon_frame   Neon frame
                Thin colored border all around the video.
 
-  split_screen Dual split
-               Video in top half, vertically flipped copy in bottom.
-
-  screenshare  Screenshare / Tutorial
-               Full-width video fills top 50 %, portrait crop in bottom 50 %.
-
-  gameplay     Gameplay / Podcast
+  gameplay     Gameplay / Podcast (TEMPORARILY DISABLED — registration is
+               commented out below pending a rework; function kept intact)
                Portrait crop fills top 30 %, full-width video in bottom 70 %.
 
 All templates are pure FFmpeg-filter-complex — no frame sampling
@@ -82,9 +77,7 @@ VALID_TEMPLATES = [
     "gradient",      # Gradient bars
     "cinema",        # Cinematic black bars
     "neon_frame",    # Coloured neon border
-    "split_screen",  # Dual split (top + bottom)
-    "screenshare",   # Full top / portrait bottom
-    "gameplay",      # Portrait top 30 % / full bottom 70 %
+    # "gameplay",    # Portrait top 30 % / full bottom 70 % — temporarily disabled, will rework
 ]
 
 # Output canvas size per aspect ratio (width, height)
@@ -482,10 +475,13 @@ _ZOOM_PEAK      = 1.04   # zoom level at the peak of a punch (was 1.08 — subtl
 _ZOOM_BASE_MAX  = 1.02   # ambient drift ceiling when no punch is active (was 1.05)
 _ZOOM_BASE_RATE = 0.0003
 
-# crop_fill scale: 1.0 = fully fills 9:16 (tightest crop), <1.0 = shows
-# slightly more context with thin blurred strips on top/bottom.
-# 0.90 means 10% of height becomes blur strips (~96 px each side on 1080×1920).
-_CROP_FILL_SCALE = 0.90
+# crop_fill scale: 1.0 = fully fills 9:16 (tightest crop, ~1.78x magnification
+# of the source), <1.0 = shows more context with blurred strips on top/bottom
+# instead of cropping/zooming it away.
+# 0.65 means 35% of height becomes blur strips (~336 px each side on
+# 1080x1920), bringing magnification down to ~1.15x — close to native
+# source resolution, so the kept video stays sharp instead of being upscaled.
+_CROP_FILL_SCALE = 0.65
 
 
 def _zoom_expr(beats: list[float]) -> str:
@@ -612,8 +608,8 @@ def _fg_geometry(template: str, width: int, height: int, src_w: int, src_h: int)
 
     Only covers templates whose `[pre]` canvas places the source video in a
     single rectangular box (the `_dynamic_zoom_filter` pan templates) —
-    `gameplay`/`screenshare` use face-driven crop offsets instead (Mechanism
-    B) and keep the zoompan pan centred.
+    `gameplay` (disabled) uses face-driven crop offsets instead (Mechanism B)
+    and keeps the zoompan pan centred.
     """
     if template in ("blur_bg", "glass"):
         # scale={width}:-2:force_original_aspect_ratio=decrease, overlay centred
@@ -631,12 +627,6 @@ def _fg_geometry(template: str, width: int, height: int, src_w: int, src_h: int)
         scale = min(inner_w / src_w, inner_h / src_h)
         fg_w, fg_h = src_w * scale, src_h * scale
         return fg_w, fg_h, 20 + (inner_w - fg_w) / 2, 20 + (inner_h - fg_h) / 2
-    if template == "split_screen":
-        # top half: scale to width x half_h (decrease), padded centred
-        half_h = height // 2
-        scale = min(width / src_w, half_h / src_h)
-        fg_w, fg_h = src_w * scale, src_h * scale
-        return fg_w, fg_h, (width - fg_w) / 2, (half_h - fg_h) / 2
     # color_bars / gradient / cinema: scale to width x vid_h (decrease), padded
     # centred horizontally, top-aligned (y=0) within the vid box at y=bar_h
     bar_h = _even_round(height * 656 / 1920)
@@ -736,40 +726,54 @@ def _fc_crop_fill(
     out_label: str = "out",
 ) -> str:
     """
-    Full-fill crop: scales the 16:9 source so it COVERS the entire 9:16
-    canvas (force_original_aspect_ratio=increase), then crops to exactly
-    width×height. No bars, no background — video fills every pixel.
-
-    A 4 % extra scale gives the crop window a small amount of travel so
-    the face-tracking pan feels smooth rather than hitting the edge.
+    Face-aware crop: cuts the 9:16-shaped window directly out of the SOURCE
+    at native resolution (face-tracking pans the window, no premature
+    upscale), then scales that native window up to the target size in one
+    pass. Leftover top/bottom (per `_CROP_FILL_SCALE`) is filled with a
+    blurred background instead of being cropped/zoomed away.
 
     Face tracking pans the crop window to keep the speaker centred.
     Falls back to a centred crop when no face track is available.
     """
-    # When _CROP_FILL_SCALE < 1.0 the main video is scaled to (scale * height)
-    # so slightly more of the 16:9 frame is visible, with thin blurred strips
-    # filling the leftover top/bottom.  At 1.0 the video fully covers the canvas
-    # (pure crop, no bars).
+    # When _CROP_FILL_SCALE < 1.0 the kept window is shorter than the full
+    # canvas height, so slightly more of the 16:9 frame survives the crop,
+    # with thin blurred strips filling the leftover top/bottom.  At 1.0 the
+    # window covers the canvas exactly (pure crop, no bars).
     vid_h = _even_round(height * _CROP_FILL_SCALE)
     cx = _fc_crop_offset(face_track, "x", "iw", "ow", "(iw-ow)/2")
     cy = _fc_crop_offset(face_track, "y", "ih", "oh", "(ih-oh)/2")
 
-    if _CROP_FILL_SCALE >= 1.0:
+    if _CROP_FILL_SCALE >= 1.0 or src_w <= 0 or src_h <= 0:
+        # No native source dims to compute an exact native-pixel crop window
+        # (or no bars wanted) — fall back to scale-to-cover then crop.
         return (
             f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
             f"crop={width}:{height}:'{cx}':'{cy}',"
             f"unsharp=lx=5:ly=5:la=0.8:cx=5:cy=5:ca=0.0"
             f"[{out_label}]"
         )
+
+    # Native crop window: the exact source-pixel rectangle whose aspect ratio
+    # matches width:vid_h — cropped directly from the untouched source frame,
+    # so the face-tracking pan moves over real native pixels, not an already
+    # upscaled frame.
+    target_aspect = width / vid_h
+    if src_w / src_h > target_aspect:
+        crop_h_native = src_h
+        crop_w_native = _even_round(src_h * target_aspect)
+    else:
+        crop_w_native = src_w
+        crop_h_native = _even_round(src_w / target_aspect)
+
     # Blurred background fills the thin top/bottom strips; main video is the
-    # slightly-zoomed-out crop in the centre.
+    # native-cropped window, scaled up once to its final size.
     return (
         f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
         f"crop={width}:{height},"
         f"boxblur=luma_radius=25:luma_power=1:chroma_radius=25:chroma_power=1[_cf_bg];"
-        f"[0:v]scale={width}:{vid_h}:force_original_aspect_ratio=increase:flags=lanczos,"
-        f"crop={width}:{vid_h}:'{cx}':'{cy}',"
-        f"unsharp=lx=5:ly=5:la=0.8:cx=5:cy=5:ca=0.0[_cf_fg];"
+        f"[0:v]crop={crop_w_native}:{crop_h_native}:'{cx}':'{cy}',"
+        f"scale={width}:{vid_h}:flags=lanczos,"
+        f"unsharp=lx=5:ly=5:la=0.4:cx=5:cy=5:ca=0.0[_cf_fg];"
         f"[_cf_bg][_cf_fg]overlay=(W-w)/2:(H-h)/2[{out_label}]"
     )
 
@@ -971,66 +975,7 @@ def _fc_neon_frame(
     )
 
 
-# ── Template 8: split_screen ──────────────────────────────────
-
-def _fc_split_screen(
-    zoom_beats: list[float] | None,
-    width: int,
-    height: int,
-    face_track: list[tuple[float, float, float]] | None,
-    src_w: int,
-    src_h: int,
-    out_label: str = "out",
-) -> str:
-    """
-    Top half  = video (letterboxed to width × height/2)
-    Bottom half = same video vertically flipped — eye-catching dual layout.
-    """
-    half_h = height // 2
-    fc = (
-        f"[0:v]scale={width}:{half_h}:force_original_aspect_ratio=decrease,"
-        f"pad={width}:{half_h}:(ow-iw)/2:(oh-ih)/2:black[top];"
-        f"[0:v]scale={width}:{half_h}:force_original_aspect_ratio=decrease,"
-        f"pad={width}:{half_h}:(ow-iw)/2:(oh-ih)/2:black,vflip[bot];"
-        "[top][bot]vstack[pre]"
-    )
-    canvas_track = _face_track_to_canvas(face_track, "split_screen", width, height, src_w, src_h)
-    return fc + ";" + _fast_crop_pan("pre", out_label, width, height, canvas_track)
-
-
-# ── Template 9: screenshare ──────────────────────────────────
-
-def _fc_screenshare(
-    zoom_beats: list[float] | None,
-    width: int,
-    height: int,
-    face_track: list[tuple[float, float, float]] | None,
-    src_w: int,
-    src_h: int,
-    out_label: str = "out",
-) -> str:
-    """
-    Tutorial / screenshare layout:
-      Top half    — full-width letterboxed video (shows entire frame)
-      Bottom half — crop of the source filling the bottom half (shows centre / speaker,
-                     or the face-tracked speaker position when `face_track` is available)
-    """
-    half_h  = height // 2
-    inner_h = _even_round(half_h * 9 / 16)
-    crop_x = _fc_crop_offset(face_track, "x", "in_w", str(width), f"(in_w-{width})/2")
-    crop_y = _fc_crop_offset(face_track, "y", "in_h", str(half_h), f"(in_h-{half_h})/2")
-    fc = (
-        f"[0:v]scale={width}:{inner_h}:force_original_aspect_ratio=decrease,"
-        f"pad={width}:{half_h}:(ow-iw)/2:(oh-ih)/2:black[top];"
-        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
-        f"crop={width}:{half_h}:'{crop_x}':'{crop_y}',"
-        f"unsharp=lx=5:ly=5:la=0.8:cx=5:cy=5:ca=0.0[bot];"
-        "[top][bot]vstack[pre]"
-    )
-    return fc + ";" + _fast_crop_pan("pre", out_label, width, height)
-
-
-# ── Template 10: gameplay ─────────────────────────────────────
+# ── Template 10: gameplay (TEMPORARILY DISABLED, see VALID_TEMPLATES) ──
 
 def _fc_gameplay(
     zoom_beats: list[float] | None,
@@ -1094,12 +1039,8 @@ def _build_template_filter(
         return _fc_cinema(zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
     elif template == "neon_frame":
         return _fc_neon_frame(bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
-    elif template == "split_screen":
-        return _fc_split_screen(zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
-    elif template == "screenshare":
-        return _fc_screenshare(zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
-    elif template == "gameplay":
-        return _fc_gameplay(zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
+    # elif template == "gameplay":  # temporarily disabled, will rework — function kept above
+    #     return _fc_gameplay(zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
     return _fc_crop_fill(width, height, face_track, src_w, src_h, out_label=out_label)
 
 
@@ -1147,7 +1088,7 @@ async def _encode_reframed_and_captioned(
     try:
         if captions or hook_title:
             fc = _build_template_filter(template, bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label="reframed")
-            ass_content = build_ass_content(captions or [], style, color, h_align, v_align, words_per_line, hook_title)
+            ass_content = build_ass_content(captions or [], style, color, h_align, v_align, words_per_line, hook_title, template=template)
             with tempfile.NamedTemporaryFile(suffix=".ass", mode="w", encoding="utf-8", delete=False) as f:
                 f.write(ass_content)
                 ass_path = f.name

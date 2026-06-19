@@ -63,7 +63,10 @@ const STYLE_OPTIONS = [
 // ── Caption colour swatch options ───────────────────────────────
 const COLOR_OPTIONS = [
   { val:'white_black',  label:'White + Black',  sub:'Classic' },
-  { val:'yellow_black', label:'Yellow + Black', sub:'🔥 Trending' },
+  { val:'yellow_black', label:'Yellow + Black', sub:'' },
+  { val:'butter_yellow',         label:'Butter Yellow',     sub:'🔥 Trending' },
+  { val:'hot_pink_black',        label:'Hot Pink + Black',  sub:'🔥 Trending' },
+  { val:'electric_blue_white',   label:'Electric Blue',     sub:'🔥 Trending' },
   { val:'black_white',  label:'Black + White',  sub:'' },
   { val:'cyan_dark',    label:'Cyan + Dark',    sub:'' },
   { val:'orange_dark',  label:'Orange + Dark',  sub:'' },
@@ -269,9 +272,7 @@ export default function ClipEngine({ onJobCreated }) {
       { val:'gradient',     label:'🌈 Gradient',       sub:'Instagram' },
       { val:'cinema',       label:'🎬 Cinema',         sub:'Black Bars' },
       { val:'neon_frame',   label:'💡 Neon Frame',    sub:'Eye-catch' },
-      { val:'split_screen', label:'⬛ Split Screen',  sub:'Dual Feed' },
-      { val:'screenshare',  label:'🖥 Screenshare',   sub:'Tutorial' },
-      { val:'gameplay',     label:'🎮 Gameplay',       sub:'Gaming' },
+      // { val:'gameplay',  label:'🎮 Gameplay',       sub:'Gaming' }, // temporarily disabled, will rework
     ]
 
     return (

@@ -14,9 +14,7 @@ const TEMPLATES = [
   { id:'gradient',     name:'Gradient'     },
   { id:'cinema',       name:'Cinema'       },
   { id:'neon_frame',   name:'Neon Frame'   },
-  { id:'split_screen', name:'Split Screen' },
-  { id:'screenshare',  name:'Screenshare'  },
-  { id:'gameplay',     name:'Gameplay'     },
+  // { id:'gameplay',  name:'Gameplay'     }, // temporarily disabled, will rework
 ]
 
 const CAPTION_STYLES = [
@@ -36,6 +34,9 @@ const CAPTION_STYLES = [
 const COLOR_COMBOS = [
   { val:'white_black',  label:'White / Black'  },
   { val:'yellow_black', label:'Yellow / Black' },
+  { val:'butter_yellow',        label:'Butter Yellow'      },
+  { val:'hot_pink_black',       label:'Hot Pink / Black'   },
+  { val:'electric_blue_white',  label:'Electric Blue'      },
   { val:'black_white',  label:'Black / White'  },
   { val:'green_dark',   label:'Green / Dark'   },
   { val:'orange_dark',  label:'Orange / Dark'  },

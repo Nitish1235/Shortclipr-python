@@ -80,6 +80,7 @@ COLOR_COMBOS: dict[str, dict[str, str]] = {
         "outline":   "&H00000000",   # black
         "back":      "&H99000000",   # semi-transparent black box
         "highlight": "&H0000FFFF",   # yellow
+        "solid_back": "&H00000000",  # opaque black — straddle/title box backing
     },
     "yellow_black": {
         "primary":   "&H0000FFFF",   # yellow
@@ -87,6 +88,7 @@ COLOR_COMBOS: dict[str, dict[str, str]] = {
         "outline":   "&H00000000",   # black
         "back":      "&H99000000",
         "highlight": "&H00FFFFFF",
+        "solid_back": "&H00000000",
     },
     "black_white": {
         "primary":   "&H00000000",   # black
@@ -94,6 +96,7 @@ COLOR_COMBOS: dict[str, dict[str, str]] = {
         "outline":   "&H00FFFFFF",   # white
         "back":      "&H99FFFFFF",
         "highlight": "&H000000FF",
+        "solid_back": "&H00FFFFFF",  # opaque white
     },
     "green_dark": {
         "primary":   "&H0000FF00",   # lime
@@ -101,6 +104,7 @@ COLOR_COMBOS: dict[str, dict[str, str]] = {
         "outline":   "&H00003200",   # dark green
         "back":      "&H99000000",
         "highlight": "&H00FFFFFF",
+        "solid_back": "&H00000000",
     },
     "orange_dark": {
         "primary":   "&H000080FF",   # orange
@@ -108,6 +112,7 @@ COLOR_COMBOS: dict[str, dict[str, str]] = {
         "outline":   "&H00002060",   # dark brown
         "back":      "&H99000000",
         "highlight": "&H00FFFFFF",
+        "solid_back": "&H00000000",
     },
     "cyan_dark": {
         "primary":   "&H00FFFF00",   # cyan
@@ -115,6 +120,7 @@ COLOR_COMBOS: dict[str, dict[str, str]] = {
         "outline":   "&H00800000",   # dark navy
         "back":      "&H99000000",
         "highlight": "&H00FFFFFF",
+        "solid_back": "&H00000000",
     },
     "red_white": {
         "primary":   "&H000000FF",   # red
@@ -122,14 +128,59 @@ COLOR_COMBOS: dict[str, dict[str, str]] = {
         "outline":   "&H00FFFFFF",   # white
         "back":      "&H99000000",
         "highlight": "&H0000FFFF",
+        "solid_back": "&H00FFFFFF",
+    },
+    # ── Trending 2026 combos (see captions.py module docstring) ──────────
+    "butter_yellow": {
+        "primary":   "&H006CE1F8",   # butter yellow — dominant 2026 overlay trend
+        "secondary": "&H00FFFFFF",
+        "outline":   "&H00202020",   # soft dark grey, not harsh black
+        "back":      "&H99000000",
+        "highlight": "&H00FFFFFF",
+        "solid_back": "&H00000000",
+    },
+    "hot_pink_black": {
+        "primary":   "&H009314FF",   # hot pink
+        "secondary": "&H00FFFFFF",
+        "outline":   "&H00000000",
+        "back":      "&H99000000",
+        "highlight": "&H00FFFFFF",
+        "solid_back": "&H00000000",
+    },
+    "electric_blue_white": {
+        "primary":   "&H00FF8000",   # electric blue
+        "secondary": "&H00000000",
+        "outline":   "&H00FFFFFF",
+        "back":      "&H99FFFFFF",
+        "highlight": "&H00000000",
+        "solid_back": "&H00FFFFFF",
     },
 }
 
 DEFAULT_COLOR = "yellow_black"
 
 # Hook title card — shown for the first N seconds of every clip, burned
-# from ClipTimestamp.title (the AI-generated 5-7 word hook).
-HOOK_TITLE_DURATION = 1.8
+# from ClipTimestamp.title (the AI-generated 5-6 word curiosity-gap hook).
+# Bumped from 1.8s -> 2.6s: a 5-6 word title needs more reading time than
+# the old shorter "punchy" titles did.
+HOOK_TITLE_DURATION = 2.6
+
+# Templates that render their own background treatment (blur strip / bars /
+# frame) around the video — the hook title for these straddles the boundary
+# between that background and the actual video, with a SOLID/opaque box.
+# Everything else (crop_fill, and any future fill-style template) is treated
+# as "fill": the video occupies the whole canvas, so the hook title gets a
+# translucent "glass" box instead, since there's no bar to straddle.
+TEMPLATE_HAS_BARS = {
+    "blur_bg", "zoom_blur", "glass", "color_bars",
+    "gradient", "cinema", "neon_frame",
+}
+
+# Approximate Y (PlayResY=1920 units) of the bar/video boundary for
+# TEMPLATE_HAS_BARS templates, derived from extractor.py's _fg_geometry()
+# for a typical 16:9 source — close enough across templates that a single
+# straddle point looks correct without per-template plumbing.
+_BAR_BOUNDARY_Y = 656
 
 
 # ══════════════════════════════════════════════════════════════
@@ -145,9 +196,11 @@ _POS: dict[str, tuple[int, int, int]] = {
     "center_left":   (80,   960,  4),
     "center":        (540,  960,  5),
     "center_right":  (1000, 960,  6),
-    "bottom_left":   (80,   1720, 1),
-    "bottom_center": (540,  1720, 2),
-    "bottom_right":  (1000, 1720, 3),
+    # Raised from y=1720 (only ~200px above the bottom edge — too close to
+    # platform UI chrome / safe-area on most players) to y=1580.
+    "bottom_left":   (80,   1580, 1),
+    "bottom_center": (540,  1580, 2),
+    "bottom_right":  (1000, 1580, 3),
 }
 
 
@@ -257,24 +310,59 @@ def _style_line(style: str, color: str, alignment: int) -> str:
     )
 
 
-def _hook_style_line(color: str) -> str:
+def _with_alpha(ass_color: str, alpha_hex: str) -> str:
+    """Swap the alpha byte of an &HAABBGGRR colour string (00 = opaque, FF = transparent)."""
+    body = ass_color[2:]
+    if len(body) == 8:
+        body = body[2:]
+    return f"&H{alpha_hex}{body}"
+
+
+def _hook_position(template: str) -> tuple[int, int, int]:
     """
-    ASS style for the hook-title card — bold ALL CAPS text on a translucent
-    boxed background (BorderStyle 3), pinned top-center regardless of the
-    user's chosen caption position.
+    (x, y, alignment) for the hook-title card, depending on whether
+    `template` renders its own bars/blur around the video.
+
+    Bar templates: straddle the bar/video boundary — alignment 5
+    (middle-center anchor) centred exactly on the boundary line, so the
+    box sits half on the bar, half on the clip.
+
+    Fill templates (crop_fill, etc.): no boundary to straddle — pinned
+    near the top of the frame instead, alignment 8 (top-center anchor).
+    """
+    if template in TEMPLATE_HAS_BARS:
+        return 540, _BAR_BOUNDARY_Y, 5
+    return 540, 230, 8
+
+
+def _hook_style_line(color: str, template: str) -> str:
+    """
+    ASS style for the hook-title card — bold ALL CAPS text, styled per
+    `template`:
+      - bar templates  -> solid/opaque trending-colour box (`solid_back`),
+        straddling the bar/video boundary (see `_hook_position`).
+      - fill templates -> translucent "glass" box (same trending colour,
+        alpha'd down) pinned near the top, since there's no bar to sit on.
     """
     clr = COLOR_COMBOS.get(color, COLOR_COMBOS[DEFAULT_COLOR])
+    is_bar = template in TEMPLATE_HAS_BARS
+    _, _, alignment = _hook_position(template)
+
+    solid_back = clr.get("solid_back", "&H00000000")
+    back_c = solid_back if is_bar else _with_alpha(solid_back, "60")
+    outline_c = clr["outline"] if is_bar else clr["highlight"]
+
     return (
         f"Style: Hook,"
         f"Liberation Sans,60,"
-        f"{clr['primary']},{clr['secondary']},{clr['highlight']},{clr['back']},"
+        f"{clr['primary']},{clr['secondary']},{outline_c},{back_c},"
         f"1,0,0,0,"
         f"100,100,"
         f"1,0,"
-        f"3,"     # BorderStyle 3 — opaque box
+        f"3,"     # BorderStyle 3 — opaque box (alpha controlled via back_c above)
         f"10,"    # Outline = box padding
         f"0,"     # Shadow
-        f"8,"     # Alignment 8 = top-center
+        f"{alignment},"
         f"60,60,90,1"
     )
 
@@ -428,33 +516,31 @@ def _lines_word_pop(captions: list[Caption], x: int, y: int, wpl: int = 1) -> li
 # ── typewriter ─────────────────────────────────────────────────
 def _lines_typewriter(captions: list[Caption], x: int, y: int, wpl: int = 1) -> list[str]:
     """
-    True typewriter: words accumulate left-to-right.
+    True typewriter: words accumulate left-to-right, bounded to `wpl` words
+    on screen at once — once a phrase group of `wpl` words is fully typed,
+    the NEXT group clears and starts accumulating from scratch (it does not
+    keep growing across the whole caption entry, which would overflow into
+    multi-line paragraphs on longer transcript cues).
 
-    Each ASS line shows the GROWING accumulated text and is replaced by
-    the next line (with one more word) at the next chunk's start time.
-    Lines are CONTIGUOUS — no overlapping timestamps at the same position.
-
-    e.g. for "Hello world how":
-      t=0.00–0.45 : shows "Hello"
-      t=0.45–0.85 : shows "Hello world"
-      t=0.85–1.30 : shows "Hello world how"
+    e.g. wpl=3 for "Hello world how are you today":
+      group 1 (t=0.00–1.00): "Hello" → "Hello world" → "Hello world how"
+      group 2 (t=1.00–2.00): "are" → "are you" → "are you today"
     """
     pos   = _pos_tag(x, y)
     lines = []
     for c in captions:
-        word_list = c.text.split()
-        if not word_list:
-            continue
-        chunks     = [word_list[i:i + wpl] for i in range(0, len(word_list), wpl)]
-        chunk_caps = _split_words(c, wpl)
+        for grp in _split_phrases(c, wpl):
+            grp_words = grp.text.split()
+            if not grp_words:
+                continue
+            word_caps = _split_words(grp, 1)   # one entry per word, timed within this group
 
-        for i, (chunk_words, chunk_cap) in enumerate(zip(chunks, chunk_caps)):
-            # Build the accumulated text (all chunks up to and including this one)
-            accumulated = " ".join(" ".join(chunks[j]) for j in range(i + 1))
-            # Show until the NEXT chunk starts (or the caption entry ends)
-            display_end = chunk_caps[i + 1].start if i + 1 < len(chunk_caps) else c.end
-            tag = f"{pos}{{\\alpha&HFF&\\t(0,100,1,\\alpha&H00&)}}"
-            lines.append(_dlg(chunk_cap.start, display_end, f"{tag}{_esc(accumulated)}"))
+            for i, word_cap in enumerate(word_caps):
+                accumulated = " ".join(grp_words[:i + 1])
+                # Show until the NEXT word starts (or the group ends)
+                display_end = word_caps[i + 1].start if i + 1 < len(word_caps) else grp.end
+                tag = f"{pos}{{\\alpha&HFF&\\t(0,100,1,\\alpha&H00&)}}"
+                lines.append(_dlg(word_cap.start, display_end, f"{tag}{_esc(accumulated)}"))
     return lines
 
 
@@ -579,17 +665,24 @@ def _lines_neon(captions: list[Caption], x: int, y: int, wpl: int = 3) -> list[s
 
 # ── hook title card ────────────────────────────────────────────
 
-def _lines_hook_title(title: str, duration: float = HOOK_TITLE_DURATION) -> list[str]:
+def _lines_hook_title(
+    title: str,
+    x: int,
+    y: int,
+    duration: float = HOOK_TITLE_DURATION,
+) -> list[str]:
     """
-    One boxed, ALL-CAPS title card pinned to the top-center for the first
-    `duration` seconds — pops in (90% -> 104% -> 100% scale) with a fade,
-    then fades out at the end of its window via \\fad's built-in tail fade.
-    Rendered on Layer 1 so it never z-fights with phrase/word captions.
+    One boxed, ALL-CAPS title card at (x, y) — anchor point matches the
+    "Hook" style's Alignment (see `_hook_position`/`_hook_style_line`) — for
+    the first `duration` seconds. Pops in (90% -> 104% -> 100% scale) with a
+    fade, then fades out at the end of its window via \\fad's built-in tail
+    fade. Rendered on Layer 1 so it never z-fights with phrase/word captions.
     """
     text = _esc(_safe_upper(title.strip()))
     if not text:
         return []
     tag = (
+        f"{_pos_tag(x, y)}"
         "{\\fscx90\\fscy90\\fad(200,250)"
         "\\t(0,200,\\fscx104\\fscy104)"
         "\\t(200,350,\\fscx100\\fscy100)}"
@@ -664,6 +757,7 @@ def build_ass_content(
     v_align:       str = "bottom",
     words_per_line: int = 3,
     hook_title:    str | None = None,
+    template:      str = "",
 ) -> str:
     """
     Build a complete .ass subtitle file string.
@@ -671,13 +765,16 @@ def build_ass_content(
     Args:
         captions:       list of Caption (times relative to clip start)
         style:          one of the 11 style names
-        color:          one of the 7 colour combo names
+        color:          one of the colour combo names
         h_align:        left | center | right
         v_align:        top  | center | bottom
         words_per_line: 1 | 2 | 3  — words shown per screen at once
-        hook_title:     AI-generated hook (ClipTimestamp.title) burned as a
-                         boxed title card for the first HOOK_TITLE_DURATION
-                         seconds. None/empty skips the hook card entirely.
+        hook_title:     AI-generated curiosity-gap hook (ClipTimestamp.title)
+                         burned as a title card for the first
+                         HOOK_TITLE_DURATION seconds. None/empty skips it.
+        template:       reframe template name (e.g. "crop_fill", "blur_bg")
+                         — drives the hook title's box style/position, see
+                         TEMPLATE_HAS_BARS / _hook_position / _hook_style_line.
     """
     x, y, alignment = _resolve_pos(h_align, v_align)
     style_key = style if style in _BASE_STYLES else "minimal"
@@ -689,8 +786,9 @@ def build_ass_content(
     events = build(captions, x, y, wpl)
 
     if hook_title and hook_title.strip():
-        style_lines.append(_hook_style_line(color_key))
-        events = _lines_hook_title(hook_title) + events
+        style_lines.append(_hook_style_line(color_key, template))
+        hook_x, hook_y, _ = _hook_position(template)
+        events = _lines_hook_title(hook_title, hook_x, hook_y) + events
 
     return _ASS_HEADER.format(
         style_lines="\n".join(style_lines),

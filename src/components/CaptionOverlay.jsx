@@ -22,6 +22,10 @@ export const COLOR_COMBOS = {
   orange_dark:  { primary:'#FF8000', secondary:'#FFFFFF', outline:'#602000', back:'rgba(0,0,0,0.6)',   highlight:'#FFFFFF' },
   cyan_dark:    { primary:'#00FFFF', secondary:'#FFFFFF', outline:'#000080', back:'rgba(0,0,0,0.6)',   highlight:'#FFFFFF' },
   red_white:    { primary:'#FF0000', secondary:'#FFFF00', outline:'#FFFFFF', back:'rgba(0,0,0,0.6)',   highlight:'#FFFF00' },
+  // Trending 2026 combos
+  butter_yellow:        { primary:'#F8E16C', secondary:'#FFFFFF', outline:'#202020', back:'rgba(0,0,0,0.6)',   highlight:'#FFFFFF' },
+  hot_pink_black:       { primary:'#FF1493', secondary:'#FFFFFF', outline:'#000000', back:'rgba(0,0,0,0.6)',   highlight:'#FFFFFF' },
+  electric_blue_white:  { primary:'#0080FF', secondary:'#000000', outline:'#FFFFFF', back:'rgba(255,255,255,0.6)', highlight:'#000000' },
 }
 export const DEFAULT_COLOR = 'white_black'
 

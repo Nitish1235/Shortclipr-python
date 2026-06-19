@@ -105,11 +105,18 @@ RULES:
    from there stays interesting and self-contained for at least that long
 6. "viral_score": rate THIS moment's viral potential on an absolute 0-100 scale
    (90-100 exceptional, 70-89 good, 50-69 decent, <50 weak)
+7. "title" = a 5-6 word CURIOSITY-GAP title burned on-screen as a hook card. This is NOT a
+   summary — it must open a loop the viewer has to keep watching to close. Tease the outcome,
+   never state it: no punchlines, numbers, names, or results that resolve the curiosity.
+   Good patterns: bold unresolved claim ("The Mistake That Cost Everything"), withheld reveal
+   ("Nobody Saw This Coming"), contrarian tease ("Why This Actually Works"), direct address
+   ("You're Doing This Completely Wrong"). Bad: anything a viewer could read and feel like they
+   already know what happens — that kills the rewatch/watch-through motive entirely.
 {topic_line}
 OUTPUT FORMAT — return ONLY this JSON object, no extra text:
 {{
   "start_line":      <integer — the [N] of the transcript line where this clip begins>,
-  "title":           "<punchy 5-7 word title>",
+  "title":           "<5-6 word curiosity-gap hook title — see rule 7, do not reveal the outcome>",
   "viral_score":     <integer 0-100>,
   "reason":          "<1-2 sentences: what makes this moment viral>",
   "caption_preview": "<first 10-15 spoken words starting at this moment>"
