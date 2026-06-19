@@ -409,13 +409,6 @@ export default function Dashboard() {
     setPublishingTT(new Set())
   }
 
-  // ── Edit clip ──────────────────────────────────────────────────
-  const handleEdit = (e, clip) => {
-    e.stopPropagation()
-    if (!requirePlan('Access the clip editor')) return
-    window.location.href = `/editor/${currentJob.job_id}/${clip.clip_id || clip.id}`
-  }
-
   // ── Modal ──────────────────────────────────────────────────────
   const openModal = (idx) => { setModalIdx(idx); setModalOpen(true) }
   const closeModal = () => setModalOpen(false)
@@ -1217,21 +1210,13 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Download + Edit */}
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-                  <button onClick={e => { handleSingleDownload(e, modalClip); closeModal() }} style={{
-                    padding:'9px', borderRadius:8, border:'1px solid #e5e7eb',
-                    background: isPaid ? '#111' : '#f3f4f6',
-                    color: isPaid ? '#fff' : '#bbb',
-                    fontSize:'.78rem', fontWeight:700, cursor: isPaid ? 'pointer' : 'default', textAlign:'center',
-                  }}>{isPaid ? '⬇ Download MP4' : '🔒 Download'}</button>
-                  <button onClick={e => handleEdit(e, modalClip)} style={{
-                    padding:'9px', borderRadius:8, border:'1px solid #e5e7eb',
-                    background: isPaid ? '#fff' : '#f3f4f6',
-                    color: isPaid ? '#374151' : '#bbb',
-                    fontSize:'.78rem', fontWeight:700, cursor: isPaid ? 'pointer' : 'default', textAlign:'center',
-                  }}>{isPaid ? '✏ Edit Clip' : '🔒 Edit'}</button>
-                </div>
+                {/* Download */}
+                <button onClick={e => { handleSingleDownload(e, modalClip); closeModal() }} style={{
+                  width:'100%', padding:'9px', borderRadius:8, border:'1px solid #e5e7eb',
+                  background: isPaid ? '#111' : '#f3f4f6',
+                  color: isPaid ? '#fff' : '#bbb',
+                  fontSize:'.78rem', fontWeight:700, cursor: isPaid ? 'pointer' : 'default', textAlign:'center',
+                }}>{isPaid ? '⬇ Download MP4' : '🔒 Download'}</button>
               </div>
             </div>
 
