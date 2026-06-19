@@ -1164,7 +1164,7 @@ async def reframe_and_caption(
     input_path: Path,
     raw_output_path: Path,
     captioned_output_path: Path,
-    template: str = "blur_bg",
+    template: str = "crop_fill",
     bar_color: str = "#0d0d0d",
     zoom_beats: list[float] | None = None,
     aspect: str = "9:16",

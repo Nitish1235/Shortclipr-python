@@ -16,14 +16,16 @@ Progress is tracked in-memory (admin-only, single-flight tool — no DB row
 needed) and polled via GET /admin/test/jobs/{job_id}.
 """
 
+import asyncio
 import logging
 import tempfile
 from pathlib import Path
 
 from app.core.proxy import use_decodo_proxy
 from app.pipeline.ai_clipper import find_sequential_clips
-from app.pipeline.captions import VALID_STYLES, get_clip_captions
-from app.pipeline.extractor import VALID_TEMPLATES, _get_source, extract_clip, reframe_and_caption
+from app.pipeline.captions import VALID_STYLES, detect_silences, get_clip_captions
+from app.pipeline.extractor import VALID_TEMPLATES, _compute_zoom_beats, _get_source, extract_clip, reframe_and_caption
+from app.pipeline.face_tracker import compute_face_track
 from app.pipeline.stream import extract_video_id, get_stream_urls, get_video_metadata
 from app.pipeline.transcript import get_transcript
 from app.pipeline.uploader import cleanup_job_files, process_and_upload_clip
@@ -31,7 +33,7 @@ from app.pipeline.uploader import cleanup_job_files, process_and_upload_clip
 logger = logging.getLogger(__name__)
 
 SEGMENT_DURATION  = 30
-DEFAULT_TEMPLATE  = "blur_bg"
+DEFAULT_TEMPLATE  = "crop_fill"
 DEFAULT_STYLE     = "minimal"
 TOTAL_CLIPS       = len(VALID_STYLES) + len(VALID_TEMPLATES)
 
@@ -103,13 +105,21 @@ async def run_test_pipeline(job_id: str, youtube_url: str, quality: str = "1080p
 
             try:
                 raw_path = await extract_clip(source_path, ts.start, ts.end, job_dir / f"clip_{i:02d}_raw.mp4")
+                clip_dur = ts.end - ts.start
                 captions = get_clip_captions(transcript, ts.start, ts.end)
+                silences, (src_w, src_h, face_track) = await asyncio.gather(
+                    detect_silences(raw_path),
+                    compute_face_track(raw_path, clip_dur),
+                )
+                zoom_beats = _compute_zoom_beats(captions, clip_dur)
                 vertical_path = job_dir / f"clip_{i:02d}_vertical.mp4"
                 final_path = job_dir / f"clip_{i:02d}_final.mp4"
                 _, captioned_path = await reframe_and_caption(
                     raw_path, vertical_path, final_path,
                     template=template, bar_color="#0d0d0d",
+                    zoom_beats=zoom_beats,
                     captions=captions, style=style,
+                    face_track=face_track, src_w=src_w, src_h=src_h,
                 )
 
                 clip_id = f"{i:02d}_{label}"

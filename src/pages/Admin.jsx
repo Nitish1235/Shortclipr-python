@@ -301,8 +301,9 @@ function TestLabGenerator({ showToast }) {
       <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111', marginBottom: '8px' }}>22-Clip Test Batch</h2>
       <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '20px', lineHeight: 1.6 }}>
         Paste a YouTube URL. No AI scoring — clips are sequential 30s segments from the start of the video.
-        Clips 1-11 cycle through every <strong>caption style</strong> (same template), clips 12-22 cycle through
-        every <strong>shorts template</strong> (same caption style).
+        Clips 1-11 cycle through every <strong>caption style</strong> using the crop_fill template.
+        Clips 12-22 cycle through every <strong>shorts template</strong> using the minimal caption style.
+        All clips include real face tracking and zoom beats.
       </p>
 
       <form onSubmit={start} style={{ ...card, marginBottom: '20px' }}>
