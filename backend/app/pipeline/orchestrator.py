@@ -95,7 +95,7 @@ async def _execute_pipeline(
     h_align         = options.get("h_align",        "center")
     v_align         = options.get("v_align",        "bottom")
     words_per_line  = options.get("words_per_line", 3)
-    short_template  = options.get("short_template", "blur_bg")
+    short_template  = options.get("short_template", "crop_fill")
     bar_color       = options.get("bar_color",      "#0d0d0d")
     aspect          = options.get("aspect",         "9:16")
 

@@ -9,9 +9,16 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 # ── Stage 2: Runtime ────────────────────────────────────────────────────────────
 FROM python:3.11-slim
 
-# System dependencies for FFmpeg
+# System dependencies for FFmpeg + fonts for libass subtitle rendering
+# fonts-liberation  → Liberation Sans/Serif/Mono (metric-compatible with Arial)
+# fonts-noto-core   → broad Unicode coverage, prevents □ tofu on any character
+# fontconfig        → fc-cache rebuilds font index so libass can locate them
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
+        fonts-liberation \
+        fonts-noto-core \
+        fontconfig \
+    && fc-cache -fv \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -169,57 +169,57 @@ def _resolve_pos(h_align: str, v_align: str) -> tuple[int, int, int]:
 # Colours are placeholders — overridden per-combo in _style_line()
 _BASE_STYLES: dict[str, dict] = {
     "minimal": dict(
-        font="Arial", size=72, bold=0,
+        font="Liberation Sans", size=72, bold=0,
         border_style=1, outline=3, shadow=1,
         scale_x=100, scale_y=100, spacing=0,
     ),
     "fade": dict(
-        font="Arial", size=72, bold=0,
+        font="Liberation Sans", size=72, bold=0,
         border_style=1, outline=3, shadow=1,
         scale_x=100, scale_y=100, spacing=0,
     ),
     "word_pop": dict(
-        font="Arial Black", size=80, bold=1,
+        font="Liberation Sans", size=80, bold=1,
         border_style=1, outline=4, shadow=0,
         scale_x=100, scale_y=100, spacing=1,
     ),
     "typewriter": dict(
-        font="Arial", size=72, bold=0,
+        font="Liberation Sans", size=72, bold=0,
         border_style=1, outline=3, shadow=1,
         scale_x=100, scale_y=100, spacing=0,
     ),
     "slide": dict(
-        font="Arial Black", size=80, bold=1,
+        font="Liberation Sans", size=80, bold=1,
         border_style=1, outline=4, shadow=0,
         scale_x=100, scale_y=100, spacing=0,
     ),
     "zoom": dict(
-        font="Arial", size=76, bold=1,
+        font="Liberation Sans", size=76, bold=1,
         border_style=1, outline=3, shadow=1,
         scale_x=100, scale_y=100, spacing=0,
     ),
     "shake": dict(
-        font="Arial Black", size=80, bold=1,
+        font="Liberation Sans", size=80, bold=1,
         border_style=1, outline=4, shadow=0,
         scale_x=100, scale_y=100, spacing=0,
     ),
     "karaoke": dict(
-        font="Arial", size=76, bold=0,
+        font="Liberation Sans", size=76, bold=0,
         border_style=1, outline=3, shadow=1,
         scale_x=100, scale_y=100, spacing=0,
     ),
     "hormozi": dict(
-        font="Arial Black", size=88, bold=1,
+        font="Liberation Sans", size=88, bold=1,
         border_style=3, outline=10, shadow=0,   # BorderStyle 3 = opaque box
         scale_x=100, scale_y=100, spacing=2,
     ),
     "mrbeast": dict(
-        font="Arial Black", size=96, bold=1,
+        font="Liberation Sans", size=96, bold=1,
         border_style=1, outline=5, shadow=2,
         scale_x=100, scale_y=100, spacing=0,
     ),
     "neon": dict(
-        font="Arial", size=76, bold=1,
+        font="Liberation Sans", size=76, bold=1,
         border_style=1, outline=5, shadow=0,
         scale_x=100, scale_y=100, spacing=1,
     ),
@@ -266,7 +266,7 @@ def _hook_style_line(color: str) -> str:
     clr = COLOR_COMBOS.get(color, COLOR_COMBOS[DEFAULT_COLOR])
     return (
         f"Style: Hook,"
-        f"Arial Black,60,"
+        f"Liberation Sans,60,"
         f"{clr['primary']},{clr['secondary']},{clr['highlight']},{clr['back']},"
         f"1,0,0,0,"
         f"100,100,"

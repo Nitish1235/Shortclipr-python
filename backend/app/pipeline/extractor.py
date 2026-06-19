@@ -74,6 +74,7 @@ settings = get_settings()
 # ── Public constants ───────────────────────────────────────────
 
 VALID_TEMPLATES = [
+    "crop_fill",     # Full-fill crop — video fills entire frame (default)
     "blur_bg",       # Blur background
     "zoom_blur",     # Heavy zoom + blur
     "glass",         # Glassmorphism
@@ -689,6 +690,42 @@ def _even_round(x: float) -> int:
 #  TEMPLATE FILTER BUILDERS — pure string construction, no I/O
 # ══════════════════════════════════════════════════════════════
 
+# ── Template 0: crop_fill ─────────────────────────────────────
+
+def _fc_crop_fill(
+    width: int,
+    height: int,
+    face_track: list[tuple[float, float, float]] | None,
+    src_w: int,
+    src_h: int,
+    out_label: str = "out",
+) -> str:
+    """
+    Full-fill crop: scales the 16:9 source so it COVERS the entire 9:16
+    canvas (force_original_aspect_ratio=increase), then crops to exactly
+    width×height. No bars, no background — video fills every pixel.
+
+    A 4 % extra scale gives the crop window a small amount of travel so
+    the face-tracking pan feels smooth rather than hitting the edge.
+
+    Face tracking pans the crop window to keep the speaker centred.
+    Falls back to a centred crop when no face track is available.
+    """
+    # 4 % extra scale → the scaled video is slightly larger than the target
+    # canvas, giving the face-tracking crop room to pan left/right and up/down.
+    scale_w = _even_round(width * 1.04)
+    scale_h = _even_round(height * 1.04)
+
+    cx = _fc_crop_offset(face_track, "x", "iw", "ow", "(iw-ow)/2")
+    cy = _fc_crop_offset(face_track, "y", "ih", "oh", "(ih-oh)/2")
+
+    return (
+        f"[0:v]scale={scale_w}:{scale_h}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height}:'{cx}':'{cy}'"
+        f"[{out_label}]"
+    )
+
+
 # ── Template 1: blur_bg ────────────────────────────────────────
 
 def _fc_blur_bg(
@@ -981,7 +1018,9 @@ def _build_template_filter(
     `face_track`/`src_w`/`src_h` come from `face_tracker.compute_face_track()`
     — empty/None reproduces the previous centre-default behaviour exactly.
     """
-    if template == "blur_bg":
+    if template == "crop_fill":
+        return _fc_crop_fill(width, height, face_track, src_w, src_h, out_label=out_label)
+    elif template == "blur_bg":
         return _fc_blur_bg(width, height, zoom_beats, face_track, src_w, src_h, out_label=out_label)
     elif template == "zoom_blur":
         return _fc_zoom_blur(width, height, zoom_beats, face_track, src_w, src_h, out_label=out_label)
@@ -1001,7 +1040,7 @@ def _build_template_filter(
         return _fc_screenshare(zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
     elif template == "gameplay":
         return _fc_gameplay(zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
-    return _fc_blur_bg(width, height, zoom_beats, face_track, src_w, src_h, out_label=out_label)
+    return _fc_crop_fill(width, height, face_track, src_w, src_h, out_label=out_label)
 
 
 # ══════════════════════════════════════════════════════════════
