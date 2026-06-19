@@ -711,16 +711,17 @@ def _fc_crop_fill(
     Face tracking pans the crop window to keep the speaker centred.
     Falls back to a centred crop when no face track is available.
     """
-    # 4 % extra scale → the scaled video is slightly larger than the target
-    # canvas, giving the face-tracking crop room to pan left/right and up/down.
-    scale_w = _even_round(width * 1.04)
-    scale_h = _even_round(height * 1.04)
-
+    # scale=width:height:force_original_aspect_ratio=increase makes ffmpeg scale
+    # the 16:9 source until it COVERS the 9:16 canvas in both dimensions.
+    # For 1080×1920 output from a 1920×1080 source the height constraint
+    # dominates → output is ~3413×1920.  The enormous horizontal excess
+    # (3413-1080=2333 px) gives the face-tracking crop all the pan room it
+    # needs — no artificial 4 % over-zoom is required.
     cx = _fc_crop_offset(face_track, "x", "iw", "ow", "(iw-ow)/2")
     cy = _fc_crop_offset(face_track, "y", "ih", "oh", "(ih-oh)/2")
 
     return (
-        f"[0:v]scale={scale_w}:{scale_h}:force_original_aspect_ratio=increase,"
+        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
         f"crop={width}:{height}:'{cx}':'{cy}'"
         f"[{out_label}]"
     )
@@ -959,7 +960,7 @@ def _fc_screenshare(
     """
     half_h  = height // 2
     inner_h = _even_round(half_h * 9 / 16)
-    crop_x = _fc_crop_offset(face_track, "x", "in_w", str(width), "0")
+    crop_x = _fc_crop_offset(face_track, "x", "in_w", str(width), f"(in_w-{width})/2")
     crop_y = _fc_crop_offset(face_track, "y", "in_h", str(half_h), f"(in_h-{half_h})/2")
     fc = (
         f"[0:v]scale={width}:{inner_h}:force_original_aspect_ratio=decrease,"
@@ -990,7 +991,7 @@ def _fc_gameplay(
     """
     top_h = _even_round(height * 0.3)
     bot_h = height - top_h
-    crop_x = _fc_crop_offset(face_track, "x", "in_w", str(width), "0")
+    crop_x = _fc_crop_offset(face_track, "x", "in_w", str(width), f"(in_w-{width})/2")
     crop_y = _fc_crop_offset(face_track, "y", "in_h", str(top_h), f"(in_h-{top_h})/2")
     fc = (
         f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
@@ -1200,7 +1201,7 @@ async def reframe_and_caption(
 
     Returns (raw_output_path, captioned_output_path) on success.
     """
-    tpl = template if template in VALID_TEMPLATES else "blur_bg"
+    tpl = template if template in VALID_TEMPLATES else "crop_fill"
     asp = aspect if aspect in VALID_ASPECTS else "9:16"
     width, height = ASPECT_DIMENSIONS[asp]
 
