@@ -60,6 +60,74 @@ const STYLE_OPTIONS = [
   { val:'minimal',    label:'Minimal',    sub:'Clean',        preview:'Aa',   upper:false, weight:500 },
 ]
 
+// ── Template live-preview renderer ──────────────────────────────
+// Pure CSS over the existing video thumbnail — no server round-trip, no
+// frame extraction, so it updates instantly as the user clicks a template.
+// Approximates each template's actual ffmpeg filter-complex layout
+// (see backend/app/pipeline/extractor.py) closely enough to preview it.
+function TemplatePreviewBg({ template, thumbnail, barColor }) {
+  const img = thumbnail || '/placeholder.png'
+  const fgImg = (style) => (
+    <img src={img} alt="" style={{
+      position:'absolute', left:'50%', top:'50%',
+      transform:'translate(-50%,-50%)',
+      width:'100%', objectFit:'contain', ...style,
+    }}/>
+  )
+  const bgBlur = (blurPx, scale, brightness = 1) => (
+    <img src={img} alt="" style={{
+      position:'absolute', inset:0, width:'100%', height:'100%',
+      objectFit:'cover', filter:`blur(${blurPx}px) brightness(${brightness})`,
+      transform:`scale(${scale})`,
+    }}/>
+  )
+
+  switch (template) {
+    case 'blur_bg':
+      return <>{bgBlur(18, 1.15)}{fgImg()}</>
+    case 'glass':
+      return <>{bgBlur(20, 1.15, 0.55)}{fgImg()}</>
+    case 'zoom_blur':
+      return <>{bgBlur(28, 1.3, 0.85)}{fgImg({ transform:'translate(-50%,-50%) scale(1.2)' })}</>
+    case 'color_bars':
+      return (
+        <>
+          <div style={{ position:'absolute', top:0, left:0, right:0, height:'18%', background:barColor }}/>
+          <div style={{ position:'absolute', bottom:0, left:0, right:0, height:'18%', background:barColor }}/>
+          {fgImg({ top:'50%' })}
+        </>
+      )
+    case 'gradient':
+      return (
+        <>
+          <div style={{ position:'absolute', top:0, left:0, right:0, height:'18%', background:`linear-gradient(to bottom, ${barColor}, transparent)` }}/>
+          <div style={{ position:'absolute', bottom:0, left:0, right:0, height:'18%', background:`linear-gradient(to top, ${barColor}, transparent)` }}/>
+          {fgImg()}
+        </>
+      )
+    case 'cinema':
+      return (
+        <>
+          <div style={{ position:'absolute', top:0, left:0, right:0, height:'12%', background:'#000' }}/>
+          <div style={{ position:'absolute', bottom:0, left:0, right:0, height:'12%', background:'#000' }}/>
+          {fgImg()}
+        </>
+      )
+    case 'neon_frame':
+      return (
+        <div style={{
+          position:'absolute', inset:'10%', overflow:'hidden',
+          border:`3px solid ${barColor}`, boxShadow:`0 0 10px ${barColor}`,
+        }}>
+          <img src={img} alt="" style={{ width:'100%', height:'100%', objectFit:'contain' }}/>
+        </div>
+      )
+    case 'crop_fill':
+    default:
+      return <img src={img} alt="" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }}/>
+  }
+}
+
 // ── Caption colour swatch options ───────────────────────────────
 const COLOR_OPTIONS = [
   { val:'white_black',  label:'White + Black',  sub:'Classic' },
@@ -512,8 +580,11 @@ export default function ClipEngine({ onJobCreated }) {
             </div>
           </div>
 
-          {/* Right: live preview */}
-          <div style={{ flex:'0 0 200px', minWidth:'160px' }}>
+          {/* Right: live preview — sticky so it stays on screen while
+              scrolling through the Source/Captions/Layout sections on the
+              left; renders the selected template + caption style together,
+              instantly, from the video's thumbnail (no server round-trip). */}
+          <div style={{ flex:'0 0 200px', minWidth:'160px', position:'sticky', top:'20px', alignSelf:'flex-start' }}>
             <div style={{ ...sectionTitle, marginBottom:'10px' }}>👀 Live Preview</div>
             <div style={{
               position:'relative', width:'100%',
@@ -522,10 +593,14 @@ export default function ClipEngine({ onJobCreated }) {
               border:'2px solid #111', boxShadow:'3px 3px 0 #cf1322',
             }}>
               {videoData.thumbnail && (
-                <img src={videoData.thumbnail} alt="" style={{
-                  width:'100%', height:'100%', objectFit:'cover', opacity:0.55,
-                }}/>
+                <TemplatePreviewBg template={shortTemplate} thumbnail={videoData.thumbnail} barColor={barColor} />
               )}
+              {/* Bottom gradient — keeps bottom-aligned captions legible
+                  regardless of which template/background sits behind them. */}
+              <div style={{
+                position:'absolute', left:0, right:0, bottom:0, height:'40%',
+                background:'linear-gradient(to top, rgba(0,0,0,0.55), transparent)',
+              }}/>
               <CaptionOverlay
                 mode="static"
                 previewText="YOUR CAPTION HERE"
@@ -535,6 +610,11 @@ export default function ClipEngine({ onJobCreated }) {
                 vAlign="bottom"
                 wordsPerLine={wordsPerLine}
               />
+              <div style={{
+                position:'absolute', top:'6px', left:'6px',
+                background:'rgba(0,0,0,0.55)', color:'#fff',
+                fontSize:'0.6rem', fontWeight:700, padding:'2px 6px', borderRadius:'4px',
+              }}>{templates.find(t => t.val === shortTemplate)?.label || shortTemplate}</div>
             </div>
             <p style={{ fontSize:'0.66rem', color:'#bbb', marginTop:'8px', textAlign:'center' }}>
               Live preview — updates as you adjust styles

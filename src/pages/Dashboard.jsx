@@ -550,10 +550,13 @@ export default function Dashboard() {
 
         <div style={{ maxWidth:'1140px', margin:'0 auto', padding:'20px 24px 0' }}>
 
-          {/* ── Generate panel ── */}
+          {/* ── Generate panel ──
+              NOTE: no `overflow:hidden` here — ClipEngine's live preview
+              uses `position:sticky` while scrolling its config sections,
+              and an overflow:hidden ancestor would clip/disable that. */}
           <div style={{
             background:'#fff', border:'1.5px solid #e5e7eb',
-            borderRadius:'12px', marginBottom:'20px', overflow:'hidden',
+            borderRadius:'12px', marginBottom:'20px',
           }}>
             <button
               onClick={() => setShowGeneratePanel(v => !v)}
