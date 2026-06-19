@@ -821,22 +821,23 @@ def _fc_colour_bars(
     out_label: str = "out",
 ) -> str:
     """
-    Solid-colour bars fill top + bottom letterbox gaps.
-    bar_color: e.g. "#0d0d0d", "#1a1a2e", "#ffffff"
-    Layout: [bar][video][bar] — bar ≈ 34 % of height each, video ≈ 32 %.
+    Solid-colour bars top + bottom, face-tracked crop-fill in the center.
+    Bars are 15 % of frame height each; video section fills the remaining 70 %.
+    The video section uses crop-fill (not letterbox) so the speaker fills the
+    center strip — no dead black padding within the video area.
     """
     c     = _hex_to_ffmpeg(bar_color)
-    bar_h = _even_round(height * 656 / 1920)
+    bar_h = _even_round(height * 0.15)
     vid_h = height - 2 * bar_h
-    fc    = (
+    cx = _fc_crop_offset(face_track, "x", "iw", "ow", "(iw-ow)/2")
+    cy = _fc_crop_offset(face_track, "y", "ih", "oh", "(ih-oh)/2")
+    return (
         f"color=c={c}:s={width}x{bar_h}[topbar];"
         f"color=c={c}:s={width}x{bar_h}[botbar];"
-        f"[0:v]scale={width}:{vid_h}:force_original_aspect_ratio=decrease,"
-        f"pad={width}:{vid_h}:(ow-iw)/2:0:color=black[vid];"
-        "[topbar][vid][botbar]vstack=inputs=3[pre]"
+        f"[0:v]scale={width}:{vid_h}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{vid_h}:'{cx}':'{cy}'[vid];"
+        f"[topbar][vid][botbar]vstack=inputs=3[{out_label}]"
     )
-    canvas_track = _face_track_to_canvas(face_track, "color_bars", width, height, src_w, src_h)
-    return fc + ";" + _fast_crop_pan("pre", out_label, width, height, canvas_track)
 
 
 # ── Template 5: gradient ──────────────────────────────────────
@@ -857,18 +858,17 @@ def _fc_gradient(
     """
     bright = _hex_to_ffmpeg(bar_color)
     dark   = _darken(bar_color, 0.25)
-    bar_h  = _even_round(height * 656 / 1920)
+    bar_h  = _even_round(height * 0.15)
     vid_h  = height - 2 * bar_h
-
-    fc = (
+    cx = _fc_crop_offset(face_track, "x", "iw", "ow", "(iw-ow)/2")
+    cy = _fc_crop_offset(face_track, "y", "ih", "oh", "(ih-oh)/2")
+    return (
         f"color=c={dark}:s={width}x{bar_h}[topbar];"
         f"color=c={bright}:s={width}x{bar_h}[botbar];"
-        f"[0:v]scale={width}:{vid_h}:force_original_aspect_ratio=decrease,"
-        f"pad={width}:{vid_h}:(ow-iw)/2:0:color=black[vid];"
-        "[topbar][vid][botbar]vstack=inputs=3[pre]"
+        f"[0:v]scale={width}:{vid_h}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{vid_h}:'{cx}':'{cy}'[vid];"
+        f"[topbar][vid][botbar]vstack=inputs=3[{out_label}]"
     )
-    canvas_track = _face_track_to_canvas(face_track, "gradient", width, height, src_w, src_h)
-    return fc + ";" + _fast_crop_pan("pre", out_label, width, height, canvas_track)
 
 
 # ── Template 6: cinema ────────────────────────────────────────
@@ -899,19 +899,26 @@ def _fc_neon_frame(
     out_label: str = "out",
 ) -> str:
     """
-    Solid coloured border around the video — neon / branded frame.
-    20 px border on all sides → video area = (width-40) × (height-40).
+    Solid coloured border around a face-tracked crop-fill inner video.
+    20 px border on all sides → inner area = (width-40) × (height-40).
+
+    The inner video uses crop-fill (not letterbox) so the speaker fills the
+    bordered area — same OpusClip crop look but with a coloured frame.
+    _fast_crop_pan is NOT applied: it would crop 21 px from each side,
+    destroying the 20 px border.
     """
     c  = _hex_to_ffmpeg(bar_color)
-    inner_w, inner_h = width - 40, height - 40
-    fc = (
+    border = 20
+    inner_w = width - 2 * border
+    inner_h = height - 2 * border
+    cx = _fc_crop_offset(face_track, "x", "iw", "ow", "(iw-ow)/2")
+    cy = _fc_crop_offset(face_track, "y", "ih", "oh", "(ih-oh)/2")
+    return (
         f"color=c={c}:s={width}x{height}[frame];"
-        f"[0:v]scale={inner_w}:{inner_h}:force_original_aspect_ratio=decrease,"
-        f"pad={inner_w}:{inner_h}:(ow-iw)/2:(oh-ih)/2:black[vid];"
-        "[frame][vid]overlay=20:20[pre]"
+        f"[0:v]scale={inner_w}:{inner_h}:force_original_aspect_ratio=increase,"
+        f"crop={inner_w}:{inner_h}:'{cx}':'{cy}'[vid];"
+        f"[frame][vid]overlay={border}:{border}[{out_label}]"
     )
-    canvas_track = _face_track_to_canvas(face_track, "neon_frame", width, height, src_w, src_h)
-    return fc + ";" + _fast_crop_pan("pre", out_label, width, height, canvas_track)
 
 
 # ── Template 8: split_screen ──────────────────────────────────
