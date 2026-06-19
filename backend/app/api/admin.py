@@ -378,7 +378,23 @@ async def admin_test_generate(body: TestGenerateRequest, admin: AdminUser):
 
 @router.get("/admin/test/jobs/{job_id}")
 async def admin_test_job_status(job_id: str, admin: AdminUser):
-    """Admin: poll progress of a test batch."""
+    """Admin: poll progress of a test batch.
+
+    When WORKER_SERVICE_URL is set, the job runs on the worker and its
+    in-memory state lives there — proxy the request to the worker.
+    """
+    if settings.WORKER_SERVICE_URL:
+        import httpx
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{settings.WORKER_SERVICE_URL}/internal/test/jobs/{job_id}",
+                headers={"X-Internal-Secret": settings.INTERNAL_TASK_SECRET},
+            )
+        if resp.status_code == 404:
+            raise HTTPException(status_code=404, detail="Test job not found")
+        resp.raise_for_status()
+        return resp.json()
+
     job = get_test_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Test job not found")

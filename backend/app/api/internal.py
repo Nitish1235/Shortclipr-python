@@ -68,6 +68,17 @@ async def internal_run_test(body: InternalTestRequest, x_internal_secret: str = 
     return {"status": "accepted"}
 
 
+@router.get("/test/jobs/{job_id}", status_code=200)
+async def internal_get_test_job(job_id: str, x_internal_secret: str = Header(default="")):
+    _require_internal_secret(x_internal_secret)
+    from app.pipeline.test_pipeline import get_test_job
+    job = get_test_job(job_id)
+    if job is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Test job not found")
+    return job
+
+
 class InternalRenderRequest(BaseModel):
     job_id: str
     clip_id: str
