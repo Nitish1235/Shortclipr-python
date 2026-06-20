@@ -39,6 +39,16 @@ def _sync_track(path_str: str, duration: float) -> tuple[int, int, list[tuple[fl
     """
     import cv2
 
+    # Concurrency is already handled at the asyncio/executor level (many
+    # clips run face-tracking in parallel) — without this, OpenCV's own
+    # internal thread pool (TBB/OpenMP) ALSO tries to use every core on
+    # each individual call, so N concurrent clips oversubscribe to N x
+    # cpu_count threads fighting for the same cores. Capping to 1 here
+    # removes that redundant layer of parallelism: same detections, same
+    # output, just without the scheduling overhead/CPU burn from threads
+    # competing against each other instead of cores being used once each.
+    cv2.setNumThreads(1)
+
     cap = cv2.VideoCapture(path_str)
     if not cap.isOpened():
         cap.release()

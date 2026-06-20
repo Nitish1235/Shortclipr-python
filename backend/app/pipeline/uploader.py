@@ -48,6 +48,7 @@ async def generate_preview(source_path: Path, output_path: Path) -> Path:
         "-i", str(source_path),
         "-vf", "scale=-2:360",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+        "-threads", "2",   # 360p throwaway preview — doesn't need every core
         "-c:a", "aac", "-b:a", "64k",
         "-movflags", "+faststart",
         str(output_path),

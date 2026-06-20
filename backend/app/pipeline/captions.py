@@ -923,6 +923,7 @@ async def burn_captions(
             "-c:v", "libx264",
             "-preset", "veryfast",
             "-crf", "22",
+            "-threads", "2",
             "-c:a", "copy",
             "-movflags", "+faststart",
             str(output_path),
@@ -971,6 +972,7 @@ async def detect_silences(
     """
     cmd = [
         "ffmpeg", "-i", str(clip_path),
+        "-threads", "1",   # audio-only decode — single thread is plenty
         "-af", f"silencedetect=noise={noise_threshold_db}dB:d={min_silence_dur}",
         "-vn", "-f", "null", "-",
     ]
