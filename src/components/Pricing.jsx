@@ -23,7 +23,7 @@ const TIERS = [
 
 const FREE_FEATURES = [
   '3 free clips (no card needed)',
-  '30 min video/month · up to 30 min/video',
+  '30 min of video per month (30 min max per single video)',
   '30s & 60s short formats',
   '720p output quality',
   '3 caption styles',
@@ -34,7 +34,7 @@ const FREE_FEATURES = [
 function getFeatures(tier) {
   return [
     `${tier.clips} shorts/month`,
-    `${tier.videoHours} hrs video/month · up to ${tier.maxVideoHours} hrs/video`,
+    `${tier.videoHours} hrs of video per month (${tier.maxVideoHours} hrs max per single video)`,
     'All formats: 30s / 60s / 90s',
     '1080p — Zero Watermark',
     'All 12 caption styles incl. Karaoke',

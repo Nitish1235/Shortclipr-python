@@ -260,6 +260,20 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
             await db.release_credits(current_user.user_id, reserved_credits)
             raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=msg)
 
+        # reserve_video_minutes CLAMPS to whatever's left rather than
+        # rejecting (e.g. user has 12 min left, window was 20 min -> only
+        # 12 reserved) — shrink the actual window to match what was
+        # billed, so the orchestrator/AI never reads transcript or cuts
+        # clips from the unbilled tail of the original selection.
+        reserved_seconds = video_minutes_reserved * 60
+        if reserved_seconds < billable_seconds - 0.5:  # float-safe "less than"
+            logger.info(
+                f"Video-minutes clamp: user {current_user.user_id} requested "
+                f"{billable_seconds:.0f}s, only {reserved_seconds:.0f}s remaining — window shrunk"
+            )
+            gateway_end_seconds = gateway_start_seconds + reserved_seconds
+            billable_seconds = reserved_seconds
+
     # ── 4. Insert job row ──────────────────────────────────────
     job_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)

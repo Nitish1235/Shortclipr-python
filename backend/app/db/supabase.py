@@ -20,6 +20,11 @@ from app.core.plan_limits import get_max_video_minutes, get_video_minutes_limit
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+# Below this, clamping to "whatever's left" wouldn't yield anything a clip
+# could actually be cut from — reject outright instead of reserving a
+# near-zero sliver. Mirrors MIN_GATEWAY_SECONDS (60s) in jobs.py/orchestrator.py.
+MIN_BILLABLE_MINUTES = 1.0
+
 # ── Connection pool singleton ─────────────────────────────────
 _pool: asyncpg.Pool | None = None
 
@@ -365,11 +370,21 @@ async def reserve_video_minutes(
     either's usage landed, and both pass).
 
     Gate 1 — per-video maximum: is this single video too long for the plan?
-    Gate 2 — monthly hours quota: would adding this video exceed the month's
-              video_minutes_limit? Reserved atomically via FOR UPDATE if so.
+              Hard reject if so (this is a structural plan limit, not a
+              balance — there's nothing to clamp to without the caller
+              choosing a shorter video/window themselves).
+    Gate 2 — monthly hours quota: CLAMPS rather than rejects. If less than
+              `duration_minutes` remains this month, reserve whatever IS
+              left (down to MIN_BILLABLE_MINUTES) instead of rejecting the
+              whole job — mirrors reserve_credits()'s "give them what's
+              left" behavior instead of an all-or-nothing wall. Only
+              rejects outright if essentially nothing is left.
 
     Returns (ok, reason, reserved_minutes). `reserved_minutes` is the exact
-    amount reserved (0.0 if not ok) — IS the final bill on job success
+    amount reserved (0.0 if not ok) — may be LESS than `duration_seconds`
+    if Gate 2 clamped it; callers MUST shrink whatever window they're
+    about to process (e.g. the minutes-gateway end) to match, so billing
+    and actual processing stay in sync. IS the final bill on job success
     (don't increment again), and must be refunded via release_video_minutes
     if the job fails/times out before delivering anything.
     """
@@ -399,21 +414,24 @@ async def reserve_video_minutes(
             limit = float(row["video_minutes_limit"] or get_video_minutes_limit(plan))
             remaining = limit - used
 
-            if duration_minutes > remaining:
+            if remaining < MIN_BILLABLE_MINUTES:
                 used_hrs  = round(used  / 60, 1)
                 limit_hrs = round(limit / 60, 1)
                 return False, (
                     f"Monthly video-hours quota reached ({used_hrs} / {limit_hrs} hrs used). "
-                    f"This video is {int(duration_minutes)} min but you only have "
-                    f"{max(0, int(remaining))} min remaining this month. "
                     f"Resets on the 1st — or upgrade for more hours."
                 ), 0.0
 
+            # Clamp to whatever's left instead of rejecting outright — same
+            # "give them what's left" pattern as reserve_credits(). Caller
+            # MUST shrink the actual window it processes to match this
+            # returned amount if it's less than what was requested.
+            billable_minutes = min(duration_minutes, remaining)
             await conn.execute(
                 "UPDATE users SET video_minutes_used = video_minutes_used + $2 WHERE id=$1",
-                user_id, duration_minutes,
+                user_id, billable_minutes,
             )
-            return True, "ok", duration_minutes
+            return True, "ok", billable_minutes
 
 
 async def release_video_minutes(user_id: str, minutes: float) -> None:

@@ -177,6 +177,16 @@ async def _execute_pipeline(
                 await db.fail_job(job_id, quota_msg)
                 return  # `finally` below releases the credits reservation
 
+            # reserve_video_minutes CLAMPS to whatever's left rather than
+            # rejecting — shrink the window to match what was actually
+            # billed, so the AI never reads transcript past what's paid for.
+            reserved_seconds = video_minutes_reserved * 60
+            if reserved_seconds < billable_seconds - 0.5:  # float-safe "less than"
+                logger.info(f"[{job_id}] Video-minutes clamp: window shrunk to {reserved_seconds:.0f}s")
+                gateway_end = gateway_start + reserved_seconds
+                billable_seconds = reserved_seconds
+                is_full_video = False
+
         # ── STEPS 3-4: Transcript + stream URL (concurrent) ───────
         await db.update_job_progress(job_id, 5, "Reading transcript & connecting to stream...")
         transcript, (stream_url, audio_url, user_agent) = await asyncio.gather(

@@ -218,7 +218,8 @@ export default function Billing() {
                   )}
                   <div style={{ fontSize: '.82rem', fontWeight: 700, color: '#111', marginBottom: 2 }}>{plan.name}</div>
                   <div style={{ fontSize: '.7rem', color: '#9ca3af', marginBottom: 2 }}>{plan.clips.toLocaleString()} shorts/mo</div>
-                  <div style={{ fontSize: '.68rem', color: '#9ca3af', marginBottom: 10 }}>{plan.videoHours}h video/mo · up to {plan.maxVideoHours}h/video</div>
+                  <div style={{ fontSize: '.68rem', color: '#9ca3af', marginBottom: 1 }}>{plan.videoHours}h of video per month</div>
+                  <div style={{ fontSize: '.68rem', color: '#9ca3af', marginBottom: 10 }}>({plan.maxVideoHours}h max per single video)</div>
                   <div style={{ marginBottom: 14 }}>
                     <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#111', letterSpacing: '-.04em' }}>${plan.price}</span>
                     <span style={{ fontSize: '.72rem', color: '#9ca3af' }}>/mo</span>
