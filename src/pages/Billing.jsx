@@ -7,12 +7,13 @@ import AppLayout from '../components/AppLayout'
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 // DodoPayments is already initialized in Pricing.jsx at bundle load time — do NOT call Initialize() again here
 
+// videoHours / maxVideoHours mirror backend/app/core/plan_limits.py — keep in sync
 const PLANS = [
-  { id: 'starter_100', name: 'Starter',  price: 10,  clips: 100,  badge: null,           perks: ['100 shorts/mo', 'HD vertical exports', 'YouTube & TikTok publish', 'Clip editor access', 'MP4 download'] },
-  { id: 'starter_250', name: 'Starter+', price: 25,  clips: 250,  badge: null,           perks: ['250 shorts/mo', 'Everything in Starter', 'Faster processing queue'] },
-  { id: 'pro_500',     name: 'Pro',      price: 45,  clips: 500,  badge: 'Most Popular', perks: ['500 shorts/mo', 'Everything in Starter+', 'Priority queue', 'Batch download'] },
-  { id: 'pro_1000',    name: 'Pro+',     price: 79,  clips: 1000, badge: null,           perks: ['1,000 shorts/mo', 'Everything in Pro', 'API access (coming soon)'] },
-  { id: 'pro_2000',    name: 'Scale',    price: 145, clips: 2000, badge: null,           perks: ['2,000 shorts/mo', 'Everything in Pro+', 'Dedicated support'] },
+  { id: 'starter_100', name: 'Starter',  price: 10,  clips: 100,  videoHours: 5,  maxVideoHours: 2, badge: null,           perks: ['100 shorts/mo', 'HD vertical exports', 'YouTube & TikTok publish', 'Clip editor access', 'MP4 download'] },
+  { id: 'starter_250', name: 'Starter+', price: 25,  clips: 250,  videoHours: 10, maxVideoHours: 2, badge: null,           perks: ['250 shorts/mo', 'Everything in Starter', 'Faster processing queue'] },
+  { id: 'pro_500',     name: 'Pro',      price: 45,  clips: 500,  videoHours: 18, maxVideoHours: 3, badge: 'Most Popular', perks: ['500 shorts/mo', 'Everything in Starter+', 'Priority queue', 'Batch download'] },
+  { id: 'pro_1000',    name: 'Pro+',     price: 79,  clips: 1000, videoHours: 35, maxVideoHours: 3, badge: null,           perks: ['1,000 shorts/mo', 'Everything in Pro', 'API access (coming soon)'] },
+  { id: 'pro_2000',    name: 'Scale',    price: 145, clips: 2000, videoHours: 60, maxVideoHours: 3, badge: null,           perks: ['2,000 shorts/mo', 'Everything in Pro+', 'Dedicated support'] },
 ]
 
 const FEATURES = [
@@ -40,6 +41,12 @@ export default function Billing() {
   const limit     = user?.credits_limit || 3
   const usedPct   = Math.min(100, Math.round((used / limit) * 100))
   const remaining = user?.videos_remaining ?? Math.max(0, limit - used)
+
+  const minsUsed      = user?.video_minutes_used || 0
+  const minsLimit     = user?.video_minutes_limit || 30
+  const minsUsedPct   = Math.min(100, Math.round((minsUsed / minsLimit) * 100))
+  const minsRemaining = user?.video_minutes_remaining ?? Math.max(0, minsLimit - minsUsed)
+  const fmtMins = n => n < 60 ? `${n}m` : `${Math.floor(n / 60)}h ${n % 60}m`
 
   const handleCheckout = async (planId) => {
     setCheckoutErr('')
@@ -159,6 +166,29 @@ export default function Billing() {
                 </span>
               </div>
             </div>
+
+            {/* Video-minutes usage meter */}
+            <div style={{ marginTop: 18 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: '.76rem', color: '#374151', fontWeight: 600 }}>Video Minutes Used</span>
+                <span style={{ fontSize: '.76rem', color: '#6b7280' }}>{fmtMins(minsUsed)} / {fmtMins(minsLimit)}</span>
+              </div>
+              <div style={{ background: '#f3f4f6', borderRadius: 6, height: 8, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', width: `${minsUsedPct}%`,
+                  background: minsUsedPct > 80
+                    ? 'linear-gradient(90deg,#ef4444,#dc2626)'
+                    : 'linear-gradient(90deg,#1d4ed8,#3b82f6)',
+                  borderRadius: 6, transition: 'width .4s',
+                }}/>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
+                <span style={{ fontSize: '.68rem', color: '#9ca3af' }}>{minsUsedPct}% used</span>
+                <span style={{ fontSize: '.68rem', fontWeight: 600, color: minsUsedPct > 80 ? '#ef4444' : '#16a34a' }}>
+                  {fmtMins(minsRemaining)} left
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* Plans grid */}
@@ -187,7 +217,8 @@ export default function Billing() {
                     }}>{plan.badge}</div>
                   )}
                   <div style={{ fontSize: '.82rem', fontWeight: 700, color: '#111', marginBottom: 2 }}>{plan.name}</div>
-                  <div style={{ fontSize: '.7rem', color: '#9ca3af', marginBottom: 10 }}>{plan.clips.toLocaleString()} shorts/mo</div>
+                  <div style={{ fontSize: '.7rem', color: '#9ca3af', marginBottom: 2 }}>{plan.clips.toLocaleString()} shorts/mo</div>
+                  <div style={{ fontSize: '.68rem', color: '#9ca3af', marginBottom: 10 }}>{plan.videoHours}h video/mo · up to {plan.maxVideoHours}h/video</div>
                   <div style={{ marginBottom: 14 }}>
                     <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#111', letterSpacing: '-.04em' }}>${plan.price}</span>
                     <span style={{ fontSize: '.72rem', color: '#9ca3af' }}>/mo</span>

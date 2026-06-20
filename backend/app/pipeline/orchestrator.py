@@ -22,7 +22,6 @@ Realtime channel reflects live state.
 
 import asyncio
 import logging
-import math
 import tempfile
 import uuid
 from pathlib import Path
@@ -54,6 +53,11 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 PIPELINE_TIMEOUT_SECONDS = 1200   # 20 minutes — kill hung jobs
+
+# "Minutes gateway" — must match jobs.py's MIN_GATEWAY_SECONDS (kept here
+# too since this module independently resolves the window when jobs.py's
+# metadata prefetch failed and deferred resolution to here).
+MIN_GATEWAY_SECONDS = 60
 
 
 async def run_pipeline(
@@ -99,6 +103,14 @@ async def _execute_pipeline(
     bar_color       = options.get("bar_color",      "#0d0d0d")
     aspect          = options.get("aspect",         "9:16")
 
+    # Reservations made by jobs.py (atomic — see reserve_credits /
+    # reserve_video_minutes in supabase.py). `success` gates the `finally`
+    # below: any failure/timeout releases the FULL reservation back to the
+    # user instead of leaving it billed for a job that delivered nothing.
+    reserved_credits       = options.get("reserved_credits", 0)
+    video_minutes_reserved = options.get("video_minutes_reserved", 0.0)
+    success = False
+
     job_dir = Path(tempfile.mkdtemp(prefix=f"sc_{job_id[:8]}_"))
 
     try:
@@ -121,12 +133,81 @@ async def _execute_pipeline(
 
         logger.info(f"[{job_id}] Video: '{metadata['title']}' ({metadata['duration']}s)")
 
+        # ── STEP 2b: Resolve the "minutes gateway" window ──────────────
+        # jobs.py already resolves this against the real duration when its
+        # own metadata prefetch succeeds (prefetched_duration > 0) and
+        # overwrites options["gateway_start"/"gateway_end"] with the final
+        # values — use those as-is. Otherwise (jobs.py's prefetch failed),
+        # resolve now against the duration THIS fetch just got, using the
+        # same clamp/fallback rules (see jobs.py for why).
+        if prefetched_duration > 0:
+            gateway_start = options.get("gateway_start", 0.0)
+            gateway_end   = options.get("gateway_end")
+        else:
+            gateway_start = max(0.0, min(options.get("gateway_start", 0.0), metadata["duration"]))
+            gateway_end   = options.get("gateway_end")
+            gateway_end = metadata["duration"] if gateway_end is None else max(0.0, min(gateway_end, metadata["duration"]))
+            if gateway_end - gateway_start < MIN_GATEWAY_SECONDS:
+                gateway_start, gateway_end = 0.0, metadata["duration"]
+        billable_seconds = gateway_end - gateway_start
+        is_full_video = gateway_start == 0.0 and gateway_end == metadata["duration"]
+        if not is_full_video:
+            logger.info(f"[{job_id}] Minutes gateway: [{gateway_start:.0f}s, {gateway_end:.0f}s] ({billable_seconds:.0f}s billable)")
+
+        # ── STEP 2c: Reserve video-minutes against the GATEWAY duration
+        # (not the full video!), if jobs.py didn't already reserve it ──
+        # jobs.py reserves this pre-flight, but ONLY when its own metadata
+        # prefetch succeeds — if that prefetch fails (proxy hiccup, rate
+        # limit, etc.) it deliberately skips the gate rather than reject a
+        # possibly-legitimate video on a transient error, trusting this
+        # fetch (which has more retries/fallbacks) to get the real duration.
+        # Without this fallback reservation, that path was a full bypass of
+        # both the per-video-length cap and the monthly-hours quota — a free
+        # user could process a multi-hour video for free by simply hitting
+        # the metadata endpoint when it was already flaky. This closes that
+        # hole and aborts BEFORE any download/transcript/AI cost is spent,
+        # regardless of which path supplied `metadata["duration"]`.
+        plan = options.get("plan", "free")
+        if video_minutes_reserved <= 0:
+            ok, quota_msg, video_minutes_reserved = await db.reserve_video_minutes(
+                user_id, billable_seconds, plan,
+            )
+            if not ok:
+                logger.warning(f"[{job_id}] Video-minutes reservation failed: {quota_msg}")
+                await db.fail_job(job_id, quota_msg)
+                return  # `finally` below releases the credits reservation
+
         # ── STEPS 3-4: Transcript + stream URL (concurrent) ───────
         await db.update_job_progress(job_id, 5, "Reading transcript & connecting to stream...")
         transcript, (stream_url, audio_url, user_agent) = await asyncio.gather(
             get_transcript(video_id, language=language, session_id=job_id),
             get_stream_urls(video_id, quality=quality, session_id=job_id),
         )
+
+        # Restrict transcript to the gateway window — the AI only ever
+        # considers moments inside the user-selected range, so extracted
+        # clips naturally stay inside it too (no separate clamp needed).
+        if not is_full_video:
+            full_len = len(transcript)
+            transcript = [e for e in transcript if gateway_start <= e["start"] < gateway_end]
+            logger.info(f"[{job_id}] Gateway window: {len(transcript)}/{full_len} transcript entries kept")
+
+        # Free-tier cap: only feed GPT the first N minutes of WHATEVER
+        # window is in play (the gateway window above, or the full video if
+        # none was selected) — set in jobs.py via
+        # plan_limits.get_max_transcript_minutes_for_ai. Bounds AI cost per
+        # free-tier job regardless of video/window length. Clip extraction
+        # still uses the full window; this only limits which moments the
+        # AI is allowed to consider.
+        max_transcript_seconds = options.get("max_transcript_seconds")
+        if max_transcript_seconds is not None:
+            cutoff = gateway_start + max_transcript_seconds
+            full_len = len(transcript)
+            transcript = [e for e in transcript if e["start"] < cutoff]
+            logger.info(
+                f"[{job_id}] Free-tier transcript cap: {len(transcript)}/{full_len} "
+                f"entries kept (first {max_transcript_seconds // 60} min of the window)"
+            )
 
         # ── STEP 5: AI finds viral moments ────────────────────────
         await db.update_job_progress(job_id, 18, "AI analyzing best moments...")
@@ -334,17 +415,31 @@ async def _execute_pipeline(
 
         await db.update_job_progress(job_id, 90, "Finalizing...")
         await db.complete_job(job_id, uploaded_count)
-        await db.increment_credits_used(user_id)
 
-        billed_minutes = math.ceil(metadata["duration"] / 60)
-        await db.increment_video_minutes_used(user_id, billed_minutes)
+        # Credits were already reserved atomically in jobs.py (one credit
+        # per clip REQUESTED — see reserve_credits). If fewer clips were
+        # actually delivered (some failed), refund the unused difference —
+        # video-minutes reservation IS the final bill as-is, since it's
+        # based on the fixed source-video duration, not clip count.
+        unused_credits = reserved_credits - uploaded_count
+        if unused_credits > 0:
+            await db.release_credits(user_id, unused_credits)
 
+        success = True
         logger.info(
-            f"[{job_id}] ✅ Done: {uploaded_count} clips delivered "
-            f"({billed_minutes} min billed to user {user_id})"
+            f"[{job_id}] ✅ Done: {uploaded_count}/{reserved_credits} clips delivered "
+            f"({video_minutes_reserved:.1f} min billed to user {user_id})"
         )
 
     finally:
+        if not success:
+            # Job failed/timed out before delivering anything billable —
+            # refund the FULL reservations rather than charging the user
+            # for a job that produced nothing.
+            if reserved_credits > 0:
+                await db.release_credits(user_id, reserved_credits)
+            if video_minutes_reserved > 0:
+                await db.release_video_minutes(user_id, video_minutes_reserved)
         cleanup_job_files(job_dir)
 
 

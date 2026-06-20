@@ -12,16 +12,18 @@ DodoPayments.Initialize({
   },
 })
 
+// videoHours / maxVideoHours mirror backend/app/core/plan_limits.py — keep in sync
 const TIERS = [
-  { clips: 100,      price: 10,  label: '100 Shorts',  dodoId: 'starter_100'  },
-  { clips: 250,      price: 25,  label: '250 Shorts',  dodoId: 'starter_250'  },
-  { clips: 500,      price: 45,  label: '500 Shorts',  dodoId: 'pro_500'      },
-  { clips: 1000,     price: 79,  label: '1000 Shorts', dodoId: 'pro_1000'     },
-  { clips: 2000,     price: 145, label: '2000 Shorts', dodoId: 'pro_2000'     },
+  { clips: 100,      price: 10,  label: '100 Shorts',  dodoId: 'starter_100', videoHours: 5,  maxVideoHours: 2 },
+  { clips: 250,      price: 25,  label: '250 Shorts',  dodoId: 'starter_250', videoHours: 10, maxVideoHours: 2 },
+  { clips: 500,      price: 45,  label: '500 Shorts',  dodoId: 'pro_500',     videoHours: 18, maxVideoHours: 3 },
+  { clips: 1000,     price: 79,  label: '1000 Shorts', dodoId: 'pro_1000',    videoHours: 35, maxVideoHours: 3 },
+  { clips: 2000,     price: 145, label: '2000 Shorts', dodoId: 'pro_2000',    videoHours: 60, maxVideoHours: 3 },
 ]
 
 const FREE_FEATURES = [
-  '3 free videos (no card needed)',
+  '3 free clips (no card needed)',
+  '30 min video/month · up to 30 min/video',
   '30s & 60s short formats',
   '720p output quality',
   '3 caption styles',
@@ -32,6 +34,7 @@ const FREE_FEATURES = [
 function getFeatures(tier) {
   return [
     `${tier.clips} shorts/month`,
+    `${tier.videoHours} hrs video/month · up to ${tier.maxVideoHours} hrs/video`,
     'All formats: 30s / 60s / 90s',
     '1080p — Zero Watermark',
     'All 12 caption styles incl. Karaoke',

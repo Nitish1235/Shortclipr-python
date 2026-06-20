@@ -8,6 +8,15 @@ Columns this maps to in the `users` table:
   video_minutes_limit  INT  — max total source-video minutes per billing month
   max_video_minutes    INT  — max duration of a SINGLE submitted YouTube video
                               (enforced pre-flight in jobs.py, NOT stored in DB)
+
+Free-tier feature caps (NOT stored in DB — enforced per-request in jobs.py /
+orchestrator.py). All three are None for every paid plan, meaning "no extra
+cap beyond the global default already enforced by JobOptions validators":
+  max_clip_count                INT|None — max clips per job (free: 3)
+  max_clip_duration_seconds     INT|None — max single-clip length (free: 60s)
+  max_transcript_minutes_for_ai INT|None — cap how much transcript is sent to
+                                           GPT for viral-moment finding, to
+                                           bound free-tier AI cost (free: 10)
 """
 
 # ─────────────────────────────────────────────────────────────────
@@ -16,7 +25,7 @@ Columns this maps to in the `users` table:
 #
 #  Plan           $/mo   Shorts  Monthly hrs  Per-video max
 #  ─────────────────────────────────────────────────────────
-#  free             $0      1      30 min        30 min
+#  free             $0      3      30 min        30 min
 #  starter_100     $10    100    5 hrs (300)    2 hrs (120)
 #  starter_250     $25    250   10 hrs (600)    2 hrs (120)
 #  pro_500         $45    500   18 hrs (1080)   3 hrs (180)
@@ -28,9 +37,16 @@ Columns this maps to in the `users` table:
 
 PLAN_LIMITS: dict[str, dict] = {
     "free": {
-        "credits_limit":       1,
+        # credits_limit = 3, matching max_clip_count = 3: a free user gets
+        # exactly one 3-clip job per month (credits are reserved per clip
+        # requested and refunded for any that fail — see reserve_credits /
+        # release_credits in db/supabase.py), then blocked until reset.
+        "credits_limit":       3,
         "video_minutes_limit": 30,    # 30 min/month total
         "max_video_minutes":   30,    # 30 min max single video
+        "max_clip_count":               3,    # only 3 clips per job
+        "max_clip_duration_seconds":    60,   # no clip longer than 60s
+        "max_transcript_minutes_for_ai": 10,  # GPT only sees first 10 min
     },
     "starter_100": {
         "credits_limit":       100,
@@ -84,6 +100,29 @@ def get_credits_limit(plan: str) -> int:
 
 def get_video_minutes_limit(plan: str) -> int:
     return get_plan_limits(plan)["video_minutes_limit"]
+
+
+def get_max_clip_count(plan: str) -> int | None:
+    """Max clips allowed per job for `plan`. None = no extra cap (use the
+    global 1-20 JobOptions validator range)."""
+    return get_plan_limits(plan).get("max_clip_count")
+
+
+def get_max_clip_duration_seconds(plan: str) -> int | None:
+    """Max single-clip duration (seconds) for `plan`. None = no extra cap."""
+    return get_plan_limits(plan).get("max_clip_duration_seconds")
+
+
+def get_max_transcript_minutes_for_ai(plan: str) -> int | None:
+    """Cap on how many minutes of transcript (from the start) are sent to
+    GPT for viral-moment finding, for `plan`. None = no cap, full transcript."""
+    return get_plan_limits(plan).get("max_transcript_minutes_for_ai")
+
+
+def is_free_plan(plan: str) -> bool:
+    """True for "free" and any unrecognized plan string (same fallback rule
+    as get_plan_limits)."""
+    return plan not in PLAN_LIMITS or plan == "free"
 
 
 def get_max_video_minutes(plan: str) -> int:

@@ -21,6 +21,15 @@ function formatTimer(createdAt) {
 }
 function isUrgent(createdAt) { return msRemaining(createdAt) < 6 * 3600000 }
 
+// Video-minutes stat formatting — e.g. 45 -> "45m", 125 -> "2h 5m"
+function formatMinutes(mins) {
+  const n = Math.max(0, Math.round(Number(mins) || 0))
+  if (n < 60) return `${n}m`
+  const h = Math.floor(n / 60)
+  const m = n % 60
+  return m ? `${h}h ${m}m` : `${h}h`
+}
+
 // ── Status colors ─────────────────────────────────────────────────
 const STATUS_COLOR = {
   completed:  { bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0', label:'Done'       },
@@ -524,6 +533,8 @@ export default function Dashboard() {
                 {[
                   { n: user?.credits_used || 0,      l:'Shorts made',      c:'#cf1322' },
                   { n: user?.videos_remaining || 0,  l:'Credits left',     c:'#16a34a' },
+                  { n: formatMinutes(user?.video_minutes_used),      l:'Minutes used', c:'#cf1322' },
+                  { n: formatMinutes(user?.video_minutes_remaining), l:'Minutes left', c:'#16a34a' },
                   { n: rawClips.length,              l:'Encoding',         c:'#f59e0b' },
                   { n: hdClips.length,               l:'HD ready',         c:'#1d4ed8' },
                   { n: publishedYT.size + publishedTT.size, l:'Published', c:'#16a34a' },

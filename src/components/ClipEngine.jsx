@@ -120,6 +120,114 @@ const COLOR_OPTIONS = [
   { val:'red_white',    label:'Red + White',    sub:'' },
 ]
 
+// ── Free-tier caps — mirrors backend/app/core/plan_limits.py "free" plan ──
+// Backend re-validates and clamps these server-side regardless (see
+// jobs.py POST /jobs) — this is just so free users SEE the lock before
+// submitting, instead of being silently clamped after the fact.
+const FREE_MAX_CLIPS        = 3
+const FREE_MAX_CLIP_SECONDS = 60
+
+// Minutes gateway — mirrors backend MIN_GATEWAY_SECONDS (jobs.py / orchestrator.py)
+const MIN_GATEWAY_GAP = 60
+
+const CLIP_LENGTH_OPTIONS = [
+  { val:'hooks', label:'<30s',   sub:'Hooks',     min:15, max:30 },
+  { val:'mid',   label:'30-60s', sub:'Standard',  min:30, max:60 },
+  { val:'auto',  label:'Auto',   sub:'<90s',      min:30, max:90 },
+  { val:'long',  label:'60-90s', sub:'Long-form', min:60, max:90 },
+]
+
+const CLIP_COUNT_OPTIONS = [
+  { val:'3',  label:'3 Shorts',           sub:'Free plan' },
+  { val:'5',  label:'5 Shorts',           sub:'' },
+  { val:'10', label:'10 Shorts',          sub:'Default' },
+  { val:'15', label:'15 Shorts',          sub:'' },
+  { val:'20', label:'20 Shorts',          sub:'Max' },
+]
+
+// ── Lockable option button — used for Clip Length / Clip Count ──────
+// Locked options show a lock badge; hovering shows a native tooltip via
+// `title`, clicking shows an upgrade prompt instead of selecting.
+function LockableButton({ active, locked, label, sub, onClick }) {
+  return (
+    <button
+      onClick={locked ? () => alert('🔒 This option needs a paid plan. Free accounts get 3 clips per job, up to 60s each — upgrade to unlock more.') : onClick}
+      title={locked ? '🔒 Upgrade to a paid plan to unlock' : undefined}
+      style={{
+        flex:1, minWidth:'70px', padding:'8px 6px', borderRadius:'8px', textAlign:'center',
+        position:'relative',
+        background: locked ? '#f3f4f6' : (active ? '#cf1322' : '#f9f9f9'),
+        color: locked ? '#aaa' : (active ? '#fff' : '#666'),
+        border: locked ? '1.5px dashed #d1d5db' : (active ? '1.5px solid #cf1322' : '1.5px solid #e5e5e5'),
+        cursor: locked ? 'not-allowed' : 'pointer',
+        fontSize:'0.75rem', fontWeight:700, lineHeight:1.3,
+        transition:'all 0.15s',
+      }}>
+      {locked && <span style={{ position:'absolute', top:'2px', right:'4px', fontSize:'0.7rem' }}>🔒</span>}
+      {label}<br/><span style={{ opacity:0.7, fontSize:'0.68rem', fontWeight:400 }}>{sub}</span>
+    </button>
+  )
+}
+
+// ── Minutes gateway — dual-handle range slider ──────────────────
+// Two overlapping native <input type="range"> (classic dual-slider trick):
+// each input's track is made transparent via CSS (.gw-thumb classes,
+// injected once below) so only the round thumb is visible/clickable,
+// letting both handles sit on the same track without fighting each other.
+function MinutesGatewaySlider({ durationSeconds, value, onChange }) {
+  const [start, end] = value
+  const pct = v => Math.min(100, Math.max(0, (v / durationSeconds) * 100))
+
+  return (
+    <div>
+      <div style={{ position:'relative', height:'30px' }}>
+        <div style={{
+          position:'absolute', top:'50%', left:0, right:0, height:'4px',
+          background:'#e5e5e5', borderRadius:'4px', transform:'translateY(-50%)',
+        }}/>
+        <div style={{
+          position:'absolute', top:'50%', height:'4px',
+          background:'#cf1322', borderRadius:'4px', transform:'translateY(-50%)',
+          left:`${pct(start)}%`, width:`${pct(end) - pct(start)}%`,
+        }}/>
+        <input
+          type="range" className="gw-thumb"
+          min={0} max={durationSeconds} step={1} value={start}
+          onChange={e => onChange([Math.min(Number(e.target.value), end - MIN_GATEWAY_GAP), end])}
+          style={{ position:'absolute', top:0, left:0, width:'100%', height:'30px', margin:0, background:'transparent' }}
+        />
+        <input
+          type="range" className="gw-thumb"
+          min={0} max={durationSeconds} step={1} value={end}
+          onChange={e => onChange([start, Math.max(Number(e.target.value), start + MIN_GATEWAY_GAP)])}
+          style={{ position:'absolute', top:0, left:0, width:'100%', height:'30px', margin:0, background:'transparent' }}
+        />
+      </div>
+      <div style={{ display:'flex', justifyContent:'space-between', fontSize:'0.72rem', color:'#888', marginTop:'2px' }}>
+        <span>{formatDuration(start)}</span>
+        <span style={{ fontWeight:700, color:'#cf1322' }}>{formatDuration(end - start)} selected</span>
+        <span>{formatDuration(end)}</span>
+      </div>
+      <style>{`
+        .gw-thumb { -webkit-appearance:none; appearance:none; pointer-events:none; }
+        .gw-thumb::-webkit-slider-thumb {
+          pointer-events:auto; -webkit-appearance:none;
+          width:18px; height:18px; border-radius:50%;
+          background:#cf1322; border:2px solid #fff;
+          box-shadow:0 1px 4px rgba(0,0,0,0.35); cursor:pointer; margin-top:6px;
+        }
+        .gw-thumb::-moz-range-thumb {
+          pointer-events:auto; width:18px; height:18px; border-radius:50%;
+          background:#cf1322; border:2px solid #fff;
+          box-shadow:0 1px 4px rgba(0,0,0,0.35); cursor:pointer;
+        }
+        .gw-thumb::-webkit-slider-runnable-track { background:transparent; }
+        .gw-thumb::-moz-range-track { background:transparent; }
+      `}</style>
+    </div>
+  )
+}
+
 export default function ClipEngine({ onJobCreated }) {
   const [url, setUrl]               = useState('')
   const [mode, setMode]             = useState('input') // input | login | config | processing
@@ -131,7 +239,7 @@ export default function ClipEngine({ onJobCreated }) {
 
   // Config options
   const [lang,          setLang]          = useState('Auto / No translation')
-  const [clipLen,       setClipLen]       = useState('Auto (<90s)')
+  const [clipLen,       setClipLen]       = useState('auto')
   const [clipCount,     setClipCount]     = useState('10')
   const [captionStyle,  setCaptionStyle]  = useState('word_pop')
   const [colorCombo,    setColorCombo]    = useState('white_black')
@@ -139,9 +247,14 @@ export default function ClipEngine({ onJobCreated }) {
   const [shortTemplate, setShortTemplate] = useState('crop_fill')
   const [barColor,      setBarColor]      = useState('#0d0d0d')
   const [aspect,        setAspect]        = useState('9:16')
+  // "Minutes gateway" — [startSeconds, endSeconds] sub-window of the video
+  // to actually process. null until video metadata loads (full video by
+  // default — the gateway is opt-in, not required).
+  const [gatewayRange,  setGatewayRange]  = useState(null)
 
   const { user, loginWithGoogleToken } = useAuth()
   const navigate = useNavigate()
+  const isPaid = !!(user?.plan && user.plan !== 'free')
 
   // Restore pending URL after login
   useEffect(() => {
@@ -151,6 +264,21 @@ export default function ClipEngine({ onJobCreated }) {
       setUrl(saved)
     }
   }, [user])
+
+  // Minutes gateway: default to the FULL video whenever a new video loads.
+  useEffect(() => {
+    if (videoData?.duration > 0) setGatewayRange([0, videoData.duration])
+  }, [videoData])
+
+  // Free-tier: if a previously-selected option becomes locked once we know
+  // the user's plan, snap it back to the nearest unlocked option instead of
+  // silently letting the user submit something the backend will clamp anyway.
+  useEffect(() => {
+    if (!user || isPaid) return
+    if (Number(clipCount) > FREE_MAX_CLIPS) setClipCount(String(FREE_MAX_CLIPS))
+    const lenOpt = CLIP_LENGTH_OPTIONS.find(o => o.val === clipLen)
+    if (lenOpt && lenOpt.max > FREE_MAX_CLIP_SECONDS) setClipLen('mid')
+  }, [user, isPaid])
 
   const handleFetchMetadata = async () => {
     if (!url.trim()) return
@@ -187,6 +315,8 @@ export default function ClipEngine({ onJobCreated }) {
     setProcessing(true)
     setProgress(5)
     setStatusMsg('Connecting to processing queue…')
+    const clipLenOpt = CLIP_LENGTH_OPTIONS.find(o => o.val === clipLen)
+      || CLIP_LENGTH_OPTIONS.find(o => o.val === 'auto')
     try {
       const token = localStorage.getItem('sc_token')
       const res = await fetch(`${API_BASE}/jobs`, {
@@ -195,7 +325,12 @@ export default function ClipEngine({ onJobCreated }) {
         body:JSON.stringify({
           youtube_url: url,
           options:{
-            clip_count:     parseInt(clipCount) || 10,
+            // Free-tier clamps are enforced again server-side (jobs.py) —
+            // these client clamps just prevent submitting something the
+            // backend would silently clamp anyway.
+            clip_count:     Math.min(parseInt(clipCount) || 10, isPaid ? 20 : FREE_MAX_CLIPS),
+            min_duration:   Math.min(clipLenOpt.min, isPaid ? clipLenOpt.min : FREE_MAX_CLIP_SECONDS),
+            max_duration:   Math.min(clipLenOpt.max, isPaid ? clipLenOpt.max : FREE_MAX_CLIP_SECONDS),
             language:       lang,
             style:          captionStyle,
             color:          colorCombo,
@@ -204,6 +339,11 @@ export default function ClipEngine({ onJobCreated }) {
             bar_color:      barColor,
             aspect:         aspect,
             h_align:'center', v_align:'bottom', quality:'1080p', topic:'',
+            // Minutes gateway — sub-window of the video to process/bill.
+            // Backend re-validates/re-clamps this against the real video
+            // duration regardless (jobs.py) — see MIN_GATEWAY_SECONDS there.
+            gateway_start: gatewayRange ? gatewayRange[0] : 0,
+            gateway_end:   gatewayRange ? gatewayRange[1] : null,
           },
         }),
       })
@@ -373,27 +513,70 @@ export default function ClipEngine({ onJobCreated }) {
                 </select>
               </div>
 
-              <div style={rowStyle}>
+              <div style={{ ...rowStyle, flexWrap:'wrap' }}>
                 <span style={labelStyle}>Clip Length</span>
-                <select style={selectStyle} value={clipLen} onChange={e => setClipLen(e.target.value)}
-                  onFocus={e => e.target.style.borderColor='#cf1322'} onBlur={e => e.target.style.borderColor='#e5e5e5'}>
-                  <option>Auto (&lt;90s)</option>
-                  <option>&lt;30s (Hooks)</option>
-                  <option>30s – 60s</option>
-                  <option>60s – 90s</option>
-                </select>
+                <div style={{ display:'flex', gap:'8px', flex:'1 1 auto', flexWrap:'wrap' }}>
+                  {CLIP_LENGTH_OPTIONS.map(opt => {
+                    const locked = !isPaid && opt.max > FREE_MAX_CLIP_SECONDS
+                    return (
+                      <LockableButton key={opt.val}
+                        active={clipLen === opt.val} locked={locked}
+                        label={opt.label} sub={opt.sub}
+                        onClick={() => setClipLen(opt.val)}
+                      />
+                    )
+                  })}
+                </div>
               </div>
+              {!isPaid && (
+                <p style={{ fontSize:'0.7rem', color:'#bbb', margin:'-2px 0 8px' }}>
+                  🔒 Free plan: clips up to 60s. <strong style={{ color:'#cf1322' }}>Upgrade</strong> for up to 90s.
+                </p>
+              )}
 
-              <div style={{ ...rowStyle, borderBottom:'none' }}>
+              <div style={{ ...rowStyle, flexWrap:'wrap' }}>
                 <span style={labelStyle}>Clip Count</span>
-                <select style={selectStyle} value={clipCount} onChange={e => setClipCount(e.target.value)}
-                  onFocus={e => e.target.style.borderColor='#cf1322'} onBlur={e => e.target.style.borderColor='#e5e5e5'}>
-                  <option value="5">5 Shorts</option>
-                  <option value="10">10 Shorts (default)</option>
-                  <option value="15">15 Shorts</option>
-                  <option value="20">20 Shorts (max)</option>
-                </select>
+                <div style={{ display:'flex', gap:'8px', flex:'1 1 auto', flexWrap:'wrap' }}>
+                  {CLIP_COUNT_OPTIONS.map(opt => {
+                    const locked = !isPaid && Number(opt.val) > FREE_MAX_CLIPS
+                    return (
+                      <LockableButton key={opt.val}
+                        active={clipCount === opt.val} locked={locked}
+                        label={opt.label} sub={opt.sub}
+                        onClick={() => setClipCount(opt.val)}
+                      />
+                    )
+                  })}
+                </div>
               </div>
+              {!isPaid && (
+                <p style={{ fontSize:'0.7rem', color:'#bbb', margin:'-2px 0 8px' }}>
+                  🔒 Free plan: 3 clips per job. <strong style={{ color:'#cf1322' }}>Upgrade</strong> for up to 20.
+                </p>
+              )}
+
+              {/* ✂️ Minutes gateway — pick a sub-window of the video to
+                  process instead of the whole thing. Only billed/analyzed
+                  inside this window — narrowing it down can also let a
+                  video that'd otherwise blow your per-video minute cap
+                  through, since only the selected window is processed. */}
+              {gatewayRange && videoData.duration > MIN_GATEWAY_GAP * 2 && (
+                <div style={{ paddingTop:'12px', borderBottom:'none' }}>
+                  <span style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>
+                    ✂️ Time Range (Minutes Gateway)
+                  </span>
+                  <MinutesGatewaySlider
+                    durationSeconds={videoData.duration}
+                    value={gatewayRange}
+                    onChange={setGatewayRange}
+                  />
+                  <p style={{ fontSize:'0.72rem', color:'#999', marginTop:'8px', lineHeight:1.5 }}>
+                    Only this window is analyzed for clips — and only{' '}
+                    <strong style={{ color:'#cf1322' }}>{formatDuration(gatewayRange[1] - gatewayRange[0])}</strong>{' '}
+                    is deducted from your video-minutes credit, not the full video.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* 💬 Captions */}

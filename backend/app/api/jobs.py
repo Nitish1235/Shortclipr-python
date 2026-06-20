@@ -25,6 +25,9 @@ from pydantic import BaseModel, field_validator
 
 from app.api.deps import CurrentUser, decode_access_token
 from app.core.config import get_settings
+from app.core.plan_limits import (
+    get_max_clip_count, get_max_clip_duration_seconds, get_max_transcript_minutes_for_ai,
+)
 from app.db import supabase as db
 from app.pipeline.captions import (
     VALID_COLORS, VALID_HALIGNS, VALID_STYLES,
@@ -38,6 +41,12 @@ from app.pipeline.uploader import delete_job_from_gcs
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 logger = logging.getLogger(__name__)
 settings = get_settings()   # Fix: was imported but never instantiated → NameError
+
+# "Minutes gateway" — minimum selectable window. Below this, a selection is
+# treated as invalid/noise and the full video is used instead. Mirrored in
+# orchestrator.py's fallback resolution (when this endpoint's own metadata
+# prefetch fails) — keep both in sync if changed.
+MIN_GATEWAY_SECONDS = 60
 
 
 # ── Request / response schemas ─────────────────────────────────
@@ -58,10 +67,23 @@ class JobOptions(BaseModel):
     topic:           str = ""
     quality:         str = "1080p"      # capped at 1080p; degrades gracefully
 
+    # "Minutes gateway" — restrict AI clip-finding (and billing!) to a
+    # sub-window of the source video instead of the whole thing.
+    # gateway_end=None means "full video", resolved once real duration is
+    # known (see create_job) — can't validate against video length here,
+    # this model has no access to it yet.
+    gateway_start: float = 0.0
+    gateway_end:   float | None = None
+
     @field_validator("clip_count")
     @classmethod
     def validate_clip_count(cls, v: int) -> int:
         return max(1, min(20, v))
+
+    @field_validator("gateway_start")
+    @classmethod
+    def validate_gateway_start(cls, v: float) -> float:
+        return max(0.0, v)
 
     @field_validator("style")
     @classmethod
@@ -121,19 +143,30 @@ class CreateJobRequest(BaseModel):
 @router.post("", status_code=status.HTTP_202_ACCEPTED)
 async def create_job(body: CreateJobRequest, current_user: CurrentUser):
     """
-    1. Check plan / credit limit
-    2. Validate YouTube URL
-    3. INSERT job row (status = processing)
-    4. asyncio.create_task(run_pipeline(...))  ← starts RIGHT NOW, no queue
-    5. Return {job_id} to frontend
+    1. Validate YouTube URL + concurrent-job limit + free-tier caps
+    2. Fetch video metadata
+    3. ATOMICALLY reserve credits + video-minutes (the real gate — last,
+       right before the INSERT, so nothing after this can fail and orphan
+       a reservation without it being rolled back here)
+    4. INSERT job row (status = processing)
+    5. asyncio.create_task(run_pipeline(...))  ← starts RIGHT NOW, no queue
+    6. Return {job_id} to frontend
 
     Frontend opens GET /jobs/{job_id}/stream for SSE heartbeats.
     Supabase Realtime delivers clip cards as they are inserted.
+
+    Reservations are deliberately the LAST gate before dispatch (not first,
+    as it used to be) — see reserve_credits/reserve_video_minutes in
+    supabase.py for why a plain "check, then bill later" pattern allowed
+    concurrent submissions to double-spend the same remaining quota.
     """
-    # ── 1. Shorts quota (credits) check ───────────────────────
-    allowed, reason = await db.check_user_can_process(current_user.user_id)
-    if not allowed:
-        raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=reason)
+    # ── 1. Validate YouTube URL ────────────────────────────────
+    video_id = extract_video_id(body.youtube_url)
+    if not video_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid YouTube URL — paste a valid youtube.com or youtu.be link.",
+        )
 
     # ── 1b. Concurrent job limit ───────────────────────────────
     active_count = await db.count_active_jobs(current_user.user_id)
@@ -144,20 +177,21 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
                    f"Wait for them to finish before submitting another.",
         )
 
-    # ── 2. Validate YouTube URL ────────────────────────────────
-    video_id = extract_video_id(body.youtube_url)
-    if not video_id:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid YouTube URL — paste a valid youtube.com or youtu.be link.",
-        )
+    # ── 1c. Free-tier feature caps (clip count / clip length) ──
+    # Enforced server-side regardless of what the client sent — the
+    # frontend also locks these in the UI, but this is the real gate.
+    # Applied BEFORE the credits reservation below so we never reserve
+    # more than a free user is even allowed to request.
+    max_clips = get_max_clip_count(current_user.plan)
+    if max_clips is not None:
+        body.options.clip_count = min(body.options.clip_count, max_clips)
 
-    # ── 3. Pre-flight: fetch video metadata + enforce duration limits ──
-    #
-    # We fetch duration HERE (before creating the job row) so we can
-    # reject over-limit videos instantly with a clear error message.
-    # The duration is forwarded to the pipeline via options so it
-    # doesn't need to make a second InnerTube call.
+    max_clip_dur = get_max_clip_duration_seconds(current_user.plan)
+    if max_clip_dur is not None:
+        body.options.max_duration = min(body.options.max_duration, max_clip_dur)
+        body.options.min_duration = min(body.options.min_duration, max_clip_dur)
+
+    # ── 2. Fetch video metadata ────────────────────────────────
     try:
         video_meta = await get_video_metadata(video_id)
     except Exception as exc:
@@ -166,35 +200,93 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
 
     video_duration_seconds = int(video_meta.get("duration", 0))
 
-    # Only enforce duration gates when metadata succeeded (duration > 0)
+    # ── 2b. Resolve the "minutes gateway" window ───────────────
+    # User-selected sub-range of the video to actually process — AI only
+    # reads transcript inside this window (orchestrator.py), and billing
+    # is based on the WINDOW length, not the full video. Falls back to the
+    # full video if not provided, out of range, or too small to be useful.
+    # Only resolvable when metadata succeeded — if it didn't, fall back to
+    # the orchestrator's own duration fetch + full-video billing.
+    gateway_start_seconds = 0.0
+    gateway_end_seconds: float | None = None
     if video_duration_seconds > 0:
-        ok, msg = await db.check_video_quota(
-            current_user.user_id,
-            video_duration_seconds,
-            current_user.plan,
+        gw_start = max(0.0, min(body.options.gateway_start, video_duration_seconds))
+        gw_end = body.options.gateway_end
+        gw_end = video_duration_seconds if gw_end is None else max(0.0, min(gw_end, video_duration_seconds))
+        if gw_end - gw_start < MIN_GATEWAY_SECONDS:
+            # Selection too small (or invalid/reversed) — use the full video
+            # rather than reject the job outright over a UI/precision glitch.
+            gw_start, gw_end = 0.0, video_duration_seconds
+        gateway_start_seconds, gateway_end_seconds = gw_start, gw_end
+
+    # billable_seconds is what actually gets reserved/billed below — the
+    # gateway window if one was resolved, otherwise the full video.
+    billable_seconds = (
+        int(round(gateway_end_seconds - gateway_start_seconds))
+        if gateway_end_seconds is not None
+        else video_duration_seconds
+    )
+
+    # ── 3. Reserve credits (clips) — the real gate, atomic ─────
+    # Credits are billed per clip DELIVERED (see orchestrator.py), so a
+    # plan advertised as "100 shorts/month" must actually cap total clips
+    # at 100. reserve_credits() clamps + reserves in one atomic DB
+    # transaction (FOR UPDATE row lock) so two concurrent submissions from
+    # the same user can't both reserve from the same "remaining" number.
+    reserved_credits = await db.reserve_credits(current_user.user_id, body.options.clip_count)
+    if reserved_credits <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Monthly shorts limit reached for your plan. Resets next month — upgrade to continue.",
+        )
+    body.options.clip_count = reserved_credits
+
+    # ── 3b. Reserve video-minutes (if duration is known) — also atomic ─
+    # Billed against `billable_seconds` (the gateway window, if any one was
+    # selected) — NOT the full video length, so windowing a long video down
+    # to a short segment only costs the segment's minutes, and can also let
+    # a video that'd otherwise blow the per-video cap through, since only
+    # the window is ever actually downloaded/transcribed/processed.
+    # Only enforced here when metadata succeeded; if it didn't, this is
+    # deferred to the orchestrator's own re-check with the authoritative
+    # duration (see orchestrator.py STEP 2b) — but we still must release
+    # the credits reservation above if THIS gate rejects the job.
+    video_minutes_reserved = 0.0
+    if billable_seconds > 0:
+        ok, msg, video_minutes_reserved = await db.reserve_video_minutes(
+            current_user.user_id, billable_seconds, current_user.plan,
         )
         if not ok:
+            await db.release_credits(current_user.user_id, reserved_credits)
             raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=msg)
 
     # ── 4. Insert job row ──────────────────────────────────────
     job_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    await db._execute(
-        """
-        INSERT INTO jobs
-          (job_id, user_id, youtube_url, status, progress,
-           current_step, clip_count, created_at, updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
-        """,
-        job_id,
-        current_user.user_id,
-        body.youtube_url,
-        "processing",
-        0,
-        "Starting pipeline...",
-        body.options.clip_count,
-        now,
-    )
+    try:
+        await db._execute(
+            """
+            INSERT INTO jobs
+              (job_id, user_id, youtube_url, status, progress,
+               current_step, clip_count, created_at, updated_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
+            """,
+            job_id,
+            current_user.user_id,
+            body.youtube_url,
+            "processing",
+            0,
+            "Starting pipeline...",
+            body.options.clip_count,
+            now,
+        )
+    except Exception:
+        # INSERT failed (infra-level) — no job will ever run, so the
+        # reservations above must be rolled back, not silently kept.
+        await db.release_credits(current_user.user_id, reserved_credits)
+        if video_minutes_reserved > 0:
+            await db.release_video_minutes(current_user.user_id, video_minutes_reserved)
+        raise
 
     # ── 5. Fire pipeline immediately ───────────────────────────
     options = body.options.model_dump()
@@ -202,6 +294,28 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
     if video_duration_seconds > 0:
         options["prefetched_duration"] = video_duration_seconds
         options["prefetched_title"]    = video_meta.get("title", "")
+        # Gateway window already resolved against the real duration above —
+        # overwrite the raw client values so the orchestrator just uses
+        # these as-is instead of re-resolving (it only needs to resolve its
+        # own copy when prefetch failed here, see orchestrator.py STEP 2b).
+        options["gateway_start"] = gateway_start_seconds
+        options["gateway_end"]   = gateway_end_seconds
+
+    # Plan is needed by the orchestrator to re-validate/reserve video-minutes
+    # quota once it has the REAL duration, when this endpoint's own prefetch
+    # failed above — see orchestrator.py STEP 2b.
+    options["plan"] = current_user.plan
+    # How much was already reserved here, so the orchestrator knows exactly
+    # what to release on failure/timeout, and doesn't double-reserve.
+    options["reserved_credits"] = reserved_credits
+    if video_minutes_reserved > 0:
+        options["video_minutes_reserved"] = video_minutes_reserved
+
+    # Free-tier cap: only the first N minutes of transcript are sent to GPT
+    # for viral-moment finding (see orchestrator._execute_pipeline).
+    max_transcript_minutes = get_max_transcript_minutes_for_ai(current_user.plan)
+    if max_transcript_minutes is not None:
+        options["max_transcript_seconds"] = max_transcript_minutes * 60
 
     if settings.WORKER_SERVICE_URL:
         # Fire-and-forget HTTP call to the worker service — /internal/pipeline/run

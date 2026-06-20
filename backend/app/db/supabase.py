@@ -259,13 +259,6 @@ async def upsert_user(user_data: dict) -> dict:
     return row or {}
 
 
-async def increment_credits_used(user_id: str) -> None:
-    await _execute(
-        "UPDATE users SET credits_used = credits_used + 1 WHERE id=$1",
-        user_id,
-    )
-
-
 async def count_active_jobs(user_id: str) -> int:
     """Count jobs currently in processing state for this user."""
     row = await _fetchrow(
@@ -275,19 +268,17 @@ async def count_active_jobs(user_id: str) -> int:
     return int(row["cnt"]) if row else 0
 
 
-async def check_user_can_process(user_id: str) -> tuple[bool, str]:
+async def _maybe_reset_monthly(user_id: str) -> None:
     """
-    Check plan credit limit with automatic monthly reset.
     Resets BOTH credits_used AND video_minutes_used to 0 when the billing
-    month rolls over (tracked by credits_reset_at).
+    month rolls over (tracked by credits_reset_at). Shared by both
+    reserve_credits() and reserve_video_minutes() so either one being
+    called first triggers the reset correctly.
     """
     user = await get_user(user_id)
     if not user:
-        return False, "User not found"
-
+        return
     now = _now()
-
-    # ── Monthly reset (credits + video minutes together) ─────
     reset_at = user.get("credits_reset_at")
     needs_reset = (
         reset_at is None
@@ -305,82 +296,132 @@ async def check_user_can_process(user_id: str) -> tuple[bool, str]:
             """,
             user_id,
         )
-        user = await get_user(user_id)
-        if not user:
-            return False, "User not found after reset"
-
-    # ── Credits (shorts) quota ───────────────────────────────
-    if user["credits_used"] >= user["credits_limit"]:
-        return False, (
-            f"Monthly shorts limit reached ({user['credits_used']}/{user['credits_limit']}) "
-            f"for {user['plan']} plan. Resets next month — upgrade to continue."
-        )
-
-    return True, "ok"
 
 
-async def check_video_quota(
+async def reserve_credits(user_id: str, requested: int) -> int:
+    """
+    Atomically reserve up to `requested` credits (clips) against the user's
+    remaining monthly allowance, RIGHT NOW — not "check then bill later".
+
+    Why atomic: credits are billed per clip, and a plan's `credits_limit` is
+    advertised as "N shorts/month". If two requests from the same user both
+    read "remaining = 50" and proceed before either's usage lands, both
+    could reserve up to 50 — actual usage doubles past the plan's limit.
+    The `FOR UPDATE` row lock inside a transaction makes the read-then-write
+    atomic per user: a second concurrent call blocks until the first
+    transaction commits, then sees the updated (already-reserved) total.
+
+    Returns the number of credits ACTUALLY reserved (may be less than
+    `requested`, or 0 if none remain) — caller must clamp clip_count to this
+    and, if fewer clips are delivered than reserved, call release_credits()
+    for the unused portion (see orchestrator.py).
+    """
+    if requested <= 0:
+        return 0
+    await _maybe_reset_monthly(user_id)
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT credits_used, credits_limit FROM users WHERE id=$1 FOR UPDATE",
+                user_id,
+            )
+            if not row:
+                return 0
+            remaining = row["credits_limit"] - row["credits_used"]
+            reserve = max(0, min(requested, remaining))
+            if reserve > 0:
+                await conn.execute(
+                    "UPDATE users SET credits_used = credits_used + $2 WHERE id=$1",
+                    user_id, reserve,
+                )
+            return reserve
+
+
+async def release_credits(user_id: str, amount: int) -> None:
+    """
+    Refund `amount` previously-reserved credits — e.g. a job reserved 10
+    (clip_count) but only delivered 7 (some clips failed), so 3 are
+    refunded; or a job failed/timed out entirely, so its full reservation
+    is refunded. GREATEST(0, ...) guards against ever going negative.
+    """
+    if amount <= 0:
+        return
+    await _execute(
+        "UPDATE users SET credits_used = GREATEST(0, credits_used - $2) WHERE id=$1",
+        user_id, amount,
+    )
+
+
+async def reserve_video_minutes(
     user_id: str,
     duration_seconds: int,
     plan: str,
-) -> tuple[bool, str]:
+) -> tuple[bool, str, float]:
     """
-    Two-gate video duration check — called BEFORE creating the job.
+    Atomically check AND reserve video-minutes quota in one step — replaces
+    the old check-then-bill-later pattern (which had the same TOCTOU race as
+    credits: two concurrent submissions could both read "remaining" before
+    either's usage landed, and both pass).
 
     Gate 1 — per-video maximum: is this single video too long for the plan?
     Gate 2 — monthly hours quota: would adding this video exceed the month's
-              video_minutes_limit?
+              video_minutes_limit? Reserved atomically via FOR UPDATE if so.
 
-    Returns (True, "ok") or (False, human-readable reason).
+    Returns (ok, reason, reserved_minutes). `reserved_minutes` is the exact
+    amount reserved (0.0 if not ok) — IS the final bill on job success
+    (don't increment again), and must be refunded via release_video_minutes
+    if the job fails/times out before delivering anything.
     """
     duration_minutes = duration_seconds / 60
 
-    # Gate 1: per-video cap
+    # Gate 1: per-video cap (doesn't touch the DB, no reservation needed)
     max_mins = get_max_video_minutes(plan)
     if duration_minutes > max_mins:
         return False, (
             f"Video is {int(duration_minutes)} min — your {plan} plan allows "
             f"a maximum of {max_mins} min per video. "
             f"Try a shorter video or upgrade your plan."
-        )
+        ), 0.0
 
-    # Gate 2: monthly hours quota
-    user = await get_user(user_id)
-    if not user:
-        return False, "User not found"
-
-    used  = int(user.get("video_minutes_used", 0) or 0)
-    limit = int(user.get("video_minutes_limit", get_video_minutes_limit(plan)) or 0)
-    remaining = limit - used
-
-    if duration_minutes > remaining:
-        used_hrs  = round(used  / 60, 1)
-        limit_hrs = round(limit / 60, 1)
-        return False, (
-            f"Monthly video-hours quota reached ({used_hrs} / {limit_hrs} hrs used). "
-            f"This video is {int(duration_minutes)} min but you only have "
-            f"{max(0, int(remaining))} min remaining this month. "
-            f"Resets on the 1st — or upgrade for more hours."
-        )
-
-    return True, "ok"
-
-
-async def increment_video_minutes_used(user_id: str, minutes: int) -> None:
-    """
-    Add `minutes` to the user's running video_minutes_used counter.
-    Called once per successfully completed job.
-    Uses LEAST(used + n, limit) to never exceed the stored cap.
-    """
-    await _execute(
-        """
-        UPDATE users
-        SET video_minutes_used = LEAST(
-                COALESCE(video_minutes_used, 0) + $1,
-                COALESCE(video_minutes_limit, 30)
+    await _maybe_reset_monthly(user_id)
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT video_minutes_used, video_minutes_limit FROM users WHERE id=$1 FOR UPDATE",
+                user_id,
             )
-        WHERE id = $2
-        """,
-        max(0, minutes),
-        user_id,
+            if not row:
+                return False, "User not found", 0.0
+
+            used  = float(row["video_minutes_used"] or 0)
+            limit = float(row["video_minutes_limit"] or get_video_minutes_limit(plan))
+            remaining = limit - used
+
+            if duration_minutes > remaining:
+                used_hrs  = round(used  / 60, 1)
+                limit_hrs = round(limit / 60, 1)
+                return False, (
+                    f"Monthly video-hours quota reached ({used_hrs} / {limit_hrs} hrs used). "
+                    f"This video is {int(duration_minutes)} min but you only have "
+                    f"{max(0, int(remaining))} min remaining this month. "
+                    f"Resets on the 1st — or upgrade for more hours."
+                ), 0.0
+
+            await conn.execute(
+                "UPDATE users SET video_minutes_used = video_minutes_used + $2 WHERE id=$1",
+                user_id, duration_minutes,
+            )
+            return True, "ok", duration_minutes
+
+
+async def release_video_minutes(user_id: str, minutes: float) -> None:
+    """Refund previously-reserved video-minutes — e.g. a job failed/timed
+    out before delivering any clips, so its reservation shouldn't count."""
+    if minutes <= 0:
+        return
+    await _execute(
+        "UPDATE users SET video_minutes_used = GREATEST(0, video_minutes_used - $2) WHERE id=$1",
+        user_id, minutes,
     )
