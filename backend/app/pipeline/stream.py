@@ -747,17 +747,40 @@ async def get_audio_stream_url(video_id: str, session_id: str | None = None) -> 
     raise RuntimeError(f"Could not resolve audio stream for {video_id}")
 
 
+def _best_thumbnail(details: dict, video_id: str) -> str:
+    """
+    Highest-resolution thumbnail URL from InnerTube's own
+    `videoDetails.thumbnail.thumbnails[]` (ordered smallest -> largest),
+    falling back to the standard hqdefault.jpg guess if that's missing —
+    handles privacy/age-restricted/unusual videos where the guessed URL
+    might not actually exist.
+    """
+    thumbs = (details.get("thumbnail") or {}).get("thumbnails") or []
+    if thumbs:
+        return thumbs[-1]["url"]
+    return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+
+
 async def get_video_metadata(video_id: str, session_id: str | None = None) -> dict:
     """
     Fetch video title, duration, thumbnail.
 
     Order:
-      1. YouTube oEmbed  — public endpoint, no proxy, fastest
-                           (no duration field — triggers InnerTube for duration)
-      2. InnerTube ANDROID, no proxy — full metadata including duration
+      1. YouTube oEmbed              — public endpoint, no proxy, fastest
+                                        (no duration field — InnerTube below
+                                        is always needed for an actual duration)
+      2. InnerTube ANDROID, WITH proxy — full metadata including duration
+      3. InnerTube ANDROID, no proxy   — fallback, if #2 fails (proxy down/
+                                          unconfigured) or returns empty
 
-    Metadata calls are cheap/low-risk and don't need proxy bandwidth or IP
-    rotation — only transcript + stream/download routes go through the proxy.
+    #2 used to run without a proxy first ("low-risk, no IP rotation
+    needed"), but in production this runs from a Cloud Run datacenter IP,
+    which YouTube blocks/rate-limits far more aggressively than a
+    residential IP — the no-proxy attempt was silently failing on every
+    request in production, falling back to oEmbed's hardcoded duration=0
+    every time (visible as "0:00" everywhere duration is shown, e.g. the
+    minutes-gateway slider never appearing since it has nothing to set a
+    range over). Proxy-first fixes that; #3 is just a safety net.
     """
     # ── 1. oEmbed (fast, no proxy) ─────────────────────────────
     oembed_url = f"https://www.youtube.com/oembed?url=https://youtu.be/{video_id}&format=json"
@@ -777,20 +800,26 @@ async def get_video_metadata(video_id: str, session_id: str | None = None) -> di
     except Exception as e:
         logger.warning(f"[{video_id}] oEmbed metadata failed: {e}")
 
-    # ── 2. InnerTube ANDROID, no proxy (for duration, or if oEmbed failed) ──
-    try:
-        data = await call_player_api(video_id, client_name="ANDROID", proxy_url=None)
-        details = data.get("videoDetails", {})
-        if details:
-            return {
-                "title":     details.get("title", "")     or (oembed_meta or {}).get("title", ""),
-                "channel":   details.get("author", "")    or (oembed_meta or {}).get("channel", ""),
-                "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
-                "duration":  int(details.get("lengthSeconds", 0)),
-                "video_id":  video_id,
-            }
-    except Exception as e:
-        logger.warning(f"[{video_id}] InnerTube ANDROID metadata failed: {e}")
+    # ── 2 & 3. InnerTube ANDROID — WITH proxy first, no-proxy fallback ──
+    proxy_url = get_dataimpulse_proxy()
+    for attempt, use_proxy in ((2, proxy_url), (3, None)):
+        if attempt == 3 and use_proxy is None:
+            # #2 already ran with no proxy (none configured) — no point retrying identically
+            break
+        try:
+            data = await call_player_api(video_id, client_name="ANDROID", proxy_url=use_proxy)
+            details = data.get("videoDetails", {})
+            if details:
+                logger.info(f"[{video_id}] Metadata duration resolved via InnerTube (attempt {attempt}, proxy={'yes' if use_proxy else 'no'})")
+                return {
+                    "title":     details.get("title", "")     or (oembed_meta or {}).get("title", ""),
+                    "channel":   details.get("author", "")    or (oembed_meta or {}).get("channel", ""),
+                    "thumbnail": _best_thumbnail(details, video_id),
+                    "duration":  int(details.get("lengthSeconds", 0)),
+                    "video_id":  video_id,
+                }
+        except Exception as e:
+            logger.warning(f"[{video_id}] InnerTube ANDROID metadata failed (attempt {attempt}, proxy={'yes' if use_proxy else 'no'}): {e}")
 
     # oEmbed succeeded but InnerTube didn't — return oEmbed data (duration=0)
     if oembed_meta:
