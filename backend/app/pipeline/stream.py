@@ -509,15 +509,24 @@ async def _ytdlp_stream(
 def _fmt(height: int) -> str:
     """
     yt-dlp format selector capped at height.
-    AV1 (av01) is excluded: Cloud Run has no hardware AV1 decoder.
-    Tries H.264 mp4 first, then any non-AV1 container, then last-resort without codec filter.
+    AV1 (av01) is excluded: Cloud Run has no hardware AV1 decoder and
+    software decoding produces "Missing Sequence Header" / corrupted output.
+
+    Deliberately STRICT — every tier excludes av01, with NO unconstrained
+    fallback at the end (that's _fmt_unconstrained()/_fmt_relaxed()'s job,
+    used as explicit later tiers in the broader fallback chains). Letting
+    this selector silently fall through to AV1 when no clean format is
+    found at this provider meant videos that only had AV1 available at the
+    target height got an AV1 stream here, on attempt 1, before any of the
+    OTHER providers (InnerTube ANDROID/TV/IOS, other yt-dlp clients) ever
+    got a chance to find a non-AV1 option. If every tier here fails to
+    match, yt-dlp raises and the caller's fallback chain moves on instead —
+    which is the correct behaviour.
     """
     return (
         f"bestvideo[height<={height}][ext=mp4][vcodec!=av01]+bestaudio[ext=m4a]"
         f"/bestvideo[height<={height}][vcodec!=av01]+bestaudio"
         f"/best[height<={height}][vcodec!=av01]"
-        f"/best[height<={height}]"
-        f"/best"
     )
 
 
