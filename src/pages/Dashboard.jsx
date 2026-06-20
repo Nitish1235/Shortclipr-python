@@ -20,6 +20,7 @@ function formatTimer(createdAt) {
   return `${h}h ${m}m`
 }
 function isUrgent(createdAt) { return msRemaining(createdAt) < 6 * 3600000 }
+function isExpired(createdAt) { return msRemaining(createdAt) <= 0 }
 
 // Video-minutes stat formatting — e.g. 45 -> "45m", 125 -> "2h 5m"
 function formatMinutes(mins) {
@@ -238,8 +239,14 @@ export default function Dashboard() {
   useEffect(() => () => clearInterval(clipPollRef.current), [])
 
   // ── Derived clip lists ────────────────────────────────────────
+  // Clip files are deleted server-side 24h after generation (see
+  // ClipsHistory.jsx's matching 24h cutoff) — once that's passed, the
+  // clip rows still exist in the DB but their GCS files are gone, so
+  // showing them just renders broken/empty cards. Hide them here instead;
+  // generate a new batch for fresh clips.
+  const jobExpired = currentJob && isExpired(currentJob.created_at)
   const rawClips = clips.filter(c => c.clip_ready === false)   // Phase 1: encoding
-  const hdClips  = clips.filter(c => c.clip_ready === true)    // Phase 2: ready
+  const hdClips  = jobExpired ? [] : clips.filter(c => c.clip_ready === true)  // Phase 2: ready
   const filteredClips = hdClips.filter(c => {
     const id = c.clip_id || c.id
     if (filter === 'unpublished') return !publishedYT.has(id) && !publishedTT.has(id)
@@ -746,10 +753,15 @@ export default function Dashboard() {
                 display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap',
               }}>
                 <span style={{ fontWeight:700, fontSize:'.86rem', color:'#111' }}>
-                  {hdClips.length > 0 ? 'Your Clips' : 'No clips yet'}
+                  {hdClips.length > 0 ? 'Your Clips' : jobExpired ? 'Clips Expired' : 'No clips yet'}
                 </span>
                 {hdClips.length > 0 && (
                   <>
+                    {/* 24h expiry reminder — clips/files are deleted after this window */}
+                    <span style={{
+                      fontSize:'.68rem', fontWeight:600, padding:'2px 9px', borderRadius:'100px',
+                      background:'#fffbeb', color:'#b45309', border:'1px solid #fde68a',
+                    }}>⏳ Clips last 24h — download or publish before they expire</span>
                     <span style={{
                       fontSize:'.68rem', fontWeight:700, padding:'2px 9px', borderRadius:'100px',
                       background:'#f0fdf4', color:'#16a34a', border:'1px solid #bbf7d0',
@@ -792,7 +804,11 @@ export default function Dashboard() {
               <div style={{ padding:'16px' }}>
                 {hdClips.length === 0 ? (
                   <div style={{ textAlign:'center', padding:'32px 20px', color:'#9ca3af', fontSize:'.84rem' }}>
-                    {isActive ? 'HD clips will appear here as they finish encoding…' : 'No clips found.'}
+                    {isActive
+                      ? 'HD clips will appear here as they finish encoding…'
+                      : jobExpired
+                      ? '⏰ These clips have passed their 24h limit and were removed. Generate a new batch to get fresh ones.'
+                      : 'No clips found.'}
                   </div>
                 ) : filteredClips.length === 0 ? (
                   <div style={{ textAlign:'center', padding:'24px', color:'#9ca3af', fontSize:'.84rem' }}>

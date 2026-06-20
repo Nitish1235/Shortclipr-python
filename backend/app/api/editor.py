@@ -11,6 +11,7 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, Body, HTTPException, Query, status
@@ -207,7 +208,18 @@ async def download_clip(
     token: Optional[str] = Query(None),
 ):
     """
-    Redirect to the GCS video URL.
+    Redirect to the GCS video URL — with `response-content-disposition`
+    forcing an actual download instead of inline playback.
+
+    The object itself has no Content-Disposition set at upload time (it
+    can't — the SAME video_url is also used for inline playback elsewhere,
+    e.g. the dashboard's <video> preview/modal — setting it as an
+    attachment at upload time would break those). GCS's XML API
+    (storage.googleapis.com) honours `response-content-disposition` as a
+    per-request query-string override on public objects with no signing
+    needed, so we append it here instead — this endpoint is the only
+    place that needs "force download" behaviour.
+
     Accepts ?token= query param — browsers can't send Authorization headers
     when opening a URL directly (e.g. anchor click / window.open).
     Free users → 403.  Paid users → 302 redirect to the MP4.
@@ -237,4 +249,9 @@ async def download_clip(
     if str(clip["user_id"]) != payload.sub:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    return RedirectResponse(url=clip["video_url"], status_code=302)
+    filename = f"ShortClipr_{clip_id.split('-')[0]}.mp4"
+    disposition = quote(f'attachment; filename="{filename}"')
+    sep = "&" if "?" in clip["video_url"] else "?"
+    download_url = f"{clip['video_url']}{sep}response-content-disposition={disposition}"
+
+    return RedirectResponse(url=download_url, status_code=302)
