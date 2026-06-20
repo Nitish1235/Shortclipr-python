@@ -633,14 +633,43 @@ async def get_stream_urls(video_id: str, quality: str = "1080p", session_id: str
     separate audio stream is available, and user_agent is the UA both URLs
     must be downloaded with (CDN URLs are bound to the requesting client's UA).
 
-    Tries InnerTube ANDROID → TV → IOS in order so that video+audio URLs
-    always come from the same InnerTube call (same proxy exit IP — required
-    for IP-bound CDN URLs). Falls back to yt-dlp video-only if all clients fail.
+    Tries yt-dlp (tv_embedded, with audio) FIRST — in production all three
+    InnerTube clients (ANDROID/TV/IOS) were consistently getting blocked or
+    rejected before ever reaching yt-dlp, so every job paid for 3 guaranteed
+    failures (~8s) before landing on the one path that actually works. If
+    yt-dlp fails too, falls back to InnerTube ANDROID → TV → IOS, then
+    finally to the video-only chain (get_stream_url) as a last resort.
     """
     h = int(quality.rstrip("p"))
 
-    # Try InnerTube clients in order — video+audio resolved in ONE call so
-    # both CDN URLs share the same proxy exit IP (required for IP-bound URLs).
+    # ── 1. yt-dlp + tv_embedded + audio (now first — see docstring) ────
+    proxy = get_dataimpulse_proxy()
+    opts = _ytdlp_base_opts(proxy)
+    opts["format"] = _fmt(h)
+    opts["extractor_args"] = {"youtube": {"player_client": ["tv_embedded"]}}
+    loop = asyncio.get_running_loop()
+    try:
+        info = await loop.run_in_executor(
+            _YTDLP_POOL,
+            _ytdlp_run_sync,
+            opts,
+            f"https://www.youtube.com/watch?v={video_id}",
+        )
+        video_url = _pick_stream_ytdlp(info)
+        if video_url:
+            audio_url = _pick_audio_ytdlp(info)
+            logger.info(
+                f"[{video_id}] stream+audio ← yt-dlp tv_embedded "
+                f"(audio={'separate' if audio_url else 'embedded/none'})"
+            )
+            return video_url, audio_url, _WEB_USER_AGENT
+        logger.warning(f"[{video_id}] yt-dlp tv_embedded returned no video URL; trying InnerTube clients")
+    except Exception as ytdlp_exc:
+        logger.warning(f"[{video_id}] yt-dlp tv_embedded failed ({ytdlp_exc}); trying InnerTube clients")
+
+    # ── 2. InnerTube ANDROID → TV → IOS — video+audio resolved in ONE
+    # call so both CDN URLs share the same proxy exit IP (required for
+    # IP-bound URLs) ─────────────────────────────────────────────────
     _clients = [
         ("ANDROID", True,  _ANDROID_HEADERS["User-Agent"]),
         ("TV",      False, CLIENTS["TV"]["headers"]["User-Agent"]),
@@ -672,38 +701,10 @@ async def get_stream_urls(video_id: str, quality: str = "1080p", session_id: str
             logger.warning(f"[{video_id}] get_stream_urls InnerTube {client_name} failed ({exc}); trying next client")
             last_exc = exc
 
-    # All InnerTube clients failed — use yt-dlp with bestvideo+bestaudio so we
-    # can extract both URLs. If yt-dlp selects a single combined stream (no
-    # audio entry in requested_formats), audio is embedded and audio_url stays None.
-    logger.warning(f"[{video_id}] All InnerTube clients failed ({last_exc}); falling back to yt-dlp with audio")
-    proxy = get_dataimpulse_proxy()
-    opts = _ytdlp_base_opts(proxy)
-    opts["format"] = _fmt(int(quality.rstrip("p")))
-    opts["extractor_args"] = {"youtube": {"player_client": ["tv_embedded"]}}
-    loop = asyncio.get_running_loop()
-    try:
-        info = await loop.run_in_executor(
-            _YTDLP_POOL,
-            _ytdlp_run_sync,
-            opts,
-            f"https://www.youtube.com/watch?v={video_id}",
-        )
-    except Exception as ytdlp_exc:
-        logger.warning(f"[{video_id}] yt-dlp with audio failed ({ytdlp_exc}); falling back to video-only chain")
-        video_url, user_agent = await get_stream_url(video_id, quality, session_id)
-        return video_url, None, user_agent
-
-    video_url = _pick_stream_ytdlp(info)
-    audio_url = _pick_audio_ytdlp(info)
-    if not video_url:
-        video_url2, user_agent2 = await get_stream_url(video_id, quality, session_id)
-        return video_url2, None, user_agent2
-
-    logger.info(
-        f"[{video_id}] stream+audio ← yt-dlp tv_embedded fallback "
-        f"(audio={'separate' if audio_url else 'embedded/none'})"
-    )
-    return video_url, audio_url, _WEB_USER_AGENT
+    # ── 3. All else failed — video-only chain as the final fallback ────
+    logger.warning(f"[{video_id}] yt-dlp + all InnerTube clients failed ({last_exc}); falling back to video-only chain")
+    video_url, user_agent = await get_stream_url(video_id, quality, session_id)
+    return video_url, None, user_agent
 
 
 async def get_audio_stream_url(video_id: str, session_id: str | None = None) -> str:
