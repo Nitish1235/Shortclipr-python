@@ -344,10 +344,11 @@ class TestGenerateRequest(BaseModel):
 @router.post("/admin/test/generate")
 async def admin_test_generate(body: TestGenerateRequest, admin: AdminUser):
     """
-    Admin: kick off a 22-clip test batch (no AI scoring).
+    Admin: kick off a test batch (no AI scoring) — clip count tracks
+    VALID_STYLES + VALID_TEMPLATES, currently 11 + 5 = 16 clips.
 
-    - Clips 1-11:  sequential 30s segments, one per caption style (all 11)
-    - Clips 12-22: sequential 30s segments, one per shorts template (all 11)
+    - First block:  sequential 30s segments, one per caption style (VALID_STYLES)
+    - Second block: sequential 30s segments, one per shorts template (VALID_TEMPLATES)
 
     Returns a job_id to poll via GET /admin/test/jobs/{job_id}.
     """

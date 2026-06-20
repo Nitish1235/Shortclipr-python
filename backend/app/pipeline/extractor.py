@@ -26,17 +26,11 @@ OUTPUT ASPECT RATIOS  (ASPECT_DIMENSIONS):
   glass        Glassmorphism
                Blurred + brightness-reduced bg, main video crisp center.
 
-  color_bars   Solid color bars
+  color_bars   Solid color bars (merged: covers the old "gradient",
+               "cinema", and "neon_frame" looks — they were all visually
+               near-identical bar/frame variants, so pick any colour via
+               `bar_color` — e.g. "#000000" reproduces the old cinema look)
                Custom-color bars top & bottom (brand / aesthetic).
-
-  gradient     Gradient bars
-               Top bar dark → bright, bottom bar bright → dark.
-
-  cinema       Cinematic black bars
-               Classic letterbox feel in portrait format.
-
-  neon_frame   Neon frame
-               Thin colored border all around the video.
 
   gameplay     Gameplay / Podcast (TEMPORARILY DISABLED — registration is
                commented out below pending a rework; function kept intact)
@@ -73,10 +67,9 @@ VALID_TEMPLATES = [
     "blur_bg",       # Blur background
     "zoom_blur",     # Heavy zoom + blur
     "glass",         # Glassmorphism
-    "color_bars",    # Solid coloured bars
-    "gradient",      # Gradient bars
-    "cinema",        # Cinematic black bars
-    "neon_frame",    # Coloured neon border
+    "color_bars",    # Solid coloured bars — merged: subsumes the old
+                     # "gradient"/"cinema"/"neon_frame" (near-identical bar
+                     # looks, pick the look via bar_color, e.g. black = cinema)
     # "gameplay",    # Portrait top 30 % / full bottom 70 % — temporarily disabled, will rework
 ]
 
@@ -457,16 +450,6 @@ def _hex_to_ffmpeg(color: str) -> str:
     return "0x" + color.lstrip("#").upper()
 
 
-def _hex_to_rgb(color: str) -> tuple[int, int, int]:
-    c = color.lstrip("#")
-    return int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
-
-
-def _darken(color: str, factor: float = 0.3) -> str:
-    r, g, b = _hex_to_rgb(color)
-    return f"0x{int(r*factor):02X}{int(g*factor):02X}{int(b*factor):02X}"
-
-
 # Beat-synced punch-zoom tuning constants
 _ZOOM_FPS       = 30
 _ZOOM_ATTACK    = 0.12   # seconds to punch in
@@ -621,13 +604,7 @@ def _fg_geometry(template: str, width: int, height: int, src_w: int, src_h: int)
         fg_w = float(_even_round(width * 1.2))
         fg_h = fg_w * src_h / src_w
         return fg_w, fg_h, (width - fg_w) / 2, (height - fg_h) / 2
-    if template == "neon_frame":
-        # scale to inner_w x inner_h (decrease), padded centred, overlay at (20,20)
-        inner_w, inner_h = width - 40, height - 40
-        scale = min(inner_w / src_w, inner_h / src_h)
-        fg_w, fg_h = src_w * scale, src_h * scale
-        return fg_w, fg_h, 20 + (inner_w - fg_w) / 2, 20 + (inner_h - fg_h) / 2
-    # color_bars / gradient / cinema: scale to width x vid_h (decrease), padded
+    # Fallback (e.g. color_bars): scale to width x vid_h (decrease), padded
     # centred horizontally, top-aligned (y=0) within the vid box at y=bar_h
     bar_h = _even_round(height * 656 / 1920)
     vid_h = height - 2 * bar_h
@@ -892,87 +869,10 @@ def _fc_colour_bars(
     )
 
 
-# ── Template 5: gradient ──────────────────────────────────────
-
-def _fc_gradient(
-    bar_color: str,
-    zoom_beats: list[float] | None,
-    width: int,
-    height: int,
-    face_track: list[tuple[float, float, float]] | None,
-    src_w: int,
-    src_h: int,
-    out_label: str = "out",
-) -> str:
-    """
-    Gradient bars — top bar is dark, bottom bar is the accent colour.
-    Creates a visual depth / branded look.
-    """
-    bright = _hex_to_ffmpeg(bar_color)
-    dark   = _darken(bar_color, 0.25)
-    bar_h  = _even_round(height * 0.15)
-    vid_h  = height - 2 * bar_h
-    cx = _fc_crop_offset(face_track, "x", "iw", "ow", "(iw-ow)/2")
-    cy = _fc_crop_offset(face_track, "y", "ih", "oh", "(ih-oh)/2")
-    return (
-        f"color=c={dark}:s={width}x{bar_h}[topbar];"
-        f"color=c={bright}:s={width}x{bar_h}[botbar];"
-        f"[0:v]scale={width}:{vid_h}:force_original_aspect_ratio=increase:flags=lanczos,"
-        f"crop={width}:{vid_h}:'{cx}':'{cy}',"
-        f"unsharp=lx=5:ly=5:la=0.8:cx=5:cy=5:ca=0.0[vid];"
-        f"[topbar][vid][botbar]vstack=inputs=3[{out_label}]"
-    )
-
-
-# ── Template 6: cinema ────────────────────────────────────────
-
-def _fc_cinema(
-    zoom_beats: list[float] | None,
-    width: int,
-    height: int,
-    face_track: list[tuple[float, float, float]] | None,
-    src_w: int,
-    src_h: int,
-    out_label: str = "out",
-) -> str:
-    """Classic cinematic black bars — letterbox portrait."""
-    return _fc_colour_bars("#000000", zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
-
-
-# ── Template 7: neon_frame ────────────────────────────────────
-
-def _fc_neon_frame(
-    bar_color: str,
-    zoom_beats: list[float] | None,
-    width: int,
-    height: int,
-    face_track: list[tuple[float, float, float]] | None,
-    src_w: int,
-    src_h: int,
-    out_label: str = "out",
-) -> str:
-    """
-    Solid coloured border around a face-tracked crop-fill inner video.
-    20 px border on all sides → inner area = (width-40) × (height-40).
-
-    The inner video uses crop-fill (not letterbox) so the speaker fills the
-    bordered area — same OpusClip crop look but with a coloured frame.
-    _fast_crop_pan is NOT applied: it would crop 21 px from each side,
-    destroying the 20 px border.
-    """
-    c  = _hex_to_ffmpeg(bar_color)
-    border = 20
-    inner_w = width - 2 * border
-    inner_h = height - 2 * border
-    cx = _fc_crop_offset(face_track, "x", "iw", "ow", "(iw-ow)/2")
-    cy = _fc_crop_offset(face_track, "y", "ih", "oh", "(ih-oh)/2")
-    return (
-        f"color=c={c}:s={width}x{height}[frame];"
-        f"[0:v]scale={inner_w}:{inner_h}:force_original_aspect_ratio=increase:flags=lanczos,"
-        f"crop={inner_w}:{inner_h}:'{cx}':'{cy}',"
-        f"unsharp=lx=5:ly=5:la=0.8:cx=5:cy=5:ca=0.0[vid];"
-        f"[frame][vid]overlay={border}:{border}[{out_label}]"
-    )
+# Templates 5-7 (gradient / cinema / neon_frame) were merged into
+# color_bars above — they were near-identical bar/frame variants of the
+# same crop-fill-with-border look. Use `bar_color` to pick the look (e.g.
+# "#000000" reproduces the old cinema black bars).
 
 
 # ── Template 10: gameplay (TEMPORARILY DISABLED, see VALID_TEMPLATES) ──
@@ -1033,12 +933,6 @@ def _build_template_filter(
         return _fc_glass(width, height, zoom_beats, face_track, src_w, src_h, out_label=out_label)
     elif template == "color_bars":
         return _fc_colour_bars(bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
-    elif template == "gradient":
-        return _fc_gradient(bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
-    elif template == "cinema":
-        return _fc_cinema(zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
-    elif template == "neon_frame":
-        return _fc_neon_frame(bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
     # elif template == "gameplay":  # temporarily disabled, will rework — function kept above
     #     return _fc_gameplay(zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
     return _fc_crop_fill(width, height, face_track, src_w, src_h, out_label=out_label)

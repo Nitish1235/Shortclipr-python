@@ -7,13 +7,11 @@ import CaptionOverlay from '../components/CaptionOverlay'
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
 const TEMPLATES = [
+  { id:'crop_fill',    name:'Crop Fill'    }, // default — no zoom, face-aware native crop
   { id:'blur_bg',      name:'Blur BG'      },
   { id:'zoom_blur',    name:'Zoom Blur'    },
   { id:'glass',        name:'Glass'        },
-  { id:'color_bars',   name:'Color Bars'   },
-  { id:'gradient',     name:'Gradient'     },
-  { id:'cinema',       name:'Cinema'       },
-  { id:'neon_frame',   name:'Neon Frame'   },
+  { id:'color_bars',   name:'Color Bars'   }, // merged: covers old Gradient/Cinema/Neon Frame looks — pick via bar colour
   // { id:'gameplay',  name:'Gameplay'     }, // temporarily disabled, will rework
 ]
 
@@ -87,7 +85,7 @@ export default function Editor() {
   const [loading,            setLoading]            = useState(true)
 
   const [aspect,            setAspect]            = useState('9:16')
-  const [selectedTemplate,  setSelectedTemplate]  = useState('blur_bg')
+  const [selectedTemplate,  setSelectedTemplate]  = useState('crop_fill')
   const [captionStyle,      setCaptionStyle]      = useState('karaoke')
   const [colorCombo,        setColorCombo]        = useState('white_black')
   const [hAlign,            setHAlign]            = useState('center')

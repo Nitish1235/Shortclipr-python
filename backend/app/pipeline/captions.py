@@ -173,7 +173,6 @@ HOOK_TITLE_DURATION = 2.6
 # translucent "glass" box instead, since there's no bar to straddle.
 TEMPLATE_HAS_BARS = {
     "blur_bg", "zoom_blur", "glass", "color_bars",
-    "gradient", "cinema", "neon_frame",
 }
 
 # Approximate Y (PlayResY=1920 units) of the bar/video boundary for

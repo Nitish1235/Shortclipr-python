@@ -52,7 +52,7 @@ class JobOptions(BaseModel):
     h_align:      str = "center"        # horizontal position
     v_align:      str = "bottom"        # vertical position
     words_per_line:  int = 3             # 1 | 2 | 3  — words per screen
-    short_template:  str = "blur_bg"    # 9:16 layout template
+    short_template:  str = "crop_fill"  # 9:16 layout template
     bar_color:       str = "#0d0d0d"    # hex colour for bars / frame / gradient
     aspect:          str = "9:16"       # output aspect ratio — 9:16 | 16:9 | 1:1
     topic:           str = ""
@@ -91,7 +91,7 @@ class JobOptions(BaseModel):
     @field_validator("short_template")
     @classmethod
     def validate_short_template(cls, v: str) -> str:
-        return v if v in VALID_TEMPLATES else "blur_bg"
+        return v if v in VALID_TEMPLATES else "crop_fill"
 
     @field_validator("bar_color")
     @classmethod

@@ -1,12 +1,14 @@
 """
 test_pipeline.py — Admin Test Lab pipeline.
 
-Generates a fixed batch of 22 clips from a YouTube video for QA purposes:
+Generates a fixed batch of TOTAL_CLIPS clips from a YouTube video for QA
+purposes (TOTAL_CLIPS = len(VALID_STYLES) + len(VALID_TEMPLATES), currently
+11 + 5 = 16 — tracks whatever styles/templates are currently registered):
   - No AI viral scoring — clips are sequential ~30s segments starting from
     the beginning of the video, snapped to transcript line boundaries
     (see ai_clipper.find_sequential_clips).
-  - Clips 0-10:  ALL 11 caption styles, one per clip, same reframe template.
-  - Clips 11-21: ALL 11 reframe templates, one per clip, same caption style.
+  - First block:  ALL caption styles, one per clip, same reframe template.
+  - Second block: ALL reframe templates, one per clip, same caption style.
 
 Each finished clip is uploaded to GCS under job_id = "test_<hex>" so it
 shows up in the normal clips/{job_id}/ prefix and is browsable via

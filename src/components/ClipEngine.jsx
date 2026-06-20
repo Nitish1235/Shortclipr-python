@@ -90,37 +90,15 @@ function TemplatePreviewBg({ template, thumbnail, barColor }) {
     case 'zoom_blur':
       return <>{bgBlur(28, 1.3, 0.85)}{fgImg({ transform:'translate(-50%,-50%) scale(1.2)' })}</>
     case 'color_bars':
+      // Merged: this one case now covers the old gradient/cinema/neon_frame
+      // looks too — they were near-identical bar/frame variants. Pick the
+      // look via the Frame Color swatch (e.g. black = old "cinema").
       return (
         <>
           <div style={{ position:'absolute', top:0, left:0, right:0, height:'18%', background:barColor }}/>
           <div style={{ position:'absolute', bottom:0, left:0, right:0, height:'18%', background:barColor }}/>
           {fgImg({ top:'50%' })}
         </>
-      )
-    case 'gradient':
-      return (
-        <>
-          <div style={{ position:'absolute', top:0, left:0, right:0, height:'18%', background:`linear-gradient(to bottom, ${barColor}, transparent)` }}/>
-          <div style={{ position:'absolute', bottom:0, left:0, right:0, height:'18%', background:`linear-gradient(to top, ${barColor}, transparent)` }}/>
-          {fgImg()}
-        </>
-      )
-    case 'cinema':
-      return (
-        <>
-          <div style={{ position:'absolute', top:0, left:0, right:0, height:'12%', background:'#000' }}/>
-          <div style={{ position:'absolute', bottom:0, left:0, right:0, height:'12%', background:'#000' }}/>
-          {fgImg()}
-        </>
-      )
-    case 'neon_frame':
-      return (
-        <div style={{
-          position:'absolute', inset:'10%', overflow:'hidden',
-          border:`3px solid ${barColor}`, boxShadow:`0 0 10px ${barColor}`,
-        }}>
-          <img src={img} alt="" style={{ width:'100%', height:'100%', objectFit:'contain' }}/>
-        </div>
       )
     case 'crop_fill':
     default:
@@ -158,7 +136,7 @@ export default function ClipEngine({ onJobCreated }) {
   const [captionStyle,  setCaptionStyle]  = useState('word_pop')
   const [colorCombo,    setColorCombo]    = useState('white_black')
   const [wordsPerLine,  setWordsPerLine]  = useState(2)
-  const [shortTemplate, setShortTemplate] = useState('blur_bg')
+  const [shortTemplate, setShortTemplate] = useState('crop_fill')
   const [barColor,      setBarColor]      = useState('#0d0d0d')
   const [aspect,        setAspect]        = useState('9:16')
 
@@ -333,13 +311,11 @@ export default function ClipEngine({ onJobCreated }) {
   /* ── Config phase ── */
   if (mode === 'config' && videoData) {
     const templates = [
+      { val:'crop_fill',    label:'✂ Crop Fill',      sub:'Default · No Zoom' },
       { val:'blur_bg',      label:'🌫 Blur BG',       sub:'Most Popular' },
       { val:'zoom_blur',    label:'🔍 Zoom Blur',     sub:'Dramatic' },
       { val:'glass',        label:'🪟 Glass',          sub:'Premium' },
-      { val:'color_bars',   label:'🎨 Color Bars',    sub:'Branded' },
-      { val:'gradient',     label:'🌈 Gradient',       sub:'Instagram' },
-      { val:'cinema',       label:'🎬 Cinema',         sub:'Black Bars' },
-      { val:'neon_frame',   label:'💡 Neon Frame',    sub:'Eye-catch' },
+      { val:'color_bars',   label:'🎨 Color Bars',    sub:'Branded' }, // merged: covers old Gradient/Cinema/Neon Frame — pick via frame colour below
       // { val:'gameplay',  label:'🎮 Gameplay',       sub:'Gaming' }, // temporarily disabled, will rework
     ]
 
@@ -559,7 +535,7 @@ export default function ClipEngine({ onJobCreated }) {
               </div>
 
               {/* Bar/frame color picker */}
-              {['color_bars','gradient','neon_frame'].includes(shortTemplate) && (
+              {shortTemplate === 'color_bars' && (
                 <div style={{ ...rowStyle, borderBottom:'none' }}>
                   <span style={labelStyle}>Frame Color</span>
                   <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap' }}>
