@@ -121,6 +121,32 @@ async def _mux(video_path: Path, audio_path: Path, output_path: Path) -> None:
 
 # ── DASH sidx parser ───────────────────────────────────────────────────────────
 
+def _find_sidx_extent(data: bytes) -> tuple[int, int] | None:
+    """
+    Locate the sidx box's (offset, declared_size) WITHOUT parsing its entry
+    table — just enough to know how many bytes the full box actually needs.
+
+    Used because the sidx box's size scales with video length (one entry
+    per segment, ~roughly every few hundred KB) — a multi-hour video's sidx
+    box can be much bigger than a short clip's. The fixed-size probes below
+    only guarantee the box's *header* is captured, not necessarily its
+    full entry table; callers must check this extent and re-probe with a
+    larger range if `len(data) < offset + size` before calling _parse_sidx,
+    or it'll crash with "unpack requires a buffer of 4 bytes" deep in the
+    entries loop once it reads past the truncated buffer.
+    """
+    i = 0
+    while i < len(data) - 8:
+        size = struct.unpack(">I", data[i : i + 4])[0]
+        name = data[i + 4 : i + 8].decode("latin1", errors="replace")
+        if name == "sidx":
+            return i, size
+        if size < 8:
+            break
+        i += size
+    return None
+
+
 def _parse_sidx(data: bytes) -> tuple[int, list[dict]]:
     """
     Scan `data` for an MP4 sidx (Segment Index) box and return:
@@ -247,6 +273,47 @@ async def download_source_parallel(
     return output_path
 
 
+async def _probe_full_sidx(client: httpx.AsyncClient, url: str, headers: dict) -> bytes:
+    """
+    Probe `url` for its complete sidx box, growing the fetch range as needed.
+
+    1. Probe first 8 KB. If the sidx box header isn't even in there, expand
+       to 64 KB (covers the vast majority of videos).
+    2. Once the box header is found, check its DECLARED size (sidx_size) —
+       for long videos (many segments => many entries) the full box can
+       exceed even the 64 KB probe. If so, re-fetch with the EXACT range
+       needed to capture the whole box (+1 KB margin) before parsing.
+
+    Returns the probe bytes, guaranteed to contain the full sidx box if one
+    was found at all (raises naturally via _parse_sidx if no sidx exists).
+    """
+    probe_headers = {**headers, "Range": "bytes=0-8191"}
+    resp = await client.get(url, headers=probe_headers)
+    if resp.status_code not in (200, 206):
+        raise RuntimeError(f"sidx probe failed: HTTP {resp.status_code}")
+    probe_data = resp.content
+
+    extent = _find_sidx_extent(probe_data)
+    if extent is None:
+        probe_headers = {**headers, "Range": "bytes=0-65535"}
+        resp = await client.get(url, headers=probe_headers)
+        probe_data = resp.content
+        extent = _find_sidx_extent(probe_data)
+
+    if extent is not None:
+        sidx_offset, sidx_size = extent
+        needed = sidx_offset + sidx_size
+        if len(probe_data) < needed:
+            # Box header found but its entry table extends past what we've
+            # fetched — common on long videos. Re-probe with the exact size.
+            logger.info(f"sidx box ({sidx_size} bytes) exceeds probe ({len(probe_data)} bytes) — re-probing")
+            probe_headers = {**headers, "Range": f"bytes=0-{needed + 1023}"}
+            resp = await client.get(url, headers=probe_headers)
+            probe_data = resp.content
+
+    return probe_data
+
+
 async def _fetch_clip_segments_for_url(
     client: httpx.AsyncClient,
     url: str,
@@ -263,18 +330,7 @@ async def _fetch_clip_segments_for_url(
     callers need this to compute the correct ffmpeg -ss offset, since the fMP4
     preserves original absolute PTS values (e.g. starts at t=60s, not t=0).
     """
-    # Probe first 8 KB for sidx; expand to 64 KB if not found
-    probe_headers = {**headers, "Range": "bytes=0-8191"}
-    resp = await client.get(url, headers=probe_headers)
-    if resp.status_code not in (200, 206):
-        raise RuntimeError(f"sidx probe failed: HTTP {resp.status_code}")
-    probe_data = resp.content
-
-    if b"sidx" not in probe_data:
-        probe_headers = {**headers, "Range": "bytes=0-65535"}
-        resp = await client.get(url, headers=probe_headers)
-        probe_data = resp.content
-
+    probe_data = await _probe_full_sidx(client, url, headers)
     init_end, segments = _parse_sidx(probe_data)
 
     relevant = [s for s in segments if s["end_t"] > clip_start and s["start_t"] < clip_end]
@@ -314,15 +370,7 @@ async def _parse_sidx_from_url(
     headers: dict,
 ) -> tuple[int, list[dict]]:
     """Download the minimum bytes needed to parse sidx from a CDN URL."""
-    probe_headers = {**headers, "Range": "bytes=0-8191"}
-    resp = await client.get(url, headers=probe_headers)
-    if resp.status_code not in (200, 206):
-        raise RuntimeError(f"sidx probe failed: HTTP {resp.status_code}")
-    probe_data = resp.content
-    if b"sidx" not in probe_data:
-        probe_headers = {**headers, "Range": "bytes=0-65535"}
-        resp = await client.get(url, headers=probe_headers)
-        probe_data = resp.content
+    probe_data = await _probe_full_sidx(client, url, headers)
     return _parse_sidx(probe_data)
 
 

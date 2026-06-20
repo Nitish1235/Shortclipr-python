@@ -173,14 +173,30 @@ def _chunk_transcript(
     Each entry is paired with its global index into `transcript` so the
     chunk's GPT response (a line number) can be mapped back to a real
     timestamp without GPT needing to read/compute one.
+
+    `video_dur` (from _video_duration) is the transcript's absolute END
+    time, not its span — bucketing is done relative to the transcript's
+    own first entry (`floor`), not absolute t=0. This matters once the
+    transcript has been pre-filtered to a sub-window of the full video
+    (e.g. the minutes gateway, or the free-tier transcript cap) starting
+    well after t=0: without rebasing, segment_size would be computed from
+    the absolute end time while bucket indices use absolute start times,
+    collapsing every entry into the last few buckets instead of spreading
+    them across the actual window (e.g. a 1800-2400s window with
+    clip_count=10 would put everything in buckets 7-9, leaving 0-6 empty).
     """
-    if clip_count <= 1 or video_dur <= 0:
+    if clip_count <= 1 or video_dur <= 0 or not transcript:
         return [list(enumerate(transcript))]
 
-    segment_size = video_dur / clip_count
+    floor = transcript[0]["start"]
+    span = video_dur - floor
+    if span <= 0:
+        return [list(enumerate(transcript))]
+
+    segment_size = span / clip_count
     chunks: list[list[tuple[int, TranscriptEntry]]] = [[] for _ in range(clip_count)]
     for i, e in enumerate(transcript):
-        idx = min(int(e["start"] // segment_size), clip_count - 1)
+        idx = min(int((e["start"] - floor) // segment_size), clip_count - 1)
         chunks[idx].append((i, e))
     return chunks
 

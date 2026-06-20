@@ -246,7 +246,7 @@ async def _execute_pipeline(
         except Exception as dash_exc:
             logger.warning(f"[{job_id}] DASH batch failed ({dash_exc}); falling back to full source")
             await db.update_job_progress(job_id, 25, "Downloading source video (fallback)...")
-            source_path = await _get_source(stream_url, audio_url, user_agent, video_id, job_dir, session_id=job_id)
+            source_path = await _get_source(stream_url, audio_url, user_agent, video_id, job_dir)
 
         await db.update_job_progress(job_id, 33, f"Clipping & publishing {len(timestamps)} previews...")
 

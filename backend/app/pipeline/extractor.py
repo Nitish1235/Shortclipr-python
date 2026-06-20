@@ -53,7 +53,7 @@ import tempfile
 from pathlib import Path
 
 from app.core.config import get_settings
-from app.core.proxy import get_proxy_url
+from app.core.proxy import get_dataimpulse_proxy
 from app.pipeline.captions import Caption, build_ass_content
 from app.pipeline.downloader import download_clip_segments, download_source_parallel
 
@@ -331,18 +331,20 @@ async def _get_source(
     user_agent: str | None,
     video_id: str | None,
     job_dir: Path,
-    session_id: str | None = None,
 ) -> Path:
     """
-    Resolve a local copy of the full source video — always routed through
-    the proxy (same IP that resolved the stream URL, for IP-bound CDN URLs).
+    Resolve a local copy of the full source video — routed through
+    DataImpulse (the SAME provider get_stream_urls() used to mint
+    `stream_url`/`audio_url` in stream.py — was previously routed through
+    the unrelated proxy-cheap pool via get_proxy_url(), which could 403/
+    return empty on IP-bound CDN URLs signed against a DataImpulse exit IP).
 
     Tries a parallel ranged HTTP download first (fast). If the CDN URL
     doesn't support Range requests or otherwise fails, falls back to the
     existing sequential chain: proxied ffmpeg download -> yt-dlp.
     """
     source_path = job_dir / "source.mp4"
-    proxy_url = get_proxy_url(session_id)
+    proxy_url = get_dataimpulse_proxy()
 
     try:
         return await download_source_parallel(
@@ -384,7 +386,7 @@ async def get_clip_via_dash(
     Falls back to RuntimeError on any sidx parse or fetch failure — callers
     should catch and fall back to _get_source + extract_clip.
     """
-    proxy_url = get_proxy_url(session_id)
+    proxy_url = get_dataimpulse_proxy()  # same provider that minted stream_url (see _get_source)
     raw_path  = output_path.with_suffix(".dash_raw.mp4")
 
     try:

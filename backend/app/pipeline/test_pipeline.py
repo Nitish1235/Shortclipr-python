@@ -86,7 +86,7 @@ async def run_test_pipeline(job_id: str, youtube_url: str, quality: str = "1080p
 
         job["progress"] = 10
         job["current_step"] = "Downloading source video..."
-        source_path = await _get_source(stream_url, audio_url, user_agent, video_id, job_dir, session_id=job_id)
+        source_path = await _get_source(stream_url, audio_url, user_agent, video_id, job_dir)
 
         job["progress"] = 25
         n = len(timestamps)
