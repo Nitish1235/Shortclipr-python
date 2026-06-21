@@ -9,7 +9,11 @@ YouTube flow:
 TikTok flow (Content Posting API v2):
   1. GET  /social/auth/tiktok              → returns TikTok OAuth URL
   2. GET  /social/auth/tiktok/callback     → exchanges code → stores access+refresh tokens
-  3. POST /social/publish/tiktok           → publishes clips via PULL_FROM_URL
+  3. POST /social/publish/tiktok           → publishes clips via FILE_UPLOAD
+                                              (PULL_FROM_URL would need TikTok
+                                              to verify ownership of the GCS
+                                              domain, which we don't own —
+                                              see _publish_one_tiktok)
   4. POST /social/publish/tiktok/status    → polls publish_id status
 
 Utility:
@@ -392,8 +396,11 @@ async def _tiktok_refresh_token(user_id: str, tt_tokens: dict) -> dict:
 @router.post("/publish/tiktok")
 async def publish_to_tiktok(body: PublishRequest, current_user: CurrentUser):
     """
-    Publish clips to TikTok via Content Posting API v2 (PULL_FROM_URL).
-    TikTok fetches the video directly from the GCS public URL.
+    Publish clips to TikTok via Content Posting API v2 (FILE_UPLOAD).
+    We fetch each clip's bytes from GCS ourselves and upload them directly
+    to TikTok — PULL_FROM_URL would require TikTok to verify ownership of
+    the domain hosting the video, which isn't possible for our shared GCS
+    public URL.
 
     Sandbox note: posts are visible only to sandbox testers;
     privacy_level is forced to SELF_ONLY in sandbox mode.
@@ -434,12 +441,59 @@ async def publish_to_tiktok(body: PublishRequest, current_user: CurrentUser):
     return {"results": results}
 
 
+_TIKTOK_MIN_CHUNK_BYTES = 5 * 1024 * 1024     # TikTok's documented chunk-size floor
+_TIKTOK_MAX_CHUNK_BYTES = 64 * 1024 * 1024    # TikTok's documented chunk-size ceiling
+
+
+def _tiktok_chunk_plan(video_size: int) -> tuple[int, int]:
+    """
+    (chunk_size, total_chunk_count) per TikTok's FILE_UPLOAD rules.
+
+    Single chunk whenever the whole file fits under the 64 MB ceiling —
+    true for virtually every clip this app produces (short vertical
+    1080x1920 clips at crf 18 land well under that). Falls back to fixed
+    60 MB chunks for the rare oversized clip; not pursuing exact
+    last-chunk-size correctness for that edge case since it practically
+    never occurs here.
+    """
+    if video_size <= _TIKTOK_MAX_CHUNK_BYTES:
+        return video_size, 1
+    chunk_size = 60 * 1024 * 1024
+    total_chunks = -(-video_size // chunk_size)  # ceil division
+    return chunk_size, total_chunks
+
+
 async def _publish_one_tiktok(item: PublishItem, access_token: str) -> dict:
     """
-    Publish a single clip to TikTok via PULL_FROM_URL.
+    Publish a single clip to TikTok via FILE_UPLOAD — fetches the clip's
+    bytes from GCS ourselves and uploads them directly to TikTok, instead
+    of handing TikTok a URL to pull from.
+
+    PULL_FROM_URL (the previous approach) requires TikTok to verify
+    ownership of the domain hosting the video before it'll fetch from it —
+    impossible for our GCS public URLs (storage.googleapis.com is Google's
+    domain, not ours to verify), which is exactly the
+    "url_ownership_unverified" error this replaces. FILE_UPLOAD has no such
+    requirement since we send the bytes ourselves.
+
     Returns a result dict with status, publish_id (on success), or error.
     """
-    payload = {
+    try:
+        async with httpx.AsyncClient(timeout=_GCS_FETCH_TIMEOUT) as client:
+            gcs_resp = await client.get(item.video_url)
+            if gcs_resp.status_code != 200:
+                raise RuntimeError(f"GCS returned {gcs_resp.status_code}")
+            video_bytes = gcs_resp.content
+            if len(video_bytes) > _MAX_VIDEO_BYTES:
+                raise RuntimeError(f"Clip too large ({len(video_bytes) // (1024*1024)} MB)")
+    except Exception as exc:
+        logger.error(f"GCS fetch failed for TikTok clip {item.clip_id}: {exc}")
+        return {"clip_id": item.clip_id, "status": "failed", "error": str(exc)}
+
+    video_size = len(video_bytes)
+    chunk_size, total_chunk_count = _tiktok_chunk_plan(video_size)
+
+    init_payload = {
         "post_info": {
             "title":                  item.title[:150],
             "privacy_level":          "SELF_ONLY",   # safe default; upgrade to PUBLIC after review
@@ -449,8 +503,10 @@ async def _publish_one_tiktok(item: PublishItem, access_token: str) -> dict:
             "video_cover_timestamp_ms": 1000,
         },
         "source_info": {
-            "source":    "PULL_FROM_URL",
-            "video_url": item.video_url,
+            "source":            "FILE_UPLOAD",
+            "video_size":         video_size,
+            "chunk_size":         chunk_size,
+            "total_chunk_count":  total_chunk_count,
         },
     }
 
@@ -458,35 +514,65 @@ async def _publish_one_tiktok(item: PublishItem, access_token: str) -> dict:
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(
                 TIKTOK_PUBLISH_URL,
-                json=payload,
+                json=init_payload,
                 headers={
                     "Authorization": f"Bearer {access_token}",
                     "Content-Type":  "application/json; charset=UTF-8",
                 },
             )
-        data = resp.json()
+            data = resp.json()
     except Exception as exc:
-        logger.error(f"TikTok publish network error for clip {item.clip_id}: {exc}")
+        logger.error(f"TikTok publish-init network error for clip {item.clip_id}: {exc}")
         return {"clip_id": item.clip_id, "status": "failed", "error": str(exc)}
 
-    logger.debug(f"TikTok publish response for {item.clip_id}: {resp.status_code} {data}")
+    logger.debug(f"TikTok publish-init response for {item.clip_id}: {resp.status_code} {data}")
 
     err = data.get("error", {})
     err_code = err.get("code", 0)
 
-    if resp.status_code == 200 and err_code == "ok":
-        publish_id = data.get("data", {}).get("publish_id", "")
-        logger.info(f"TikTok queued clip {item.clip_id} → publish_id={publish_id}")
-        return {"clip_id": item.clip_id, "status": "success", "publish_id": publish_id}
-    else:
+    if not (resp.status_code == 200 and err_code == "ok"):
         msg = err.get("message", "Unknown TikTok error")
-        logger.error(f"TikTok publish failed for {item.clip_id}: code={err_code} msg={msg}")
+        logger.error(f"TikTok publish-init failed for {item.clip_id}: code={err_code} msg={msg}")
         return {
             "clip_id":            item.clip_id,
             "status":             "failed",
             "error":              msg,
             "tiktok_error_code":  err_code,
         }
+
+    publish_id = data.get("data", {}).get("publish_id", "")
+    upload_url = data.get("data", {}).get("upload_url", "")
+    if not upload_url:
+        logger.error(f"TikTok publish-init for {item.clip_id} returned no upload_url")
+        return {"clip_id": item.clip_id, "status": "failed", "error": "No upload_url returned by TikTok"}
+
+    # Upload the actual bytes — one PUT per chunk, each with the byte range
+    # TikTok expects for that chunk.
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            for chunk_idx in range(total_chunk_count):
+                start = chunk_idx * chunk_size
+                end = min(start + chunk_size, video_size) - 1
+                chunk = video_bytes[start:end + 1]
+                put_resp = await client.put(
+                    upload_url,
+                    content=chunk,
+                    headers={
+                        "Content-Type":  "video/mp4",
+                        "Content-Range": f"bytes {start}-{end}/{video_size}",
+                    },
+                )
+                if put_resp.status_code not in (200, 201, 206):
+                    raise RuntimeError(
+                        f"TikTok upload PUT failed (chunk {chunk_idx + 1}/{total_chunk_count}): "
+                        f"HTTP {put_resp.status_code} {put_resp.text[:300]}"
+                    )
+    except Exception as exc:
+        logger.error(f"TikTok file upload failed for {item.clip_id}: {exc}")
+        return {"clip_id": item.clip_id, "status": "failed", "error": str(exc)}
+
+    logger.info(f"TikTok uploaded clip {item.clip_id} → publish_id={publish_id}")
+    return {"clip_id": item.clip_id, "status": "success", "publish_id": publish_id}
 
 
 class TikTokStatusRequest(BaseModel):
