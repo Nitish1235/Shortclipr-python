@@ -263,11 +263,15 @@ async def _execute_pipeline(
             raw_clip_path = job_dir / f"clip_{i:02d}_trimmed.mp4"
 
             # caption_base: the actual start of the trimmed clip content in
-            # original-video time.  In the DASH path the clip starts at the
-            # SIDX segment boundary (actual_start_t ≤ ts.start), which is
-            # where ffmpeg's -c copy keyframe snap lands.  In the full-source
-            # fallback we can't know the exact keyframe without probing, so we
-            # use ts.start and accept a minor caption drift (< 1 GOP).
+            # original-video time. Always computed via probe_clip_start_offset
+            # on the FINAL trimmed file — both the DASH and full-source paths
+            # do a "-ss <offset> ... -c copy" seek that snaps to the nearest
+            # keyframe at-or-before the target, so the true start can land up
+            # to ~1 GOP earlier than the seek target. It is NOT simply
+            # actual_start_t (the pre-trim DASH file's own start) — that's the
+            # position BEFORE the seek even runs, off by the full ss_offset
+            # (often several seconds, not a sub-GOP amount), which silently
+            # desynced captions from the actual video/audio for every DASH clip.
             caption_base: float = ts.start
 
             if raw_clip_results is not None:
@@ -291,9 +295,8 @@ async def _execute_pipeline(
                 if proc.returncode != 0:
                     raise RuntimeError(f"DASH trim failed: {stderr.decode(errors='ignore')[-300:]}")
                 raw_path_dash.unlink(missing_ok=True)  # free disk: dash file no longer needed
-                # The -c copy seek snapped back to actual_start_t; captions must
-                # be relative to that (not ts.start) or they appear early.
-                caption_base = actual_start_t
+                kf_offset = await probe_clip_start_offset(raw_clip_path, duration)
+                caption_base = ts.start - kf_offset
             else:
                 raw_clip_path = await extract_clip(source_path, ts.start, ts.end, raw_clip_path)
                 kf_offset = await probe_clip_start_offset(raw_clip_path, ts.end - ts.start)

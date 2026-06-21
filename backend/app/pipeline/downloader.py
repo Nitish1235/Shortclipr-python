@@ -94,12 +94,31 @@ async def _download_ranged(
 
 
 async def _mux(video_path: Path, audio_path: Path, output_path: Path) -> None:
+    """
+    Mux independently-downloaded video+audio DASH fragments into one file.
+
+    CRITICAL: -copyts is required here. Video and audio are fetched from
+    separate sidx segment grids with DIFFERENT segment boundaries (see
+    download_all_clips_parallel) — their fragments' true absolute PTS
+    values are usually several seconds apart (confirmed: e.g. video
+    starting at 3598.6s, audio at 3594.4s, a 4.1s gap, for the same
+    requested clip window). Without -copyts, ffmpeg's default muxing
+    behaviour independently normalizes EACH mapped stream to start its own
+    PTS at 0 when reading from two SEPARATE input files — silently
+    discarding that real 4.1s relative offset and producing a file where
+    video and audio are desynced by exactly that amount. -copyts preserves
+    each stream's true original PTS through the copy, so the subsequent
+    -avoid_negative_ts make_zero correctly computes ONE shared shift
+    across both streams (preserving their real relative offset) instead
+    of two independent ones.
+    """
     cmd = [
         "ffmpeg", "-y",
         "-i", str(video_path),
         "-i", str(audio_path),
         "-c", "copy",
         "-map", "0:v:0", "-map", "1:a:0",
+        "-copyts",
         "-avoid_negative_ts", "make_zero",
         "-movflags", "+faststart",
         str(output_path),

@@ -559,25 +559,36 @@ async def _resolve_stream_url(video_id: str, quality: str, session_id: str | Non
     chain: list[tuple[str, object]] = [
         # 1. InnerTube ANDROID + proxy  (~2-10s, highest priority)
         ("InnerTube ANDROID+proxy", lambda: _innertube_android_stream(video_id, h, session_id)),
-        # 2. yt-dlp + tv_embedded client + proxy (very reliable, ~15-30s)
+        # 2-4. yt-dlp + tv_embedded/android/ios client + proxy — all using
+        # _fmt(h) (AV1-excluded), NOT a bare "best" selector. "best" has no
+        # codec filter at all, so for any video where the chosen client's
+        # best-at-this-height format happens to be AV1, these tiers would
+        # silently hand back an AV1 stream and the LATER InnerTube clients
+        # (which DO avoid AV1, see _pick_best_stream) would never get a
+        # chance to find a clean one. AV1-permissive selectors stay
+        # reserved for the explicit last-resort tiers below (6).
         ("yt-dlp+tv_embedded+proxy", lambda: _ytdlp_stream(
-            video_id, "best", client="tv_embedded", label="yt-dlp+tv_embedded", session_id=session_id
+            video_id, _fmt(h), client="tv_embedded", label="yt-dlp+tv_embedded", session_id=session_id
         )),
-        # 3. yt-dlp + android client + proxy (use "best" format)
         ("yt-dlp+android+proxy", lambda: _ytdlp_stream(
-            video_id, "best", client="android", label="yt-dlp+android", session_id=session_id
+            video_id, _fmt(h), client="android", label="yt-dlp+android", session_id=session_id
         )),
-        # 4. yt-dlp + ios client + proxy
         ("yt-dlp+ios+proxy", lambda: _ytdlp_stream(
-            video_id, "best", client="ios", label="yt-dlp+ios", session_id=session_id
+            video_id, _fmt(h), client="ios", label="yt-dlp+ios", session_id=session_id
         )),
-        # 5. yt-dlp with height-constrained format (for android)
+        # 5. yt-dlp + android client + relaxed format (no ext=mp4 constraint).
+        # Tries non-AV1 variants first, same as tiers 2-4, but its own
+        # trailing bare `/best` means THIS tier can accept AV1 if none of
+        # those variants match for this client — intentional, one tier
+        # earlier than the universal last-resort below, not a regression
+        # of the original bug (4 strict, AV1-free attempts already ran first).
         ("yt-dlp+android-constrained+proxy", lambda: _ytdlp_stream(
-            video_id, _fmt(h), client="android", label="yt-dlp+android-constrained", session_id=session_id
+            video_id, _fmt_relaxed(h), client="android", label="yt-dlp+android-constrained", session_id=session_id
         )),
-        # 6. yt-dlp unconstrained (any client, any format)
+        # 6. yt-dlp unconstrained (any client, any format) — explicit final
+        # last resort, AV1 permitted here ONLY (see _fmt_unconstrained docstring).
         ("yt-dlp+unconstrained+proxy", lambda: _ytdlp_stream(
-            video_id, "best", label="yt-dlp+unconstrained", session_id=session_id
+            video_id, _fmt_unconstrained(), label="yt-dlp+unconstrained", session_id=session_id
         )),
     ]
 
