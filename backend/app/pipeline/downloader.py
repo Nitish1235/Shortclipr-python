@@ -277,8 +277,17 @@ async def _probe_full_sidx(client: httpx.AsyncClient, url: str, headers: dict) -
     """
     Probe `url` for its complete sidx box, growing the fetch range as needed.
 
-    1. Probe first 8 KB. If the sidx box header isn't even in there, expand
-       to 64 KB (covers the vast majority of videos).
+    1. Probe first 8 KB, then 64 KB, then 1 MB if the sidx box HEADER isn't
+       even found yet. This matters because _find_sidx_extent()'s box-walk
+       reads each top-level box's declared size and jumps past it — if an
+       EARLIER box (e.g. a moov with lots of track/chapter metadata) is
+       itself bigger than the probe, the walk runs off the end of the
+       buffer before ever reaching sidx, even though sidx exists right
+       after it. 64 KB covers the vast majority of videos; the 1 MB tier
+       is a rarely-needed safety net for unusually large leading boxes
+       before we conclude the stream genuinely has no sidx (e.g. it's a
+       progressive/non-fragmented format, which legitimately can't use
+       this DASH path at all and must fall back to full-source download).
     2. Once the box header is found, check its DECLARED size (sidx_size) —
        for long videos (many segments => many entries) the full box can
        exceed even the 64 KB probe. If so, re-fetch with the EXACT range
@@ -287,18 +296,22 @@ async def _probe_full_sidx(client: httpx.AsyncClient, url: str, headers: dict) -
     Returns the probe bytes, guaranteed to contain the full sidx box if one
     was found at all (raises naturally via _parse_sidx if no sidx exists).
     """
-    probe_headers = {**headers, "Range": "bytes=0-8191"}
-    resp = await client.get(url, headers=probe_headers)
-    if resp.status_code not in (200, 206):
-        raise RuntimeError(f"sidx probe failed: HTTP {resp.status_code}")
-    probe_data = resp.content
-
-    extent = _find_sidx_extent(probe_data)
-    if extent is None:
-        probe_headers = {**headers, "Range": "bytes=0-65535"}
+    extent = None
+    probe_data = b""
+    for range_end in (8_191, 65_535, 1_048_575):
+        probe_headers = {**headers, "Range": f"bytes=0-{range_end}"}
         resp = await client.get(url, headers=probe_headers)
+        if resp.status_code not in (200, 206):
+            raise RuntimeError(f"sidx probe failed: HTTP {resp.status_code}")
         probe_data = resp.content
         extent = _find_sidx_extent(probe_data)
+        if extent is not None:
+            break
+        # Stop early if the server returned less than requested (whole file
+        # fits in this probe) — escalating further would just refetch the
+        # same bytes and confirm sidx genuinely isn't there.
+        if len(probe_data) < range_end:
+            break
 
     if extent is not None:
         sidx_offset, sidx_size = extent
