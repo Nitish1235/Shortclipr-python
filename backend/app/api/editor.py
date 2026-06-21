@@ -9,13 +9,13 @@ Access rules:
 import json
 import tempfile
 import time
+from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, Body, HTTPException, Query, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import CurrentUser, decode_access_token
 from app.core.config import get_settings
@@ -208,21 +208,29 @@ async def download_clip(
     token: Optional[str] = Query(None),
 ):
     """
-    Redirect to the GCS video URL — with `response-content-disposition`
-    forcing an actual download instead of inline playback.
+    Stream the clip through OUR OWN response with a real Content-Disposition
+    header — forces an actual download instead of inline playback.
 
-    The object itself has no Content-Disposition set at upload time (it
-    can't — the SAME video_url is also used for inline playback elsewhere,
-    e.g. the dashboard's <video> preview/modal — setting it as an
-    attachment at upload time would break those). GCS's XML API
-    (storage.googleapis.com) honours `response-content-disposition` as a
-    per-request query-string override on public objects with no signing
-    needed, so we append it here instead — this endpoint is the only
-    place that needs "force download" behaviour.
+    PREVIOUSLY this 302-redirected to the GCS URL with a
+    `response-content-disposition` query override appended. That override
+    is part of GCS's SIGNED URL mechanism — it's only honoured when a
+    signature covers it. On a plain public/unsigned object (this bucket
+    grants public read via bucket-level IAM, not signed URLs), GCS just
+    ignores the override entirely, so the browser still saw a bare
+    video/mp4 response with no Content-Disposition and played it inline
+    instead of downloading. Streaming it through our own endpoint sidesteps
+    that — the header comes from US, on a direct (non-redirected) response,
+    which every browser honours unconditionally.
+
+    The object itself still has no Content-Disposition set at upload time —
+    that's unchanged and still correct, since the SAME video_url is also
+    used for inline playback elsewhere (e.g. the dashboard's <video>
+    preview/modal); this endpoint is the only place that needs "force
+    download", so the override belongs here, not on the stored object.
 
     Accepts ?token= query param — browsers can't send Authorization headers
     when opening a URL directly (e.g. anchor click / window.open).
-    Free users → 403.  Paid users → 302 redirect to the MP4.
+    Free users → 403.  Paid users → streamed MP4 with attachment disposition.
     """
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -250,8 +258,29 @@ async def download_clip(
         raise HTTPException(status_code=403, detail="Access denied")
 
     filename = f"ShortClipr_{clip_id.split('-')[0]}.mp4"
-    disposition = quote(f'attachment; filename="{filename}"')
-    sep = "&" if "?" in clip["video_url"] else "?"
-    download_url = f"{clip['video_url']}{sep}response-content-disposition={disposition}"
 
-    return RedirectResponse(url=download_url, status_code=302)
+    stack = AsyncExitStack()
+    client = await stack.enter_async_context(httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0)))
+    try:
+        upstream = await stack.enter_async_context(client.stream("GET", clip["video_url"]))
+    except httpx.HTTPError as exc:
+        await stack.aclose()
+        raise HTTPException(status_code=502, detail=f"Could not fetch clip file: {exc}")
+
+    if upstream.status_code != 200:
+        await stack.aclose()
+        raise HTTPException(status_code=502, detail=f"Clip file fetch failed: HTTP {upstream.status_code}")
+
+    async def _stream():
+        try:
+            async for chunk in upstream.aiter_bytes(chunk_size=262_144):
+                yield chunk
+        finally:
+            await stack.aclose()
+
+    response_headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    content_length = upstream.headers.get("content-length")
+    if content_length:
+        response_headers["Content-Length"] = content_length
+
+    return StreamingResponse(_stream(), media_type="video/mp4", headers=response_headers)

@@ -100,7 +100,15 @@ def _copy_to_showcase_sync(
         "added_at": datetime.now(timezone.utc).isoformat(),
     }
     dest_blob.patch()
-    dest_blob.make_public()
+    # Do NOT call dest_blob.make_public() — bucket has Uniform Bucket-Level
+    # Access enabled, which disables the legacy per-object ACL API entirely
+    # (this call 400s with "Cannot get legacy ACL for an object when uniform
+    # bucket-level access is enabled"). Public access is already granted via
+    # IAM (allUsers:Storage Object Viewer) at the bucket level — every object
+    # in it, including this copy, inherits that automatically. Same
+    # constraint already documented in uploader.py's _upload_to_gcs().
+    # dest_blob.public_url below is pure client-side string construction —
+    # no API call, no ACL dependency — so it works without make_public().
 
     return {
         "id": showcase_id,
