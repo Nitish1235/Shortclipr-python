@@ -1,20 +1,19 @@
 """
 orchestrator.py — Master coordinator for the ShortClipr pipeline.
 
-New two-phase clip flow (per clip, all clips run concurrently):
+Single-phase clip flow (per clip, all clips run concurrently). The earlier
+"Phase 1" (360p preview generation + raw-clip upload to GCS purely to show
+an early preview card) has been removed — it never fed the reframe/caption
+step, which always read the local trimmed file directly. Removing it cuts
+one ffmpeg encode (`generate_preview`) and one GCS upload/delete pair per
+clip, at the cost of the "card appears early with a 360p preview" UX —
+cards now appear once, already HD:
 
-  Phase 1 — FAST (card appears immediately):
-    DASH download clip → trim raw clip → upload raw to GCS →
-    generate 360p preview → upload preview →
-    Supabase INSERT (clip_ready=FALSE, preview_url set) → card visible
-
-  Phase 2 — ENCODE (card upgrades to HD):
-    detect silences + face track + captions →
-    reframe + burn captions (one ffmpeg pass) →
-    upload final vertical + reframed raw →
-    generate + upload thumbnail →
-    delete raw from GCS →
-    Supabase UPDATE (clip_ready=TRUE, video_url set) → card upgrades
+    DASH download clip → trim raw clip → INSERT placeholder row
+    (clip_ready=FALSE, preview_url="") → detect silences + face track +
+    captions → reframe + burn captions (one ffmpeg pass) → upload final
+    vertical + reframed raw + thumbnail → Supabase UPDATE
+    (clip_ready=TRUE, video_url set) → card appears (HD only)
 
 Progress emitted to Supabase after every major step so the frontend
 Realtime channel reflects live state.
@@ -41,13 +40,9 @@ from app.pipeline.transcript import get_transcript
 from app.pipeline.downloader import download_all_clips_parallel
 from app.pipeline.uploader import (
     cleanup_job_files,
-    delete_source_clip,
-    generate_preview,
     generate_thumbnail,
     upload_clip,
-    upload_preview,
     upload_raw_clip,
-    upload_source_clip,
     upload_thumbnail,
 )
 
@@ -270,14 +265,13 @@ async def _execute_pipeline(
             async with _step(job_id, "full-source fallback download"):
                 source_path = await _get_source(stream_url, audio_url, user_agent, video_id, job_dir)
 
-        await db.update_job_progress(job_id, 33, f"Clipping & publishing {len(timestamps)} previews...")
+        await db.update_job_progress(job_id, 33, f"Encoding {len(timestamps)} clips...")
 
         total = len(timestamps)
-        phase1_done = 0
-        phase2_done = 0
+        clips_done = 0
 
         async def _process_one_clip(i: int, ts: ClipTimestamp) -> dict:
-            nonlocal phase1_done, phase2_done
+            nonlocal clips_done
 
             # ── Trim raw clip ──────────────────────────────────────
             # Downloader writes clip_{i:02d}_raw.mp4 — use a different
@@ -327,28 +321,18 @@ async def _execute_pipeline(
 
             clip_id = str(uuid.uuid4())
 
-            # ════════════════════════════════════════════════════════
-            # PHASE 1 — Upload raw + preview → INSERT clip (card appears)
-            # ════════════════════════════════════════════════════════
-            async with _step(job_id, f"clip {i} phase1 (preview + upload)"):
-                preview_path = job_dir / f"clip_{i:02d}_preview.mp4"
-                await generate_preview(raw_clip_path, preview_path)
-
-                raw_gcs_url, preview_gcs_url = await asyncio.gather(
-                    upload_source_clip(raw_clip_path, job_id, clip_id),
-                    upload_preview(preview_path, job_id, clip_id),
-                )
-                preview_path.unlink(missing_ok=True)
-
-            # INSERT — Supabase Realtime fires → card appears with 360p preview
+            # INSERT — placeholder row so the UPDATE below has a target row
+            # and the dashboard shows an "encoding" card immediately. No
+            # preview/source upload anymore (Phase 1 removed) — the card has
+            # no 360p preview video until the HD encode below finishes.
             clip_data = {
                 "clip_id":            clip_id,
                 "job_id":             job_id,
                 "user_id":            user_id,
-                "video_url":          "",              # filled in phase 2
-                "thumbnail_url":      "",              # filled in phase 2
-                "raw_video_url":      "",              # filled in phase 2
-                "preview_url":        preview_gcs_url,
+                "video_url":          "",              # filled below
+                "thumbnail_url":      "",              # filled below
+                "raw_video_url":      "",              # filled below
+                "preview_url":        "",              # no preview generated anymore
                 "clip_ready":         False,
                 "duration":           ts.duration,
                 "start_time":         ts.start,
@@ -359,17 +343,14 @@ async def _execute_pipeline(
                 "bottom_tag":         f"#{ts.title.lower().replace(' ', '')}",
                 "caption_style":      clip_style,
                 "ai_reason":          ts.reason,
-                "captions_data":      [],              # filled in phase 2
+                "captions_data":      [],              # filled below
                 "editor_config":      {},
             }
             await db.insert_clip(clip_data)
-            phase1_done += 1
-            pct = 33 + int(30 * phase1_done / total)
-            await db.update_job_progress(job_id, pct, f"Preview ready: {phase1_done}/{total} clips visible...")
-            logger.info(f"[{job_id}] Clip {i} preview live (clip_id={clip_id})")
 
             # ════════════════════════════════════════════════════════
-            # PHASE 2 — Full encode → upload → delete raw → UPDATE card to HD
+            # Full encode → upload → UPDATE card to HD (Phase 1 removed —
+            # no preview generation, no source-clip GCS upload/delete)
             # ════════════════════════════════════════════════════════
             job_check = await db.get_job(job_id)
             if job_check and job_check.get("status") == "cancelled":
@@ -418,9 +399,6 @@ async def _execute_pipeline(
                 ]
                 final_url, raw_vertical_url, thumb_url = await asyncio.gather(*upload_tasks)
 
-                # Delete raw horizontal from GCS now that encode is done
-                await delete_source_clip(job_id, clip_id)
-
             # UPDATE clip row → Realtime fires → card upgrades to HD vertical
             await db.update_clip_final_url(
                 clip_id=clip_id,
@@ -430,9 +408,9 @@ async def _execute_pipeline(
                 captions_data=captions_to_dict(captions),
             )
 
-            phase2_done += 1
-            pct = 63 + int(27 * phase2_done / total)
-            await db.update_job_progress(job_id, pct, f"HD ready: {phase2_done}/{total} clips encoded...")
+            clips_done += 1
+            pct = 33 + int(57 * clips_done / total)
+            await db.update_job_progress(job_id, pct, f"HD ready: {clips_done}/{total} clips encoded...")
             logger.info(f"[{job_id}] Clip {i} HD live (clip_id={clip_id})")
 
             # Clean up local temp files for this clip
