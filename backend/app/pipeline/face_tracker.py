@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 _MODEL_PATH = Path(__file__).parent / "models" / "face_detection_yunet_2023mar.onnx"
 
-_SAMPLE_FPS = 2.0          # detection sample rate
+_SAMPLE_FPS = 1.0          # detection sample rate
 _DETECT_WIDTH = 640        # frames are downscaled to this width before YuNet
 _EMA_ALPHA = 0.3           # smoothing factor for the (nx, ny) series
 _GAP_HOLD = 1.5            # seconds without a detection before easing to centre

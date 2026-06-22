@@ -68,7 +68,7 @@ class Settings(BaseSettings):
 
     # ── Worker / Pipeline ─────────────────────────────────────
     MAX_CONCURRENT_CLIPS: int = 10          # asyncio semaphore for cheap -c copy extraction
-    MAX_CONCURRENT_ENCODES: int = 3         # asyncio semaphore for libx264 reframe+caption encodes
+    MAX_CONCURRENT_ENCODES: int = 2         # asyncio semaphore for libx264 reframe+caption encodes
     SOURCE_DOWNLOAD_CHUNKS: int = 8         # parallel ranged-download chunk count
     MAX_CONCURRENT_JOBS_PER_USER: int = 2   # prevent spam-submit
     # Note: per-video duration limits are now plan-based — see app/core/plan_limits.py
