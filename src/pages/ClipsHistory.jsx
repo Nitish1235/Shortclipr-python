@@ -101,7 +101,12 @@ export default function ClipsHistory() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // ── Publish handlers ───────────────────────────────────────────
+  // ── Publish handlers — TEMPORARILY DISABLED ─────────────────────
+  // Neither platform has granted official approval yet (YouTube API audit
+  // / TikTok Content Posting API review both pending). Stubbed to a
+  // "coming soon" toast below; original implementation kept commented
+  // out so re-enabling later is just deleting the stubs and uncommenting.
+  /*
   const handlePublishYT = async (e, clip) => {
     e.stopPropagation()
     if (!isPaid) { showToast('Upgrade to publish to YouTube', 'error'); return }
@@ -159,6 +164,9 @@ export default function ClipsHistory() {
     } catch { showToast('Network error', 'error') }
     finally { setPublishingTT(p => { const n = new Set(p); n.delete(clipId); return n }) }
   }
+  */
+  const handlePublishYT = (e) => { e.stopPropagation(); showToast('YouTube publishing is coming soon!', 'info') }
+  const handlePublishTT = (e) => { e.stopPropagation(); showToast('TikTok publishing is coming soon!', 'info') }
 
   const handleDownload = (e, clip) => {
     e.stopPropagation()
@@ -179,15 +187,15 @@ export default function ClipsHistory() {
       {toast && (
         <div style={{
           position: 'fixed', top: 20, right: 20, zIndex: 9999,
-          background: toast.type === 'error' ? '#fef2f2' : '#f0fdf4',
-          border: `1px solid ${toast.type === 'error' ? '#fecaca' : '#bbf7d0'}`,
-          color: toast.type === 'error' ? '#dc2626' : '#16a34a',
+          background: toast.type === 'error' ? '#fef2f2' : toast.type === 'info' ? '#eff6ff' : '#f0fdf4',
+          border: `1px solid ${toast.type === 'error' ? '#fecaca' : toast.type === 'info' ? '#bfdbfe' : '#bbf7d0'}`,
+          color: toast.type === 'error' ? '#dc2626' : toast.type === 'info' ? '#1d4ed8' : '#16a34a',
           borderRadius: 10, padding: '10px 16px',
           fontSize: '.82rem', fontWeight: 600,
           boxShadow: '0 4px 20px rgba(0,0,0,.1)',
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          {toast.type === 'error' ? '✕' : '✓'} {toast.msg}
+          {toast.type === 'error' ? '✕' : toast.type === 'info' ? 'ℹ' : '✓'} {toast.msg}
         </div>
       )}
 
@@ -358,34 +366,31 @@ export default function ClipsHistory() {
 
                           {/* Action buttons */}
                           <div style={{ display: 'flex', gap: 3 }}>
-                            <button
-                              onClick={e => handlePublishYT(e, clip)}
-                              title={ytDone ? 'Published to YouTube' : ytConn ? 'Publish to YouTube' : 'Connect YouTube first'}
+                            {/* Post-to-YouTube/TikTok disabled — pending platform
+                                approval. Original buttons called handlePublishYT/TT
+                                (now stubbed above). */}
+                            <div
+                              title="YouTube publishing — coming soon"
                               style={{
                                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
                                 padding: '5px 4px', borderRadius: 7, fontSize: '.6rem', fontWeight: 700,
-                                border: `1px solid ${ytDone ? '#bbf7d0' : '#fca5a5'}`,
-                                background: ytDone ? '#f0fdf4' : '#fff5f5',
-                                color: ytDone ? '#16a34a' : ytPub ? '#9ca3af' : '#dc2626',
-                                cursor: ytPub ? 'wait' : 'pointer', transition: '.1s',
+                                border: '1px dashed #e5e7eb', background: '#f9fafb',
+                                color: '#9ca3af', cursor: 'default',
                               }}
                             >
-                              <YTLogo size={10} /> {ytPub ? '…' : ytDone ? '✓' : 'Post'}
-                            </button>
-                            <button
-                              onClick={e => handlePublishTT(e, clip)}
-                              title={ttDone ? 'Published to TikTok' : ttConn ? 'Publish to TikTok' : 'Connect TikTok first'}
+                              <YTLogo size={10} /> Soon
+                            </div>
+                            <div
+                              title="TikTok publishing — coming soon"
                               style={{
                                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
                                 padding: '5px 4px', borderRadius: 7, fontSize: '.6rem', fontWeight: 700,
-                                border: `1px solid ${ttDone ? '#bbf7d0' : ttConn ? '#c4b5fd' : '#e5e7eb'}`,
-                                background: ttDone ? '#f0fdf4' : ttConn ? '#faf5ff' : '#f9fafb',
-                                color: ttDone ? '#16a34a' : ttPub ? '#9ca3af' : '#010101',
-                                cursor: ttPub ? 'wait' : 'pointer', transition: '.1s',
+                                border: '1px dashed #e5e7eb', background: '#f9fafb',
+                                color: '#9ca3af', cursor: 'default',
                               }}
                             >
-                              <TTLogo size={10} /> {ttPub ? '…' : ttDone ? '✓' : 'Post'}
-                            </button>
+                              <TTLogo size={10} /> Soon
+                            </div>
                             <button
                               onClick={e => handleDownload(e, clip)}
                               title={isPaid ? 'Download MP4' : 'Upgrade to download'}
@@ -467,22 +472,24 @@ export default function ClipsHistory() {
             </div>
             {/* Actions */}
             <div style={{ padding: '14px 18px', display: 'flex', gap: 8 }}>
-              <button
-                onClick={e => handlePublishYT(e, modalClip)}
+              {/* Post-to-YouTube/TikTok disabled — pending platform approval.
+                  Original buttons called handlePublishYT/TT (now stubbed above). */}
+              <div
+                title="YouTube publishing — coming soon"
                 style={{
                   flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                   padding: '9px 12px', borderRadius: 9, fontSize: '.78rem', fontWeight: 700,
-                  border: '1px solid #fca5a5', background: '#fff5f5', color: '#dc2626', cursor: 'pointer',
+                  border: '1px dashed #d1d5db', background: '#f9fafb', color: '#9ca3af', cursor: 'default',
                 }}
-              ><YTLogo size={13} /> Post to YouTube</button>
-              <button
-                onClick={e => handlePublishTT(e, modalClip)}
+              ><YTLogo size={13} /> YouTube — Coming Soon</div>
+              <div
+                title="TikTok publishing — coming soon"
                 style={{
                   flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                   padding: '9px 12px', borderRadius: 9, fontSize: '.78rem', fontWeight: 700,
-                  border: '1px solid #c4b5fd', background: '#faf5ff', color: '#010101', cursor: 'pointer',
+                  border: '1px dashed #d1d5db', background: '#f9fafb', color: '#9ca3af', cursor: 'default',
                 }}
-              ><TTLogo size={13} /> Post to TikTok</button>
+              ><TTLogo size={13} /> TikTok — Coming Soon</div>
               <button
                 onClick={e => handleDownload(e, modalClip)}
                 style={{

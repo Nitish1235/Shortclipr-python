@@ -101,19 +101,23 @@ function SectionLabel({ children }) {
 }
 
 // ── Social account row ────────────────────────────────────────────
-function SocialRow({ icon, label, connected, onConnect, onDisconnect }) {
+function SocialRow({ icon, label, connected, onConnect, onDisconnect, comingSoon }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 8,
       padding: '7px 11px', borderRadius: 8, marginBottom: 1,
     }}>
-      <span style={{ flexShrink: 0 }}>{icon}</span>
+      <span style={{ flexShrink: 0, opacity: comingSoon ? 0.5 : 1 }}>{icon}</span>
       <span style={{
         flex: 1, fontSize: '.8rem',
         color: 'rgba(255,255,255,.55)', userSelect: 'none',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{label}</span>
-      {connected ? (
+      {comingSoon ? (
+        <span style={{ flexShrink: 0, fontSize: '.6rem', fontWeight: 700, color: 'rgba(255,255,255,.3)' }}>
+          Soon
+        </span>
+      ) : connected ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
           <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4ade80' }}/>
           <span style={{ fontSize: '.6rem', color: 'rgba(255,255,255,.3)' }}>On</span>
@@ -178,6 +182,10 @@ export default function AppLayout({ children }) {
       .catch(() => {})
   }, [])
 
+  // Connect flows disabled — YouTube API audit / TikTok Content Posting
+  // API review both pending official approval. Originals kept below,
+  // commented out, for a quick revert once approved.
+  /*
   const connectYT = async () => {
     try {
       const token = localStorage.getItem('sc_token')
@@ -193,6 +201,9 @@ export default function AppLayout({ children }) {
       if (r.ok) { const d = await r.json(); window.location.href = d.url }
     } catch {}
   }
+  */
+  const connectYT = () => {}
+  const connectTT = () => {}
 
   const disconnect = async (platform) => {
     try {
@@ -249,6 +260,7 @@ export default function AppLayout({ children }) {
               connected={ytConn}
               onConnect={connectYT}
               onDisconnect={() => disconnect('youtube')}
+              comingSoon
             />
             <SocialRow
               icon={<TTLogo size={13} />}
@@ -256,6 +268,7 @@ export default function AppLayout({ children }) {
               connected={ttConn}
               onConnect={connectTT}
               onDisconnect={() => disconnect('tiktok')}
+              comingSoon
             />
           </div>
 
