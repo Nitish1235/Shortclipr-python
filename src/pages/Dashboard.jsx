@@ -79,6 +79,18 @@ export default function Dashboard() {
   const currentJob = jobs[0] || null          // most-recent job only
   const isActive = currentJob && ['queued','processing'].includes(currentJob.status)
 
+  // Friendly, non-technical status — never surface raw backend step text
+  // (e.g. "Reading transcript...", "Downloading clips...") to the user.
+  const friendlyJobStatus = (job) => {
+    if (!job) return 'Queued…'
+    const n = job.clip_count || 'your'
+    const pct = job.progress || 0
+    if (pct >= 95) return 'Almost done — finalizing…'
+    if (pct >= 60) return `Encoding ${n} clips in HD…`
+    if (pct >= 25) return `Generating ${n} clips — this'll take a few minutes…`
+    return `Getting started…`
+  }
+
   // ── Utils ──────────────────────────────────────────────────────
   const requirePlan = (reason) => {
     if (!isPaid) { setUpgradeReason(reason); setShowUpgradeModal(true); return false }
@@ -618,15 +630,16 @@ export default function Dashboard() {
                   fontSize:'.68rem', fontWeight:700, textTransform:'uppercase',
                 }}>Processing</div>
               </div>
-              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px', fontSize:'.74rem', color:'#6b7280' }}>
-                <span>{currentJob.current_step || 'Queued…'}</span>
-                <span>{currentJob.progress || 0}%</span>
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'8px', fontSize:'.8rem', color:'#374151', fontWeight:600 }}>
+                <span>{friendlyJobStatus(currentJob)}</span>
+                <span style={{ color:'#cf1322', fontWeight:800 }}>{currentJob.progress || 0}%</span>
               </div>
-              <div style={{ background:'#f4f4f4', borderRadius:'4px', height:'5px', overflow:'hidden' }}>
+              <div style={{ background:'#eee', borderRadius:'100px', height:'10px', overflow:'hidden', boxShadow:'inset 0 1px 2px rgba(0,0,0,0.08)' }}>
                 <div style={{
                   height:'100%', width:`${currentJob.progress || 0}%`,
                   background:'linear-gradient(90deg,#cf1322,#ff6b6b)',
-                  borderRadius:'4px', transition:'width .5s ease',
+                  borderRadius:'100px', transition:'width .8s cubic-bezier(0.22,0.61,0.36,1)',
+                  boxShadow:'0 1px 4px rgba(207,19,34,0.5)',
                 }}/>
               </div>
               {hdClips.length > 0 && (

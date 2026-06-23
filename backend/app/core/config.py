@@ -74,13 +74,27 @@ class Settings(BaseSettings):
     # Note: per-video duration limits are now plan-based — see app/core/plan_limits.py
 
     # ── Worker dispatch (optional second Cloud Run service) ───
-    # Leave WORKER_SERVICE_URL empty to run the pipeline in-process via
+    # Leave WORKER_SERVICE_URLS empty to run the pipeline in-process via
     # asyncio.create_task (single-service mode, original behavior).
-    # If set, POST /jobs and POST /editor/render fire-and-forget to
-    # {WORKER_SERVICE_URL}/internal/pipeline/run and /internal/editor/render
-    # on a separate (heavier) Cloud Run service, gated by INTERNAL_TASK_SECRET.
-    WORKER_SERVICE_URL: str = ""            # e.g. https://shortclipr-worker-xxxx.run.app
+    # If set, POST /jobs enqueues a Cloud Task (see app/core/worker_routing.py
+    # + app/core/tasks.py) and POST /editor/render calls directly — both
+    # picking one of these worker URLs round-robin — targeting
+    # {worker_url}/internal/pipeline/run or /internal/editor/render on a
+    # separate (heavier) Cloud Run service, gated by INTERNAL_TASK_SECRET.
+    # Comma-separated, one URL per region, e.g.:
+    #   "https://shortclipr-worker-us-central1-xxxx.run.app,https://shortclipr-worker-us-east1-xxxx.run.app"
+    WORKER_SERVICE_URLS: str = ""
+    # Comma-separated Cloud Tasks queue names, SAME ORDER/COUNT as
+    # WORKER_SERVICE_URLS — queue[i] must target worker URL[i].
+    WORKER_QUEUE_NAMES: str = ""
+    # Comma-separated GCP regions, SAME ORDER/COUNT as WORKER_SERVICE_URLS —
+    # used as the Cloud Tasks queue's location for each entry.
+    WORKER_QUEUE_REGIONS: str = ""
     INTERNAL_TASK_SECRET: str = ""          # shared secret for /internal/* routes
+
+    # ── Cloud Tasks ────────────────────────────────────────────
+    GCP_PROJECT_ID: str = ""                # required to build Cloud Tasks queue paths
+    RECONCILE_STUCK_JOB_MINUTES: int = 15    # "queued" longer than this -> fail + refund
 
     # ── InnerTube ──────────────────────────────────────────────
     INNERTUBE_API_KEY: str = "AIzaSyA8eiZmM1FaSbwzBlGmbW3ILtKBNJI41zQ"

@@ -1,0 +1,17 @@
+-- ────────────────────────────────────────────────────────────
+-- Phase 1 (360p preview generation + raw-clip upload) was removed from
+-- orchestrator.py — clips are now inserted with preview_url='' and it's
+-- never populated again. Drop the now-permanently-dead column.
+--
+-- Frontend already degrades safely: Dashboard.jsx's
+-- `{clip.preview_url && (...)}` and the `video_url || preview_url`
+-- fallbacks both treat a missing/undefined value as falsy — no frontend
+-- change needed before or after running this.
+--
+-- NOTE: irreversible. Existing rows lose their preview_url value
+-- permanently (the underlying GCS objects under previews/ are unaffected
+-- by this — they're orphaned in the bucket already since Phase 1 stopped
+-- writing new ones; clean those up separately via `gsutil rm` if desired,
+-- this migration only touches the database column).
+-- ────────────────────────────────────────────────────────────
+ALTER TABLE clips DROP COLUMN IF EXISTS preview_url;

@@ -55,6 +55,24 @@ _client = AsyncOpenAI(
 # Per-chunk transcript character budget for GPT-4o-mini
 MAX_CHUNK_CHARS = 40_000
 
+# Curated trending emoji (mirrors src/pages/Editor.jsx TRENDING_EMOJI),
+# split into 5 mood/theme groups of 9 — the model picks the single
+# best-fitting GROUP for the clip's tone, then ONE emoji within it. Giving
+# it a pre-grouped, narrowed choice keeps the pick on-theme and consistent,
+# instead of free-choosing from all 45 with no thematic anchor.
+EMOJI_GROUPS: dict[str, list[str]] = {
+    "hype":      ["🔥", "💯", "⚡", "✨", "🎉", "💥", "⭐", "🚀", "😎"],
+    "shock":     ["😱", "🤯", "👀", "💀", "😭", "🥶", "😂", "🤣", "🚨"],
+    "money":     ["💰", "📈", "📉", "🤑", "💸", "👑", "🔑", "✅", "🆗"],
+    "connection": ["👍", "👏", "🙌", "🙏", "🤝", "❤️", "💪", "🫡", "❌"],
+    "thinking":  ["🤔", "🧠", "👇", "👆", "➡️", "🎬", "👎", "⚠️", "🎯"],
+}
+_ALL_EMOJI = {e for group in EMOJI_GROUPS.values() for e in group}
+
+def _emoji_groups_prompt_block() -> str:
+    lines = [f'  {name}: {" ".join(emojis)}' for name, emojis in EMOJI_GROUPS.items()]
+    return "\n".join(lines)
+
 
 # ── Data model ──────────────────────────────────────────────────
 
@@ -112,11 +130,16 @@ RULES:
    ("Nobody Saw This Coming"), contrarian tease ("Why This Actually Works"), direct address
    ("You're Doing This Completely Wrong"). Bad: anything a viewer could read and feel like they
    already know what happens — that kills the rewatch/watch-through motive entirely.
+8. "title_emoji" = ONE emoji to prefix the title card with. First pick whichever GROUP below
+   best matches this moment's tone, then pick exactly ONE emoji from that group only — never
+   mix emoji across groups, never invent an emoji outside this list:
+{emoji_groups}
 {topic_line}
 OUTPUT FORMAT — return ONLY this JSON object, no extra text:
 {{
   "start_line":      <integer — the [N] of the transcript line where this clip begins>,
   "title":           "<5-6 word curiosity-gap hook title — see rule 7, do not reveal the outcome>",
+  "title_emoji":      "<exactly one emoji from the single best-fitting group in rule 8>",
   "viral_score":     <integer 0-100>,
   "reason":          "<1-2 sentences: what makes this moment viral>",
   "caption_preview": "<first 10-15 spoken words starting at this moment>"
@@ -226,6 +249,7 @@ async def find_viral_clips(
     )
     system = _CHUNK_SYSTEM_PROMPT.format(
         min_dur=int(min_dur), max_dur=int(max_dur), topic_line=topic_line,
+        emoji_groups=_emoji_groups_prompt_block(),
     )
 
     logger.info(
@@ -329,10 +353,15 @@ def _parse_single(raw: str) -> dict[str, Any] | None:
         logger.warning(f"Unexpected chunk output type: {type(item)}")
         return None
 
+    title_emoji = str(item.get("title_emoji", "")).strip()
+    if title_emoji not in _ALL_EMOJI:
+        title_emoji = ""   # model invented/mixed an emoji outside the groups — drop it
+
     try:
         return {
             "start_idx":       int(item["start_line"]),
             "title":           str(item.get("title", "Untitled"))[:100],
+            "title_emoji":     title_emoji,
             "viral_score":     max(0, min(100, int(item.get("viral_score", 50)))),
             "reason":          str(item.get("reason", ""))[:500],
             "caption_preview": str(item.get("caption_preview", ""))[:200],

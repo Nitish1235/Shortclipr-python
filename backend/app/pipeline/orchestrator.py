@@ -112,6 +112,9 @@ async def _execute_pipeline(
     v_align         = options.get("v_align",        "bottom")
     words_per_line  = options.get("words_per_line", 3)
     short_template  = options.get("short_template", "crop_fill")
+    title_permanent = options.get("title_permanent", False)
+    hook_title_enabled = options.get("hook_title_enabled", True)
+    font            = options.get("font", "default")
     bar_color       = options.get("bar_color",      "#0d0d0d")
     aspect          = options.get("aspect",         "9:16")
 
@@ -124,6 +127,14 @@ async def _execute_pipeline(
     success = False
 
     job_dir = Path(tempfile.mkdtemp(prefix=f"sc_{job_id[:8]}_"))
+
+    # Flip "queued" → "processing" now that the pipeline has actually
+    # started (multi-region dispatch inserts jobs as "queued" — see
+    # jobs.py — since Cloud Tasks enqueue can succeed without the worker
+    # ever picking the task up; this is the actual "we're running" signal
+    # the reconciliation sweep uses to tell queued-forever apart from
+    # legitimately-running jobs).
+    await db.update_job_progress(job_id, 1, "Starting pipeline...")
 
     try:
         # ── STEP 1: Extract video ID ──────────────────────────────
@@ -332,7 +343,6 @@ async def _execute_pipeline(
                 "video_url":          "",              # filled below
                 "thumbnail_url":      "",              # filled below
                 "raw_video_url":      "",              # filled below
-                "preview_url":        "",              # no preview generated anymore
                 "clip_ready":         False,
                 "duration":           ts.duration,
                 "start_time":         ts.start,
@@ -381,8 +391,10 @@ async def _execute_pipeline(
                     zoom_beats=zoom_beats, aspect=aspect,
                     captions=captions, style=clip_style, color=color_combo,
                     h_align=h_align, v_align=v_align, words_per_line=words_per_line,
-                    hook_title=ts.title,
+                    hook_title=(ts.title if hook_title_enabled else None),
                     face_track=face_track, src_w=src_w, src_h=src_h,
+                    title_permanent=title_permanent, clip_duration=clip_actual_dur,
+                    font=font,
                 )
 
             # Generate thumbnail from final vertical clip

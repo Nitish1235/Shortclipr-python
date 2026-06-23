@@ -19,6 +19,7 @@ from fastapi.responses import StreamingResponse
 
 from app.api.deps import CurrentUser, decode_access_token
 from app.core.config import get_settings
+from app.core.worker_routing import has_multi_region_workers, pick_worker
 from app.db import supabase as db
 from app.pipeline.captions import Caption, burn_captions
 from app.pipeline.uploader import download_to_file, upload_clip
@@ -37,12 +38,36 @@ _ALLOWED_KEYS = {
     "words_per_line",
     # Highlight
     "highlightColor",
+    # Permanent title card
+    "hook_title", "title_permanent", "hook_title_enabled",
+    # Font
+    "font",
 }
 
 # Keys accepted by the re-render endpoint — caption styling only
 _RENDER_KEYS = {
     "style", "color", "h_align", "v_align", "words_per_line", "highlightColor",
+    "hook_title", "title_permanent", "hook_title_enabled", "font",
 }
+
+
+async def _probe_duration(clip_path: Path) -> float:
+    """ffprobe a clip's duration in seconds — used to make a hook title
+    span the entire clip when `title_permanent` is set."""
+    import asyncio
+    proc = await asyncio.create_subprocess_exec(
+        "ffprobe", "-v", "quiet",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        str(clip_path),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    out, _ = await proc.communicate()
+    try:
+        return float(out.strip())
+    except (ValueError, TypeError):
+        return 0.0
 
 
 def _require_plan(user: dict) -> None:
@@ -88,9 +113,10 @@ async def save_editor_config(
 # ── Re-render captions onto the raw (uncaptioned) clip ────────
 #
 # The ffmpeg work (download + burn_captions + upload) is CPU-heavy and
-# runs on the worker service when WORKER_SERVICE_URL is configured
-# (see _burn_and_upload_from_url, called directly here in single-service
-# mode and via /internal/editor/render in split mode).
+# runs on a worker service when WORKER_SERVICE_URLS is configured (see
+# _burn_and_upload_from_url, called directly here in single-service mode
+# and via /internal/editor/render — routed across regions, see
+# app/core/worker_routing.py — in split mode).
 
 async def _burn_and_upload_from_url(
     raw_url: str,
@@ -107,6 +133,9 @@ async def _burn_and_upload_from_url(
 
         await download_to_file(raw_url, raw_path)
 
+        title_permanent = bool(config.get("title_permanent"))
+        clip_duration = await _probe_duration(raw_path) if title_permanent else 0.0
+
         await burn_captions(
             raw_path, captions, out_path,
             style=config.get("style", "minimal"),
@@ -114,6 +143,10 @@ async def _burn_and_upload_from_url(
             h_align=config.get("h_align", "center"),
             v_align=config.get("v_align", "bottom"),
             words_per_line=config.get("words_per_line", 3),
+            hook_title=config.get("hook_title"),
+            title_permanent=title_permanent,
+            clip_duration=clip_duration,
+            font=config.get("font", "default"),
         )
 
         clip_url = await upload_clip(out_path, job_id, clip_id)
@@ -169,11 +202,17 @@ async def render_clip(
         captions_data = json.loads(captions_data)
     captions = [Caption(start=c["start"], end=c["end"], text=c["text"]) for c in captions_data]
 
-    if settings.WORKER_SERVICE_URL:
-        # Heavy ffmpeg work runs on the worker service.
+    if has_multi_region_workers():
+        # Heavy ffmpeg work runs on the worker service — spread across
+        # regions same as pipeline dispatch (app/core/worker_routing.py).
+        # Synchronous call (not Cloud Tasks): the caller is waiting on the
+        # response for the new video_url, so a queue would just add
+        # latency without fixing anything — failures already propagate
+        # straight back to the user via raise_for_status(), no zombie risk.
+        target = await pick_worker()
         async with httpx.AsyncClient(timeout=180.0) as client:
             resp = await client.post(
-                f"{settings.WORKER_SERVICE_URL}/internal/editor/render",
+                f"{target.worker_url}/internal/editor/render",
                 json={
                     "job_id": job_id,
                     "clip_id": clip_id,

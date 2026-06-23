@@ -977,6 +977,9 @@ async def _encode_reframed_and_captioned(
     face_track: list[tuple[float, float, float]] | None = None,
     src_w: int = 0,
     src_h: int = 0,
+    title_permanent: bool = False,
+    clip_duration: float = 0.0,
+    font: str = "default",
 ) -> None:
     """One ffmpeg invocation: reframe + (optionally) burn captions, producing
     both the raw reframed output and the captioned output."""
@@ -984,7 +987,10 @@ async def _encode_reframed_and_captioned(
     try:
         if captions or hook_title:
             fc = _build_template_filter(template, bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label="reframed")
-            ass_content = build_ass_content(captions or [], style, color, h_align, v_align, words_per_line, hook_title, template=template)
+            ass_content = build_ass_content(
+                captions or [], style, color, h_align, v_align, words_per_line, hook_title,
+                template=template, title_permanent=title_permanent, clip_duration=clip_duration, font=font,
+            )
             with tempfile.NamedTemporaryFile(suffix=".ass", mode="w", encoding="utf-8", delete=False) as f:
                 f.write(ass_content)
                 ass_path = f.name
@@ -1067,6 +1073,9 @@ async def reframe_and_caption(
     face_track: list[tuple[float, float, float]] | None = None,
     src_w: int = 0,
     src_h: int = 0,
+    title_permanent: bool = False,
+    clip_duration: float = 0.0,
+    font: str = "default",
 ) -> tuple[Path, Path]:
     """
     Reframe a 16:9 clip into the chosen aspect ratio and (if `captions` or
@@ -1088,7 +1097,9 @@ async def reframe_and_caption(
                      passed to build_ass_content() when captions is non-empty
         hook_title:  AI-generated hook (ClipTimestamp.title), burned as a
                      boxed title card for the first HOOK_TITLE_DURATION
-                     seconds regardless of `captions`
+                     seconds (or the whole clip if `title_permanent`)
+        title_permanent: keep the hook-title card on screen for the entire
+                     clip duration instead of just the first few seconds.
         face_track, src_w, src_h:
                      dominant-face position track and source resolution from
                      face_tracker.compute_face_track() — drives the zoompan
@@ -1112,7 +1123,7 @@ async def reframe_and_caption(
             input_path, raw_output_path, captioned_output_path,
             tpl, bar_color, zoom_beats, width, height,
             captions, style, color, h_align, v_align, words_per_line,
-            hook_title, face_track, src_w, src_h,
+            hook_title, face_track, src_w, src_h, title_permanent, clip_duration, font,
         )
     except Exception as exc:
         logger.error(
@@ -1123,7 +1134,7 @@ async def reframe_and_caption(
                 input_path, raw_output_path, captioned_output_path,
                 "blur_bg", bar_color, None, width, height,
                 captions, style, color, h_align, v_align, words_per_line,
-                hook_title, None, 0, 0,
+                hook_title, None, 0, 0, title_permanent, clip_duration, font,
             )
         except Exception as exc2:
             raise RuntimeError(

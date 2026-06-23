@@ -26,8 +26,25 @@ export const COLOR_COMBOS = {
   butter_yellow:        { primary:'#F8E16C', secondary:'#FFFFFF', outline:'#202020', back:'rgba(0,0,0,0.6)',   highlight:'#FFFFFF' },
   hot_pink_black:       { primary:'#FF1493', secondary:'#FFFFFF', outline:'#000000', back:'rgba(0,0,0,0.6)',   highlight:'#FFFFFF' },
   electric_blue_white:  { primary:'#0080FF', secondary:'#000000', outline:'#FFFFFF', back:'rgba(255,255,255,0.6)', highlight:'#000000' },
+  // Clean, monochrome combos — no clashing accent outline
+  pure_white:   { primary:'#FFFFFF', secondary:'#FFFFFF', outline:'#000000', back:'rgba(0,0,0,0.6)', highlight:'#FFFFFF' },
+  gold_premium: { primary:'#FFD700', secondary:'#FFFFFF', outline:'#000000', back:'rgba(0,0,0,0.6)', highlight:'#FFD700' },
+  ice_blue:     { primary:'#C8E5FF', secondary:'#FFFFFF', outline:'#101010', back:'rgba(0,0,0,0.6)', highlight:'#C8E5FF' },
 }
 export const DEFAULT_COLOR = 'white_black'
+
+// Mirrors FONT_OPTIONS in captions.py — CSS font-family strings.
+// The actual @font-face files are loaded globally via index.html (Google Fonts CDN).
+export const FONT_FAMILIES = {
+  default:       '"Arial Black", Arial, sans-serif',
+  montserrat:    '"Montserrat", sans-serif',
+  archivo_black: '"Archivo Black", sans-serif',
+  anton:         '"Anton", sans-serif',
+  bebas_neue:    '"Bebas Neue", sans-serif',
+  poppins:       '"Poppins", sans-serif',
+  jakarta:       '"Plus Jakarta Sans", sans-serif',
+}
+export const DEFAULT_FONT = 'default'
 
 // Mirrors _POS in captions.py (PlayRes 1080x1920 → percentages + anchor)
 const POSITIONS = {
@@ -113,9 +130,9 @@ const KEYFRAMES = `
 `
 
 /** Build the rendered text node(s) + wrapper style/animation for one style. */
-function renderChunk({ style, combo, highlightColor, phrase, chunk, chunks, idx, time }) {
+function renderChunk({ style, combo, highlightColor, phrase, chunk, chunks, idx, time, fontFamily }) {
   const base = {
-    fontFamily: '"Arial Black", Arial, sans-serif',
+    fontFamily,
     fontWeight: 800,
     color: combo.primary,
     textShadow: `0 0 3px ${combo.outline}, 0 2px 4px rgba(0,0,0,0.85)`,
@@ -133,7 +150,7 @@ function renderChunk({ style, combo, highlightColor, phrase, chunk, chunks, idx,
 
     case 'typewriter': {
       const accumulated = chunks.slice(0, idx + 1).map(c => c.text).join(' ')
-      return { text: accumulated, wrapStyle: { ...base, fontFamily: 'Arial, sans-serif', fontWeight: 600 } }
+      return { text: accumulated, wrapStyle: { ...base, fontWeight: 600 } }
     }
 
     case 'zoom':
@@ -143,14 +160,14 @@ function renderChunk({ style, combo, highlightColor, phrase, chunk, chunks, idx,
       return { text: chunk.text.toUpperCase(), wrapStyle: { ...base, animation: 'capShake 0.4s ease both' } }
 
     case 'fade':
-      return { text: chunk.text, wrapStyle: { ...base, fontFamily: 'Arial, sans-serif', fontWeight: 500, animation: 'capFade 0.4s ease both' } }
+      return { text: chunk.text, wrapStyle: { ...base, fontWeight: 500, animation: 'capFade 0.4s ease both' } }
 
     case 'karaoke': {
       const words = splitWords(phrase, 1)
       const activeIdx = words.findIndex(w => time >= w.start && time < w.end)
       const phraseWords = phrase.text.trim().split(/\s+/).filter(Boolean)
       return {
-        wrapStyle: { ...base, fontFamily: 'Arial, sans-serif', fontWeight: 600 },
+        wrapStyle: { ...base, fontWeight: 600 },
         node: (
           <>
             {phraseWords.map((w, i) => (
@@ -182,13 +199,16 @@ function renderChunk({ style, combo, highlightColor, phrase, chunk, chunks, idx,
     case 'neon':
       return {
         text: chunk.text, wrapStyle: {
-          ...base, fontFamily: 'Arial, sans-serif',
+          ...base,
           textShadow: `0 0 6px ${combo.primary}, 0 0 12px ${combo.primary}, 0 2px 4px rgba(0,0,0,0.7)`,
         },
       }
 
+    case 'none':
+      return { text: '', wrapStyle: { display: 'none' } }
+
     default: // minimal
-      return { text: chunk.text, wrapStyle: { ...base, fontFamily: 'Arial, sans-serif', fontWeight: 500 } }
+      return { text: chunk.text, wrapStyle: { ...base, fontWeight: 500 } }
   }
 }
 
@@ -207,6 +227,7 @@ export default function CaptionOverlay({
   vAlign = 'bottom',
   wordsPerLine = 3,
   highlightColor,
+  font = DEFAULT_FONT,
 }) {
   const [time, setTime] = useState(0)
   const [demoIdx, setDemoIdx] = useState(0)
@@ -257,8 +278,9 @@ export default function CaptionOverlay({
   const chunk = chunks[idx]
   if (!chunk) return null
 
+  const fontFamily = FONT_FAMILIES[font] || FONT_FAMILIES[DEFAULT_FONT]
   const { text, node, wrapStyle } = renderChunk({
-    style, combo, highlightColor, phrase, chunk, chunks, idx, time: activeTime,
+    style, combo, highlightColor, phrase, chunk, chunks, idx, time: activeTime, fontFamily,
   })
 
   return (

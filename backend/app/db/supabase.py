@@ -154,6 +154,27 @@ async def get_job(job_id: str) -> dict | None:
     return await _fetchrow("SELECT * FROM jobs WHERE job_id=$1", job_id)
 
 
+async def find_stuck_queued_jobs(older_than_minutes: int) -> list[dict]:
+    """
+    Jobs that have sat at status='queued' longer than `older_than_minutes`
+    — either Cloud Tasks exhausted every retry without a worker ever
+    picking the task up, or the worker fleet was unreachable/down.
+    Used by the reconciliation sweep (app/api/internal.py) to fail these
+    jobs and refund their credits/video-minutes reservations, since
+    orchestrator.py's own refund-on-failure logic never runs for a job
+    whose pipeline never started.
+    """
+    return await _fetch(
+        """
+        SELECT job_id, user_id, clip_count, reserved_video_minutes
+        FROM jobs
+        WHERE status = 'queued'
+          AND created_at < NOW() - ($1 || ' minutes')::interval
+        """,
+        str(older_than_minutes),
+    )
+
+
 async def update_job_metadata(job_id: str, video_title: str, video_duration: int) -> None:
     await _execute(
         "UPDATE jobs SET video_title=$1, video_duration=$2 WHERE job_id=$3",

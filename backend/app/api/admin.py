@@ -29,6 +29,7 @@ from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, get_current_user
 from app.core.config import get_settings
+from app.core.worker_routing import has_multi_region_workers, pick_primary_worker
 from app.db import supabase as db
 from app.pipeline.test_pipeline import TOTAL_CLIPS, get_test_job, run_test_pipeline
 
@@ -362,15 +363,18 @@ async def admin_test_generate(body: TestGenerateRequest, admin: AdminUser):
     """
     job_id = f"test_{uuid.uuid4().hex[:12]}"
 
-    if settings.WORKER_SERVICE_URL:
-        # Dispatch to worker — same pattern as normal jobs.
-        # Worker has the proxy env vars and 8 vCPU for ffmpeg.
+    if has_multi_region_workers():
+        # Dispatch to a worker — always the SAME (primary) one, not
+        # round-robin, since this admin test pipeline keeps its progress
+        # state in-memory on whichever single instance handles it (see
+        # admin_test_job_status below, which must poll that same instance).
+        target = pick_primary_worker()
         async def _dispatch():
             try:
                 import httpx
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     resp = await client.post(
-                        f"{settings.WORKER_SERVICE_URL}/internal/test/run",
+                        f"{target.worker_url}/internal/test/run",
                         json={"job_id": job_id, "youtube_url": body.youtube_url, "quality": body.quality},
                         headers={"X-Internal-Secret": settings.INTERNAL_TASK_SECRET},
                     )
@@ -389,14 +393,15 @@ async def admin_test_generate(body: TestGenerateRequest, admin: AdminUser):
 async def admin_test_job_status(job_id: str, admin: AdminUser):
     """Admin: poll progress of a test batch.
 
-    When WORKER_SERVICE_URL is set, the job runs on the worker and its
-    in-memory state lives there — proxy the request to the worker.
+    When worker dispatch is configured, the job runs on the (primary)
+    worker and its in-memory state lives there — proxy the request to it.
     """
-    if settings.WORKER_SERVICE_URL:
+    if has_multi_region_workers():
+        target = pick_primary_worker()
         import httpx
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
-                f"{settings.WORKER_SERVICE_URL}/internal/test/jobs/{job_id}",
+                f"{target.worker_url}/internal/test/jobs/{job_id}",
                 headers={"X-Internal-Secret": settings.INTERNAL_TASK_SECRET},
             )
         if resp.status_code == 404:

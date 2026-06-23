@@ -31,6 +31,15 @@ COPY --from=builder /install /usr/local
 COPY app/        app/
 COPY migrations/ migrations/
 
+# Register bundled caption fonts (Montserrat ExtraBold, Archivo Black, Anton,
+# Bebas Neue, Poppins ExtraBold, Plus Jakarta Sans ExtraBold) + Twemoji Mozilla
+# (COLR colour-emoji font — provides emoji glyphs as a fontconfig fallback so
+# libass renders 🔥💯✅ etc. inline with caption/title text, no overlay needed)
+# with fontconfig so libass can find them by family name in the .ass file.
+RUN mkdir -p /usr/share/fonts/truetype/shortclipr \
+    && cp app/assets/fonts/*.ttf /usr/share/fonts/truetype/shortclipr/ \
+    && fc-cache -fv
+
 # ── Cloud Run settings ──────────────────────────────────────────────────────────
 ENV PORT=8080
 EXPOSE 8080

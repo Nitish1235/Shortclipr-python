@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Navigation from '../components/Navigation'
-import CaptionOverlay from '../components/CaptionOverlay'
+import CaptionOverlay, { FONT_FAMILIES } from '../components/CaptionOverlay'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
@@ -27,11 +27,37 @@ const CAPTION_STYLES = [
   { val:'hormozi',    label:'Hormozi',    sub:'Bold caps with high-contrast highlight' },
   { val:'mrbeast',    label:'MrBeast',    sub:'Big bouncy text, bright highlight' },
   { val:'neon',       label:'Neon',       sub:'Glowing neon outline' },
+  { val:'none',       label:'None',       sub:'No subtitles burned in' },
+]
+
+// Curated trending emoji — burned in via the Twemoji Mozilla colour-emoji
+// font (bundled in backend/app/assets/fonts/, fontconfig-registered as a
+// libass glyph fallback), so these render inline with title/caption text
+// with zero extra positioning/sync work — no image-overlay system needed.
+const TRENDING_EMOJI = [
+  '🔥','💯','✅','❌','👀','💀','😂','🤣','❤️','👍',
+  '👎','🚀','💰','⚡','🎯','😱','🤯','🙌','👏','💪',
+  '🤔','🫡','✨','🎉','🔑','🧠','⚠️','📈','📉','🤑',
+  '🙏','💸','🎬','👇','👆','➡️','😎','🆗','🤝','👑',
+  '😭','🚨','💥','⭐','🥶',
+]
+
+const FONT_OPTIONS_LIST = [
+  { val:'default',       label:'Default' },
+  { val:'montserrat',    label:'Montserrat' },
+  { val:'archivo_black', label:'Archivo Black' },
+  { val:'anton',         label:'Anton' },
+  { val:'bebas_neue',    label:'Bebas Neue' },
+  { val:'poppins',       label:'Poppins' },
+  { val:'jakarta',       label:'Plus Jakarta' },
 ]
 
 const COLOR_COMBOS = [
   { val:'white_black',  label:'White / Black'  },
   { val:'yellow_black', label:'Yellow / Black' },
+  { val:'pure_white',           label:'Pure White (clean)' },
+  { val:'gold_premium',         label:'Gold Premium'       },
+  { val:'ice_blue',             label:'Ice Blue'           },
   { val:'butter_yellow',        label:'Butter Yellow'      },
   { val:'hot_pink_black',       label:'Hot Pink / Black'   },
   { val:'electric_blue_white',  label:'Electric Blue'      },
@@ -76,6 +102,7 @@ export default function Editor() {
   const userPlan          = user?.plan || 'free'
   const previewRef        = useRef(null)
   const videoRef          = useRef(null)
+  const titleInputRef     = useRef(null)
 
   const [activeTab,          setActiveTab]          = useState('templates')
   const [showSubtitleEditor, setShowSubtitleEditor] = useState(false)
@@ -91,6 +118,7 @@ export default function Editor() {
   const [hAlign,            setHAlign]            = useState('center')
   const [vAlign,            setVAlign]            = useState('bottom')
   const [wordsPerLine,      setWordsPerLine]      = useState(2)
+  const [captionFont,      setCaptionFont]       = useState('default')
   const [highlightColor,    setHighlightColor]    = useState('#cf1322')
   const [showCaptions,      setShowCaptions]      = useState(true)
   const [transcriptBlocks,  setTranscriptBlocks]  = useState([])
@@ -99,6 +127,9 @@ export default function Editor() {
   const [thumbnailUrl,      setThumbnailUrl]      = useState('')
   const [rawVideoUrl,       setRawVideoUrl]       = useState('')
   const [captionsData,      setCaptionsData]      = useState([])
+  const [titleText,         setTitleText]         = useState('')
+  const [titlePermanent,    setTitlePermanent]    = useState(false)
+  const [titleEnabled,      setTitleEnabled]      = useState(true)
 
   useEffect(() => {
     const fetchClipData = async () => {
@@ -126,8 +157,12 @@ export default function Editor() {
         if (cfg.h_align)          setHAlign(cfg.h_align)
         if (cfg.v_align)          setVAlign(cfg.v_align)
         if (cfg.words_per_line)   setWordsPerLine(cfg.words_per_line)
+        if (cfg.font)             setCaptionFont(cfg.font)
         if (cfg.highlightColor)   setHighlightColor(cfg.highlightColor)
         if (cfg.subtitlePosition) setSubtitlePosition(cfg.subtitlePosition)
+        setTitleText(cfg.hook_title ?? clip.top_title ?? '')
+        if (cfg.title_permanent)  setTitlePermanent(cfg.title_permanent)
+        if (cfg.hook_title_enabled === false) setTitleEnabled(false)
 
         if (Array.isArray(cfg.transcript) && cfg.transcript.length) {
           setTranscriptBlocks(cfg.transcript)
@@ -149,6 +184,22 @@ export default function Editor() {
   const handleTextUpdate = (id, val) =>
     setTranscriptBlocks(prev => prev.map(b => b.id === id ? { ...b, text:val } : b))
 
+  // Insert an emoji at the current cursor position in the title textarea
+  // (falls back to appending at the end if the field isn't focused).
+  const insertEmoji = (emoji) => {
+    const el = titleInputRef.current
+    if (!el) { setTitleText(prev => prev + emoji); return }
+    const start = el.selectionStart ?? titleText.length
+    const end   = el.selectionEnd ?? titleText.length
+    const next  = titleText.slice(0, start) + emoji + titleText.slice(end)
+    setTitleText(next)
+    requestAnimationFrame(() => {
+      el.focus()
+      const caret = start + emoji.length
+      el.setSelectionRange(caret, caret)
+    })
+  }
+
   const handleSave = async () => {
     setIsSaving(true)
     try {
@@ -164,9 +215,13 @@ export default function Editor() {
           h_align: hAlign,
           v_align: vAlign,
           words_per_line: wordsPerLine,
+          font: captionFont,
           highlightColor,
           subtitlePosition,
           transcript: transcriptBlocks,
+          hook_title: titleEnabled ? titleText : '',
+          title_permanent: titlePermanent,
+          hook_title_enabled: titleEnabled,
         }),
       })
       if (res.status === 401) { logout(); return }
@@ -191,7 +246,11 @@ export default function Editor() {
           h_align: hAlign,
           v_align: vAlign,
           words_per_line: wordsPerLine,
+          font: captionFont,
           highlightColor,
+          hook_title: titleEnabled ? titleText : '',
+          title_permanent: titlePermanent,
+          hook_title_enabled: titleEnabled,
         }),
       })
       if (res.status === 401) { logout(); return }
@@ -374,6 +433,7 @@ export default function Editor() {
                     vAlign={vAlign}
                     wordsPerLine={wordsPerLine}
                     highlightColor={highlightColor}
+                    font={captionFont}
                   />
                 ) : (
                   <div style={{
@@ -424,6 +484,7 @@ export default function Editor() {
             <div style={{ display:'flex', borderBottom:'1px solid #e5e5e5' }}>
               <button style={tabBtn(activeTab === 'templates')} onClick={() => setActiveTab('templates')}>Layouts</button>
               <button style={tabBtn(activeTab === 'captions')} onClick={() => setActiveTab('captions')}>Captions</button>
+              <button style={tabBtn(activeTab === 'title')} onClick={() => setActiveTab('title')}>Title</button>
             </div>
 
             {/* Tab body */}
@@ -566,6 +627,27 @@ export default function Editor() {
                     </div>
                   </div>
 
+                  {/* Font */}
+                  <div>
+                    <span style={labelStyle}>Font</span>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                      {FONT_OPTIONS_LIST.map(opt => (
+                        <button key={opt.val} onClick={() => setCaptionFont(opt.val)} style={{
+                          padding:'10px 8px', borderRadius:'8px', textAlign:'center',
+                          background: captionFont === opt.val ? '#fef2f2' : '#f9f9f9',
+                          border: captionFont === opt.val ? '2px solid #cf1322' : '1.5px solid #e5e5e5',
+                          cursor:'pointer',
+                        }}>
+                          <div style={{
+                            fontFamily: FONT_FAMILIES[opt.val], fontWeight:800, fontSize:'1rem',
+                            color: captionFont === opt.val ? '#cf1322' : '#333', marginBottom:'2px',
+                          }}>Aa</div>
+                          <div style={{ fontSize:'0.7rem', fontWeight:600, color: captionFont === opt.val ? '#cf1322' : '#666' }}>{opt.label}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Highlight color */}
                   <div>
                     <span style={labelStyle}>Highlight Color</span>
@@ -623,6 +705,107 @@ export default function Editor() {
                       ))}
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* ── Title tab ── */}
+              {activeTab === 'title' && (
+                <div style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
+
+                  {/* Enable / None toggle */}
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 0', borderBottom:'1px solid #f0f0f0' }}>
+                    <div>
+                      <div style={{ fontSize:'0.875rem', fontWeight:600, color:'#111' }}>Title Card</div>
+                      <div style={{ fontSize:'0.75rem', color:'#999', marginTop:'2px' }}>
+                        {titleEnabled ? 'On — a title card will be burned in.' : 'None — no title card on this clip.'}
+                      </div>
+                    </div>
+                    <button onClick={() => setTitleEnabled(p => !p)} style={{
+                      background: titleEnabled ? '#cf1322' : '#e5e5e5',
+                      border:'none', borderRadius:'100px', width:'44px', height:'24px',
+                      cursor:'pointer', position:'relative', transition:'background 0.2s', flexShrink:0,
+                    }}>
+                      <span style={{
+                        position:'absolute', top:'3px', width:'18px', height:'18px',
+                        background:'#fff', borderRadius:'50%', transition:'left 0.2s',
+                        left: titleEnabled ? '23px' : '3px',
+                      }}/>
+                    </button>
+                  </div>
+
+                  <div style={{ opacity: titleEnabled ? 1 : 0.45, pointerEvents: titleEnabled ? 'auto' : 'none' }}>
+                    <span style={labelStyle}>Title Text</span>
+                    <textarea
+                      ref={titleInputRef}
+                      value={titleText}
+                      onChange={e => setTitleText(e.target.value)}
+                      disabled={!titleEnabled}
+                      placeholder="e.g. THE TRUTH ABOUT PASSIVE INCOME"
+                      style={{
+                        width:'100%', background:'#f9f9f9', color:'#111',
+                        border:'1.5px solid #e5e5e5', borderRadius:'8px',
+                        padding:'12px 14px', minHeight:'70px', fontSize:'0.9rem',
+                        fontWeight:600, resize:'vertical', outline:'none',
+                        fontFamily:'Space Grotesk, sans-serif',
+                      }}
+                      onFocus={e => e.target.style.borderColor='#cf1322'}
+                      onBlur={e => e.target.style.borderColor='#e5e5e5'}
+                    />
+                    <p style={{ fontSize:'0.75rem', color:'#999', marginTop:'8px', lineHeight:1.5 }}>
+                      Burned in as a bold boxed title card. Uses the same colour
+                      combo as your captions (set in the Captions tab) — pick a
+                      clean combo like <strong>Pure White</strong> or <strong>Gold Premium</strong> for best contrast.
+                    </p>
+
+                    {/* Trending emoji picker — inserts at cursor position */}
+                    <div style={{ marginTop:'12px' }}>
+                      <span style={{ ...labelStyle, fontSize:'0.66rem' }}>Trending Emoji</span>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginTop:'6px' }}>
+                        {TRENDING_EMOJI.map(e => (
+                          <button key={e} type="button" disabled={!titleEnabled}
+                            onClick={() => insertEmoji(e)}
+                            style={{
+                              width:'32px', height:'32px', fontSize:'1.05rem',
+                              background:'#f9f9f9', border:'1.5px solid #e5e5e5',
+                              borderRadius:'7px', cursor: titleEnabled ? 'pointer' : 'not-allowed',
+                              display:'flex', alignItems:'center', justifyContent:'center',
+                            }}
+                          >{e}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Permanent toggle */}
+                  <div style={{
+                    display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 0',
+                    borderTop:'1px solid #f0f0f0', borderBottom:'1px solid #f0f0f0',
+                    opacity: titleEnabled ? 1 : 0.45, pointerEvents: titleEnabled ? 'auto' : 'none',
+                  }}>
+                    <div>
+                      <div style={{ fontSize:'0.875rem', fontWeight:600, color:'#111' }}>Show title for entire clip</div>
+                      <div style={{ fontSize:'0.75rem', color:'#999', marginTop:'2px' }}>
+                        Off = first ~2.6s only. On = stays on screen the whole clip.
+                      </div>
+                    </div>
+                    <button onClick={() => setTitlePermanent(p => !p)} style={{
+                      background: titlePermanent ? '#cf1322' : '#e5e5e5',
+                      border:'none', borderRadius:'100px', width:'44px', height:'24px',
+                      cursor:'pointer', position:'relative', transition:'background 0.2s', flexShrink:0,
+                    }}>
+                      <span style={{
+                        position:'absolute', top:'3px', width:'18px', height:'18px',
+                        background:'#fff', borderRadius:'50%', transition:'left 0.2s',
+                        left: titlePermanent ? '23px' : '3px',
+                      }}/>
+                    </button>
+                  </div>
+
+                  {titleEnabled && !titleText.trim() && (
+                    <p style={{ fontSize:'0.78rem', color:'#cf1322', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'8px', padding:'10px 12px' }}>
+                      Add title text above, then hit Render to burn it in.
+                    </p>
+                  )}
                 </div>
               )}
             </div>

@@ -1,16 +1,24 @@
 """
 jobs.py — /jobs endpoints.
 
-POST /jobs              — Validate → check plan → INSERT job → START pipeline immediately
+POST /jobs              — Validate → check plan → INSERT job → enqueue/start pipeline
 GET  /jobs/{job_id}/stream — SSE progress monitor (pure heartbeat, pipeline already running)
 GET  /jobs              — List user's jobs
 GET  /jobs/{job_id}     — Single job
 GET  /jobs/{job_id}/clips — Clips for a job
 DELETE /jobs/{job_id}   — Delete job + clips
 
-No queue. Pipeline fires the moment POST /jobs is received.
-asyncio.create_task() launches run_pipeline() in the same event loop —
-Cloud Run keeps the CPU alive as long as the task is running.
+Two dispatch modes:
+  - Single-service (WORKER_SERVICE_URLS empty): pipeline runs in-process via
+    asyncio.create_task(), job row inserted as status="processing" since
+    there's no network hop that can silently fail between INSERT and start.
+  - Multi-region (WORKER_SERVICE_URLS set): job row inserted as
+    status="queued", then enqueued onto one region's Cloud Tasks queue (see
+    app/core/worker_routing.py, app/core/tasks.py). The worker flips the row
+    to "processing" itself once the pipeline actually starts (orchestrator.py)
+    — if Cloud Tasks exhausts retries without ever reaching a worker, the
+    row stays "queued" and gets caught + refunded by the reconciliation
+    sweep (/internal/reconcile-stuck-jobs), not silently lost.
 """
 
 import asyncio
@@ -18,7 +26,6 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-import httpx
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
@@ -28,9 +35,11 @@ from app.core.config import get_settings
 from app.core.plan_limits import (
     get_max_clip_count, get_max_clip_duration_seconds, get_max_transcript_minutes_for_ai,
 )
+from app.core.tasks import enqueue_pipeline_run
+from app.core.worker_routing import has_multi_region_workers, pick_worker
 from app.db import supabase as db
 from app.pipeline.captions import (
-    VALID_COLORS, VALID_HALIGNS, VALID_STYLES,
+    VALID_COLORS, VALID_FONTS, VALID_HALIGNS, VALID_STYLES,
     VALID_VALIGNS, VALID_WORDS_PER_LINE,
 )
 from app.pipeline.extractor import VALID_TEMPLATES, VALID_ASPECTS
@@ -61,6 +70,9 @@ class JobOptions(BaseModel):
     h_align:      str = "center"        # horizontal position
     v_align:      str = "bottom"        # vertical position
     words_per_line:  int = 3             # 1 | 2 | 3  — words per screen
+    title_permanent: bool = False        # keep the AI hook title on screen for the whole clip
+    hook_title_enabled: bool = True      # False = "None" — skip the AI title card entirely
+    font:            str = "default"    # one of captions.VALID_FONTS
     short_template:  str = "crop_fill"  # 9:16 layout template
     bar_color:       str = "#0d0d0d"    # hex colour for bars / frame / gradient
     aspect:          str = "9:16"       # output aspect ratio — 9:16 | 16:9 | 1:1
@@ -109,6 +121,11 @@ class JobOptions(BaseModel):
     @classmethod
     def validate_words_per_line(cls, v: int) -> int:
         return v if v in VALID_WORDS_PER_LINE else 3
+
+    @field_validator("font")
+    @classmethod
+    def validate_font(cls, v: str) -> str:
+        return v if v in VALID_FONTS else "default"
 
     @field_validator("short_template")
     @classmethod
@@ -275,23 +292,30 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
             billable_seconds = reserved_seconds
 
     # ── 4. Insert job row ──────────────────────────────────────
+    # "queued" when dispatch goes through Cloud Tasks (a network hop that
+    # can fail between INSERT and pipeline start — the reconciliation sweep
+    # catches anything stuck here); "processing" for in-process single-service
+    # mode, where there's no such gap.
     job_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
+    multi_region = has_multi_region_workers()
+    initial_status = "queued" if multi_region else "processing"
     try:
         await db._execute(
             """
             INSERT INTO jobs
               (job_id, user_id, youtube_url, status, progress,
-               current_step, clip_count, created_at, updated_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
+               current_step, clip_count, reserved_video_minutes, created_at, updated_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)
             """,
             job_id,
             current_user.user_id,
             body.youtube_url,
-            "processing",
+            initial_status,
             0,
-            "Starting pipeline...",
+            "Starting pipeline..." if not multi_region else "Queued...",
             body.options.clip_count,
+            video_minutes_reserved,
             now,
         )
     except Exception:
@@ -331,28 +355,35 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
     if max_transcript_minutes is not None:
         options["max_transcript_seconds"] = max_transcript_minutes * 60
 
-    if settings.WORKER_SERVICE_URL:
-        # Fire-and-forget HTTP call to the worker service — /internal/pipeline/run
-        # itself does asyncio.create_task() and returns immediately, so this
-        # call returns fast and doesn't hold the API instance open.
-        async def _dispatch_to_worker():
-            try:
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    resp = await client.post(
-                        f"{settings.WORKER_SERVICE_URL}/internal/pipeline/run",
-                        json={
-                            "job_id": job_id, "user_id": current_user.user_id,
-                            "youtube_url": body.youtube_url, "options": options,
-                        },
-                        headers={"X-Internal-Secret": settings.INTERNAL_TASK_SECRET},
-                    )
-                    resp.raise_for_status()
-            except Exception:
-                logger.exception(f"[{job_id}] Failed to dispatch pipeline to worker")
+    if multi_region:
+        # Enqueue onto one region's Cloud Tasks queue — NOT fire-and-forget.
+        # Cloud Tasks retries with backoff on failure; if it exhausts every
+        # attempt without the worker ever flipping this row to "processing",
+        # /internal/reconcile-stuck-jobs catches it and refunds the
+        # reservations made above instead of leaving a permanent zombie job.
+        target = await pick_worker()
+        try:
+            await enqueue_pipeline_run(
+                target, job_id,
+                payload={
+                    "job_id": job_id, "user_id": current_user.user_id,
+                    "youtube_url": body.youtube_url, "options": options,
+                },
+            )
+        except Exception:
+            # Enqueue itself failed (Cloud Tasks API error, bad queue config,
+            # etc.) — this is NOT a transient dispatch failure Cloud Tasks can
+            # retry, since the task was never created. Fail fast and refund
+            # now rather than waiting for the reconciliation sweep.
+            logger.exception(f"[{job_id}] Failed to enqueue pipeline task")
+            await db.fail_job(job_id, "Failed to schedule job — please try again.")
+            await db.release_credits(current_user.user_id, reserved_credits)
+            if video_minutes_reserved > 0:
+                await db.release_video_minutes(current_user.user_id, video_minutes_reserved)
+            raise HTTPException(status_code=503, detail="Failed to schedule job — please try again.")
 
-        asyncio.create_task(_dispatch_to_worker(), name=f"dispatch-{job_id[:8]}")
         logger.info(
-            f"[{job_id}] Pipeline dispatched to worker — user={current_user.user_id} "
+            f"[{job_id}] Pipeline enqueued to {target.region} — user={current_user.user_id} "
             f"plan={current_user.plan} duration={video_duration_seconds}s"
         )
     else:
@@ -366,7 +397,7 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
         )
 
     # ── 6. Return instantly ────────────────────────────────────
-    return {"job_id": job_id, "status": "processing"}
+    return {"job_id": job_id, "status": initial_status}
 
 
 # ── SSE stream — pure progress monitor ─────────────────────────

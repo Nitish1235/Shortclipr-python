@@ -1,3 +1,16 @@
+substitutions:
+  # Cloud Run deploy region — pass via --substitutions _REGION=us-east1 on
+  # the trigger for each additional region. Image is always built/pushed to
+  # the SAME us-central1 Artifact Registry repo regardless of deploy region
+  # (creating per-region repos is unnecessary extra infra — Cloud Run can
+  # pull cross-region, just a few seconds slower on cold start).
+  _REGION: 'us-central1'
+  # vCPU per instance — also drives how many instances fit in a region's
+  # 20,000m CPU quota (see --max-instances comment below). Pass
+  # --substitutions _CPU=4,_MAX_INSTANCES=5 to match.
+  _CPU: '4'
+  _MAX_INSTANCES: '5'
+
 steps:
   # ── 1. Build image ──────────────────────────────────────────────────────────
   - name: 'gcr.io/cloud-builders/docker'
@@ -17,9 +30,9 @@ steps:
       - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker'
 
   # ── 3. Deploy to Cloud Run ──────────────────────────────────────────────────
-  # shortclipr-worker — the SAME image as shortclipr-api, but sized for
-  # ffmpeg encoding and only ever called via:
-  #   - /internal/pipeline/run   (fire-and-forget call from POST /jobs)
+  # shortclipr-worker-$_REGION — one Cloud Run service per region, all built
+  # from the SAME image, only ever called via:
+  #   - /internal/pipeline/run   (Cloud Tasks target — see app/core/tasks.py)
   #   - /internal/editor/render  (direct call from POST /editor/render)
   # Both routes are gated on X-Internal-Secret == INTERNAL_TASK_SECRET.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -27,11 +40,11 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'shortclipr-worker'
+      - 'shortclipr-worker-$_REGION'
       - '--image'
       - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA'
       - '--region'
-      - 'us-central1'
+      - '$_REGION'
       - '--platform'
       - 'managed'
       # Allow-unauthenticated like shortclipr-api — /internal/* routes are
@@ -41,13 +54,14 @@ steps:
       - '8080'
 
       # ── Resources ────────────────────────────────────────────────────────
-      # 8 GiB RAM / 8 vCPU: FFmpeg encodes run with MAX_CONCURRENT_ENCODES
-      # concurrent libx264 processes, plus cheap -c copy extraction
-      # (asyncio semaphore = 10) and in-flight temp video data.
+      # FFmpeg encodes run with MAX_CONCURRENT_ENCODES concurrent libx264
+      # processes, plus cheap -c copy extraction (asyncio semaphore = 10)
+      # and in-flight temp video data. Memory scaled to match _CPU (Cloud
+      # Run requires a minimum memory/vCPU ratio) — bump if OOM under load.
       - '--memory'
-      - '8192Mi'
+      - '4096Mi'
       - '--cpu'
-      - '8'
+      - '$_CPU'
 
       # CPU-boost speeds up cold starts; no-cpu-throttling keeps full CPU
       # available to background asyncio tasks (the pipeline runs via
@@ -70,13 +84,12 @@ steps:
       - '5'
 
       # ── Scaling ──────────────────────────────────────────────────────────
-      # Capped at 2: region CPU quota is 20 vCPU/40GiB, and at 8 vCPU/8GiB
-      # per instance with --no-cpu-throttling, only 2 instances fit
-      # (CpuAllocPerProjectRegion = 20000m / 8000m = 2.5 → 2).
+      # _MAX_INSTANCES must match: region_quota_m / (_CPU * 1000).
+      # At _CPU=4 and a 20,000m regional quota: 20000/4000 = 5.
       - '--min-instances'
       - '0'
       - '--max-instances'
-      - '2'
+      - '$_MAX_INSTANCES'
 
 images:
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA'

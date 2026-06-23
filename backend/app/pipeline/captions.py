@@ -155,6 +155,31 @@ COLOR_COMBOS: dict[str, dict[str, str]] = {
         "highlight": "&H00000000",
         "solid_back": "&H00FFFFFF",
     },
+    # ── Clean, monochrome combos — no clashing accent outline ────────────
+    "pure_white": {
+        "primary":   "&H00FFFFFF",   # white
+        "secondary": "&H00FFFFFF",   # white (no flashy karaoke swap)
+        "outline":   "&H00000000",   # black
+        "back":      "&H99000000",
+        "highlight": "&H00FFFFFF",
+        "solid_back": "&H00000000",  # opaque black box
+    },
+    "gold_premium": {
+        "primary":   "&H0000D7FF",   # gold
+        "secondary": "&H00FFFFFF",
+        "outline":   "&H00000000",   # black
+        "back":      "&H99000000",
+        "highlight": "&H0000D7FF",
+        "solid_back": "&H00000000",
+    },
+    "ice_blue": {
+        "primary":   "&H00FFE5C8",   # soft ice blue
+        "secondary": "&H00FFFFFF",
+        "outline":   "&H00101010",   # near-black
+        "back":      "&H99000000",
+        "highlight": "&H00FFE5C8",
+        "solid_back": "&H00000000",
+    },
 }
 
 DEFAULT_COLOR = "yellow_black"
@@ -208,6 +233,25 @@ def _resolve_pos(h_align: str, v_align: str) -> tuple[int, int, int]:
     v = (v_align or "bottom").lower().strip()
     key = "center" if (v == "center" and h == "center") else f"{v}_{h}"
     return _POS.get(key, _POS["bottom_center"])
+
+
+# ══════════════════════════════════════════════════════════════
+#  FONT OPTIONS — bundled in backend/app/assets/fonts/, registered
+#  with fontconfig in the Dockerfile (fc-cache). Family names below
+#  must match each .ttf's internal name-table family name exactly.
+# ══════════════════════════════════════════════════════════════
+
+FONT_OPTIONS: dict[str, str] = {
+    "default":       "Liberation Sans",
+    "montserrat":    "Montserrat ExtraBold",   # most-used 2026 caption font
+    "archivo_black": "Archivo Black",          # heavy geometric — Hormozi/MrBeast feel
+    "anton":         "Anton",                  # ultra-condensed bold display
+    "bebas_neue":    "Bebas Neue",             # tall condensed — word_pop/karaoke punch
+    "poppins":       "Poppins ExtraBold",      # rounder, friendlier bold
+    "jakarta":       "Plus Jakarta Sans ExtraBold",  # modern, clean SaaS-y bold
+}
+DEFAULT_FONT = "default"
+VALID_FONTS  = list(FONT_OPTIONS.keys())
 
 
 # ══════════════════════════════════════════════════════════════
@@ -275,13 +319,21 @@ _BASE_STYLES: dict[str, dict] = {
         border_style=1, outline=5, shadow=0,
         scale_x=100, scale_y=100, spacing=1,
     ),
+    # "None" — user explicitly wants no burned-in subtitles at all.
+    # Style row is harmless boilerplate; _lines_none() emits zero events.
+    "none": dict(
+        font="Liberation Sans", size=76, bold=1,
+        border_style=1, outline=4, shadow=1,
+        scale_x=100, scale_y=100, spacing=0,
+    ),
 }
 
 
-def _style_line(style: str, color: str, alignment: int) -> str:
-    """Build one ASS [V4+ Styles] Style: line for the given style+colour."""
+def _style_line(style: str, color: str, alignment: int, font: str = DEFAULT_FONT) -> str:
+    """Build one ASS [V4+ Styles] Style: line for the given style+colour+font."""
     cfg = _BASE_STYLES.get(style, _BASE_STYLES["minimal"])
     clr = COLOR_COMBOS.get(color, COLOR_COMBOS[DEFAULT_COLOR])
+    font_name = FONT_OPTIONS.get(font, FONT_OPTIONS[DEFAULT_FONT])
 
     primary   = clr["primary"]
     secondary = clr["secondary"]
@@ -295,7 +347,7 @@ def _style_line(style: str, color: str, alignment: int) -> str:
 
     return (
         f"Style: Default,"
-        f"{cfg['font']},"
+        f"{font_name},"
         f"{cfg['size']},"
         f"{primary},{secondary},{outline_c},{back_c},"
         f"{cfg['bold']},0,0,0,"
@@ -334,7 +386,7 @@ def _hook_position(template: str) -> tuple[int, int, int]:
     return 540, 230, 8
 
 
-def _hook_style_line(color: str, template: str) -> str:
+def _hook_style_line(color: str, template: str, font: str = DEFAULT_FONT) -> str:
     """
     ASS style for the hook-title card — bold ALL CAPS text, styled per
     `template`:
@@ -346,14 +398,18 @@ def _hook_style_line(color: str, template: str) -> str:
     clr = COLOR_COMBOS.get(color, COLOR_COMBOS[DEFAULT_COLOR])
     is_bar = template in TEMPLATE_HAS_BARS
     _, _, alignment = _hook_position(template)
+    font_name = FONT_OPTIONS.get(font, FONT_OPTIONS[DEFAULT_FONT])
 
+    # Always use the neutral `outline` colour (not `highlight`, which is
+    # often a bright accent that clashes badly against the title's own
+    # `primary` text colour — e.g. white text + yellow outline).
     solid_back = clr.get("solid_back", "&H00000000")
     back_c = solid_back if is_bar else _with_alpha(solid_back, "60")
-    outline_c = clr["outline"] if is_bar else clr["highlight"]
+    outline_c = clr["outline"]
 
     return (
         f"Style: Hook,"
-        f"Liberation Sans,60,"
+        f"{font_name},60,"
         f"{clr['primary']},{clr['secondary']},{outline_c},{back_c},"
         f"1,0,0,0,"
         f"100,100,"
@@ -662,6 +718,13 @@ def _lines_neon(captions: list[Caption], x: int, y: int, wpl: int = 3) -> list[s
     return lines
 
 
+# ── none (subtitles explicitly disabled) ────────────────────────
+def _lines_none(captions: list[Caption], x: int, y: int, wpl: int = 3) -> list[str]:
+    """User chose no subtitles — emit zero dialogue events. The hook
+    title (if any) is unaffected since it's added separately."""
+    return []
+
+
 # ── hook title card ────────────────────────────────────────────
 
 def _lines_hook_title(
@@ -703,6 +766,7 @@ _BUILDERS = {
     "hormozi":    _lines_hormozi,
     "mrbeast":    _lines_mrbeast,
     "neon":       _lines_neon,
+    "none":       _lines_none,
 }
 
 
@@ -757,6 +821,9 @@ def build_ass_content(
     words_per_line: int = 3,
     hook_title:    str | None = None,
     template:      str = "",
+    title_permanent: bool = False,
+    clip_duration: float = 0.0,
+    font:          str = DEFAULT_FONT,
 ) -> str:
     """
     Build a complete .ass subtitle file string.
@@ -774,20 +841,28 @@ def build_ass_content(
         template:       reframe template name (e.g. "crop_fill", "blur_bg")
                          — drives the hook title's box style/position, see
                          TEMPLATE_HAS_BARS / _hook_position / _hook_style_line.
+        title_permanent: keep the hook title on screen for `clip_duration`
+                         seconds instead of just HOOK_TITLE_DURATION.
+        clip_duration:  total clip length in seconds — only used when
+                         `title_permanent` is True.
+        font:           one of FONT_OPTIONS keys — applies to both captions
+                         and the hook title card.
     """
     x, y, alignment = _resolve_pos(h_align, v_align)
     style_key = style if style in _BASE_STYLES else "minimal"
     color_key = color if color in COLOR_COMBOS else DEFAULT_COLOR
+    font_key  = font if font in FONT_OPTIONS else DEFAULT_FONT
     wpl       = max(1, min(int(words_per_line), 4))   # clamp 1-4
 
-    style_lines = [_style_line(style_key, color_key, alignment)]
+    style_lines = [_style_line(style_key, color_key, alignment, font_key)]
     build  = _BUILDERS.get(style_key, _lines_minimal)
     events = build(captions, x, y, wpl)
 
     if hook_title and hook_title.strip():
-        style_lines.append(_hook_style_line(color_key, template))
+        style_lines.append(_hook_style_line(color_key, template, font_key))
         hook_x, hook_y, _ = _hook_position(template)
-        events = _lines_hook_title(hook_title, hook_x, hook_y) + events
+        hook_duration = clip_duration if (title_permanent and clip_duration > 0) else HOOK_TITLE_DURATION
+        events = _lines_hook_title(hook_title, hook_x, hook_y, duration=hook_duration) + events
 
     return _ASS_HEADER.format(
         style_lines="\n".join(style_lines),
@@ -893,18 +968,25 @@ async def burn_captions(
     h_align:        str = "center",
     v_align:        str = "bottom",
     words_per_line: int = 3,
+    hook_title:     str | None = None,
+    title_permanent: bool = False,
+    clip_duration:  float = 0.0,
+    template:       str = "",
+    font:           str = DEFAULT_FONT,
 ) -> Path:
     """
     Burn captions into a clip via FFmpeg ASS filter.
     Writes a temp .ass file, burns it in one pass, cleans up.
     """
-    if not captions:
-        logger.warning(f"No captions for {clip_path.name} — copying without subtitles")
+    if not captions and not (hook_title and hook_title.strip()):
+        logger.warning(f"No captions/title for {clip_path.name} — copying without subtitles")
         output_path.write_bytes(clip_path.read_bytes())
         return output_path
 
     ass_content = build_ass_content(
-        captions, style, color, h_align, v_align, words_per_line
+        captions, style, color, h_align, v_align, words_per_line,
+        hook_title=hook_title, template=template,
+        title_permanent=title_permanent, clip_duration=clip_duration, font=font,
     )
 
     with tempfile.NamedTemporaryFile(

@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from app.api.editor import _burn_and_upload_from_url
 from app.core.config import get_settings
+from app.db import supabase as db
 from app.pipeline.captions import Caption
 from app.pipeline.orchestrator import run_pipeline
 from app.pipeline.test_pipeline import run_test_pipeline
@@ -95,3 +96,31 @@ async def internal_render_clip(body: InternalRenderRequest, x_internal_secret: s
         body.raw_url, captions, body.config, body.job_id, body.clip_id,
     )
     return {"video_url": video_url}
+
+
+@router.post("/reconcile-stuck-jobs")
+async def reconcile_stuck_jobs(x_internal_secret: str = Header(default="")):
+    """
+    Catches jobs that never made it past "queued" — Cloud Tasks exhausted
+    every retry attempt without a worker ever picking up the task, or the
+    worker fleet was unreachable. orchestrator.py's own refund-on-failure
+    logic (see run_pipeline's finally block) never runs for these, since
+    their pipeline never started, so this is the only place their credits/
+    video-minutes reservations ever get released.
+
+    Intended to be hit periodically by Cloud Scheduler (every few minutes),
+    same X-Internal-Secret gate as the rest of /internal/*.
+    """
+    _require_internal_secret(x_internal_secret)
+
+    stuck = await db.find_stuck_queued_jobs(settings.RECONCILE_STUCK_JOB_MINUTES)
+    for job in stuck:
+        job_id = job["job_id"]
+        logger.warning(f"[{job_id}] Stuck in 'queued' beyond timeout — failing + refunding")
+        await db.fail_job(job_id, "Job could not be scheduled in time — please retry.")
+        if job["clip_count"] > 0:
+            await db.release_credits(job["user_id"], job["clip_count"])
+        if job["reserved_video_minutes"] > 0:
+            await db.release_video_minutes(job["user_id"], job["reserved_video_minutes"])
+
+    return {"reconciled": len(stuck)}

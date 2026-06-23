@@ -56,6 +56,10 @@ class UpstashRedis:
         except (json.JSONDecodeError, TypeError):
             return raw
 
+    async def incr(self, key: str) -> int:
+        """Atomic increment — used for cross-instance round-robin counters."""
+        return int(await self._cmd("INCR", key))
+
 
 # Module-level singleton
 redis = UpstashRedis()

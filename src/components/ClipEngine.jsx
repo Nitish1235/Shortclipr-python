@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { GoogleLogin } from '@react-oauth/google'
-import CaptionOverlay, { COLOR_COMBOS } from './CaptionOverlay'
+import CaptionOverlay, { COLOR_COMBOS, FONT_FAMILIES } from './CaptionOverlay'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
@@ -58,6 +58,7 @@ const STYLE_OPTIONS = [
   { val:'shake',      label:'Shake',      sub:'Energy',       preview:'SHAKE', upper:true, weight:800 },
   { val:'neon',       label:'Neon Glow',  sub:'Glow',         preview:'Neon', upper:false, weight:700 },
   { val:'minimal',    label:'Minimal',    sub:'Clean',        preview:'Aa',   upper:false, weight:500 },
+  { val:'none',       label:'None',       sub:'No subtitles', preview:'—',    upper:false, weight:500 },
 ]
 
 // ── Template live-preview renderer ──────────────────────────────
@@ -118,6 +119,20 @@ const COLOR_OPTIONS = [
   { val:'orange_dark',  label:'Orange + Dark',  sub:'' },
   { val:'green_dark',   label:'Green + Dark',   sub:'' },
   { val:'red_white',    label:'Red + White',    sub:'' },
+  { val:'pure_white',   label:'Pure White',     sub:'Clean' },
+  { val:'gold_premium', label:'Gold Premium',   sub:'' },
+  { val:'ice_blue',     label:'Ice Blue',       sub:'' },
+]
+
+// ── Caption font options ─────────────────────────────────────────
+const FONT_OPTIONS = [
+  { val:'default',       label:'Default' },
+  { val:'montserrat',    label:'Montserrat' },
+  { val:'archivo_black', label:'Archivo Black' },
+  { val:'anton',         label:'Anton' },
+  { val:'bebas_neue',    label:'Bebas Neue' },
+  { val:'poppins',       label:'Poppins' },
+  { val:'jakarta',       label:'Plus Jakarta' },
 ]
 
 // ── Free-tier caps — mirrors backend/app/core/plan_limits.py "free" plan ──
@@ -179,48 +194,63 @@ function MinutesGatewaySlider({ durationSeconds, value, onChange }) {
   const pct = v => Math.min(100, Math.max(0, (v / durationSeconds) * 100))
 
   return (
-    <div>
-      <div style={{ position:'relative', height:'30px' }}>
+    <div style={{
+      background:'#fef2f2', border:'1.5px solid #fecaca', borderRadius:'12px',
+      padding:'14px 16px 12px',
+    }}>
+      <div style={{ position:'relative', height:'34px' }}>
         <div style={{
-          position:'absolute', top:'50%', left:0, right:0, height:'4px',
-          background:'#e5e5e5', borderRadius:'4px', transform:'translateY(-50%)',
+          position:'absolute', top:'50%', left:0, right:0, height:'8px',
+          background:'#e5e5e5', borderRadius:'100px', transform:'translateY(-50%)',
+          boxShadow:'inset 0 1px 2px rgba(0,0,0,0.1)',
         }}/>
         <div style={{
-          position:'absolute', top:'50%', height:'4px',
-          background:'#cf1322', borderRadius:'4px', transform:'translateY(-50%)',
+          position:'absolute', top:'50%', height:'8px',
+          background:'linear-gradient(90deg,#cf1322,#ff6b6b)', borderRadius:'100px',
+          transform:'translateY(-50%)', transition:'left .15s ease, width .15s ease',
+          boxShadow:'0 1px 3px rgba(207,19,34,0.4)',
           left:`${pct(start)}%`, width:`${pct(end) - pct(start)}%`,
         }}/>
         <input
           type="range" className="gw-thumb"
           min={0} max={durationSeconds} step={1} value={start}
           onChange={e => onChange([Math.min(Number(e.target.value), end - MIN_GATEWAY_GAP), end])}
-          style={{ position:'absolute', top:0, left:0, width:'100%', height:'30px', margin:0, background:'transparent' }}
+          style={{ position:'absolute', top:0, left:0, width:'100%', height:'34px', margin:0, background:'transparent' }}
         />
         <input
           type="range" className="gw-thumb"
           min={0} max={durationSeconds} step={1} value={end}
           onChange={e => onChange([start, Math.max(Number(e.target.value), start + MIN_GATEWAY_GAP)])}
-          style={{ position:'absolute', top:0, left:0, width:'100%', height:'30px', margin:0, background:'transparent' }}
+          style={{ position:'absolute', top:0, left:0, width:'100%', height:'34px', margin:0, background:'transparent' }}
         />
       </div>
-      <div style={{ display:'flex', justifyContent:'space-between', fontSize:'0.72rem', color:'#888', marginTop:'2px' }}>
-        <span>{formatDuration(start)}</span>
-        <span style={{ fontWeight:700, color:'#cf1322' }}>{formatDuration(end - start)} selected</span>
-        <span>{formatDuration(end)}</span>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'6px' }}>
+        <span style={{ fontSize:'0.76rem', color:'#888', fontWeight:600 }}>{formatDuration(start)}</span>
+        <span style={{
+          fontWeight:800, color:'#fff', fontSize:'0.8rem',
+          background:'#cf1322', padding:'4px 12px', borderRadius:'100px',
+          boxShadow:'0 2px 5px rgba(207,19,34,0.35)',
+        }}>{formatDuration(end - start)} selected</span>
+        <span style={{ fontSize:'0.76rem', color:'#888', fontWeight:600 }}>{formatDuration(end)}</span>
       </div>
       <style>{`
         .gw-thumb { -webkit-appearance:none; appearance:none; pointer-events:none; }
         .gw-thumb::-webkit-slider-thumb {
           pointer-events:auto; -webkit-appearance:none;
-          width:18px; height:18px; border-radius:50%;
-          background:#cf1322; border:2px solid #fff;
-          box-shadow:0 1px 4px rgba(0,0,0,0.35); cursor:pointer; margin-top:6px;
+          width:26px; height:26px; border-radius:50%;
+          background:#cf1322; border:3px solid #fff;
+          box-shadow:0 2px 6px rgba(0,0,0,0.45); cursor:pointer; margin-top:4px;
+          transition:transform .12s ease;
         }
+        .gw-thumb::-webkit-slider-thumb:hover { transform:scale(1.12); }
+        .gw-thumb::-webkit-slider-thumb:active { transform:scale(1.2); }
         .gw-thumb::-moz-range-thumb {
-          pointer-events:auto; width:18px; height:18px; border-radius:50%;
-          background:#cf1322; border:2px solid #fff;
-          box-shadow:0 1px 4px rgba(0,0,0,0.35); cursor:pointer;
+          pointer-events:auto; width:26px; height:26px; border-radius:50%;
+          background:#cf1322; border:3px solid #fff;
+          box-shadow:0 2px 6px rgba(0,0,0,0.45); cursor:pointer;
+          transition:transform .12s ease;
         }
+        .gw-thumb::-moz-range-thumb:hover { transform:scale(1.12); }
         .gw-thumb::-webkit-slider-runnable-track { background:transparent; }
         .gw-thumb::-moz-range-track { background:transparent; }
       `}</style>
@@ -244,9 +274,11 @@ export default function ClipEngine({ onJobCreated }) {
   const [captionStyle,  setCaptionStyle]  = useState('word_pop')
   const [colorCombo,    setColorCombo]    = useState('white_black')
   const [wordsPerLine,  setWordsPerLine]  = useState(2)
+  const [captionFont,   setCaptionFont]   = useState('default')
   const [shortTemplate, setShortTemplate] = useState('crop_fill')
   const [barColor,      setBarColor]      = useState('#0d0d0d')
   const [aspect,        setAspect]        = useState('9:16')
+  const [titleEnabled,  setTitleEnabled]  = useState(true)
   // "Minutes gateway" — [startSeconds, endSeconds] sub-window of the video
   // to actually process. null until video metadata loads (full video by
   // default — the gateway is opt-in, not required).
@@ -335,9 +367,11 @@ export default function ClipEngine({ onJobCreated }) {
             style:          captionStyle,
             color:          colorCombo,
             words_per_line: wordsPerLine,
+            font:           captionFont,
             short_template: shortTemplate,
             bar_color:      barColor,
             aspect:         aspect,
+            hook_title_enabled: titleEnabled,
             h_align:'center', v_align:'bottom', quality:'1080p', topic:'',
             // Minutes gateway — sub-window of the video to process/bill.
             // Backend re-validates/re-clamps this against the real video
@@ -561,16 +595,19 @@ export default function ClipEngine({ onJobCreated }) {
                   video that'd otherwise blow your per-video minute cap
                   through, since only the selected window is processed. */}
               {gatewayRange && videoData.duration > MIN_GATEWAY_GAP * 2 && (
-                <div style={{ paddingTop:'12px', borderBottom:'none' }}>
-                  <span style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>
-                    ✂️ Time Range (Minutes Gateway)
-                  </span>
+                <div style={{ paddingTop:'14px', borderBottom:'none' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px' }}>
+                    <span style={{ fontSize:'1rem' }}>✂️</span>
+                    <span style={{ fontSize:'0.92rem', fontWeight:800, color:'#111' }}>
+                      Time Range <span style={{ color:'#cf1322' }}>(Minutes Gateway)</span>
+                    </span>
+                  </div>
                   <MinutesGatewaySlider
                     durationSeconds={videoData.duration}
                     value={gatewayRange}
                     onChange={setGatewayRange}
                   />
-                  <p style={{ fontSize:'0.72rem', color:'#999', marginTop:'8px', lineHeight:1.5 }}>
+                  <p style={{ fontSize:'0.74rem', color:'#888', marginTop:'8px', lineHeight:1.6 }}>
                     Only this window is analyzed for clips — and only{' '}
                     <strong style={{ color:'#cf1322' }}>{formatDuration(gatewayRange[1] - gatewayRange[0])}</strong>{' '}
                     is deducted from your video-minutes credit, not the full video.
@@ -618,7 +655,8 @@ export default function ClipEngine({ onJobCreated }) {
                 </div>
               </div>
 
-              {/* Caption colour swatches */}
+              {/* Caption colour swatches — irrelevant when style is "None" */}
+              {captionStyle !== 'none' && (
               <div style={{ padding:'12px 0 4px' }}>
                 <span style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>Caption Colour</span>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px' }}>
@@ -646,8 +684,10 @@ export default function ClipEngine({ onJobCreated }) {
                   })}
                 </div>
               </div>
+              )}
 
               {/* Words per line */}
+              {captionStyle !== 'none' && (
               <div style={{ ...rowStyle, borderBottom:'none' }}>
                 <span style={labelStyle}>Words / Screen</span>
                 <div style={{ display:'flex', gap:'8px', flex:1 }}>
@@ -669,6 +709,56 @@ export default function ClipEngine({ onJobCreated }) {
                   ))}
                 </div>
               </div>
+              )}
+
+              {/* Caption font */}
+              {captionStyle !== 'none' && (
+              <div style={{ padding:'12px 0 4px', borderTop:'1px solid #f0f0f0' }}>
+                <span style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>Font</span>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'8px' }}>
+                  {FONT_OPTIONS.map(opt => {
+                    const active = captionFont === opt.val
+                    return (
+                      <button key={opt.val} onClick={() => setCaptionFont(opt.val)} style={{
+                        padding:'10px 8px', borderRadius:'10px', textAlign:'center',
+                        background: active ? '#fef2f2' : '#f9f9f9',
+                        border: active ? '1.5px solid #cf1322' : '1.5px solid #e5e5e5',
+                        cursor:'pointer', transition:'all 0.15s',
+                      }}>
+                        <div style={{
+                          fontFamily: FONT_FAMILIES[opt.val], fontWeight:800,
+                          fontSize:'1rem', color: active ? '#cf1322' : '#333', marginBottom:'2px',
+                        }}>Aa</div>
+                        <div style={{ fontSize:'0.66rem', fontWeight:700, color: active ? '#cf1322' : '#555' }}>{opt.label}</div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              )}
+            </div>
+
+            {/* 🏷️ Title Card */}
+            <div style={sectionCard}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                <div style={sectionTitle}>🏷️ Title Card</div>
+                <button onClick={() => setTitleEnabled(p => !p)} style={{
+                  background: titleEnabled ? '#cf1322' : '#e5e5e5',
+                  border:'none', borderRadius:'100px', width:'44px', height:'24px',
+                  cursor:'pointer', position:'relative', transition:'background 0.2s', flexShrink:0,
+                }}>
+                  <span style={{
+                    position:'absolute', top:'3px', width:'18px', height:'18px',
+                    background:'#fff', borderRadius:'50%', transition:'left 0.2s',
+                    left: titleEnabled ? '23px' : '3px',
+                  }}/>
+                </button>
+              </div>
+              <p style={{ fontSize:'0.74rem', color:'#999', marginTop:'6px', lineHeight:1.5 }}>
+                {titleEnabled
+                  ? 'AI generates a short curiosity-gap title and burns it in for the first few seconds.'
+                  : 'None — clips will have no title card, only the captions above.'}
+              </p>
             </div>
 
             {/* 📐 Layout */}
@@ -768,6 +858,7 @@ export default function ClipEngine({ onJobCreated }) {
                 hAlign="center"
                 vAlign="bottom"
                 wordsPerLine={wordsPerLine}
+                font={captionFont}
               />
               <div style={{
                 position:'absolute', top:'6px', left:'6px',
