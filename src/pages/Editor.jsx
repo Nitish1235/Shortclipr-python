@@ -42,6 +42,25 @@ const TRENDING_EMOJI = [
   '😭','🚨','💥','⭐','🥶',
 ]
 
+const TITLE_TEXT_COLOR_OPTIONS = [
+  { val:'white',    label:'White',    hex:'#FFFFFF' },
+  { val:'black',    label:'Black',    hex:'#000000' },
+  { val:'yellow',   label:'Yellow',   hex:'#FFE600' },
+  { val:'gold',     label:'Gold',     hex:'#FFD700' },
+  { val:'red',      label:'Red',      hex:'#FF3B30' },
+  { val:'ice_blue', label:'Ice Blue', hex:'#C8E5FF' },
+  { val:'hot_pink', label:'Hot Pink', hex:'#FF1493' },
+]
+
+const TITLE_BG_OPTIONS = [
+  { val:'none',       label:'None',       hex:null },
+  { val:'dark_gray',  label:'Dark Gray',  hex:'#1A1A1A' },
+  { val:'light_gray', label:'Light Gray', hex:'#E5E5E5' },
+  { val:'black',      label:'Black',      hex:'#000000' },
+  { val:'white',      label:'White',      hex:'#FFFFFF' },
+  { val:'brand_red',  label:'Brand Red',  hex:'#CF1322' },
+]
+
 const FONT_OPTIONS_LIST = [
   { val:'default',       label:'Default' },
   { val:'montserrat',    label:'Montserrat' },
@@ -130,6 +149,9 @@ export default function Editor() {
   const [titleText,         setTitleText]         = useState('')
   const [titlePermanent,    setTitlePermanent]    = useState(false)
   const [titleEnabled,      setTitleEnabled]      = useState(true)
+  const [titleColor,        setTitleColor]        = useState('white')
+  const [titleBg,           setTitleBg]           = useState('none')
+  const [titleBgOpacity,    setTitleBgOpacity]    = useState(0.55)
 
   useEffect(() => {
     const fetchClipData = async () => {
@@ -163,6 +185,9 @@ export default function Editor() {
         setTitleText(cfg.hook_title ?? clip.top_title ?? '')
         if (cfg.title_permanent)  setTitlePermanent(cfg.title_permanent)
         if (cfg.hook_title_enabled === false) setTitleEnabled(false)
+        if (cfg.title_color)     setTitleColor(cfg.title_color)
+        if (cfg.title_bg)        setTitleBg(cfg.title_bg)
+        if (cfg.title_bg_opacity !== undefined) setTitleBgOpacity(cfg.title_bg_opacity)
 
         if (Array.isArray(cfg.transcript) && cfg.transcript.length) {
           setTranscriptBlocks(cfg.transcript)
@@ -222,6 +247,9 @@ export default function Editor() {
           hook_title: titleEnabled ? titleText : '',
           title_permanent: titlePermanent,
           hook_title_enabled: titleEnabled,
+          title_color: titleColor,
+          title_bg: titleBg,
+          title_bg_opacity: titleBgOpacity,
         }),
       })
       if (res.status === 401) { logout(); return }
@@ -251,6 +279,9 @@ export default function Editor() {
           hook_title: titleEnabled ? titleText : '',
           title_permanent: titlePermanent,
           hook_title_enabled: titleEnabled,
+          title_color: titleColor,
+          title_bg: titleBg,
+          title_bg_opacity: titleBgOpacity,
         }),
       })
       if (res.status === 401) { logout(); return }
@@ -752,9 +783,8 @@ export default function Editor() {
                       onBlur={e => e.target.style.borderColor='#e5e5e5'}
                     />
                     <p style={{ fontSize:'0.75rem', color:'#999', marginTop:'8px', lineHeight:1.5 }}>
-                      Burned in as a bold boxed title card. Uses the same colour
-                      combo as your captions (set in the Captions tab) — pick a
-                      clean combo like <strong>Pure White</strong> or <strong>Gold Premium</strong> for best contrast.
+                      Burned in as a bold title card with its own text/background
+                      colours below — independent of your caption colour.
                     </p>
 
                     {/* Trending emoji picker — inserts at cursor position */}
@@ -805,6 +835,55 @@ export default function Editor() {
                     <p style={{ fontSize:'0.78rem', color:'#cf1322', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'8px', padding:'10px 12px' }}>
                       Add title text above, then hit Render to burn it in.
                     </p>
+                  )}
+
+                  {/* Title text colour — independent of caption colour */}
+                  <div style={{ opacity: titleEnabled ? 1 : 0.45, pointerEvents: titleEnabled ? 'auto' : 'none' }}>
+                    <span style={labelStyle}>Title Text Colour</span>
+                    <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginTop:'6px' }}>
+                      {TITLE_TEXT_COLOR_OPTIONS.map(opt => (
+                        <button key={opt.val} onClick={() => setTitleColor(opt.val)} title={opt.label} style={{
+                          width:'32px', height:'32px', borderRadius:'50%', background:opt.hex,
+                          border: titleColor === opt.val ? '3px solid #cf1322' : '2px solid #e5e5e5',
+                          boxShadow: opt.hex === '#FFFFFF' ? 'inset 0 0 0 1px #e5e5e5' : 'none',
+                          cursor:'pointer',
+                        }}/>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Title background box — defaults to None */}
+                  <div style={{ opacity: titleEnabled ? 1 : 0.45, pointerEvents: titleEnabled ? 'auto' : 'none' }}>
+                    <span style={labelStyle}>Title Background</span>
+                    <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginTop:'6px' }}>
+                      {TITLE_BG_OPTIONS.map(opt => (
+                        <button key={opt.val} onClick={() => setTitleBg(opt.val)} title={opt.label} style={{
+                          width:'32px', height:'32px', borderRadius:'50%',
+                          background: opt.hex || 'repeating-linear-gradient(45deg, #f0f0f0, #f0f0f0 4px, #fff 4px, #fff 8px)',
+                          border: titleBg === opt.val ? '3px solid #cf1322' : '2px solid #e5e5e5',
+                          boxShadow: opt.hex === '#FFFFFF' ? 'inset 0 0 0 1px #e5e5e5' : 'none',
+                          cursor:'pointer',
+                        }}/>
+                      ))}
+                    </div>
+                    <p style={{ fontSize:'0.72rem', color:'#bbb', marginTop:'6px' }}>
+                      Rounded-corner box behind the title text. "None" (default) is clean text + outline only.
+                    </p>
+                  </div>
+
+                  {/* Opacity slider — only matters when a background is picked */}
+                  {titleEnabled && titleBg !== 'none' && (
+                    <div>
+                      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
+                        <span style={labelStyle}>Background Opacity</span>
+                        <span style={{ fontSize:'0.8rem', fontWeight:800, color:'#cf1322' }}>{Math.round(titleBgOpacity * 100)}%</span>
+                      </div>
+                      <input
+                        type="range" min={0} max={100} value={Math.round(titleBgOpacity * 100)}
+                        onChange={e => setTitleBgOpacity(Number(e.target.value) / 100)}
+                        style={{ width:'100%', accentColor:'#cf1322', height:'18px' }}
+                      />
+                    </div>
                   )}
                 </div>
               )}

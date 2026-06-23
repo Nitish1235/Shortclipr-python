@@ -33,3 +33,6 @@ google-api-python-client==2.143.0
 ## Face tracking (smart reframe pan/crop)
 opencv-python-headless==4.10.0.84
 numpy==1.26.4
+
+## Hook-title rounded background box (text measurement + rounded-rect PNG)
+Pillow==10.4.0

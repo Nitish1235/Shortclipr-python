@@ -43,6 +43,7 @@ from app.pipeline.captions import (
     VALID_VALIGNS, VALID_WORDS_PER_LINE,
 )
 from app.pipeline.extractor import VALID_TEMPLATES, VALID_ASPECTS
+from app.pipeline.title_box import TITLE_BG_COLORS, TITLE_TEXT_COLORS
 from app.pipeline.orchestrator import run_pipeline
 from app.pipeline.stream import extract_video_id, get_video_metadata
 from app.pipeline.uploader import delete_job_from_gcs
@@ -73,6 +74,9 @@ class JobOptions(BaseModel):
     title_permanent: bool = False        # keep the AI hook title on screen for the whole clip
     hook_title_enabled: bool = True      # False = "None" — skip the AI title card entirely
     font:            str = "default"    # one of captions.VALID_FONTS
+    title_color:     str = "white"      # title TEXT colour — independent of caption `color`
+    title_bg:        str = "none"       # title background box — "none" (default) | swatch key
+    title_bg_opacity: float = 0.55      # 0.0-1.0, only used when title_bg != "none"
     short_template:  str = "crop_fill"  # 9:16 layout template
     bar_color:       str = "#0d0d0d"    # hex colour for bars / frame / gradient
     aspect:          str = "9:16"       # output aspect ratio — 9:16 | 16:9 | 1:1
@@ -126,6 +130,21 @@ class JobOptions(BaseModel):
     @classmethod
     def validate_font(cls, v: str) -> str:
         return v if v in VALID_FONTS else "default"
+
+    @field_validator("title_color")
+    @classmethod
+    def validate_title_color(cls, v: str) -> str:
+        return v if v in TITLE_TEXT_COLORS else "white"
+
+    @field_validator("title_bg")
+    @classmethod
+    def validate_title_bg(cls, v: str) -> str:
+        return v if v in TITLE_BG_COLORS else "none"
+
+    @field_validator("title_bg_opacity")
+    @classmethod
+    def validate_title_bg_opacity(cls, v: float) -> float:
+        return max(0.0, min(1.0, float(v)))
 
     @field_validator("short_template")
     @classmethod

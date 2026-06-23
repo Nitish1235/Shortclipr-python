@@ -124,6 +124,27 @@ const COLOR_OPTIONS = [
   { val:'ice_blue',     label:'Ice Blue',       sub:'' },
 ]
 
+// ── Title text colour swatches — independent of caption colours ─────
+const TITLE_TEXT_COLOR_OPTIONS = [
+  { val:'white',    label:'White',    hex:'#FFFFFF' },
+  { val:'black',    label:'Black',    hex:'#000000' },
+  { val:'yellow',   label:'Yellow',   hex:'#FFE600' },
+  { val:'gold',     label:'Gold',     hex:'#FFD700' },
+  { val:'red',      label:'Red',      hex:'#FF3B30' },
+  { val:'ice_blue', label:'Ice Blue', hex:'#C8E5FF' },
+  { val:'hot_pink', label:'Hot Pink', hex:'#FF1493' },
+]
+
+// ── Title background swatches — "none" (default) = no box at all ───
+const TITLE_BG_OPTIONS = [
+  { val:'none',       label:'None',       hex:null },
+  { val:'dark_gray',  label:'Dark Gray',  hex:'#1A1A1A' },
+  { val:'light_gray', label:'Light Gray', hex:'#E5E5E5' },
+  { val:'black',      label:'Black',      hex:'#000000' },
+  { val:'white',      label:'White',      hex:'#FFFFFF' },
+  { val:'brand_red',  label:'Brand Red',  hex:'#CF1322' },
+]
+
 // ── Caption font options ─────────────────────────────────────────
 const FONT_OPTIONS = [
   { val:'default',       label:'Default' },
@@ -279,6 +300,9 @@ export default function ClipEngine({ onJobCreated }) {
   const [barColor,      setBarColor]      = useState('#0d0d0d')
   const [aspect,        setAspect]        = useState('9:16')
   const [titleEnabled,  setTitleEnabled]  = useState(true)
+  const [titleColor,    setTitleColor]    = useState('white')
+  const [titleBg,       setTitleBg]       = useState('none')
+  const [titleBgOpacity, setTitleBgOpacity] = useState(0.55)
   // "Minutes gateway" — [startSeconds, endSeconds] sub-window of the video
   // to actually process. null until video metadata loads (full video by
   // default — the gateway is opt-in, not required).
@@ -372,6 +396,9 @@ export default function ClipEngine({ onJobCreated }) {
             bar_color:      barColor,
             aspect:         aspect,
             hook_title_enabled: titleEnabled,
+            title_color:        titleColor,
+            title_bg:           titleBg,
+            title_bg_opacity:   titleBgOpacity,
             h_align:'center', v_align:'bottom', quality:'1080p', topic:'',
             // Minutes gateway — sub-window of the video to process/bill.
             // Backend re-validates/re-clamps this against the real video
@@ -756,9 +783,62 @@ export default function ClipEngine({ onJobCreated }) {
               </div>
               <p style={{ fontSize:'0.74rem', color:'#999', marginTop:'6px', lineHeight:1.5 }}>
                 {titleEnabled
-                  ? 'AI generates a short curiosity-gap title and burns it in for the first few seconds.'
+                  ? 'AI generates a short curiosity-gap title (with a matching trending emoji) and burns it in for the first few seconds.'
                   : 'None — clips will have no title card, only the captions above.'}
               </p>
+
+              {titleEnabled && (
+                <>
+                  {/* Title text colour — independent of caption colour */}
+                  <div style={{ marginTop:'14px' }}>
+                    <span style={{ ...labelStyle, display:'block', marginBottom:'8px' }}>Title Text Colour</span>
+                    <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                      {TITLE_TEXT_COLOR_OPTIONS.map(opt => (
+                        <button key={opt.val} onClick={() => setTitleColor(opt.val)} title={opt.label} style={{
+                          width:'30px', height:'30px', borderRadius:'50%', background:opt.hex,
+                          border: titleColor === opt.val ? '3px solid #cf1322' : '2px solid #e5e5e5',
+                          boxShadow: opt.hex === '#FFFFFF' ? 'inset 0 0 0 1px #e5e5e5' : 'none',
+                          cursor:'pointer',
+                        }}/>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Title background box — defaults to None */}
+                  <div style={{ marginTop:'14px' }}>
+                    <span style={{ ...labelStyle, display:'block', marginBottom:'8px' }}>Title Background</span>
+                    <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                      {TITLE_BG_OPTIONS.map(opt => (
+                        <button key={opt.val} onClick={() => setTitleBg(opt.val)} title={opt.label} style={{
+                          width:'30px', height:'30px', borderRadius:'50%',
+                          background: opt.hex || 'repeating-linear-gradient(45deg, #f0f0f0, #f0f0f0 4px, #fff 4px, #fff 8px)',
+                          border: titleBg === opt.val ? '3px solid #cf1322' : '2px solid #e5e5e5',
+                          boxShadow: opt.hex === '#FFFFFF' ? 'inset 0 0 0 1px #e5e5e5' : 'none',
+                          cursor:'pointer',
+                        }}/>
+                      ))}
+                    </div>
+                    <p style={{ fontSize:'0.7rem', color:'#bbb', marginTop:'6px' }}>
+                      Rounded-corner box behind the title. "None" (default) is just clean text + outline.
+                    </p>
+                  </div>
+
+                  {/* Opacity slider — only matters when a background is picked */}
+                  {titleBg !== 'none' && (
+                    <div style={{ marginTop:'14px' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
+                        <span style={labelStyle}>Background Opacity</span>
+                        <span style={{ fontSize:'0.78rem', fontWeight:800, color:'#cf1322' }}>{Math.round(titleBgOpacity * 100)}%</span>
+                      </div>
+                      <input
+                        type="range" min={0} max={100} value={Math.round(titleBgOpacity * 100)}
+                        onChange={e => setTitleBgOpacity(Number(e.target.value) / 100)}
+                        style={{ width:'100%', accentColor:'#cf1322', height:'18px' }}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             {/* 📐 Layout */}

@@ -115,6 +115,9 @@ async def _execute_pipeline(
     title_permanent = options.get("title_permanent", False)
     hook_title_enabled = options.get("hook_title_enabled", True)
     font            = options.get("font", "default")
+    title_color     = options.get("title_color", "white")
+    title_bg        = options.get("title_bg", "none")
+    title_bg_opacity = options.get("title_bg_opacity", 0.55)
     bar_color       = options.get("bar_color",      "#0d0d0d")
     aspect          = options.get("aspect",         "9:16")
 
@@ -394,7 +397,8 @@ async def _execute_pipeline(
                     hook_title=(ts.title_with_emoji if hook_title_enabled else None),
                     face_track=face_track, src_w=src_w, src_h=src_h,
                     title_permanent=title_permanent, clip_duration=clip_actual_dur,
-                    font=font,
+                    font=font, title_color=title_color, title_bg=title_bg,
+                    title_bg_opacity=title_bg_opacity,
                 )
 
             # Generate thumbnail from final vertical clip

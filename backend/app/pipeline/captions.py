@@ -53,6 +53,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.core.config import get_settings
+from app.pipeline.title_box import (
+    DEFAULT_TITLE_BG, DEFAULT_TITLE_BG_OPACITY, DEFAULT_TITLE_TEXT_COLOR,
+    TITLE_TEXT_COLORS, overlay_xy, render_title_box_png,
+)
 from app.pipeline.transcript import TranscriptEntry
 
 logger = logging.getLogger(__name__)
@@ -369,6 +373,12 @@ def _with_alpha(ass_color: str, alpha_hex: str) -> str:
     return f"&H{alpha_hex}{body}"
 
 
+def compute_hook_duration(title_permanent: bool, clip_duration: float) -> float:
+    """Shared by build_ass_content() and the title-box overlay (extractor.py)
+    so both agree on exactly how long the hook title stays on screen."""
+    return clip_duration if (title_permanent and clip_duration > 0) else HOOK_TITLE_DURATION
+
+
 def _hook_position(template: str) -> tuple[int, int, int]:
     """
     (x, y, alignment) for the hook-title card, depending on whether
@@ -386,37 +396,47 @@ def _hook_position(template: str) -> tuple[int, int, int]:
     return 540, 230, 8
 
 
-def _hook_style_line(color: str, template: str, font: str = DEFAULT_FONT) -> str:
-    """
-    ASS style for the hook-title card — bold ALL CAPS text, styled per
-    `template`:
-      - bar templates  -> solid/opaque trending-colour box (`solid_back`),
-        straddling the bar/video boundary (see `_hook_position`).
-      - fill templates -> translucent "glass" box (same trending colour,
-        alpha'd down) pinned near the top, since there's no bar to sit on.
-    """
-    clr = COLOR_COMBOS.get(color, COLOR_COMBOS[DEFAULT_COLOR])
-    is_bar = template in TEMPLATE_HAS_BARS
-    _, _, alignment = _hook_position(template)
-    font_name = FONT_OPTIONS.get(font, FONT_OPTIONS[DEFAULT_FONT])
+def _hex_to_ass_color(hex_color: str) -> str:
+    """'#RRGGBB' -> ASS '&H00BBGGRR' (00 = fully opaque)."""
+    h = hex_color.lstrip("#")
+    r, g, b = h[0:2], h[2:4], h[4:6]
+    return f"&H00{b}{g}{r}".upper()
 
-    # Always use the neutral `outline` colour (not `highlight`, which is
-    # often a bright accent that clashes badly against the title's own
-    # `primary` text colour — e.g. white text + yellow outline).
-    solid_back = clr.get("solid_back", "&H00000000")
-    back_c = solid_back if is_bar else _with_alpha(solid_back, "60")
-    outline_c = clr["outline"]
+
+def _auto_contrast_outline(hex_color: str) -> str:
+    """Pick a black or white ASS outline colour based on text luminance,
+    so the outline always reads against any background — the box (if any)
+    is a separate rounded PNG overlay now, not an ASS BackColour box."""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    luminance = 0.299 * r + 0.587 * g + 0.114 * b
+    return "&H00FFFFFF" if luminance < 140 else "&H00000000"
+
+
+def _hook_style_line(title_color: str, template: str, font: str = DEFAULT_FONT) -> str:
+    """
+    ASS style for the hook-title card — bold ALL CAPS text, `title_color`
+    independent of the caption colour combo. BorderStyle is always 1
+    (outline only, no ASS box) — a rounded-rect background (if the user
+    picked one) is rendered as a separate PNG and composited via ffmpeg
+    `overlay` BEHIND this text layer (see title_box.py / extractor.py),
+    since libass's BorderStyle 3 box can't do rounded corners.
+    """
+    font_name = FONT_OPTIONS.get(font, FONT_OPTIONS[DEFAULT_FONT])
+    primary = _hex_to_ass_color(title_color)
+    outline_c = _auto_contrast_outline(title_color)
+    _, _, alignment = _hook_position(template)
 
     return (
         f"Style: Hook,"
         f"{font_name},60,"
-        f"{clr['primary']},{clr['secondary']},{outline_c},{back_c},"
+        f"{primary},{primary},{outline_c},&H00000000,"
         f"1,0,0,0,"
         f"100,100,"
         f"1,0,"
-        f"3,"     # BorderStyle 3 — opaque box (alpha controlled via back_c above)
-        f"10,"    # Outline = box padding
-        f"0,"     # Shadow
+        f"1,"     # BorderStyle 1 — outline only, no ASS box
+        f"6,"     # Outline width
+        f"2,"     # Shadow
         f"{alignment},"
         f"60,60,90,1"
     )
@@ -824,6 +844,7 @@ def build_ass_content(
     title_permanent: bool = False,
     clip_duration: float = 0.0,
     font:          str = DEFAULT_FONT,
+    title_color:   str = "#FFFFFF",
 ) -> str:
     """
     Build a complete .ass subtitle file string.
@@ -839,14 +860,18 @@ def build_ass_content(
                          burned as a title card for the first
                          HOOK_TITLE_DURATION seconds. None/empty skips it.
         template:       reframe template name (e.g. "crop_fill", "blur_bg")
-                         — drives the hook title's box style/position, see
-                         TEMPLATE_HAS_BARS / _hook_position / _hook_style_line.
+                         — drives the hook title's position, see
+                         TEMPLATE_HAS_BARS / _hook_position.
         title_permanent: keep the hook title on screen for `clip_duration`
                          seconds instead of just HOOK_TITLE_DURATION.
         clip_duration:  total clip length in seconds — only used when
                          `title_permanent` is True.
         font:           one of FONT_OPTIONS keys — applies to both captions
                          and the hook title card.
+        title_color:    hex colour for the title TEXT — independent of the
+                         caption `color` combo (see title_box.TITLE_TEXT_COLORS).
+                         The title's background box (if any) is rendered
+                         separately as a PNG overlay — see title_box.py.
     """
     x, y, alignment = _resolve_pos(h_align, v_align)
     style_key = style if style in _BASE_STYLES else "minimal"
@@ -859,9 +884,9 @@ def build_ass_content(
     events = build(captions, x, y, wpl)
 
     if hook_title and hook_title.strip():
-        style_lines.append(_hook_style_line(color_key, template, font_key))
+        style_lines.append(_hook_style_line(title_color, template, font_key))
         hook_x, hook_y, _ = _hook_position(template)
-        hook_duration = clip_duration if (title_permanent and clip_duration > 0) else HOOK_TITLE_DURATION
+        hook_duration = compute_hook_duration(title_permanent, clip_duration)
         events = _lines_hook_title(hook_title, hook_x, hook_y, duration=hook_duration) + events
 
     return _ASS_HEADER.format(
@@ -973,20 +998,28 @@ async def burn_captions(
     clip_duration:  float = 0.0,
     template:       str = "",
     font:           str = DEFAULT_FONT,
+    title_color:    str = DEFAULT_TITLE_TEXT_COLOR,
+    title_bg:       str = DEFAULT_TITLE_BG,
+    title_bg_opacity: float = DEFAULT_TITLE_BG_OPACITY,
 ) -> Path:
     """
-    Burn captions into a clip via FFmpeg ASS filter.
-    Writes a temp .ass file, burns it in one pass, cleans up.
+    Burn captions into a clip via FFmpeg ASS filter — and, if `hook_title`
+    is set with a non-"none" `title_bg`, composite a rounded-rect PNG box
+    (see title_box.py) behind the title text via `overlay` first.
+    Writes a temp .ass file (+ temp PNG box, if any), burns in one pass,
+    cleans up both.
     """
     if not captions and not (hook_title and hook_title.strip()):
         logger.warning(f"No captions/title for {clip_path.name} — copying without subtitles")
         output_path.write_bytes(clip_path.read_bytes())
         return output_path
 
+    title_color_hex = TITLE_TEXT_COLORS.get(title_color, TITLE_TEXT_COLORS[DEFAULT_TITLE_TEXT_COLOR])
     ass_content = build_ass_content(
         captions, style, color, h_align, v_align, words_per_line,
         hook_title=hook_title, template=template,
         title_permanent=title_permanent, clip_duration=clip_duration, font=font,
+        title_color=title_color_hex,
     )
 
     with tempfile.NamedTemporaryFile(
@@ -995,13 +1028,37 @@ async def burn_captions(
         f.write(ass_content)
         ass_path = f.name
 
+    box_path: Path | None = None
     try:
         # Escape Windows backslashes / colons for FFmpeg filter string
         safe_ass = ass_path.replace("\\", "/").replace(":", "\\:")
+
+        extra_inputs: list[str] = []
+        if hook_title and hook_title.strip() and title_bg != "none":
+            hook_duration = compute_hook_duration(title_permanent, clip_duration)
+            hook_x, hook_y, alignment = _hook_position(template)
+            box = render_title_box_png(
+                _safe_upper(hook_title.strip()), font, 60, title_bg, title_bg_opacity,
+            )
+            if box:
+                box_path, box_w, box_h = box
+                ox, oy = overlay_xy(hook_x, hook_y, alignment, box_w, box_h)
+                extra_inputs = ["-i", str(box_path)]
+                vf = (
+                    f"[0:v][1:v]overlay={ox}:{oy}:enable='between(t,0,{hook_duration:.3f})'[boxed];"
+                    f"[boxed]ass={safe_ass}"
+                )
+            else:
+                vf = f"ass={safe_ass}"
+        else:
+            vf = f"ass={safe_ass}"
+
+        filter_flag = "-filter_complex" if extra_inputs else "-vf"
         cmd = [
             "ffmpeg", "-y",
             "-i", str(clip_path),
-            "-vf", f"ass={safe_ass}",
+            *extra_inputs,
+            filter_flag, vf,
             "-c:v", "libx264",
             "-preset", "veryfast",
             "-crf", "22",
@@ -1030,6 +1087,8 @@ async def burn_captions(
 
     finally:
         Path(ass_path).unlink(missing_ok=True)
+        if box_path:
+            box_path.unlink(missing_ok=True)
 
     logger.info(f"Burned [{style}/{color}] captions → {output_path.name}")
     return output_path

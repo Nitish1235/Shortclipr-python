@@ -40,6 +40,7 @@ _ALLOWED_KEYS = {
     "highlightColor",
     # Permanent title card
     "hook_title", "title_permanent", "hook_title_enabled",
+    "title_color", "title_bg", "title_bg_opacity",
     # Font
     "font",
 }
@@ -48,6 +49,7 @@ _ALLOWED_KEYS = {
 _RENDER_KEYS = {
     "style", "color", "h_align", "v_align", "words_per_line", "highlightColor",
     "hook_title", "title_permanent", "hook_title_enabled", "font",
+    "title_color", "title_bg", "title_bg_opacity",
 }
 
 
@@ -147,6 +149,9 @@ async def _burn_and_upload_from_url(
             title_permanent=title_permanent,
             clip_duration=clip_duration,
             font=config.get("font", "default"),
+            title_color=config.get("title_color", "white"),
+            title_bg=config.get("title_bg", "none"),
+            title_bg_opacity=config.get("title_bg_opacity", 0.55),
         )
 
         clip_url = await upload_clip(out_path, job_id, clip_id)

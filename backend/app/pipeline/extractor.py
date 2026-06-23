@@ -54,8 +54,14 @@ from pathlib import Path
 
 from app.core.config import get_settings
 from app.core.proxy import get_dataimpulse_proxy
-from app.pipeline.captions import Caption, build_ass_content
+from app.pipeline.captions import (
+    Caption, build_ass_content, compute_hook_duration, _hook_position, _safe_upper,
+)
 from app.pipeline.downloader import download_clip_segments, download_source_parallel
+from app.pipeline.title_box import (
+    DEFAULT_TITLE_BG, DEFAULT_TITLE_BG_OPACITY, DEFAULT_TITLE_TEXT_COLOR,
+    TITLE_TEXT_COLORS, overlay_xy, render_title_box_png,
+)
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -980,26 +986,51 @@ async def _encode_reframed_and_captioned(
     title_permanent: bool = False,
     clip_duration: float = 0.0,
     font: str = "default",
+    title_color: str = DEFAULT_TITLE_TEXT_COLOR,
+    title_bg: str = DEFAULT_TITLE_BG,
+    title_bg_opacity: float = DEFAULT_TITLE_BG_OPACITY,
 ) -> None:
     """One ffmpeg invocation: reframe + (optionally) burn captions, producing
     both the raw reframed output and the captioned output."""
     ass_path: str | None = None
+    title_color_hex = TITLE_TEXT_COLORS.get(title_color, TITLE_TEXT_COLORS[DEFAULT_TITLE_TEXT_COLOR])
+    box_path: Path | None = None
     try:
         if captions or hook_title:
             fc = _build_template_filter(template, bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label="reframed")
             ass_content = build_ass_content(
                 captions or [], style, color, h_align, v_align, words_per_line, hook_title,
                 template=template, title_permanent=title_permanent, clip_duration=clip_duration, font=font,
+                title_color=title_color_hex,
             )
             with tempfile.NamedTemporaryFile(suffix=".ass", mode="w", encoding="utf-8", delete=False) as f:
                 f.write(ass_content)
                 ass_path = f.name
             safe_ass = ass_path.replace("\\", "/").replace(":", "\\:")
-            fc += f";[reframed]split=2[rawv][capv];[capv]ass={safe_ass}[capout]"
+
+            extra_inputs: list[str] = []
+            if hook_title and hook_title.strip() and title_bg != "none":
+                hook_duration = compute_hook_duration(title_permanent, clip_duration)
+                hook_x, hook_y, alignment = _hook_position(template)
+                box = render_title_box_png(
+                    _safe_upper(hook_title.strip()), font, 60, title_bg, title_bg_opacity,
+                )
+                if box:
+                    box_path, box_w, box_h = box
+                    ox, oy = overlay_xy(hook_x, hook_y, alignment, box_w, box_h)
+                    extra_inputs = ["-i", str(box_path)]
+                    fc += (
+                        f";[reframed]split=2[rawv][capv0];"
+                        f"[capv0][1:v]overlay={ox}:{oy}:enable='between(t,0,{hook_duration:.3f})'[capv];"
+                        f"[capv]ass={safe_ass}[capout]"
+                    )
+            if not extra_inputs:
+                fc += f";[reframed]split=2[rawv][capv];[capv]ass={safe_ass}[capout]"
 
             cmd = [
                 "ffmpeg", "-y",
                 "-i", str(input_path),
+                *extra_inputs,
                 "-filter_complex", fc,
                 "-map", "[rawv]", "-map", "0:a?",
                 "-c:v", "libx264", "-preset", "faster", "-tune", "fastdecode", "-crf", "18",
@@ -1053,6 +1084,8 @@ async def _encode_reframed_and_captioned(
     finally:
         if ass_path:
             Path(ass_path).unlink(missing_ok=True)
+        if box_path:
+            box_path.unlink(missing_ok=True)
 
 
 async def reframe_and_caption(
@@ -1076,6 +1109,9 @@ async def reframe_and_caption(
     title_permanent: bool = False,
     clip_duration: float = 0.0,
     font: str = "default",
+    title_color: str = DEFAULT_TITLE_TEXT_COLOR,
+    title_bg: str = DEFAULT_TITLE_BG,
+    title_bg_opacity: float = DEFAULT_TITLE_BG_OPACITY,
 ) -> tuple[Path, Path]:
     """
     Reframe a 16:9 clip into the chosen aspect ratio and (if `captions` or
@@ -1124,6 +1160,7 @@ async def reframe_and_caption(
             tpl, bar_color, zoom_beats, width, height,
             captions, style, color, h_align, v_align, words_per_line,
             hook_title, face_track, src_w, src_h, title_permanent, clip_duration, font,
+            title_color, title_bg, title_bg_opacity,
         )
     except Exception as exc:
         logger.error(
@@ -1135,6 +1172,7 @@ async def reframe_and_caption(
                 "blur_bg", bar_color, None, width, height,
                 captions, style, color, h_align, v_align, words_per_line,
                 hook_title, None, 0, 0, title_permanent, clip_duration, font,
+                title_color, title_bg, title_bg_opacity,
             )
         except Exception as exc2:
             raise RuntimeError(
