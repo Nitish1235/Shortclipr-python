@@ -84,16 +84,22 @@ class ClipTimestamp:
     viral_score:     int     # 0-100
     reason:          str
     caption_preview: str
+    title_emoji:     str = ""   # one emoji from EMOJI_GROUPS, AI-picked per clip; "" = none
 
     @property
     def duration(self) -> float:
         return self.end - self.start
+
+    @property
+    def title_with_emoji(self) -> str:
+        return f"{self.title_emoji} {self.title}".strip() if self.title_emoji else self.title
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "start":           self.start,
             "end":             self.end,
             "title":           self.title,
+            "title_emoji":     self.title_emoji,
             "viral_score":     self.viral_score,
             "reason":          self.reason,
             "caption_preview": self.caption_preview,
@@ -479,6 +485,7 @@ def _build_clips(
             start           = start,
             end             = end,
             title           = c["title"],
+            title_emoji     = c.get("title_emoji", ""),
             viral_score     = c["viral_score"],
             reason          = c["reason"],
             caption_preview = c["caption_preview"],
