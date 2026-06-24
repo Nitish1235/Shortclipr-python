@@ -9,7 +9,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
 // videoHours / maxVideoHours mirror backend/app/core/plan_limits.py — keep in sync
 const PLANS = [
-  { id: 'starter_100', name: 'Starter',  price: 10,  clips: 100,  videoHours: 5,  maxVideoHours: 2, badge: null,           perks: ['100 shorts/mo', 'HD vertical exports', 'YouTube & TikTok publish', 'Clip editor access', 'MP4 download'] },
+  { id: 'starter_100', name: 'Starter',  price: 10,  clips: 100,  videoHours: 5,  maxVideoHours: 2, badge: null,           perks: ['100 shorts/mo', 'HD vertical exports', 'YouTube & TikTok publish (coming soon)', 'Clip editor access', 'MP4 download'] },
   { id: 'starter_250', name: 'Starter+', price: 25,  clips: 250,  videoHours: 10, maxVideoHours: 2, badge: null,           perks: ['250 shorts/mo', 'Everything in Starter', 'Faster processing queue'] },
   { id: 'pro_500',     name: 'Pro',      price: 45,  clips: 500,  videoHours: 18, maxVideoHours: 3, badge: 'Most Popular', perks: ['500 shorts/mo', 'Everything in Starter+', 'Priority queue', 'Batch download'] },
   { id: 'pro_1000',    name: 'Pro+',     price: 79,  clips: 1000, videoHours: 35, maxVideoHours: 3, badge: null,           perks: ['1,000 shorts/mo', 'Everything in Pro', 'API access (coming soon)'] },
@@ -19,8 +19,8 @@ const PLANS = [
 const FEATURES = [
   { f: 'Generate up to 3 test clips',         free: true,  paid: true  },
   { f: 'HD vertical shorts (9:16)',            free: false, paid: true  },
-  { f: 'YouTube Shorts publish',               free: false, paid: true  },
-  { f: 'TikTok publish',                       free: false, paid: true  },
+  { f: 'YouTube Shorts publish',               free: false, paid: true, soon: true },
+  { f: 'TikTok publish',                       free: false, paid: true, soon: true },
   { f: 'Clip editor (captions, style, color)', free: false, paid: true  },
   { f: 'Download MP4',                         free: false, paid: true  },
   { f: 'Batch download',                       free: false, paid: true  },
@@ -265,19 +265,23 @@ export default function Billing() {
               <span style={{ textAlign: 'center', fontSize: '.72rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '.07em' }}>Free</span>
               <span style={{ textAlign: 'center', fontSize: '.72rem', fontWeight: 700, color: '#cf1322', textTransform: 'uppercase', letterSpacing: '.07em' }}>Paid</span>
             </div>
-            {FEATURES.map(({ f, free, paid }, i) => (
+            {FEATURES.map(({ f, free, paid, soon }, i) => (
               <div key={f} style={{
                 display: 'grid', gridTemplateColumns: '1fr 80px 80px',
                 padding: '11px 20px',
                 borderBottom: i < FEATURES.length - 1 ? '1px solid #f3f4f6' : 'none',
                 alignItems: 'center',
               }}>
-                <span style={{ fontSize: '.8rem', color: '#374151' }}>{f}</span>
+                <span style={{ fontSize: '.8rem', color: '#374151' }}>
+                  {f}{soon && <span style={{ color: '#f59e0b', fontWeight: 600, fontSize: '.72rem' }}> (coming soon)</span>}
+                </span>
                 <span style={{ textAlign: 'center', fontSize: '.82rem' }}>
                   {free ? <span style={{ color: '#16a34a', fontWeight: 700 }}>✓</span> : <span style={{ color: '#d1d5db' }}>—</span>}
                 </span>
                 <span style={{ textAlign: 'center', fontSize: '.82rem' }}>
-                  {paid ? <span style={{ color: '#16a34a', fontWeight: 700 }}>✓</span> : <span style={{ color: '#d1d5db' }}>—</span>}
+                  {soon
+                    ? <span style={{ color: '#f59e0b', fontWeight: 700, fontSize: '.68rem' }}>Soon</span>
+                    : paid ? <span style={{ color: '#16a34a', fontWeight: 700 }}>✓</span> : <span style={{ color: '#d1d5db' }}>—</span>}
                 </span>
               </div>
             ))}

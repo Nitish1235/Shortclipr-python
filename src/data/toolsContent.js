@@ -82,7 +82,7 @@ const toolsContent = {
     steps: [
       { n: '01', title: 'Paste your YouTube link', desc: 'Works with regular uploads, premieres, podcasts, and livestream replays.' },
       { n: '02', title: 'Pick your style', desc: 'Choose a caption style, layout template, and (optionally) a topic to focus on.' },
-      { n: '03', title: 'Download or publish directly', desc: 'Export individually, as a ZIP, or push straight to TikTok / Reels / Shorts from the editor.' },
+      { n: '03', title: 'Download individually or as a ZIP', desc: 'Export each clip separately or grab a batch ZIP — ready to post to TikTok / Reels / Shorts. Direct in-app publishing is coming soon.' },
     ],
     features: [
       { icon: '🚫', title: 'No watermark, even on free', desc: 'Free-plan exports are fully clean — what you see is exactly what you can post, with no upsell hidden in the output.' },
@@ -93,7 +93,7 @@ const toolsContent = {
     faqs: [
       { q: 'Is the YouTube to Shorts converter actually free?', a: 'Yes — your first 3 videos are processed free, with no watermark and no credit card required. After that, plans are billed per video rather than per minute.' },
       { q: 'Will my exported clips have a ShortClipr logo on them?', a: 'No. Unlike most "free" converters, ShortClipr does not place a watermark on free-plan exports — the clips are export-ready as-is.' },
-      { q: 'Can I publish directly to TikTok, Reels, and Shorts?', a: 'Yes — once your clips are generated you can export them individually, download a batch ZIP, or publish directly from the built-in editor.' },
+      { q: 'Can I publish directly to TikTok, Reels, and Shorts?', a: 'Direct in-app publishing is coming soon. For now, export clips individually or as a batch ZIP, ready to upload to any platform.' },
       { q: 'What video lengths does the converter support?', a: 'Up to 6 hours of source video — well beyond the 2-3 hour caps most competing converters impose.' },
     ],
   },
