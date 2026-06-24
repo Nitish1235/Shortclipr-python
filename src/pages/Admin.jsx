@@ -527,6 +527,9 @@ export default function Admin() {
               {t.label}
             </button>
           ))}
+          <button onClick={() => navigate('/admin/marketing-editor')} style={tabStyle(false)}>
+            🎞️ Marketing Editor
+          </button>
         </div>
 
         {/* ── Showcase tab ── */}

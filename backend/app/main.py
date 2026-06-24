@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from app.api import auth, editor, admin, internal, jobs, payments, social, webhooks, youtube
+from app.api import admin_marketing, auth, editor, admin, internal, jobs, payments, social, webhooks, youtube
 from app.core.config import get_settings
 
 
@@ -122,6 +122,7 @@ app.include_router(social.router)
 # Include the new editor router
 app.include_router(editor.router)
 app.include_router(admin.router)
+app.include_router(admin_marketing.router)
 app.include_router(internal.router)
 
 # Lab/testing endpoints — development only, never exposed in production

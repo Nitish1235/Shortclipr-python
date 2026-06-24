@@ -37,6 +37,7 @@ import DMCA           from './pages/DMCA'
 import Editor         from './pages/Editor'
 import Lab            from './pages/Lab'
 import Admin          from './pages/Admin'
+import AdminMarketingEditor from './pages/AdminMarketingEditor'
 
 // SEO landing pages
 import ToolsIndex        from './pages/ToolsIndex'
@@ -177,6 +178,7 @@ export default function App() {
 
             {/* Admin — no separate auth guard on frontend, backend enforces admin check */}
             <Route path="/admin"                 element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+            <Route path="/admin/marketing-editor" element={<ProtectedRoute><AdminMarketingEditor /></ProtectedRoute>} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

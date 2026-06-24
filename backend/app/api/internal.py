@@ -69,6 +69,33 @@ async def internal_run_test(body: InternalTestRequest, x_internal_secret: str = 
     return {"status": "accepted"}
 
 
+class InternalMarketingRequest(BaseModel):
+    job_id: str
+    config: dict
+
+
+@router.post("/marketing/render", status_code=202)
+async def internal_run_marketing(body: InternalMarketingRequest, x_internal_secret: str = Header(default="")):
+    _require_internal_secret(x_internal_secret)
+    from app.api.admin_marketing import run_marketing_render
+    asyncio.create_task(
+        run_marketing_render(body.job_id, body.config),
+        name=f"mktg-{body.job_id[:8]}",
+    )
+    return {"status": "accepted"}
+
+
+@router.get("/marketing/jobs/{job_id}", status_code=200)
+async def internal_get_marketing_job(job_id: str, x_internal_secret: str = Header(default="")):
+    _require_internal_secret(x_internal_secret)
+    from app.api.admin_marketing import _marketing_jobs
+    job = _marketing_jobs.get(job_id)
+    if job is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Marketing job not found")
+    return job
+
+
 @router.get("/test/jobs/{job_id}", status_code=200)
 async def internal_get_test_job(job_id: str, x_internal_secret: str = Header(default="")):
     _require_internal_secret(x_internal_secret)
