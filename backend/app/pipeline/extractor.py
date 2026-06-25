@@ -47,6 +47,7 @@ COLOUR PARAMETER  (bar_color):
 """
 
 import asyncio
+import contextlib
 import logging
 import shutil
 import tempfile
@@ -960,6 +961,18 @@ def _get_encode_semaphore() -> asyncio.Semaphore:
     return _ENCODE_SEMAPHORE
 
 
+@contextlib.asynccontextmanager
+async def _maybe(semaphore: asyncio.Semaphore | None):
+    """No-op passthrough when no per-job semaphore is supplied — callers
+    that don't care about job-level fairness (e.g. the admin test pipeline)
+    just get the existing global-only behavior."""
+    if semaphore is None:
+        yield
+    else:
+        async with semaphore:
+            yield
+
+
 # ══════════════════════════════════════════════════════════════
 #  PUBLIC ENTRY POINT — reframe_and_caption
 # ══════════════════════════════════════════════════════════════
@@ -989,6 +1002,7 @@ async def _encode_reframed_and_captioned(
     title_color: str = DEFAULT_TITLE_TEXT_COLOR,
     title_bg: str = DEFAULT_TITLE_BG,
     title_bg_opacity: float = DEFAULT_TITLE_BG_OPACITY,
+    job_semaphore: asyncio.Semaphore | None = None,
 ) -> None:
     """One ffmpeg invocation: reframe + (optionally) burn captions, producing
     both the raw reframed output and the captioned output."""
@@ -1056,7 +1070,12 @@ async def _encode_reframed_and_captioned(
                 str(raw_output_path),
             ]
 
-        async with _get_encode_semaphore():
+        # job_semaphore (outer) caps how many of THIS job's own clips can be
+        # inside the instance-wide pool at once — prevents one big job from
+        # holding both global slots back-to-back while other users' jobs on
+        # the same instance queue behind it entirely. See orchestrator.py
+        # for how its size is chosen (adaptive: full speed when solo).
+        async with _maybe(job_semaphore), _get_encode_semaphore():
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.DEVNULL,
@@ -1112,6 +1131,7 @@ async def reframe_and_caption(
     title_color: str = DEFAULT_TITLE_TEXT_COLOR,
     title_bg: str = DEFAULT_TITLE_BG,
     title_bg_opacity: float = DEFAULT_TITLE_BG_OPACITY,
+    job_semaphore: asyncio.Semaphore | None = None,
 ) -> tuple[Path, Path]:
     """
     Reframe a 16:9 clip into the chosen aspect ratio and (if `captions` or
@@ -1141,6 +1161,12 @@ async def reframe_and_caption(
                      face_tracker.compute_face_track() — drives the zoompan
                      pan target / speaker-box crop offset. Empty/None falls
                      back to centre-default framing.
+        job_semaphore: optional per-job encode cap (see orchestrator.py) —
+                     limits how many of THIS job's own clips can occupy the
+                     instance-wide encode pool at once, so one large job
+                     can't monopolize it and starve other users' jobs on
+                     the same instance. None = no job-level limit (only the
+                     global MAX_CONCURRENT_ENCODES semaphore applies).
 
     Returns (raw_output_path, captioned_output_path) on success.
     """
@@ -1160,7 +1186,7 @@ async def reframe_and_caption(
             tpl, bar_color, zoom_beats, width, height,
             captions, style, color, h_align, v_align, words_per_line,
             hook_title, face_track, src_w, src_h, title_permanent, clip_duration, font,
-            title_color, title_bg, title_bg_opacity,
+            title_color, title_bg, title_bg_opacity, job_semaphore,
         )
     except Exception as exc:
         logger.error(
@@ -1172,7 +1198,7 @@ async def reframe_and_caption(
                 "blur_bg", bar_color, None, width, height,
                 captions, style, color, h_align, v_align, words_per_line,
                 hook_title, None, 0, 0, title_permanent, clip_duration, font,
-                title_color, title_bg, title_bg_opacity,
+                title_color, title_bg, title_bg_opacity, job_semaphore,
             )
         except Exception as exc2:
             raise RuntimeError(

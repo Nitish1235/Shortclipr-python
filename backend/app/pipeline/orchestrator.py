@@ -57,6 +57,17 @@ PIPELINE_TIMEOUT_SECONDS = 1200   # 20 minutes — kill hung jobs
 MIN_GATEWAY_SECONDS = 60
 
 
+# Tracks how many jobs are concurrently running ON THIS INSTANCE — used to
+# size each job's own encode semaphore adaptively (see _execute_pipeline):
+# a SOLO job gets the full global MAX_CONCURRENT_ENCODES to itself (no
+# slowdown vs. before this change), but as soon as a second job lands on
+# the same instance, each job's own clips get capped to 1 concurrent
+# encode so neither can monopolize both global slots and starve the other.
+# Plain int is safe here without a lock — single-threaded asyncio event
+# loop, no actual concurrent mutation.
+_ACTIVE_JOBS_ON_INSTANCE = 0
+
+
 @asynccontextmanager
 async def _step(job_id: str, name: str):
     """Wrap a pipeline step with start/complete/error logs + elapsed time —
@@ -138,6 +149,9 @@ async def _execute_pipeline(
     # the reconciliation sweep uses to tell queued-forever apart from
     # legitimately-running jobs).
     await db.update_job_progress(job_id, 1, "Starting pipeline...")
+
+    global _ACTIVE_JOBS_ON_INSTANCE
+    _ACTIVE_JOBS_ON_INSTANCE += 1
 
     try:
         # ── STEP 1: Extract video ID ──────────────────────────────
@@ -284,6 +298,18 @@ async def _execute_pipeline(
         total = len(timestamps)
         clips_done = 0
 
+        # Adaptive per-job encode cap: if this is the ONLY job currently
+        # running on this instance, let it use the full global encode pool
+        # (MAX_CONCURRENT_ENCODES) — no slowdown for a solo user. As soon as
+        # a second job is sharing the instance, cap each job's own clips to
+        # 1 concurrent encode so one big job can't hold both global slots
+        # and starve the other job entirely (see extractor.py's job_semaphore
+        # param + _maybe()). Snapshot taken once here, not re-evaluated
+        # mid-job — good enough since the global semaphore is still the
+        # real backstop regardless of which snapshot a job started with.
+        job_cap = settings.MAX_CONCURRENT_ENCODES if _ACTIVE_JOBS_ON_INSTANCE <= 1 else 1
+        job_encode_semaphore = asyncio.Semaphore(job_cap)
+
         async def _process_one_clip(i: int, ts: ClipTimestamp) -> dict:
             nonlocal clips_done
 
@@ -399,6 +425,7 @@ async def _execute_pipeline(
                     title_permanent=title_permanent, clip_duration=clip_actual_dur,
                     font=font, title_color=title_color, title_bg=title_bg,
                     title_bg_opacity=title_bg_opacity,
+                    job_semaphore=job_encode_semaphore,
                 )
 
             # Generate thumbnail from final vertical clip
@@ -475,6 +502,7 @@ async def _execute_pipeline(
             if video_minutes_reserved > 0:
                 await db.release_video_minutes(user_id, video_minutes_reserved)
         cleanup_job_files(job_dir)
+        _ACTIVE_JOBS_ON_INSTANCE = max(0, _ACTIVE_JOBS_ON_INSTANCE - 1)
 
 
 async def _empty_str() -> str:
