@@ -512,6 +512,13 @@ def _fmt(height: int) -> str:
     AV1 (av01) is excluded: Cloud Run has no hardware AV1 decoder and
     software decoding produces "Missing Sequence Header" / corrupted output.
 
+    IMPORTANT — use `vcodec!^=av01` (starts-with negation), NOT `vcodec!=av01`
+    (exact-match negation). Real codec tags look like "av01.0.08M.08", never
+    the bare string "av01" — `!=av01` silently never matches anything and
+    excludes nothing, confirmed in production: a video with avc1 1080p AND
+    vp9 1080p both available still got served av01 1080p by this selector
+    with the `!=` form. `!^=` correctly excludes every av01.* variant.
+
     Deliberately STRICT — every tier excludes av01, with NO unconstrained
     fallback at the end (that's _fmt_unconstrained()/_fmt_relaxed()'s job,
     used as explicit later tiers in the broader fallback chains). Letting
@@ -524,9 +531,9 @@ def _fmt(height: int) -> str:
     which is the correct behaviour.
     """
     return (
-        f"bestvideo[height<={height}][ext=mp4][vcodec!=av01]+bestaudio[ext=m4a]"
-        f"/bestvideo[height<={height}][vcodec!=av01]+bestaudio"
-        f"/best[height<={height}][vcodec!=av01]"
+        f"bestvideo[height<={height}][ext=mp4][vcodec!^=av01]+bestaudio[ext=m4a]"
+        f"/bestvideo[height<={height}][vcodec!^=av01]+bestaudio"
+        f"/best[height<={height}][vcodec!^=av01]"
     )
 
 
@@ -535,7 +542,7 @@ def _fmt_unconstrained() -> str:
     Most permissive format selector - no height or extension constraints.
     Used as final fallback when all else fails.
     """
-    return "bestvideo[vcodec!=av01]+bestaudio/best"
+    return "bestvideo[vcodec!^=av01]+bestaudio/best"
 
 
 def _fmt_relaxed(height: int) -> str:
@@ -544,9 +551,9 @@ def _fmt_relaxed(height: int) -> str:
     Used as an additional fallback when strict mp4 selector fails.
     """
     return (
-        f"bestvideo[height<={height}][vcodec!=av01]+bestaudio"
-        f"/best[height<={height}][vcodec!=av01]"
-        f"/bestvideo[vcodec!=av01]+bestaudio"
+        f"bestvideo[height<={height}][vcodec!^=av01]+bestaudio"
+        f"/best[height<={height}][vcodec!^=av01]"
+        f"/bestvideo[vcodec!^=av01]+bestaudio"
         f"/best"
     )
 
