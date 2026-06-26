@@ -743,12 +743,23 @@ def _fc_crop_fill(
     # matches width:vid_h — cropped directly from the untouched source frame,
     # so the face-tracking pan moves over real native pixels, not an already
     # upscaled frame.
+    # Both dimensions MUST be even (libx264/yuv420p chroma requirement) — the
+    # "kept as the full native dimension" side here used to pass src_w/src_h
+    # straight through with NO rounding. Most source videos have even native
+    # resolutions so this went unnoticed, but a video with an odd native
+    # dimension fed an odd crop size into the downstream lanczos scale,
+    # which can hang ffmpeg instead of erroring cleanly (confirmed in
+    # production: crop_fill timed out at 180s on a clip that blur_bg —
+    # which never touches src_w/src_h directly — encoded successfully on
+    # the identical input). Round DOWN here, not _even_round() (which always
+    # rounds odd values UP) — rounding up would request a crop region
+    # taller/wider than the actual source frame, an out-of-bounds crop.
     target_aspect = width / vid_h
     if src_w / src_h > target_aspect:
-        crop_h_native = src_h
+        crop_h_native = src_h if src_h % 2 == 0 else src_h - 1
         crop_w_native = _even_round(src_h * target_aspect)
     else:
-        crop_w_native = src_w
+        crop_w_native = src_w if src_w % 2 == 0 else src_w - 1
         crop_h_native = _even_round(src_w / target_aspect)
 
     # Blurred background fills the thin top/bottom strips; main video is the
