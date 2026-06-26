@@ -18,6 +18,7 @@ import contextvars
 import hashlib
 import logging
 import random
+import uuid
 from urllib.parse import parse_qs, quote_plus, urlparse
 
 from app.core.config import get_settings
@@ -101,13 +102,26 @@ def _get_decodo_proxy_url(session_id: str | None = None) -> str:
     return f"http://{user}:{password}@{host}:{port}"
 
 
-def get_dataimpulse_proxy() -> str | None:
+def get_dataimpulse_proxy(purpose: str = "req") -> str | None:
     """
     DataImpulse rotating residential proxy — use for transcript + stream URL.
 
-    Rotating means each new connection gets a fresh IP automatically.
-    No session stickiness needed: transcript and stream URL are independent
-    requests that don't need to share an IP.
+    DataImpulse pins one exit IP per `sessid` for ~30 min by default (see
+    https://dataimpulse.com docs on sticky sessions — username syntax is
+    "{login};sessid.{id}"). WITHOUT a sessid, back-to-back calls can land
+    on the same (or an already YouTube-blocked) exit IP — confirmed in
+    production logs where all 3 transcript fallback methods hit IpBlocked
+    in succession. Appending a fresh random sessid on every call forces an
+    independent rotation each time, so one blocked IP doesn't poison every
+    subsequent call within the same job.
+
+    `purpose` is just a log-friendly label (e.g. "ytta", "stream") baked
+    into the sessid — it has no effect on stickiness/rotation behavior.
+
+    Callers that need the SAME IP across multiple sub-requests (e.g. the
+    InnerTube player call + its timedtext fetch, which share an IP-tied
+    auth token) must call this ONCE and reuse the returned string — do
+    NOT call it again expecting the same IP, each call mints a new one.
 
     Returns None if DATAIMPULSE_USER is not configured.
     """
@@ -115,12 +129,13 @@ def get_dataimpulse_proxy() -> str | None:
     if not s.DATAIMPULSE_USER or not s.DATAIMPULSE_PASS:
         _logger.warning("[proxy.py] DataImpulse not configured — transcript/stream running without residential proxy")
         return None
-    user = quote_plus(s.DATAIMPULSE_USER.strip())
+    sessid = f"{purpose}{uuid.uuid4().hex[:10]}"
+    user = quote_plus(f"{s.DATAIMPULSE_USER.strip()};sessid.{sessid}")
     pw   = quote_plus(s.DATAIMPULSE_PASS.strip())
     host = s.DATAIMPULSE_HOST.strip()
     port = s.DATAIMPULSE_PORT
     safe_pw = f"{pw[:3]}...{pw[-2:]} (len={len(pw)})" if len(pw) > 5 else f"len={len(pw)}"
-    _logger.info(f"[proxy.py] DataImpulse residential — {host}:{port} user={user[:10]}... pass={safe_pw}")
+    _logger.info(f"[proxy.py] DataImpulse residential — {host}:{port} sessid={sessid} pass={safe_pw}")
     return f"http://{user}:{pw}@{host}:{port}"
 
 

@@ -351,7 +351,7 @@ async def _get_source(
     existing sequential chain: proxied ffmpeg download -> yt-dlp.
     """
     source_path = job_dir / "source.mp4"
-    proxy_url = get_dataimpulse_proxy()
+    proxy_url = get_dataimpulse_proxy(purpose="source-download")
 
     try:
         return await download_source_parallel(
@@ -393,7 +393,7 @@ async def get_clip_via_dash(
     Falls back to RuntimeError on any sidx parse or fetch failure — callers
     should catch and fall back to _get_source + extract_clip.
     """
-    proxy_url = get_dataimpulse_proxy()  # same provider that minted stream_url (see _get_source)
+    proxy_url = get_dataimpulse_proxy(purpose="dash-clip")  # same provider that minted stream_url (see _get_source)
     raw_path  = output_path.with_suffix(".dash_raw.mp4")
 
     try:

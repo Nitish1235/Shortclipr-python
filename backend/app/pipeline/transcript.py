@@ -242,7 +242,7 @@ def _ytta_fetch_sync(
 
 
 async def _ytta_proxy(video_id: str, lang_code: str, session_id: str | None = None) -> list[TranscriptEntry]:
-    proxy = get_dataimpulse_proxy()
+    proxy = get_dataimpulse_proxy(purpose="transcript-ytta")
     loop = asyncio.get_running_loop()
     # _TranscriptsDisabledError and _VideoUnavailableError propagate naturally
     return await loop.run_in_executor(
@@ -261,7 +261,7 @@ async def _innertube_android_proxy(video_id: str, lang_code: str, session_id: st
     Fetch caption track list via InnerTube ANDROID player call, then download
     the timedtext URL — both via the SAME DataImpulse rotating residential proxy.
     """
-    proxy = get_dataimpulse_proxy()
+    proxy = get_dataimpulse_proxy(purpose="transcript-innertube")
     data = await call_player_api(video_id, client_name="ANDROID", proxy_url=proxy)
 
     ps = data.get("playabilityStatus", {})
@@ -456,7 +456,7 @@ def _ytdlp_subs_sync(
 
 
 async def _ytdlp_subs_proxy(video_id: str, lang_code: str, session_id: str | None = None) -> list[TranscriptEntry]:
-    proxy = get_dataimpulse_proxy()
+    proxy = get_dataimpulse_proxy(purpose="transcript-ytdlp")
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
         _TRANSCRIPT_POOL,
