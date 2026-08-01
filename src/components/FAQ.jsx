@@ -4,15 +4,15 @@ import { useNavigate, useLocation } from 'react-router-dom'
 const faqs = [
   {
     q: 'What is ShortClipr and how does it work?',
-    a: 'Paste a YouTube URL — our AI transcribes, scores viral moments, reframes to 9:16, burns in captions, and delivers ready-to-post clips in under 5 minutes. No editing software needed.',
+    a: 'Paste a YouTube URL — our AI transcribes, scores viral moments, reframes to 9:16, burns in captions, and delivers ready-to-post clips in minutes. No editing software needed.',
   },
   {
     q: 'Is ShortClipr better than OpusClip?',
-    a: 'ShortClipr is 3–5× faster, has no watermarks on the free plan, uses per-video pricing (not confusing per-minute), and offers 11 caption styles vs OpusClip\'s 4.',
+    a: 'ShortClipr is noticeably faster (we never download the full source video), has no watermarks on the free plan, uses per-video pricing (not confusing per-minute), and offers 11 caption styles vs OpusClip\'s 4.',
   },
   {
     q: 'How long does it take to generate clips?',
-    a: 'Average is 2–4 minutes per video. Stream extraction means we never download the full file — a 3-hour podcast returns 10+ clips in under 5 minutes.',
+    a: 'Typically 5–10 minutes per video, depending on length and clip count. Stream extraction means we never download the full source file — a 3-hour podcast usually returns 10+ clips in that window.',
   },
   {
     q: 'Can I use ShortClipr for free?',
@@ -121,6 +121,34 @@ export default function FAQ() {
             onMouseEnter={e => { e.currentTarget.style.transform = 'translate(-1px,-1px)'; e.currentTarget.style.boxShadow = '3px 3px 0 #111' }}
             onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '2px 2px 0 #111' }}
           >Start free — paste a URL →</a>
+        </div>
+
+        {/* Internal link cluster — SEO link equity to tool + alternatives pages */}
+        <div style={{ marginTop: '40px', borderTop: '1px solid #e8e8e8', paddingTop: '28px' }}>
+          <p style={{ fontSize: '0.78rem', color: '#bbb', textAlign: 'center', marginBottom: '14px', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 600 }}>Explore ShortClipr</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
+            {[
+              { label: 'YouTube to Shorts',    href: '/tools/youtube-to-shorts-converter'    },
+              { label: 'Podcast to Shorts',    href: '/tools/podcast-to-shorts'              },
+              { label: 'TikTok Clip Maker',    href: '/tools/tiktok-clip-maker'              },
+              { label: 'Video to Reels',       href: '/tools/video-to-reels'                 },
+              { label: 'Webinar to Clips',     href: '/tools/webinar-to-clips'               },
+              { label: 'Opus Clip Alternative',href: '/alternatives/opus-clip'               },
+              { label: '2short.ai Alternative',href: '/alternatives/2short'                  },
+              { label: 'Riverside Alternative',href: '/alternatives/riverside'               },
+              { label: 'Munch Alternative',    href: '/alternatives/munch'                   },
+              { label: 'Vizard Alternative',   href: '/alternatives/vizard'                  },
+            ].map(({ label, href }) => (
+              <a key={href} href={href} style={{
+                fontSize: '0.78rem', color: '#999', textDecoration: 'none',
+                padding: '4px 10px', borderRadius: '4px', border: '1px solid #e5e5e5',
+                transition: 'color 0.15s, border-color 0.15s',
+              }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#cf1322'; e.currentTarget.style.borderColor = '#cf1322' }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#999'; e.currentTarget.style.borderColor = '#e5e5e5' }}
+              >{label}</a>
+            ))}
+          </div>
         </div>
       </div>
       <style>{`@keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}`}</style>

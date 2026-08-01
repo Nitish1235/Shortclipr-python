@@ -8,18 +8,26 @@ import { YTLogo, TTLogo } from '../components/PlatformLogos'
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
 // ── Timer helpers ─────────────────────────────────────────────────
+// Clip retention: 15 days from job creation. Mirrors the filter in
+// pages/ClipsHistory.jsx — keep both in sync if changed.
+const CLIP_RETENTION_MS = 15 * 24 * 3600 * 1000
+
 function msRemaining(createdAt) {
   if (!createdAt) return 0
-  return new Date(createdAt).getTime() + 24 * 3600 * 1000 - Date.now()
+  return new Date(createdAt).getTime() + CLIP_RETENTION_MS - Date.now()
 }
 function formatTimer(createdAt) {
   const ms = msRemaining(createdAt)
   if (ms <= 0) return 'Expired'
-  const h = Math.floor(ms / 3600000)
-  const m = Math.floor((ms % 3600000) / 60000)
-  return `${h}h ${m}m`
+  const days = Math.floor(ms / (24 * 3600000))
+  const hrs  = Math.floor((ms % (24 * 3600000)) / 3600000)
+  if (days > 0) return `${days}d ${hrs}h`
+  const mins = Math.floor((ms % 3600000) / 60000)
+  return `${hrs}h ${mins}m`
 }
-function isUrgent(createdAt) { return msRemaining(createdAt) < 6 * 3600000 }
+// "Urgent" = clip has less than 1 day left. Was 6h under the old 24h window;
+// scaled up because "6h left of 15 days" is invisible on the UI meter.
+function isUrgent(createdAt) { return msRemaining(createdAt) < 24 * 3600000 }
 function isExpired(createdAt) { return msRemaining(createdAt) <= 0 }
 
 // Video-minutes stat formatting — e.g. 45 -> "45m", 125 -> "2h 5m"
@@ -251,11 +259,11 @@ export default function Dashboard() {
   useEffect(() => () => clearInterval(clipPollRef.current), [])
 
   // ── Derived clip lists ────────────────────────────────────────
-  // Clip files are deleted server-side 24h after generation (see
-  // ClipsHistory.jsx's matching 24h cutoff) — once that's passed, the
-  // clip rows still exist in the DB but their GCS files are gone, so
-  // showing them just renders broken/empty cards. Hide them here instead;
-  // generate a new batch for fresh clips.
+  // Clips are hidden from the UI 15 days after generation (see
+  // CLIP_RETENTION_MS above + matching filter in ClipsHistory.jsx).
+  // Server-side, non-showcased clips get deleted whenever the user
+  // deletes the parent job — this UI cutoff is a soft rolloff so old
+  // clips stop cluttering the dashboard even if the user never cleans up.
   const jobExpired = currentJob && isExpired(currentJob.created_at)
   const rawClips = clips.filter(c => c.clip_ready === false)   // Phase 1: encoding
   const hdClips  = jobExpired ? [] : clips.filter(c => c.clip_ready === true)  // Phase 2: ready
@@ -778,11 +786,11 @@ export default function Dashboard() {
                 </span>
                 {hdClips.length > 0 && (
                   <>
-                    {/* 24h expiry reminder — clips/files are deleted after this window */}
+                    {/* 15-day soft expiry reminder — clips leave the dashboard after this. */}
                     <span style={{
                       fontSize:'.68rem', fontWeight:600, padding:'2px 9px', borderRadius:'100px',
                       background:'#fffbeb', color:'#b45309', border:'1px solid #fde68a',
-                    }}>⏳ Clips last 24h — download or publish before they expire</span>
+                    }}>⏳ Clips last 15 days — download or publish before they expire</span>
                     <span style={{
                       fontSize:'.68rem', fontWeight:700, padding:'2px 9px', borderRadius:'100px',
                       background:'#f0fdf4', color:'#16a34a', border:'1px solid #bbf7d0',
@@ -828,7 +836,7 @@ export default function Dashboard() {
                     {isActive
                       ? 'HD clips will appear here as they finish encoding…'
                       : jobExpired
-                      ? '⏰ These clips have passed their 24h limit and were removed. Generate a new batch to get fresh ones.'
+                      ? '⏰ These clips have passed their 15-day window and were removed from your dashboard. Generate a new batch to get fresh ones.'
                       : 'No clips found.'}
                   </div>
                 ) : filteredClips.length === 0 ? (
@@ -1272,8 +1280,8 @@ export default function Dashboard() {
             </p>
             <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:24 }}>
               {[
-                { name:'Starter', price:'$10/mo', perks:'100 shorts · Editor · Downloads' },
-                { name:'Pro',     price:'$45/mo', perks:'500 shorts · Priority · Everything' },
+                { name:'Starter', price:'$10/mo', perks:'75 shorts · Editor · Downloads' },
+                { name:'Pro',     price:'$45/mo', perks:'400 shorts · Priority · Everything' },
               ].map(plan => (
                 <div key={plan.name} style={{
                   border:'1px solid #e5e5e5', borderRadius:10, padding:'14px 16px',

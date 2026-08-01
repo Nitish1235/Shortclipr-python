@@ -134,7 +134,7 @@ export default function ToolLanding() {
         {/* CTA band */}
         <section className="seo-cta-band">
           <h2>Try it on your own video — free</h2>
-          <p>3 videos, no watermark, no credit card. See your own clips in under 3 minutes.</p>
+          <p>3 videos, no watermark, no credit card. Your first clips ready in minutes.</p>
           <Link to="/" className="seo-btn-primary">Get started free →</Link>
         </section>
       </div>

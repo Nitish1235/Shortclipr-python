@@ -1,3 +1,9 @@
+# DEPRECATED: Legacy unified worker deployment. New deployments should
+# use cloudbuild-api-worker.yaml + cloudbuild-ffmpeg-worker.yaml instead
+# (split-worker architecture). This file is kept only to keep existing
+# Cloud Build triggers pointing at shortclipr-worker-* services alive
+# during the split-worker rollout.
+
 substitutions:
   # Cloud Run deploy region — pass via --substitutions _REGION=us-east1 on
   # the trigger for each additional region. Image is always built/pushed to
@@ -32,7 +38,7 @@ steps:
   # ── 3. Deploy to Cloud Run ──────────────────────────────────────────────────
   # shortclipr-worker-$_REGION — one Cloud Run service per region, all built
   # from the SAME image, only ever called via:
-  #   - /internal/pipeline/run   (Cloud Tasks target — see app/core/tasks.py)
+  #   - /internal/pipeline/run   (dispatched by the watcher service)
   #   - /internal/editor/render  (direct call from POST /editor/render)
   # Both routes are gated on X-Internal-Secret == INTERNAL_TASK_SECRET.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'

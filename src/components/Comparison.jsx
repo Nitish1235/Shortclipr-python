@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom'
 const rows = [
   {
     feature: 'Processing speed',
-    us:       '< 3 min',
-    opus:     '5–12 min',
-    klap:     '6–15 min',
-    vidyo:    '8–20 min',
+    us:       '5–10 min',
+    opus:     '10–20 min',
+    klap:     '12–25 min',
+    vidyo:    '15–30 min',
   },
   {
     feature: 'Free plan watermarks',

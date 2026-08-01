@@ -81,8 +81,12 @@ def _copy_to_showcase_sync(
     viral_score: int,
     thumbnail_url: str,
     source_video_url: str,
+    source_clip_id: str,
+    source_job_id: str,
 ) -> dict:
-    """Copy a clip from clips/ → showcase/ with metadata. Returns showcase entry."""
+    """Copy a clip from clips/ → showcase/ with metadata. Returns showcase entry.
+    source_clip_id + source_job_id are stored on the blob so admin_delete_showcase
+    can locate + un-flag the original clip row when the showcase entry is removed."""
     client = _get_gcs_client()
     bucket = client.bucket(settings.GCS_BUCKET_NAME)
 
@@ -94,11 +98,15 @@ def _copy_to_showcase_sync(
 
     # Store metadata on the GCS blob
     dest_blob.metadata = {
-        "showcase_id": showcase_id,
-        "title": title[:200],
-        "viral_score": str(viral_score),
-        "thumbnail_url": thumbnail_url,
-        "added_at": datetime.now(timezone.utc).isoformat(),
+        "showcase_id":    showcase_id,
+        "title":          title[:200],
+        "viral_score":    str(viral_score),
+        "thumbnail_url":  thumbnail_url,
+        "added_at":       datetime.now(timezone.utc).isoformat(),
+        # Back-references to the source row so removal from showcase can
+        # un-flag the original clip in the DB (see admin_delete_showcase).
+        "source_clip_id": source_clip_id,
+        "source_job_id":  source_job_id,
     }
     dest_blob.patch()
     # Do NOT call dest_blob.make_public() — bucket has Uniform Bucket-Level
@@ -134,13 +142,18 @@ def _list_showcase_sync() -> list[dict]:
             blob.reload()  # fetch metadata
             meta = blob.metadata or {}
             items.append({
-                "id":            meta.get("showcase_id", blob.name.split("/")[-1].replace(".mp4", "")),
-                "video_url":     blob.public_url,
-                "thumbnail_url": meta.get("thumbnail_url", ""),
-                "title":         meta.get("title", "ShortClipr Clip"),
-                "viral_score":   int(meta.get("viral_score", 0)),
-                "added_at":      meta.get("added_at", ""),
-                "blob_name":     blob.name,
+                "id":              meta.get("showcase_id", blob.name.split("/")[-1].replace(".mp4", "")),
+                "video_url":       blob.public_url,
+                "thumbnail_url":   meta.get("thumbnail_url", ""),
+                "title":           meta.get("title", "ShortClipr Clip"),
+                "viral_score":     int(meta.get("viral_score", 0)),
+                "added_at":        meta.get("added_at", ""),
+                "blob_name":       blob.name,
+                # Empty when the showcase entry pre-dates migration 006
+                # (blobs added before source_clip_id was tracked). Admin UI
+                # can still delete these; the DB unflag just no-ops.
+                "source_clip_id":  meta.get("source_clip_id", ""),
+                "source_job_id":   meta.get("source_job_id",  ""),
             })
         # Sort newest first
         items.sort(key=lambda x: x["added_at"], reverse=True)
@@ -212,8 +225,14 @@ class AddToShowcaseRequest(BaseModel):
 @router.post("/admin/showcase/add")
 async def admin_add_to_showcase(body: AddToShowcaseRequest, admin: AdminUser):
     """
-    Admin: copy a generated clip into the GCS showcase/ folder.
-    The clip is copied (not moved) so the original job clip is unaffected.
+    Admin: copy a generated clip into the GCS showcase/ folder AND flag the
+    source clip row (is_showcased=TRUE) so it can't be deleted by the user
+    or a retention sweep.
+
+    The clip is COPIED (not moved) so:
+      - The showcase copy under GCS `showcase/` prefix is fully independent
+      - The source clip row + `clips/` blob are protected via is_showcased flag
+      - If the source clip / job is later deleted, the showcase copy stays
     """
     # Derive blob name from the video URL
     # URL format: https://storage.googleapis.com/{bucket}/{blob_name}
@@ -233,12 +252,26 @@ async def admin_add_to_showcase(body: AddToShowcaseRequest, admin: AdminUser):
             body.viral_score,
             body.thumbnail_url,
             body.video_url,
+            body.clip_id,
+            body.job_id,
         )
-        logger.info(f"Admin {admin.email} added showcase clip: {entry['id']}")
-        return {"success": True, "showcase_entry": entry}
     except Exception as e:
         logger.error(f"Failed to add to showcase: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+    # Flag the source clip so DELETE /jobs/{id} won't nuke it later.
+    # Runs AFTER the GCS copy succeeds — if the copy fails we don't lie
+    # about the DB state.
+    try:
+        await db.mark_clip_showcased(body.clip_id)
+    except Exception as e:
+        # GCS copy already succeeded; log but don't fail the request — the
+        # showcase entry is live, worst case the source clip gets deleted
+        # someday and the showcase copy remains (which is still the intent).
+        logger.error(f"Marked showcase in GCS but failed to flag clip {body.clip_id}: {e}")
+
+    logger.info(f"Admin {admin.email} added showcase clip {entry['id']} (source clip {body.clip_id})")
+    return {"success": True, "showcase_entry": entry}
 
 
 @router.get("/admin/showcase")
@@ -275,19 +308,48 @@ async def admin_update_showcase_meta(body: UpdateShowcaseMetaRequest, admin: Adm
     return {"success": True}
 
 
+def _delete_showcase_sync_and_get_source(blob_name: str) -> str:
+    """Delete a showcase blob and return the source_clip_id from its metadata
+    (empty string if the blob predates that metadata field)."""
+    client = _get_gcs_client()
+    bucket = client.bucket(settings.GCS_BUCKET_NAME)
+    blob = bucket.blob(blob_name)
+    # Fetch metadata BEFORE the delete so we know which source clip to un-flag.
+    try:
+        blob.reload()
+        source_clip_id = (blob.metadata or {}).get("source_clip_id", "") if blob.metadata else ""
+    except Exception:
+        source_clip_id = ""
+    blob.delete()
+    return source_clip_id
+
+
 @router.delete("/admin/showcase/{showcase_id}")
 async def admin_delete_showcase(showcase_id: str, blob_name: str, admin: AdminUser):
-    """Admin: remove a video from the showcase."""
+    """
+    Admin: remove a video from the showcase. Also un-flags the source clip
+    (is_showcased=FALSE) so future DELETE /jobs/{id} calls can clean it up
+    normally — the showcase protection was the ONLY reason we kept it locked.
+    """
     # blob_name is passed as query param for safety
     if not blob_name.startswith("showcase/"):
         raise HTTPException(status_code=400, detail="Invalid blob name")
     loop = asyncio.get_running_loop()
     try:
-        await loop.run_in_executor(None, _delete_showcase_sync, blob_name)
-        logger.info(f"Admin {admin.email} deleted showcase: {blob_name}")
-        return {"success": True}
+        source_clip_id = await loop.run_in_executor(
+            None, _delete_showcase_sync_and_get_source, blob_name,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+    if source_clip_id:
+        try:
+            await db.unmark_clip_showcased(source_clip_id)
+        except Exception as e:
+            logger.error(f"Deleted showcase blob but failed to unflag clip {source_clip_id}: {e}")
+
+    logger.info(f"Admin {admin.email} deleted showcase: {blob_name} (source clip {source_clip_id or '?'})")
+    return {"success": True}
 
 
 # ── ADMIN: Test Lab — GCS clip browser ─────────────────────────

@@ -26,10 +26,10 @@ const features = [
   {
     icon: '⚡',
     badge: 'Speed',
-    title: 'Under 3 Min Processing',
-    desc: 'Stream extraction pulls only needed segments — 5× faster than OpusClip. A 2-hour podcast returns 10 clips in under 4 minutes.',
-    highlight: '5× faster',
-    highlightSub: 'than OpusClip & Klap',
+    title: 'Minutes, Not Hours',
+    desc: 'Stream extraction pulls only the segments we need — no full-video download. Typically 5–10 minutes end-to-end vs. hours of manual editing.',
+    highlight: 'Way faster',
+    highlightSub: 'than editing by hand',
   },
   {
     icon: '🎨',

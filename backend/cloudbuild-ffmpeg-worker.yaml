@@ -1,0 +1,97 @@
+substitutions:
+  # Cloud Run deploy region — pass via --substitutions _REGION=us-east1 on
+  # the trigger for each additional region. Image is always built/pushed to
+  # the SAME us-central1 Artifact Registry repo regardless of deploy region.
+  _REGION: 'us-central1'
+  # vCPU per instance. FFmpeg workers are CPU bound — libx264 reframe+caption
+  # encode saturates the cores. 2 concurrent jobs on 4 vCPU is the sweet spot
+  # (each job's MAX_CONCURRENT_ENCODES caps to 1 when 2+ jobs share).
+  # Regional quota of 20,000m CPU → 20000/4000 = 5 max instances per region.
+  _CPU: '4'
+  _MAX_INSTANCES: '5'
+
+steps:
+  # ── 1. Build image ──────────────────────────────────────────────────────────
+  # Same Docker image as the API worker — differentiated only by Cloud Run
+  # resource/concurrency settings and the /internal/* endpoint the watcher hits.
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:latest'
+      - './backend'
+
+  # ── 2. Push both tags to Artifact Registry ─────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker'
+
+  # ── 3. Deploy FFmpeg worker to Cloud Run ───────────────────────────────────
+  # shortclipr-ffmpeg-worker-$_REGION handles the FFmpeg pipeline stage:
+  #   /internal/ffmpeg-stage/run  — DASH download / encode / upload
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'shortclipr-ffmpeg-worker-$_REGION'
+      - '--image'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA'
+      - '--region'
+      - '$_REGION'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'   # /internal/* is gated on X-Internal-Secret
+      - '--port'
+      - '8080'
+
+      # ── Resources ────────────────────────────────────────────────────────
+      # 8Gi RAM: 2 concurrent jobs × (source video + trimmed clips +
+      # captioned output all resident during encode) ≈ 4-5 GiB peak. 8Gi
+      # gives ~50% headroom for spike safety without waste.
+      - '--memory'
+      - '8Gi'
+      - '--cpu'
+      - '$_CPU'
+
+      # CPU-boost speeds up cold starts; no-cpu-throttling keeps CPU
+      # available to background asyncio tasks (encoding runs via
+      # asyncio.create_task AFTER the HTTP response returns).
+      - '--cpu-boost'
+      - '--no-cpu-throttling'
+
+      # ── Timeout ──────────────────────────────────────────────────────────
+      # 1500s = 25 min — matches FFMPEG_STAGE_TIMEOUT_SECONDS in ffmpeg_stage.py.
+      # A 15-clip job takes ~7-8 min solo, up to ~14 min with 2 sharing an
+      # instance. 25 min gives generous headroom for retries on heavier videos.
+      - '--timeout'
+      - '1500'
+
+      # ── Concurrency ──────────────────────────────────────────────────────
+      # 2 concurrent requests per instance — matches FFMPEG_REGION_SOFT_CAP
+      # in the watcher. 2 is the sweet spot on 4 vCPU: each job's own
+      # MAX_CONCURRENT_ENCODES self-caps to 1 when sharing an instance, so
+      # 2 jobs together saturate 4 vCPU. More than 2 → contention explodes
+      # per-job time without meaningful throughput gain.
+      - '--concurrency'
+      - '2'
+
+      # ── Scaling ──────────────────────────────────────────────────────────
+      # _MAX_INSTANCES = region_quota_m / (_CPU * 1000).
+      # At _CPU=4 and 20,000m regional quota: 20000/4000 = 5 instances max.
+      # 5 instances × 2 concurrency = 10 concurrent FFmpeg jobs per region.
+      - '--min-instances'
+      - '0'
+      - '--max-instances'
+      - '$_MAX_INSTANCES'
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -1,0 +1,95 @@
+substitutions:
+  # Cloud Run deploy region — pass via --substitutions _REGION=us-east1 on
+  # the trigger for each additional region. Image is always built/pushed to
+  # the SAME us-central1 Artifact Registry repo regardless of deploy region.
+  _REGION: 'us-central1'
+  # vCPU per instance. API workers are I/O bound (waiting on YouTube / OpenAI),
+  # so we run ~12 concurrent requests per instance on 4 vCPU. Regional quota
+  # of 20,000m CPU → 20000/4000 = 5 max instances per region.
+  _CPU: '4'
+  _MAX_INSTANCES: '5'
+
+steps:
+  # ── 1. Build image ──────────────────────────────────────────────────────────
+  # Same Docker image as the FFmpeg worker — differentiated only by Cloud Run
+  # resource/concurrency settings and the /internal/* endpoint the watcher hits.
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:latest'
+      - './backend'
+
+  # ── 2. Push both tags to Artifact Registry ─────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker'
+
+  # ── 3. Deploy API worker to Cloud Run ──────────────────────────────────────
+  # shortclipr-api-worker-$_REGION handles the API pipeline stage:
+  #   /internal/api-stage/run  — metadata / transcript / GPT
+  # Also serves /internal/editor/render since it uses the same Docker image
+  # (any worker can serve editor renders; watcher routes stage traffic).
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'shortclipr-api-worker-$_REGION'
+      - '--image'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA'
+      - '--region'
+      - '$_REGION'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'   # /internal/* is gated on X-Internal-Secret
+      - '--port'
+      - '8080'
+
+      # ── Resources ────────────────────────────────────────────────────────
+      # API workers are I/O bound (YouTube API, OpenAI API, transcript fetch).
+      # 2Gi is generous — a single API job holds ~100-200MB (transcript +
+      # GPT response), so 2Gi safely handles ~12 concurrent jobs with margin.
+      - '--memory'
+      - '2Gi'
+      - '--cpu'
+      - '$_CPU'
+
+      # CPU-boost speeds up cold starts; no-cpu-throttling keeps CPU available
+      # to background asyncio tasks (pipeline runs via asyncio.create_task
+      # AFTER the HTTP response returns).
+      - '--cpu-boost'
+      - '--no-cpu-throttling'
+
+      # ── Timeout ──────────────────────────────────────────────────────────
+      # 300s = 5 min — matches API_STAGE_TIMEOUT_SECONDS in api_stage.py.
+      # Long enough for slow transcript fetches, short enough that a hung
+      # instance is recycled quickly.
+      - '--timeout'
+      - '300'
+
+      # ── Concurrency ──────────────────────────────────────────────────────
+      # 12 concurrent requests per instance — matches API_REGION_SOFT_CAP in
+      # the watcher. Each request is mostly network-bound so CPU stays low.
+      - '--concurrency'
+      - '12'
+
+      # ── Scaling ──────────────────────────────────────────────────────────
+      # _MAX_INSTANCES = region_quota_m / (_CPU * 1000).
+      # At _CPU=4 and 20,000m regional quota: 20000/4000 = 5 instances max.
+      # 5 instances × 12 concurrency = 60 concurrent API jobs per region.
+      - '--min-instances'
+      - '0'
+      - '--max-instances'
+      - '$_MAX_INSTANCES'
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

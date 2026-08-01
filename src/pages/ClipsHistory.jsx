@@ -44,7 +44,9 @@ export default function ClipsHistory() {
     setTimeout(() => setToast(null), 3500)
   }, [])
 
-  // Load jobs + clips (last 24 hours only)
+  // Load jobs + clips (last 15 days). Mirrors CLIP_RETENTION_MS in
+  // pages/Dashboard.jsx — keep both in sync if changed.
+  const RETENTION_MS = 15 * 24 * 3600 * 1000
   useEffect(() => {
     const load = async () => {
       setLoading(true)
@@ -58,7 +60,7 @@ export default function ClipsHistory() {
 
         const now = Date.now()
         const relevant = jobs
-          .filter(j => j.status === 'completed' && (now - new Date(j.created_at)) < 86400000)
+          .filter(j => j.status === 'completed' && (now - new Date(j.created_at)) < RETENTION_MS)
           .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
           .slice(0, 25)
 
@@ -240,7 +242,7 @@ export default function ClipsHistory() {
               <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🎬</div>
               <div style={{ fontSize: '1rem', fontWeight: 700, color: '#374151', marginBottom: 8 }}>No clips found</div>
               <p style={{ fontSize: '.85rem', color: '#9ca3af', marginBottom: 20, maxWidth: 320, margin: '0 auto 20px' }}>
-                No clips generated in the last 24 hours. Head to the Dashboard to create some.
+                No clips generated in the last 15 days. Head to the Dashboard to create some.
               </p>
               <a href="/dashboard" style={{
                 display: 'inline-block', padding: '9px 20px', background: '#cf1322',

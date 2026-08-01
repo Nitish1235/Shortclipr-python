@@ -9,11 +9,11 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
 // videoHours / maxVideoHours mirror backend/app/core/plan_limits.py — keep in sync
 const PLANS = [
-  { id: 'starter_100', name: 'Starter',  price: 10,  clips: 100,  videoHours: 5,  maxVideoHours: 2, badge: null,           perks: ['100 shorts/mo', 'HD vertical exports', 'YouTube & TikTok publish (coming soon)', 'Clip editor access', 'MP4 download'] },
-  { id: 'starter_250', name: 'Starter+', price: 25,  clips: 250,  videoHours: 10, maxVideoHours: 2, badge: null,           perks: ['250 shorts/mo', 'Everything in Starter', 'Faster processing queue'] },
-  { id: 'pro_500',     name: 'Pro',      price: 45,  clips: 500,  videoHours: 18, maxVideoHours: 3, badge: 'Most Popular', perks: ['500 shorts/mo', 'Everything in Starter+', 'Priority queue', 'Batch download'] },
-  { id: 'pro_1000',    name: 'Pro+',     price: 79,  clips: 1000, videoHours: 35, maxVideoHours: 3, badge: null,           perks: ['1,000 shorts/mo', 'Everything in Pro', 'API access (coming soon)'] },
-  { id: 'pro_2000',    name: 'Scale',    price: 145, clips: 2000, videoHours: 60, maxVideoHours: 3, badge: null,           perks: ['2,000 shorts/mo', 'Everything in Pro+', 'Dedicated support'] },
+  { id: 'starter_100', name: 'Starter',  price: 10,  clips: 75,   videoHours: 5,  maxVideoHours: 2, badge: null,           perks: ['75 shorts/mo', 'HD vertical exports', 'YouTube & TikTok publish (coming soon)', 'Clip editor access', 'MP4 download'] },
+  { id: 'starter_250', name: 'Starter+', price: 25,  clips: 200,  videoHours: 10, maxVideoHours: 2, badge: null,           perks: ['200 shorts/mo', 'Everything in Starter', 'Faster processing queue'] },
+  { id: 'pro_500',     name: 'Pro',      price: 45,  clips: 400,  videoHours: 18, maxVideoHours: 3, badge: 'Most Popular', perks: ['400 shorts/mo', 'Everything in Starter+', 'Priority queue', 'Batch download'] },
+  { id: 'pro_1000',    name: 'Pro+',     price: 79,  clips: 800,  videoHours: 35, maxVideoHours: 3, badge: null,           perks: ['800 shorts/mo', 'Everything in Pro', 'API access (coming soon)'] },
+  { id: 'pro_2000',    name: 'Scale',    price: 145, clips: 1500, videoHours: 60, maxVideoHours: 3, badge: null,           perks: ['1,500 shorts/mo', 'Everything in Pro+', 'Dedicated support'] },
 ]
 
 const FEATURES = [

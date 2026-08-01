@@ -318,8 +318,8 @@ export default function Editor() {
           </p>
           <div style={{ display:'flex', flexDirection:'column', gap:'10px', marginBottom:'24px', textAlign:'left' }}>
             {[
-              { name:'Starter', price:'$10/mo', desc:'100 shorts · Editor · Downloads'   },
-              { name:'Pro',     price:'$45/mo', desc:'500 shorts · Everything · Priority' },
+              { name:'Starter', price:'$10/mo', desc:'75 shorts · Editor · Downloads'   },
+              { name:'Pro',     price:'$45/mo', desc:'400 shorts · Everything · Priority' },
             ].map(p => (
               <div key={p.name} style={{
                 border:'1px solid #e5e5e5', borderRadius:'10px', padding:'14px 16px',

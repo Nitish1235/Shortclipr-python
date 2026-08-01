@@ -1,15 +1,20 @@
 """
-internal.py — internal-only endpoints, called by the API service when
-dispatching heavy work to the worker service.
+internal.py — internal-only endpoints, dispatched to by the watcher service
+(or, in single-service mode, called by jobs.py directly via asyncio.create_task
+without going through HTTP at all).
 
-POST /internal/pipeline/run    — fires the pipeline for a job in the
-                                  background (asyncio.create_task) and
-                                  returns immediately.
-POST /internal/editor/render   — re-burns captions onto a raw clip (the
-                                  ffmpeg work behind POST /editor/render).
+  POST /internal/pipeline/run       — legacy unified pipeline (both stages).
+                                       Kept for backward compat with older
+                                       WORKER_SERVICE_URLS deployments.
+  POST /internal/api-stage/run      — API stage only (split-worker mode).
+                                       Called by watcher for API worker pool.
+  POST /internal/ffmpeg-stage/run   — FFmpeg stage only (split-worker mode).
+                                       Called by watcher for FFmpeg worker pool.
+  POST /internal/editor/render      — re-burn captions onto a raw clip.
 
-Both are protected by a shared secret header (X-Internal-Secret), not user
-auth — only the API service should ever call these.
+All /internal/* routes are gated on X-Internal-Secret == INTERNAL_TASK_SECRET.
+Only the watcher (and the API service itself, for /editor/render) should
+ever call these.
 """
 
 import asyncio
@@ -21,7 +26,9 @@ from pydantic import BaseModel
 from app.api.editor import _burn_and_upload_from_url
 from app.core.config import get_settings
 from app.db import supabase as db
+from app.pipeline.api_stage import run_api_stage
 from app.pipeline.captions import Caption
+from app.pipeline.ffmpeg_stage import run_ffmpeg_stage
 from app.pipeline.orchestrator import run_pipeline
 from app.pipeline.test_pipeline import run_test_pipeline
 
@@ -45,10 +52,52 @@ class InternalRunRequest(BaseModel):
 
 @router.post("/pipeline/run", status_code=202)
 async def internal_run_pipeline(body: InternalRunRequest, x_internal_secret: str = Header(default="")):
+    """Legacy unified pipeline — runs BOTH stages in-process on this instance.
+    Used by the pre-split single-pool worker deployment (WORKER_SERVICE_URLS)."""
     _require_internal_secret(x_internal_secret)
     asyncio.create_task(
         run_pipeline(body.job_id, body.user_id, body.youtube_url, body.options),
         name=f"pipeline-{body.job_id[:8]}",
+    )
+    return {"status": "accepted"}
+
+
+# ── Split-worker endpoints ────────────────────────────────────
+# Called by the watcher's dual-queue dispatcher when API_WORKER_URLS /
+# FFMPEG_WORKER_URLS are configured. Each Cloud Run instance runs the
+# same Docker image but only receives calls for its designated stage
+# (the watcher's routing enforces that separation, not the instance).
+
+class InternalApiStageRequest(BaseModel):
+    job_id:      str
+    user_id:     str
+    youtube_url: str
+    options:     dict
+
+
+@router.post("/api-stage/run", status_code=202)
+async def internal_run_api_stage(body: InternalApiStageRequest, x_internal_secret: str = Header(default="")):
+    """API stage: metadata → transcript → GPT → write ffmpeg_payload → status='api_done'."""
+    _require_internal_secret(x_internal_secret)
+    asyncio.create_task(
+        run_api_stage(body.job_id, body.user_id, body.youtube_url, body.options),
+        name=f"api-{body.job_id[:8]}",
+    )
+    return {"status": "accepted"}
+
+
+class InternalFfmpegStageRequest(BaseModel):
+    job_id: str
+    # No other fields — FFmpeg stage reads ffmpeg_payload from the jobs table.
+
+
+@router.post("/ffmpeg-stage/run", status_code=202)
+async def internal_run_ffmpeg_stage(body: InternalFfmpegStageRequest, x_internal_secret: str = Header(default="")):
+    """FFmpeg stage: DASH download → encode → upload → status='completed'."""
+    _require_internal_secret(x_internal_secret)
+    asyncio.create_task(
+        run_ffmpeg_stage(body.job_id),
+        name=f"ffmpeg-{body.job_id[:8]}",
     )
     return {"status": "accepted"}
 
@@ -128,22 +177,19 @@ async def internal_render_clip(body: InternalRenderRequest, x_internal_secret: s
 @router.post("/reconcile-stuck-jobs")
 async def reconcile_stuck_jobs(x_internal_secret: str = Header(default="")):
     """
-    Catches jobs that never made it past "queued" — Cloud Tasks exhausted
-    every retry attempt without a worker ever picking up the task, or the
-    worker fleet was unreachable. orchestrator.py's own refund-on-failure
-    logic (see run_pipeline's finally block) never runs for these, since
-    their pipeline never started, so this is the only place their credits/
-    video-minutes reservations ever get released.
+    Catches jobs stuck in any pre-terminal state beyond the timeout:
+      'created' | 'dispatched' | 'api_processing' | 'api_done' | 'ffmpeg_processing'
 
-    Intended to be hit periodically by Cloud Scheduler (every few minutes),
-    same X-Internal-Secret gate as the rest of /internal/*.
+    The watcher service runs its own reconciliation loop (every 60s), but
+    this endpoint is kept as a manual fallback trigger (same X-Internal-Secret
+    gate) for on-call debugging.
     """
     _require_internal_secret(x_internal_secret)
 
-    stuck = await db.find_stuck_queued_jobs(settings.RECONCILE_STUCK_JOB_MINUTES)
+    stuck = await db.find_stuck_jobs(settings.RECONCILE_STUCK_JOB_MINUTES)
     for job in stuck:
         job_id = job["job_id"]
-        logger.warning(f"[{job_id}] Stuck in 'queued' beyond timeout — failing + refunding")
+        logger.warning(f"[{job_id}] Stuck in '{job.get('status', '?')}' beyond timeout — failing + refunding")
         await db.fail_job(job_id, "Job could not be scheduled in time — please retry.")
         if job["clip_count"] > 0:
             await db.release_credits(job["user_id"], job["clip_count"])

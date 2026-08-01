@@ -188,7 +188,7 @@ export default function HowItWorks() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ width: '8px', height: '8px', background: '#cf1322', borderRadius: '50%', animation: 'pulse 2s ease-in-out infinite' }}/>
             <span style={{ fontSize: '0.88rem', color: '#aaa', fontWeight: 500 }}>Total time:</span>
-            <span style={{ fontSize: '1rem', fontWeight: 800, color: '#fff' }}>Under 5 minutes</span>
+            <span style={{ fontSize: '1rem', fontWeight: 800, color: '#fff' }}>Minutes, not hours</span>
           </div>
           <div style={{ width: '1px', height: '20px', background: '#333' }}/>
           <div style={{ display: 'flex', gap: '16px' }}>

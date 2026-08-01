@@ -31,8 +31,10 @@ class Settings(BaseSettings):
     REDIS_STREAM_CACHE_TTL: int = 14400  # 4 hours in seconds
 
     # ── OpenAI ────────────────────────────────────────────────
+    # The clip-detection model is pinned in app/pipeline/ai_clipper.py
+    # (CLIP_MODEL constant). No env-var override — model selection is a
+    # code change since it affects prompt tuning + cost accounting.
     OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o"
 
     # ── Google Cloud ──────────────────────────────────────────
     GCS_BUCKET_NAME: str = "shortclipr-clips"
@@ -73,28 +75,52 @@ class Settings(BaseSettings):
     MAX_CONCURRENT_JOBS_PER_USER: int = 2   # prevent spam-submit
     # Note: per-video duration limits are now plan-based — see app/core/plan_limits.py
 
-    # ── Worker dispatch (optional second Cloud Run service) ───
-    # Leave WORKER_SERVICE_URLS empty to run the pipeline in-process via
-    # asyncio.create_task (single-service mode, original behavior).
-    # If set, POST /jobs enqueues a Cloud Task (see app/core/worker_routing.py
-    # + app/core/tasks.py) and POST /editor/render calls directly — both
-    # picking one of these worker URLs round-robin — targeting
-    # {worker_url}/internal/pipeline/run or /internal/editor/render on a
-    # separate (heavier) Cloud Run service, gated by INTERNAL_TASK_SECRET.
-    # Comma-separated, one URL per region, e.g.:
-    #   "https://shortclipr-worker-us-central1-xxxx.run.app,https://shortclipr-worker-us-east1-xxxx.run.app"
-    WORKER_SERVICE_URLS: str = ""
-    # Comma-separated Cloud Tasks queue names, SAME ORDER/COUNT as
-    # WORKER_SERVICE_URLS — queue[i] must target worker URL[i].
-    WORKER_QUEUE_NAMES: str = ""
-    # Comma-separated GCP regions, SAME ORDER/COUNT as WORKER_SERVICE_URLS —
-    # used as the Cloud Tasks queue's location for each entry.
-    WORKER_QUEUE_REGIONS: str = ""
+    # ── Worker dispatch (optional second Cloud Run services) ───
+    # Two operating modes:
+    #
+    # 1) Single-service (both worker-pool vars below empty) — pipeline runs
+    #    in-process via asyncio.create_task in the API host, unified
+    #    (API stage + FFmpeg stage back-to-back). Original behavior.
+    #
+    # 2) Split-worker (API + FFMPEG pool vars set) — POST /jobs inserts
+    #    status='created', pipeline_stage='api' and fires pg_notify('new_job').
+    #    The watcher dispatches to the API pool. When the API stage sets
+    #    status='api_done', a Postgres trigger fires pg_notify('api_done')
+    #    and the watcher dispatches to the FFMPEG pool.
+    #
+    # Legacy (backwards compat): if only WORKER_SERVICE_URLS is set (the old
+    # unified-worker pool) and the split pools are empty, the watcher treats
+    # it as a single pool running the unified /internal/pipeline/run endpoint.
+    WORKER_SERVICE_URLS:    str = ""
+    WORKER_SERVICE_REGIONS: str = ""
+
+    # API worker pool (lightweight: metadata / transcript / GPT — I/O bound)
+    # Comma-separated, one URL per region, same order/count as *_REGIONS.
+    #   e.g. "https://shortclipr-api-worker-us-c1-xxx.run.app,https://shortclipr-api-worker-eu-w1-xxx.run.app"
+    API_WORKER_URLS:    str = ""
+    API_WORKER_REGIONS: str = ""
+
+    # FFmpeg worker pool (heavy: DASH download + reframe + caption encode)
+    FFMPEG_WORKER_URLS:    str = ""
+    FFMPEG_WORKER_REGIONS: str = ""
+
     INTERNAL_TASK_SECRET: str = ""          # shared secret for /internal/* routes
 
-    # ── Cloud Tasks ────────────────────────────────────────────
-    GCP_PROJECT_ID: str = ""                # required to build Cloud Tasks queue paths
-    RECONCILE_STUCK_JOB_MINUTES: int = 15    # "queued" longer than this -> fail + refund
+    # ── Queue / watcher ────────────────────────────────────────
+    # Per-region soft cap: max in-flight jobs the watcher will send to a
+    # region before queueing further ones (jobs stay status='created'/'api_done'
+    # in Postgres until a slot opens). Sized to match each pool's per-instance
+    # capacity: an API instance handles ~12 concurrent jobs (I/O-bound), an
+    # FFmpeg instance handles ~2 (CPU-bound at ~7-8 min/job).
+    API_REGION_SOFT_CAP:    int = 12
+    FFMPEG_REGION_SOFT_CAP: int = 2
+
+    # Legacy soft cap (unified worker) — used only when neither API_WORKER_URLS
+    # nor FFMPEG_WORKER_URLS is set and the watcher runs against the old
+    # WORKER_SERVICE_URLS pool.
+    WATCHER_REGION_SOFT_CAP: int = 4
+
+    RECONCILE_STUCK_JOB_MINUTES: int = 10  # applies to API-stage timeouts; FFmpeg stage uses 3× this
 
     # ── InnerTube ──────────────────────────────────────────────
     INNERTUBE_API_KEY: str = "AIzaSyA8eiZmM1FaSbwzBlGmbW3ILtKBNJI41zQ"

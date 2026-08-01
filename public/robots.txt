@@ -2,6 +2,10 @@ User-agent: *
 Allow: /
 Disallow: /dashboard
 Disallow: /editor
+Disallow: /billing
+Disallow: /clips
+Disallow: /lab
+Disallow: /admin
 Disallow: /payment/
 
 Sitemap: https://shortclipr.com/sitemap.xml

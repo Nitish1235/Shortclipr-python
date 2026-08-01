@@ -23,9 +23,9 @@ export default function ToolsIndex() {
   return (
     <>
       <SEO
-        title="Free AI Tools for YouTube & Long-Form Video Repurposing | ShortClipr"
-        description="Explore ShortClipr's free AI tools: convert long YouTube videos to Shorts, turn transcripts into clips, repurpose podcasts, and more — all powered by the same fast clipping engine."
-        keywords="ai video tools, youtube to shorts tools, ai clip maker tools, video repurposing tools, free ai shorts generator tools"
+        title="Free AI Tools — YouTube to Shorts, TikTok Clips, Reels, Webinar & More | ShortClipr"
+        description="Explore ShortClipr's free AI tools: convert YouTube to Shorts, make TikTok clips, create Instagram Reels, turn podcasts, webinars, and interviews into viral vertical clips automatically."
+        keywords="ai video tools, youtube to shorts, tiktok clip maker, video to reels, podcast to shorts, webinar to clips, interview to clips, ai clip maker, free shorts generator"
         path="/tools"
         schema={schema}
       />

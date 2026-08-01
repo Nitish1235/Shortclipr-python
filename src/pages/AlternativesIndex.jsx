@@ -11,7 +11,7 @@ export default function AlternativesIndex() {
     '@type': 'CollectionPage',
     name: 'ShortClipr — Compare Alternatives',
     url: `${SITE}/alternatives`,
-    description: 'Side-by-side comparisons of ShortClipr against Opus Clip, Klap, Vmaker AI, and other AI video clipping tools — speed, pricing, watermarks, and feature breakdowns.',
+    description: 'Side-by-side comparisons of ShortClipr against Opus Clip, Klap, 2short.ai, Vidyo, Munch, Riverside Magic Clips, Spikes Studio, Vizard, Wisecut, and other AI video clipping tools — speed, pricing, watermarks, and feature breakdowns.',
     hasPart: alternativeSlugs.map(s => ({
       '@type': 'WebPage',
       name: `ShortClipr vs ${alternativesContent[s].name}`,
@@ -22,9 +22,9 @@ export default function AlternativesIndex() {
   return (
     <>
       <SEO
-        title="ShortClipr vs Opus Clip, Klap & More — Compare Alternatives"
-        description="See exactly how ShortClipr stacks up against Opus Clip, Klap, Vmaker AI and other AI clipping tools — speed, pricing model, watermarks, video length limits, and more."
-        keywords="opus clip alternative, klap alternative, vmaker alternative, ai clipping tool comparison, shortclipr vs opus clip vs klap"
+        title="ShortClipr Alternatives — Compare vs Opus Clip, Klap, Munch, Riverside & More"
+        description="See exactly how ShortClipr stacks up against Opus Clip, Klap, 2short.ai, Vidyo, Munch, Riverside Magic Clips, Spikes Studio, Vizard, and Wisecut — speed, pricing, watermarks, and feature breakdowns."
+        keywords="opus clip alternative, klap alternative, 2short alternative, vidyo alternative, munch alternative, riverside clips alternative, spikes studio alternative, vizard alternative, ai clipping tool comparison"
         path="/alternatives"
         schema={schema}
       />

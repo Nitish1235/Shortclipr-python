@@ -10,13 +10,13 @@ const toolsContent = {
     badge: 'YouTube → Shorts',
     metaTitle: 'YouTube Long Video to Short — Free AI Converter | ShortClipr',
     metaDescription:
-      'Turn any long YouTube video into short, viral-ready clips automatically. Paste a link, get 10+ scored vertical Shorts with captions in under 3 minutes. Free to start, no watermark.',
+      'Turn any long YouTube video into short, viral-ready clips automatically. Paste a link, get 10+ scored vertical Shorts with captions in minutes. Free to start, no watermark.',
     keywords:
       'youtube long video to short, convert long youtube video to shorts, youtube video to short clips, long video to short converter, youtube shorts from long video',
     h1: 'Turn a Long YouTube Video Into Shorts — Automatically',
     subhead:
       'Paste any YouTube URL. ShortClipr’s AI watches the whole video, finds the moments people actually stop scrolling for, and exports them as ready-to-post vertical Shorts — captions, reframing, and a virality score included.',
-    heroStat: { value: '< 3 min', label: 'to go from a 2-hour video to 10 clips' },
+    heroStat: { value: 'Minutes', label: 'to go from a 2-hour video to 10 clips' },
     steps: [
       { n: '01', title: 'Paste the YouTube link', desc: 'No upload, no download. We pull the video directly via the source — even 4-6 hour streams and podcasts.' },
       { n: '02', title: 'AI finds the short-worthy moments', desc: 'Our model reads the transcript, tone, and pacing to flag hooks, punchlines, and payoffs — not just "loud" timestamps.' },
@@ -56,7 +56,7 @@ const toolsContent = {
     features: [
       { icon: '🧠', title: 'Context-aware moment detection', desc: 'Goes beyond audio-spike detection — understands sarcasm, story arcs, and setup-payoff structure so it doesn’t clip the wrong half of a joke.' },
       { icon: '🖼️', title: 'Smart 9:16 reframing', desc: 'Automatically tracks faces and on-screen action so subjects stay centered when converting widescreen footage to vertical.' },
-      { icon: '⚡', title: 'Minutes, not hours', desc: 'What takes a human editor 3-4 hours per long-form video, ShortClipr does in under 3 minutes — at 5x the speed of comparable AI tools.' },
+      { icon: '⚡', title: 'Minutes, not hours', desc: 'What takes a human editor 3-4 hours per long-form video, ShortClipr does in minutes — no full-video download means far less waiting than comparable AI tools.' },
       { icon: '🗂️', title: 'Batch export', desc: 'Download every generated clip as a single ZIP — something most AI shorts generators still don’t offer.' },
     ],
     faqs: [
@@ -188,6 +188,129 @@ const toolsContent = {
       { q: 'Does it handle multi-person conversations well?', a: 'Yes — the smart 9:16 reframing tracks who’s speaking so multi-guest conversations stay framed correctly when converted to vertical video.' },
       { q: 'Can I focus the AI on a specific guest or topic?', a: 'Yes — keyword and topic search let you tell the AI to prioritize segments about a particular guest, story, or subject rather than scanning generically.' },
       { q: 'What’s the maximum episode length supported?', a: 'Up to 6 hours of source video or audio-as-video — enough for the longest marathon interview formats.' },
+    ],
+  },
+  'webinar-to-clips': {
+    slug: 'webinar-to-clips',
+    badge: 'Webinar Repurposing',
+    metaTitle: 'Webinar to Clips AI — Turn Recordings Into Viral Shorts | ShortClipr',
+    metaDescription:
+      'Repurpose webinar recordings into short social clips automatically. ShortClipr finds the best Q&A moments, key insights, and quotable takeaways — captioned and ready to post.',
+    keywords:
+      'webinar to clips, webinar clip generator, repurpose webinar recordings, webinar to social media clips, ai webinar clipper',
+    h1: 'Turn One Webinar Recording Into a Week of Social Content',
+    subhead:
+      'Most webinar recordings die on a Google Drive link. ShortClipr finds the sharpest Q&As, the biggest revelations, and the most quotable moments from your recording — then packages them as captioned, vertical Shorts you can post all week.',
+    heroStat: { value: '10-15', label: 'clips from a single webinar recording' },
+    steps: [
+      { n: '01', title: 'Upload your webinar recording', desc: 'Direct file upload or YouTube link — Zoom recordings, Riverside sessions, GoTo exports, or any video format.' },
+      { n: '02', title: 'AI reads the transcript for share-worthy moments', desc: 'It identifies the best questions, the clearest expert answers, the surprising statistics, and the punchy one-liners that make great standalone clips.' },
+      { n: '03', title: 'Export a full week of captioned vertical clips', desc: 'Batch-download ready-to-post 9:16 Shorts — one webinar becomes 10+ clips, each ranked by likely engagement.' },
+    ],
+    features: [
+      { icon: '🎙️', title: 'Q&A moment detection', desc: 'Webinars\' most shareable moments are usually in the Q&A. ShortClipr\'s transcript AI specifically flags question-answer exchanges that work well as standalone clips.' },
+      { icon: '📌', title: 'Key insight extraction', desc: 'Frames the clearest, most quotable takeaways as standalone clips — the moments attendees screenshot and share, now actually shareable.' },
+      { icon: '🌍', title: '28-language support', desc: 'Clip webinars in Spanish, French, German, Hindi, Japanese, and 23 other languages — useful for global audience repurposing.' },
+      { icon: '📦', title: 'Batch ZIP for scheduling', desc: 'Download a full batch of clips and load them straight into your scheduling tool — one recording, one export, a week of content.' },
+    ],
+    faqs: [
+      { q: 'What kinds of webinar moments does ShortClipr find?', a: 'Transcript-based AI looks for Q&A exchanges, expert insights, surprising statistics, bold claims, and clear how-to moments — the segments that work well out of context as standalone short clips.' },
+      { q: 'Can I upload a Zoom or Riverside webinar recording directly?', a: 'Yes — ShortClipr accepts direct video file uploads, so Zoom, Riverside, GoTo, Teams, and any other recorded format can be processed without first uploading to YouTube.' },
+      { q: 'How many clips does one webinar typically generate?', a: 'A 60-90 minute webinar typically generates 8-12 scored clips. A 2-3 hour session can return 12-15+ candidates, ranked by virality score so you know which to post first.' },
+      { q: 'Will the clips have captions automatically?', a: 'Yes — every clip exports with burned-in captions generated from the webinar\'s own transcript. Choose from 11 styles and 28 languages before export.' },
+    ],
+  },
+
+  'video-to-reels': {
+    slug: 'video-to-reels',
+    badge: 'Instagram Reels',
+    metaTitle: 'Video to Reels AI — Convert Any Video to Instagram Reels | ShortClipr',
+    metaDescription:
+      'Convert long videos to Instagram Reels automatically with AI. ShortClipr finds the best moments, reframes to 9:16, adds captions, and scores each Reel for engagement — free to start.',
+    keywords:
+      'video to reels, convert video to instagram reels, ai video to reels converter, long video to reels, instagram reels from youtube',
+    h1: 'Convert Any Long Video Into Instagram Reels — Automatically',
+    subhead:
+      'Instagram Reels run on volume and consistency. ShortClipr takes one long video and generates 10+ vertical, captioned, engagement-scored Reels so you can post daily without spending your week in an editor.',
+    heroStat: { value: '9:16', label: 'auto-reframed, ready to post as a Reel' },
+    steps: [
+      { n: '01', title: 'Paste a YouTube link or upload your video', desc: 'Podcasts, interviews, tutorials, vlogs, webinars — any long-form source works.' },
+      { n: '02', title: 'AI finds your highest-engagement moments', desc: 'Transcript analysis surfaces hooks, payoffs, and quotable lines — the moments that make viewers stop scrolling.' },
+      { n: '03', title: 'Download Reels-ready 9:16 clips with captions', desc: 'Every clip exports at 1080×1920 with burned-in captions and a virality score — upload straight to Instagram Reels.' },
+    ],
+    features: [
+      { icon: '📱', title: 'True 9:16 output at 1080p', desc: 'Every clip is auto-reframed to portrait format with face-tracking crop — correct aspect ratio, correct resolution, right out of the tool.' },
+      { icon: '🎨', title: '11 caption styles for Reels-native look', desc: 'Word-by-word animated captions, bold keywords, minimalist subtitles — pick a style that matches your Reels aesthetic.' },
+      { icon: '📊', title: 'Engagement scoring', desc: 'A 0-100 virality score tells you which generated clips are most likely to perform on Reels — so you don\'t have to guess which one to post first.' },
+      { icon: '🗓️', title: 'Batch export for a week of Reels', desc: 'Download every clip in one ZIP and load the entire batch into Later, Buffer, or your scheduler of choice.' },
+    ],
+    faqs: [
+      { q: 'Does ShortClipr output the right aspect ratio for Instagram Reels?', a: 'Yes — every clip exports in true 9:16 (1080×1920) with face-aware reframing, the correct format for Instagram Reels. No manual cropping or resizing needed.' },
+      { q: 'Will the captions work on Instagram Reels?', a: 'Yes — captions are burned directly into the video file, so they appear on Reels with or without sound. Choose from 11 styles to match your content aesthetic.' },
+      { q: 'Can I convert a YouTube video directly to Instagram Reels?', a: 'Yes — paste the YouTube URL, ShortClipr processes it and outputs 9:16 captioned clips ready to post on Reels. No download or re-upload of the source needed.' },
+      { q: 'How many Reels can I get from one long video?', a: 'Typically 10-15 scored Reels from a 1-3 hour video. Each is ranked by engagement score so you can prioritize the best ones for your posting schedule.' },
+    ],
+  },
+
+  'tiktok-clip-maker': {
+    slug: 'tiktok-clip-maker',
+    badge: 'TikTok Clips',
+    metaTitle: 'TikTok Clip Maker AI — Turn Long Videos Into TikToks | ShortClipr',
+    metaDescription:
+      'AI TikTok clip maker that finds viral moments in long videos and converts them to vertical TikToks with captions. Paste a YouTube link, get scored, ready-to-post TikTok clips in minutes.',
+    keywords:
+      'tiktok clip maker, ai tiktok clip maker, make tiktok clips from youtube, youtube to tiktok ai, tiktok video maker from long video',
+    h1: 'Make TikTok Clips From Any Long Video — With AI',
+    subhead:
+      'The average TikTok is under 90 seconds. The average podcast is 2 hours. ShortClipr bridges the gap: it finds the moments in your long video with the strongest hooks, pacing, and payoff — then cuts, captions, and formats them for TikTok in minutes, not hours.',
+    heroStat: { value: 'Under 90s', label: 'TikTok-optimized clips with captions, scored for virality' },
+    steps: [
+      { n: '01', title: 'Paste your YouTube link or upload', desc: 'Works with any long-form source — podcasts, interviews, gaming sessions, tutorials, vlogs.' },
+      { n: '02', title: 'AI finds your TikTok-worthy moments', desc: 'Transcript and pacing analysis surfaces the hooks, punchlines, and story arcs that perform best in TikTok\'s fast-scroll environment.' },
+      { n: '03', title: 'Get captioned, 9:16 TikTok clips ranked by virality', desc: 'Each clip is under 90 seconds, formatted for TikTok, and scored 0-100 — pick the top ones and post.' },
+    ],
+    features: [
+      { icon: '🎵', title: 'TikTok-native format', desc: 'Every clip exports in 9:16 at 1080p with face-tracking reframe — exactly what TikTok needs, no editing in TikTok\'s clunky in-app editor.' },
+      { icon: '🔥', title: 'Hook-first moment detection', desc: 'TikTok lives and dies on the first 3 seconds. ShortClipr\'s AI specifically weights clips that open with a strong hook — a question, a bold claim, or a surprising stat.' },
+      { icon: '✍️', title: 'Styled captions for silent viewing', desc: '73% of TikTok is watched without sound at some point. Burned-in captions in 11 styles ensure your clip\'s message lands either way.' },
+      { icon: '📊', title: 'Virality score for prioritization', desc: 'Every clip is ranked 0-100 so you know which ones to post today vs. schedule for later — stop guessing what\'ll perform.' },
+    ],
+    faqs: [
+      { q: 'What makes a clip good for TikTok vs. other platforms?', a: 'TikTok rewards fast hooks, clear payoff, and high-energy pacing. ShortClipr\'s scoring specifically weights these signals — so higher-scored clips are better optimized for TikTok\'s algorithm by default.' },
+      { q: 'Can I turn a YouTube video into a TikTok without downloading it?', a: 'Yes — paste the YouTube URL and ShortClipr processes everything on its end. You get back finished TikTok-formatted clips without ever downloading the original video yourself.' },
+      { q: 'Will the clips be the right length for TikTok?', a: 'Yes — ShortClipr targets 30-90 second clips, the sweet spot for TikTok performance. Longer segments are trimmed to the highest-value portion within that window.' },
+      { q: 'Can I make TikTok clips for free?', a: 'Yes — the free plan processes 3 full videos into TikTok-ready clips with no watermark and no credit card required.' },
+    ],
+  },
+
+  'interview-to-clips': {
+    slug: 'interview-to-clips',
+    badge: 'Interview Clips',
+    metaTitle: 'Interview to Clips AI — Turn Interview Recordings Into Viral Shorts | ShortClipr',
+    metaDescription:
+      'Turn long interview recordings into short clips automatically. ShortClipr finds the best quotes, insights, and exchanges in any interview video — captioned and ready to post as vertical Shorts.',
+    keywords:
+      'interview to clips, interview video to shorts, ai interview clipper, interview clip generator, convert interview to short clips',
+    h1: 'Turn a Long Interview Into Dozens of Shareable Clips',
+    subhead:
+      'A great interview is full of moment-length gold — the unexpected admission, the quotable take, the exchange that reframes everything. ShortClipr reads every word, finds those moments, and turns them into captioned vertical clips you can share individually all week.',
+    heroStat: { value: '10+', label: 'scored clips from a single 1-2 hour interview' },
+    steps: [
+      { n: '01', title: 'Input your interview', desc: 'YouTube link or direct upload — podcast-style interviews, panel discussions, Q&As, fireside chats, press interviews.' },
+      { n: '02', title: 'AI identifies the most quotable moments', desc: 'Transcript analysis finds the sharpest answers, the boldest takes, the unexpected pivots — moments that work as standalone clips without needing the whole interview for context.' },
+      { n: '03', title: 'Export scored, captioned clips instantly', desc: 'Each clip arrives pre-reframed to 9:16, captioned with the speaker\'s exact words, and ranked by virality score — ready to post.' },
+    ],
+    features: [
+      { icon: '👥', title: 'Multi-speaker tracking', desc: 'Smart 9:16 reframing follows whoever is speaking in multi-guest interviews — both speakers stay properly framed in portrait format.' },
+      { icon: '💬', title: 'Quote-level precision', desc: 'Finds the specific sentences and exchanges that land — not just "minute 43 was interesting" but the exact 60-second window where the insight happened.' },
+      { icon: '🔍', title: 'Guest or topic search', desc: 'Processing a multi-guest panel? Tell ShortClipr to focus on a specific guest, topic, or keyword and it filters the whole transcript for that target.' },
+      { icon: '📋', title: 'Perfect caption sync', desc: 'Captions are pulled from the same transcript segment that identified the clip — word-accurate, synced, and burned in with the speaker\'s exact phrasing.' },
+    ],
+    faqs: [
+      { q: 'How does ShortClipr find the best moments in an interview?', a: 'It reads the full transcript looking for clear insights, bold claims, surprising admissions, and self-contained exchanges — moments that work as standalone clips without requiring the audience to have watched the rest of the interview.' },
+      { q: 'Does ShortClipr handle two-person interviews and panels?', a: 'Yes — multi-speaker face tracking keeps the right person centered in the 9:16 frame as the conversation shifts between speakers, even in multi-guest panel formats.' },
+      { q: 'Can I focus the AI on one specific guest in a panel interview?', a: 'Yes — topic and keyword targeting let you tell ShortClipr to prioritize a specific guest name, topic, or subject. It filters the whole transcript and only clips the relevant segments.' },
+      { q: 'Is there a free way to try interview clipping?', a: 'Yes — the free plan processes 3 complete interview videos with no watermark and no credit card required, so you can evaluate clip quality before committing to a paid plan.' },
     ],
   },
 }

@@ -1,7 +1,7 @@
 // Social proof + feature ticker — between hero and how-it-works
 const items = [
   { text: '✅ No watermarks on free plan'           },
-  { text: '⚡ Under 3 min processing'               },
+  { text: '⚡ Minutes, not hours'                    },
   { text: '🎬 11 caption styles'                    },
   { text: '📐 Auto 9:16 reframe'                    },
   { text: '🌍 28 languages supported'               },

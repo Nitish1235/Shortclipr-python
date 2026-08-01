@@ -1,23 +1,25 @@
 """
 ai_clipper.py — Step 4 of the ShortClipr pipeline.
 
-Uses GPT-4o-mini for viral clip detection.
-  • ~30× cheaper than GPT-4o
+Uses GPT-5-nano for viral clip detection.
+  • Cheaper than GPT-4o-mini and on the newer 5-series
   • Fast enough for real-time job processing
   • No local models, no extra dependencies
 
 Flow:
   1. Split the transcript into `clip_count` equal-duration time chunks
-  2. One parallel GPT-4o-mini call per chunk → best "start" moment + score.
-     gpt-4o-mini has a strong positional bias toward the start of long
-     contexts ("lost in the middle") — a single call over the whole
-     transcript reliably clusters all picks in the first minute, even when
-     explicitly told to spread out. Per-chunk calls are the only reliable
-     way to get clips spread across the whole video.
+  2. One parallel model call per chunk → best "start" moment + score.
+     Per-chunk (rather than one call over the whole transcript) is required
+     because prior model generations exhibited strong positional bias toward
+     the start of long contexts ("lost in the middle") — clustering all
+     picks in the first minute even when explicitly told to spread out.
+     Chunking is defensive: if a newer model doesn't have this bias, the
+     per-chunk approach still gives us clean parallelism and predictable
+     coverage across the video.
   3. Compute each clip's "end" by snapping to a transcript line boundary
-     near start + target_duration — gpt-4o-mini is unreliable at picking
-     "end" timestamps itself (it tends to echo the per-line caption duration,
-     producing sub-second "clips").
+     near start + target_duration — small/cheap models are historically
+     unreliable at picking "end" timestamps themselves (they tend to echo
+     the per-line caption duration, producing sub-second "clips").
   4. Validate + deduplicate overlapping clips
   5. Re-rank by score (100 = most viral, descending) and return top N
 """
@@ -36,8 +38,9 @@ from app.pipeline.transcript import TranscriptEntry
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# GPT-4o-mini: $0.15/1M input tokens vs GPT-4o's $5/1M — 33× cheaper
-CLIP_MODEL = "gpt-4o-mini"
+# GPT-5-nano: $0.05/1M input, $0.40/1M output — cheaper than gpt-4o-mini
+# ($0.15/$0.60) and on the newer 5-series. Pricing per OpenAI standard tier.
+CLIP_MODEL = "gpt-5-nano"
 
 # Built-in SDK retry handles 429 + 5xx — connection errors need our own retry.
 # http_client=None lets httpx use system env (no proxy) — OpenAI must NOT go
@@ -52,8 +55,17 @@ _client = AsyncOpenAI(
     ),
 )
 
-# Per-chunk transcript character budget for GPT-4o-mini
+# Per-chunk transcript character budget — sized to fit comfortably in the
+# model's context window with room for the system+user prompt boilerplate.
 MAX_CHUNK_CHARS = 40_000
+
+# How far outside the user's requested [min_duration, max_duration] band we're
+# willing to snap the end point to land on a natural sentence/thought boundary.
+# A clip that ends mid-sentence at exactly 60s reads much worse than one that
+# ends cleanly at 66s — the ~7s of slop is invisible to users but the natural
+# cut is not. Applied symmetrically in _compute_end() but never below MIN_END_FLOOR.
+END_SNAP_TOLERANCE = 7.0
+MIN_END_FLOOR      = 10.0  # never let a clip end within 10s of its start
 
 # Curated trending emoji (mirrors src/pages/Editor.jsx TRENDING_EMOJI),
 # split into 5 mood/theme groups of 9 — the model picks the single
@@ -116,38 +128,113 @@ Below is ONE SEGMENT of a longer video's transcript. Each line is prefixed with 
 number in brackets, like "[42] some spoken text". Find the SINGLE most viral moment within
 THIS SEGMENT to turn into a short clip.
 
-RULES:
-1. "start_line" = the [N] line number where the clip should BEGIN — it MUST be the start of
-   a natural sentence/thought, NEVER mid-sentence. Copy the bracketed number EXACTLY as shown
-   on that line — do not compute, guess, or offset it.
-2. The HOOK (the first few seconds right after "start_line") must grab attention immediately —
-   this is the #1 factor
-3. Prioritise: shocking facts, emotional moments, controversy, humour, clear tips, plot twists
-4. Avoid: rambling, jargon-heavy sections, mid-story moments, slow introductions
-5. The clip will run for roughly {min_dur}-{max_dur} seconds starting at "start_line" (a
-   separate system picks the exact end point) — only choose a "start_line" if the content
-   from there stays interesting and self-contained for at least that long
-6. "viral_score": rate THIS moment's viral potential on an absolute 0-100 scale
-   (90-100 exceptional, 70-89 good, 50-69 decent, <50 weak)
-7. "title" = a 5-6 word CURIOSITY-GAP title burned on-screen as a hook card. This is NOT a
-   summary — it must open a loop the viewer has to keep watching to close. Tease the outcome,
-   never state it: no punchlines, numbers, names, or results that resolve the curiosity.
-   Good patterns: bold unresolved claim ("The Mistake That Cost Everything"), withheld reveal
-   ("Nobody Saw This Coming"), contrarian tease ("Why This Actually Works"), direct address
-   ("You're Doing This Completely Wrong"). Bad: anything a viewer could read and feel like they
-   already know what happens — that kills the rewatch/watch-through motive entirely.
-8. "title_emoji" = ONE emoji to prefix the title card with. First pick whichever GROUP below
-   best matches this moment's tone, then pick exactly ONE emoji from that group only — never
-   mix emoji across groups, never invent an emoji outside this list:
+═══════════════════════════════════════════════════════════════════
+CORE RULE: PICK THE HOOK, NOT THE PAYOFF
+═══════════════════════════════════════════════════════════════════
+The "start_line" you pick becomes the FIRST FRAME the viewer sees. In the first
+2-3 seconds they decide whether to keep watching. So start where the speaker
+opens a loop — asks a question, makes a bold claim, sets up a surprise — NOT
+where they deliver the punchline (by then the viewer has already scrolled past).
+
+═══════════════════════════════════════════════════════════════════
+START-LINE RULES
+═══════════════════════════════════════════════════════════════════
+1. "start_line" = the [N] line number where the clip begins. It MUST be:
+   a) the START of a natural sentence/thought (NEVER mid-sentence)
+   b) a line that MAKES SENSE STANDALONE — a viewer with zero prior context
+      must be able to follow it. If the line starts with "So then...", "And
+      that's why...", "Which is why...", "As I was saying..." — reject it and
+      pick a line that starts a fresh thought instead.
+   c) A HOOK — one of: bold claim, question, surprising fact, contrarian
+      statement, story opener ("So this one time..."), direct address
+      ("Here's the thing about...")
+
+2. Copy the bracketed [N] number EXACTLY as shown on the line. Do NOT compute,
+   guess, or offset it — the app maps [N] to a timestamp directly.
+
+═══════════════════════════════════════════════════════════════════
+WHAT TO PICK
+═══════════════════════════════════════════════════════════════════
+STRONG signals (aim for these):
+  • Shocking or counter-intuitive facts ("Actually, most people get this wrong")
+  • Emotional peaks — anger, joy, grief, surprise, wonder
+  • Story moments with clear setup → tension → payoff arc
+  • Controversial takes, hot opinions
+  • Sharp humor (jokes that don't need context)
+  • Concrete tips / actionable steps ("Here are 3 ways to...")
+  • Plot twists, reveals, "wait what?" moments
+  • Named + repeated numbers / stats (viewers screenshot these)
+
+WEAK signals (avoid):
+  • Rambling explanations without a clear point
+  • Jargon-heavy sections that require domain expertise
+  • Mid-story moments that need prior context to land
+  • Slow introductions, "welcome back everyone..."
+  • Meta-commentary about the video itself ("in this video we'll cover...")
+  • Ad reads, sponsor breaks, subscribe reminders
+
+═══════════════════════════════════════════════════════════════════
+DURATION
+═══════════════════════════════════════════════════════════════════
+3. Target clip length: {min_dur}-{max_dur} seconds. The exact end point is
+   chosen by a separate system that snaps to the nearest natural sentence
+   boundary within ±{tolerance} seconds of that target — you don't need to
+   pick the end. Just make sure the content stays interesting and self-
+   contained for AT LEAST {min_dur} seconds from "start_line". If it fizzles
+   out earlier, pick a different start.
+
+═══════════════════════════════════════════════════════════════════
+SCORING (calibrated — most moments are NOT viral)
+═══════════════════════════════════════════════════════════════════
+4. "viral_score" — rate this moment's TRUE viral potential 0-100. Be strict:
+     90-100  Rare. Only for standout moments — undeniable hook, huge emotion,
+             or one-in-a-hundred insight. Most videos have zero of these.
+     70-89   Good clip material — solid hook, clear payoff, would perform
+             above-average if posted. Maybe 1-3 per hour of source video.
+     50-69   Decent. Postable but unremarkable — average retention.
+     30-49   Weak. Missing a hook, meandering, or too niche.
+     <30     Skip-worthy. Would flop on any platform.
+   Do NOT default to 70+. If the segment genuinely has nothing viral, score
+   it honestly (30-50). Inflated scores waste the user's editing time.
+
+═══════════════════════════════════════════════════════════════════
+TITLE CARD
+═══════════════════════════════════════════════════════════════════
+5. "title" = 5-6 words, CURIOSITY-GAP style — the on-screen hook card burned
+   into the first few seconds of the clip. Rules:
+
+   • NOT a summary — open a loop, don't close one
+   • Tease the outcome, never state it: no punchlines, numbers, names, or
+     resolutions that satisfy the curiosity from the title alone
+   • Should make the viewer NEED to hear the answer
+
+   Good patterns:
+     • Bold unresolved claim:  "The Mistake That Cost Everything"
+     • Withheld reveal:        "Nobody Saw This Coming"
+     • Contrarian tease:       "Why This Actually Works"
+     • Direct address:         "You're Doing This Completely Wrong"
+     • Numbered promise:       "3 Signs You're Doing It Wrong"
+
+   Bad: anything a viewer reads and thinks "I already know what happens" —
+   that kills the watch-through motive entirely.
+
+═══════════════════════════════════════════════════════════════════
+TITLE EMOJI
+═══════════════════════════════════════════════════════════════════
+6. "title_emoji" = exactly ONE emoji. First pick the single GROUP below that
+   best matches this moment's tone, then pick ONE emoji from THAT GROUP only.
+   Never mix across groups, never invent an emoji outside this list:
 {emoji_groups}
 {topic_line}
-OUTPUT FORMAT — return ONLY this JSON object, no extra text:
+═══════════════════════════════════════════════════════════════════
+OUTPUT — return ONLY this JSON object, no extra text
+═══════════════════════════════════════════════════════════════════
 {{
   "start_line":      <integer — the [N] of the transcript line where this clip begins>,
-  "title":           "<5-6 word curiosity-gap hook title — see rule 7, do not reveal the outcome>",
-  "title_emoji":      "<exactly one emoji from the single best-fitting group in rule 8>",
-  "viral_score":     <integer 0-100>,
-  "reason":          "<1-2 sentences: what makes this moment viral>",
+  "title":           "<5-6 word curiosity-gap hook title — do not reveal the outcome>",
+  "title_emoji":     "<exactly one emoji from the best-fitting group above>",
+  "viral_score":     <integer 0-100 — be strict, see calibration in rule 4>,
+  "reason":          "<1-2 sentences: what specific viral signal makes this moment work>",
   "caption_preview": "<first 10-15 spoken words starting at this moment>"
 }}"""
 
@@ -237,7 +324,7 @@ async def find_viral_clips(
     options:    dict,
 ) -> list[ClipTimestamp]:
     """
-    Split transcript into clip_count chunks → one GPT-4o-mini call per chunk
+    Split transcript into clip_count chunks → one model call per chunk
     → validate → deduplicate → re-rank → return top N clips.
     """
     clip_count   = max(1, int(options.get("clip_count", 10)))
@@ -254,12 +341,14 @@ async def find_viral_clips(
         if topic else ""
     )
     system = _CHUNK_SYSTEM_PROMPT.format(
-        min_dur=int(min_dur), max_dur=int(max_dur), topic_line=topic_line,
+        min_dur=int(min_dur), max_dur=int(max_dur),
+        tolerance=int(END_SNAP_TOLERANCE),
+        topic_line=topic_line,
         emoji_groups=_emoji_groups_prompt_block(),
     )
 
     logger.info(
-        f"GPT-4o-mini request — {len(transcript)} entries, "
+        f"{CLIP_MODEL} request — {len(transcript)} entries, "
         f"{len(chunks)} chunks, want {clip_count} clips"
     )
 
@@ -283,9 +372,9 @@ async def find_viral_clips(
         c.viral_score = max(0, 100 - i)
 
     if not clips:
-        logger.warning("GPT-4o-mini → 0 valid clips across all chunks")
+        logger.warning(f"{CLIP_MODEL} → 0 valid clips across all chunks")
     else:
-        logger.info(f"GPT-4o-mini → {len(clips)} valid clips, returning top {clip_count}")
+        logger.info(f"{CLIP_MODEL} → {len(clips)} valid clips, returning top {clip_count}")
     return clips[:clip_count]
 
 
@@ -327,7 +416,7 @@ async def _call_gpt(system: str, user: str) -> str:
             )
             choice = response.choices[0]
             if choice.finish_reason == "length":
-                logger.warning(f"GPT-4o-mini chunk response truncated (usage={response.usage})")
+                logger.warning(f"{CLIP_MODEL} chunk response truncated (usage={response.usage})")
             return choice.message.content or "{}"
         except APIConnectionError as e:
             last_err = e
@@ -387,24 +476,53 @@ def _compute_end(
     video_dur:  float,
 ) -> float:
     """
-    Snap the clip end to the boundary (start + duration) of a transcript line
-    that lands closest to start + target_duration, within [start+min_dur,
-    start+max_dur] (clamped to the video length).
+    Snap the clip end to a natural sentence boundary near the user's target
+    duration, with ±END_SNAP_TOLERANCE seconds of slop so we don't cut off
+    mid-sentence just to hit an exact number.
+
+    Search window is [start + min_dur - tolerance, start + max_dur + tolerance]
+    (clamped to video length and to MIN_END_FLOOR), and we pick the transcript
+    line-end closest to (min_dur + max_dur) / 2 within that window. Falling
+    just outside the user-requested [min, max] band by a few seconds to land
+    on a real sentence boundary reads dramatically better than a clean number
+    that chops words in half.
     """
     target = start + (min_dur + max_dur) / 2
-    lo     = start + min_dur
-    hi     = min(start + max_dur, video_dur)
+
+    # Expanded search window — allow up to END_SNAP_TOLERANCE seconds outside
+    # the requested band, but never below MIN_END_FLOOR from start (a 3s clip
+    # that happens to land on a sentence boundary is still bad) and never past
+    # the actual video end.
+    lo = max(start + min_dur - END_SNAP_TOLERANCE, start + MIN_END_FLOOR)
+    hi = min(start + max_dur + END_SNAP_TOLERANCE, video_dur)
 
     if hi <= lo:
         return min(start + min_dur, video_dur)
 
-    best, best_diff = None, None
+    # Preference-weighted match: line-ends INSIDE the original [min, max] band
+    # are preferred over ones in the tolerance zone. We do this by adding a
+    # small penalty to the distance metric for boundaries that fall outside
+    # the user's requested band — that way a natural cut at 62s beats a
+    # mid-sentence cut at 60s (both close to target), but a natural cut at
+    # 60s still beats a natural cut at 68s.
+    inner_lo = start + min_dur
+    inner_hi = min(start + max_dur, video_dur)
+
+    def _score(line_end: float) -> float:
+        distance = abs(line_end - target)
+        # Small penalty for landing in the tolerance zone rather than inside
+        # the requested band — keeps the "prefer inside band" preference while
+        # still allowing tolerance cuts when they're clearly better.
+        outside_band = line_end < inner_lo or line_end > inner_hi
+        return distance + (2.0 if outside_band else 0.0)
+
+    best, best_score = None, None
     for e in transcript:
         line_end = e["start"] + e.get("duration", 0)
         if lo <= line_end <= hi:
-            diff = abs(line_end - target)
-            if best_diff is None or diff < best_diff:
-                best, best_diff = line_end, diff
+            s = _score(line_end)
+            if best_score is None or s < best_score:
+                best, best_score = line_end, s
 
     return best if best is not None else hi
 

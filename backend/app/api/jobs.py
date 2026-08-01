@@ -9,19 +9,21 @@ GET  /jobs/{job_id}/clips — Clips for a job
 DELETE /jobs/{job_id}   — Delete job + clips
 
 Two dispatch modes:
-  - Single-service (WORKER_SERVICE_URLS empty): pipeline runs in-process via
-    asyncio.create_task(), job row inserted as status="processing" since
-    there's no network hop that can silently fail between INSERT and start.
-  - Multi-region (WORKER_SERVICE_URLS set): job row inserted as
-    status="queued", then enqueued onto one region's Cloud Tasks queue (see
-    app/core/worker_routing.py, app/core/tasks.py). The worker flips the row
-    to "processing" itself once the pipeline actually starts (orchestrator.py)
-    — if Cloud Tasks exhausts retries without ever reaching a worker, the
-    row stays "queued" and gets caught + refunded by the reconciliation
-    sweep (/internal/reconcile-stuck-jobs), not silently lost.
+  - Single-service (no worker URLs configured): unified pipeline runs
+    in-process via asyncio.create_task(), job row inserted as
+    status='processing' since there's no network hop that can silently fail.
+  - Split-worker (API_WORKER_URLS + FFMPEG_WORKER_URLS set): job row inserted
+    as status='created', pipeline_stage='api' with queue_payload, then
+    pg_notify('new_job') fires. Watcher dispatches to an API worker; when
+    the API stage completes it flips status='api_done' (Postgres trigger
+    fires pg_notify('api_done')), watcher then dispatches to an FFmpeg
+    worker. See migrations/005_split_workers.sql for the full status flow.
+    (Legacy: if only WORKER_SERVICE_URLS is set, the watcher runs against
+    the old unified worker pool via /internal/pipeline/run.)
 """
 
 import asyncio
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -35,8 +37,7 @@ from app.core.config import get_settings
 from app.core.plan_limits import (
     get_max_clip_count, get_max_clip_duration_seconds, get_max_transcript_minutes_for_ai,
 )
-from app.core.tasks import enqueue_pipeline_run
-from app.core.worker_routing import has_multi_region_workers, pick_worker
+from app.core.worker_routing import has_multi_region_workers
 from app.db import supabase as db
 from app.pipeline.captions import (
     VALID_COLORS, VALID_FONTS, VALID_HALIGNS, VALID_STYLES,
@@ -310,99 +311,78 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
             gateway_end_seconds = gateway_start_seconds + reserved_seconds
             billable_seconds = reserved_seconds
 
-    # ── 4. Insert job row ──────────────────────────────────────
-    # "queued" when dispatch goes through Cloud Tasks (a network hop that
-    # can fail between INSERT and pipeline start — the reconciliation sweep
-    # catches anything stuck here); "processing" for in-process single-service
-    # mode, where there's no such gap.
+    # ── 4. Build pipeline options payload ─────────────────────
+    options = body.options.model_dump()
+    if video_duration_seconds > 0:
+        options["prefetched_duration"] = video_duration_seconds
+        options["prefetched_title"]    = video_meta.get("title", "")
+        options["gateway_start"] = gateway_start_seconds
+        options["gateway_end"]   = gateway_end_seconds
+
+    options["plan"] = current_user.plan
+    options["reserved_credits"] = reserved_credits
+    if video_minutes_reserved > 0:
+        options["video_minutes_reserved"] = video_minutes_reserved
+
+    max_transcript_minutes = get_max_transcript_minutes_for_ai(current_user.plan)
+    if max_transcript_minutes is not None:
+        options["max_transcript_seconds"] = max_transcript_minutes * 60
+
+    # ── 5. Insert job row + dispatch ──────────────────────────
     job_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     multi_region = has_multi_region_workers()
-    initial_status = "queued" if multi_region else "processing"
+    initial_status = "created" if multi_region else "processing"
+
+    # In split-worker mode, jobs always enter at the API stage. In
+    # single-service mode pipeline_stage is unused (the unified
+    # orchestrator runs both stages), but we still stamp it 'api' so
+    # in-flight rows are consistent if the deployment is switched to
+    # split-worker while jobs are alive.
+    initial_pipeline_stage = "api"
+
+    queue_payload = json.dumps({
+        "job_id": job_id, "user_id": current_user.user_id,
+        "youtube_url": body.youtube_url, "options": options,
+    }) if multi_region else None
+
     try:
         await db._execute(
             """
             INSERT INTO jobs
-              (job_id, user_id, youtube_url, status, progress,
-               current_step, clip_count, reserved_video_minutes, created_at, updated_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)
+              (job_id, user_id, youtube_url, status, pipeline_stage, progress,
+               current_step, clip_count, reserved_video_minutes,
+               queue_payload, created_at, updated_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$11)
             """,
             job_id,
             current_user.user_id,
             body.youtube_url,
             initial_status,
+            initial_pipeline_stage,
             0,
             "Starting pipeline..." if not multi_region else "Queued...",
             body.options.clip_count,
             video_minutes_reserved,
+            queue_payload,
             now,
         )
     except Exception:
-        # INSERT failed (infra-level) — no job will ever run, so the
-        # reservations above must be rolled back, not silently kept.
         await db.release_credits(current_user.user_id, reserved_credits)
         if video_minutes_reserved > 0:
             await db.release_video_minutes(current_user.user_id, video_minutes_reserved)
         raise
 
-    # ── 5. Fire pipeline immediately ───────────────────────────
-    options = body.options.model_dump()
-    # Pass prefetched metadata so orchestrator skips a second InnerTube call
-    if video_duration_seconds > 0:
-        options["prefetched_duration"] = video_duration_seconds
-        options["prefetched_title"]    = video_meta.get("title", "")
-        # Gateway window already resolved against the real duration above —
-        # overwrite the raw client values so the orchestrator just uses
-        # these as-is instead of re-resolving (it only needs to resolve its
-        # own copy when prefetch failed here, see orchestrator.py STEP 2b).
-        options["gateway_start"] = gateway_start_seconds
-        options["gateway_end"]   = gateway_end_seconds
-
-    # Plan is needed by the orchestrator to re-validate/reserve video-minutes
-    # quota once it has the REAL duration, when this endpoint's own prefetch
-    # failed above — see orchestrator.py STEP 2b.
-    options["plan"] = current_user.plan
-    # How much was already reserved here, so the orchestrator knows exactly
-    # what to release on failure/timeout, and doesn't double-reserve.
-    options["reserved_credits"] = reserved_credits
-    if video_minutes_reserved > 0:
-        options["video_minutes_reserved"] = video_minutes_reserved
-
-    # Free-tier cap: only the first N minutes of transcript are sent to GPT
-    # for viral-moment finding (see orchestrator._execute_pipeline).
-    max_transcript_minutes = get_max_transcript_minutes_for_ai(current_user.plan)
-    if max_transcript_minutes is not None:
-        options["max_transcript_seconds"] = max_transcript_minutes * 60
-
     if multi_region:
-        # Enqueue onto one region's Cloud Tasks queue — NOT fire-and-forget.
-        # Cloud Tasks retries with backoff on failure; if it exhausts every
-        # attempt without the worker ever flipping this row to "processing",
-        # /internal/reconcile-stuck-jobs catches it and refunds the
-        # reservations made above instead of leaving a permanent zombie job.
-        target = await pick_worker()
-        try:
-            await enqueue_pipeline_run(
-                target, job_id,
-                payload={
-                    "job_id": job_id, "user_id": current_user.user_id,
-                    "youtube_url": body.youtube_url, "options": options,
-                },
-            )
-        except Exception:
-            # Enqueue itself failed (Cloud Tasks API error, bad queue config,
-            # etc.) — this is NOT a transient dispatch failure Cloud Tasks can
-            # retry, since the task was never created. Fail fast and refund
-            # now rather than waiting for the reconciliation sweep.
-            logger.exception(f"[{job_id}] Failed to enqueue pipeline task")
-            await db.fail_job(job_id, "Failed to schedule job — please try again.")
-            await db.release_credits(current_user.user_id, reserved_credits)
-            if video_minutes_reserved > 0:
-                await db.release_video_minutes(current_user.user_id, video_minutes_reserved)
-            raise HTTPException(status_code=503, detail="Failed to schedule job — please try again.")
-
+        # Notify the watcher service via Postgres LISTEN/NOTIFY.
+        # The watcher claims the job (FOR UPDATE SKIP LOCKED), picks the
+        # least-loaded region, and dispatches to the worker. If the watcher
+        # misses this notification (restart, connection blip), its poll
+        # fallback picks up unclaimed 'created' rows every 15s.
+        pool = await db.get_pool()
+        await pool.execute("SELECT pg_notify('new_job', $1)", job_id)
         logger.info(
-            f"[{job_id}] Pipeline enqueued to {target.region} — user={current_user.user_id} "
+            f"[{job_id}] Job created + notified — user={current_user.user_id} "
             f"plan={current_user.plan} duration={video_duration_seconds}s"
         )
     else:
@@ -528,7 +508,7 @@ async def get_job_clips(job_id: str, current_user: CurrentUser):
 @router.post("/{job_id}/cancel", status_code=200)
 async def cancel_job(job_id: str, current_user: CurrentUser):
     """
-    Cancel a running or queued job. Marks it as 'cancelled' and stops
+    Cancel a running or pending job. Marks it as 'cancelled' and stops
     further clip processing. Already-completed clips remain.
     """
     job = await db.get_job(job_id)
@@ -538,10 +518,15 @@ async def cancel_job(job_id: str, current_user: CurrentUser):
         raise HTTPException(status_code=403, detail="Access denied")
 
     status_val = job.get("status")
-    if status_val not in ("processing", "queued"):
+    cancellable = {
+        "created", "dispatched", "processing",
+        "api_processing", "api_done", "ffmpeg_processing",
+    }
+    if status_val not in cancellable:
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot cancel a job with status '{status_val}' (only 'processing'/'queued' jobs can be cancelled)"
+            detail=f"Cannot cancel a job with status '{status_val}' "
+                   f"(only jobs still in the pipeline can be cancelled)"
         )
 
     await db._execute(
@@ -556,14 +541,42 @@ async def cancel_job(job_id: str, current_user: CurrentUser):
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_job(job_id: str, current_user: CurrentUser):
+    """
+    Delete a job and its clips/GCS files.
+
+    Showcase-protected clips (is_showcased=TRUE, added via admin.py's
+    /admin/showcase/add) survive this delete — both the DB row and the GCS
+    files. If ALL of a job's clips are showcased, the job row is also kept
+    so the surviving clips still have a valid parent (foreign key + admin
+    "clips for this job" browsing keep working).
+    """
     job = await db.get_job(job_id)
     if not job or str(job["user_id"]) != current_user.user_id:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    await db._execute("DELETE FROM clips WHERE job_id=$1", job_id)
-    await db._execute("DELETE FROM jobs  WHERE job_id=$1", job_id)
-    # Fire-and-forget GCS cleanup — don't block the response
-    asyncio.create_task(delete_job_from_gcs(job_id), name=f"gcs-cleanup-{job_id[:8]}")
+    # Which clips are showcase-protected? Their rows + GCS files stay.
+    showcased_ids = await db.get_showcased_clip_ids_for_job(job_id)
+
+    if showcased_ids:
+        # Delete only the non-showcased clip rows
+        await db._execute(
+            "DELETE FROM clips WHERE job_id=$1 AND is_showcased = FALSE",
+            job_id,
+        )
+        # Job row stays so the surviving clips have a valid FK. GCS cleanup
+        # is scoped to skip showcased clip files.
+        asyncio.create_task(
+            delete_job_from_gcs(job_id, keep_clip_ids=showcased_ids),
+            name=f"gcs-cleanup-{job_id[:8]}",
+        )
+    else:
+        # Normal path: nothing protected, wipe everything.
+        await db._execute("DELETE FROM clips WHERE job_id=$1", job_id)
+        await db._execute("DELETE FROM jobs  WHERE job_id=$1", job_id)
+        asyncio.create_task(
+            delete_job_from_gcs(job_id),
+            name=f"gcs-cleanup-{job_id[:8]}",
+        )
 
 
 # ── Serialisation helpers ──────────────────────────────────────

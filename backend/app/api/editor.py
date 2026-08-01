@@ -210,11 +210,11 @@ async def render_clip(
     if has_multi_region_workers():
         # Heavy ffmpeg work runs on the worker service — spread across
         # regions same as pipeline dispatch (app/core/worker_routing.py).
-        # Synchronous call (not Cloud Tasks): the caller is waiting on the
+        # Synchronous call (not the job queue): the caller is waiting on the
         # response for the new video_url, so a queue would just add
         # latency without fixing anything — failures already propagate
         # straight back to the user via raise_for_status(), no zombie risk.
-        target = await pick_worker()
+        target = pick_worker()
         async with httpx.AsyncClient(timeout=180.0) as client:
             resp = await client.post(
                 f"{target.worker_url}/internal/editor/render",

@@ -14,11 +14,11 @@ DodoPayments.Initialize({
 
 // videoHours / maxVideoHours mirror backend/app/core/plan_limits.py — keep in sync
 const TIERS = [
-  { clips: 100,      price: 10,  label: '100 Shorts',  dodoId: 'starter_100', videoHours: 5,  maxVideoHours: 2 },
-  { clips: 250,      price: 25,  label: '250 Shorts',  dodoId: 'starter_250', videoHours: 10, maxVideoHours: 2 },
-  { clips: 500,      price: 45,  label: '500 Shorts',  dodoId: 'pro_500',     videoHours: 18, maxVideoHours: 3 },
-  { clips: 1000,     price: 79,  label: '1000 Shorts', dodoId: 'pro_1000',    videoHours: 35, maxVideoHours: 3 },
-  { clips: 2000,     price: 145, label: '2000 Shorts', dodoId: 'pro_2000',    videoHours: 60, maxVideoHours: 3 },
+  { clips: 75,       price: 10,  label: '75 Shorts',   dodoId: 'starter_100', videoHours: 5,  maxVideoHours: 2 },
+  { clips: 200,      price: 25,  label: '200 Shorts',  dodoId: 'starter_250', videoHours: 10, maxVideoHours: 2 },
+  { clips: 400,      price: 45,  label: '400 Shorts',  dodoId: 'pro_500',     videoHours: 18, maxVideoHours: 3 },
+  { clips: 800,      price: 79,  label: '800 Shorts',  dodoId: 'pro_1000',    videoHours: 35, maxVideoHours: 3 },
+  { clips: 1500,     price: 145, label: '1500 Shorts', dodoId: 'pro_2000',    videoHours: 60, maxVideoHours: 3 },
 ]
 
 const FREE_FEATURES = [

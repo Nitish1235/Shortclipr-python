@@ -32,7 +32,7 @@ export default function Hero() {
   const trust = [
     { num:'12,000+', label:'Creators' },
     { num:'9.2M+',   label:'Clips generated' },
-    { num:'< 3 min', label:'Processing time' },
+    { num:'Minutes', label:'Not hours of editing' },
     { num:'4.8 ★',   label:'Average rating' },
   ]
 

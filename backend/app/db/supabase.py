@@ -154,24 +154,95 @@ async def get_job(job_id: str) -> dict | None:
     return await _fetchrow("SELECT * FROM jobs WHERE job_id=$1", job_id)
 
 
-async def find_stuck_queued_jobs(older_than_minutes: int) -> list[dict]:
+async def find_stuck_jobs(older_than_minutes: int) -> list[dict]:
     """
-    Jobs that have sat at status='queued' longer than `older_than_minutes`
-    — either Cloud Tasks exhausted every retry without a worker ever
-    picking the task up, or the worker fleet was unreachable/down.
-    Used by the reconciliation sweep (app/api/internal.py) to fail these
-    jobs and refund their credits/video-minutes reservations, since
-    orchestrator.py's own refund-on-failure logic never runs for a job
-    whose pipeline never started.
+    Jobs stuck longer than expected in any pre-terminal state:
+      - 'created'          — watcher never claimed (API queue)
+      - 'dispatched'       — legacy unified-worker dispatch stalled
+      - 'api_processing'   — API worker crashed / never returned
+      - 'api_done'         — watcher never claimed for FFmpeg queue
+      - 'ffmpeg_processing'— FFmpeg worker crashed mid-encode (uses 3× the
+                             timeout since it's the slow stage)
+
+    Used by the reconciliation sweep to retry or fail+refund these jobs.
     """
     return await _fetch(
         """
-        SELECT job_id, user_id, clip_count, reserved_video_minutes
+        SELECT job_id, user_id, status, clip_count, reserved_video_minutes, retry_count
         FROM jobs
-        WHERE status = 'queued'
-          AND created_at < NOW() - ($1 || ' minutes')::interval
+        WHERE (status = 'created'          AND start_after         < NOW() - ($1 || ' minutes')::interval)
+           OR (status = 'dispatched'       AND dispatched_at       < NOW() - ($1 || ' minutes')::interval)
+           OR (status = 'api_processing'   AND api_dispatched_at   < NOW() - ($1 || ' minutes')::interval)
+           OR (status = 'api_done'         AND api_completed_at    < NOW() - ($1 || ' minutes')::interval)
+           OR (status = 'ffmpeg_processing' AND ffmpeg_dispatched_at < NOW() - ($1::int * 3 || ' minutes')::interval)
         """,
         str(older_than_minutes),
+    )
+
+
+# ── Split-worker state transitions ─────────────────────────────
+# Called by api_stage.py / ffmpeg_stage.py to move a job through the
+# split-pipeline status flow. See migrations/005_split_workers.sql for
+# the full flow diagram.
+
+async def set_job_api_processing(job_id: str) -> None:
+    """API worker has picked up the job and started the API stage."""
+    await _execute(
+        """
+        UPDATE jobs
+        SET status = 'api_processing',
+            updated_at = NOW()
+        WHERE job_id = $1
+        """,
+        job_id,
+    )
+
+
+async def set_job_api_done(job_id: str, ffmpeg_payload: dict) -> None:
+    """
+    API stage finished. Writes the FFmpeg-stage payload atomically with the
+    status flip — the pg_notify('api_done') fires from the trigger, no
+    separate call needed. FFmpeg worker will read ffmpeg_payload from the row.
+    """
+    await _execute(
+        """
+        UPDATE jobs
+        SET status           = 'api_done',
+            pipeline_stage   = 'ffmpeg',
+            ffmpeg_payload   = $2::jsonb,
+            api_completed_at = NOW(),
+            updated_at       = NOW()
+        WHERE job_id = $1
+        """,
+        job_id, json.dumps(ffmpeg_payload),
+    )
+
+
+async def set_job_ffmpeg_processing(job_id: str) -> None:
+    """FFmpeg worker has picked up the job and started the encoding stage."""
+    await _execute(
+        """
+        UPDATE jobs
+        SET status = 'ffmpeg_processing',
+            updated_at = NOW()
+        WHERE job_id = $1
+        """,
+        job_id,
+    )
+
+
+async def get_job_with_ffmpeg_payload(job_id: str) -> dict | None:
+    """
+    Fetch just the columns FFmpeg stage needs — avoids pulling the full row
+    with all reservation/status metadata that the FFmpeg stage doesn't touch.
+    """
+    return await _fetchrow(
+        """
+        SELECT job_id, user_id, youtube_url, ffmpeg_payload
+        FROM jobs
+        WHERE job_id = $1
+        """,
+        job_id,
     )
 
 
@@ -240,6 +311,41 @@ async def get_clips_for_job(job_id: str) -> list[dict]:
     )
 
 
+# ── Showcase protection ────────────────────────────────────────
+# Clips added to the public admin showcase (see admin.py) get is_showcased=TRUE
+# so the delete-job path in jobs.py can skip them + their GCS files. See
+# migrations/006_clip_retention.sql for the schema.
+
+async def mark_clip_showcased(clip_id: str) -> None:
+    """Flag a clip as showcased so it survives its job's deletion."""
+    await _execute(
+        "UPDATE clips SET is_showcased = TRUE WHERE clip_id = $1",
+        clip_id,
+    )
+
+
+async def unmark_clip_showcased(clip_id: str) -> None:
+    """Called when an admin removes a clip from the showcase — restores
+    normal delete behaviour on that clip's job."""
+    await _execute(
+        "UPDATE clips SET is_showcased = FALSE WHERE clip_id = $1",
+        clip_id,
+    )
+
+
+async def get_showcased_clip_ids_for_job(job_id: str) -> list[str]:
+    """
+    Return the clip_ids of showcased clips in a job. Used by DELETE /jobs/{id}
+    to (a) skip them in the DELETE FROM clips, and (b) tell the GCS cleanup
+    task which blob paths to leave in place.
+    """
+    rows = await _fetch(
+        "SELECT clip_id FROM clips WHERE job_id = $1 AND is_showcased = TRUE",
+        job_id,
+    )
+    return [str(r["clip_id"]) for r in rows]
+
+
 # ── User operations ───────────────────────────────────────────
 
 async def get_user(user_id: str) -> dict | None:
@@ -286,9 +392,18 @@ async def upsert_user(user_data: dict) -> dict:
 
 
 async def count_active_jobs(user_id: str) -> int:
-    """Count jobs currently in processing state for this user."""
+    """
+    Count jobs in any active (non-terminal) state for this user. Used to
+    gate MAX_CONCURRENT_JOBS_PER_USER in jobs.py. Terminal states are
+    'completed', 'failed', 'cancelled' — anything else counts as active.
+    """
     row = await _fetchrow(
-        "SELECT COUNT(*) AS cnt FROM jobs WHERE user_id=$1 AND status='processing'",
+        """SELECT COUNT(*) AS cnt FROM jobs
+           WHERE user_id=$1
+             AND status IN (
+               'created', 'dispatched', 'processing',
+               'api_processing', 'api_done', 'ffmpeg_processing'
+             )""",
         user_id,
     )
     return int(row["cnt"]) if row else 0

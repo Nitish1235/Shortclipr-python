@@ -117,28 +117,47 @@ async def download_to_file(url: str, dest: Path) -> Path:
     return dest
 
 
-async def delete_job_from_gcs(job_id: str) -> None:
+async def delete_job_from_gcs(job_id: str, keep_clip_ids: list[str] | None = None) -> None:
     """
     Delete all GCS objects for a job (clips + thumbnails).
     Called when a user deletes a job — prevents storage leaks.
+
+    keep_clip_ids: clip_ids whose blobs must be preserved (e.g. showcased
+    clips — see admin.py + migrations/006_clip_retention.sql). Any blob
+    whose filename basename (minus extension) matches one of these IDs
+    is left in place.
     """
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, _delete_job_blobs_sync, job_id)
+    await loop.run_in_executor(
+        None, _delete_job_blobs_sync, job_id, set(keep_clip_ids or []),
+    )
 
 
-def _delete_job_blobs_sync(job_id: str) -> None:
-    """Synchronous GCS bulk delete — called in executor."""
+def _delete_job_blobs_sync(job_id: str, keep_clip_ids: set[str]) -> None:
+    """Synchronous GCS bulk delete — called in executor.
+    Skips any blob whose filename (without extension) is in keep_clip_ids."""
     try:
         client = _get_gcs_client()
         bucket = client.bucket(settings.GCS_BUCKET_NAME)
         prefixes = [f"clips/{job_id}/", f"thumbnails/{job_id}/", f"raw/{job_id}/", f"previews/{job_id}/"]
         deleted = 0
+        kept    = 0
         for prefix in prefixes:
             blobs = list(bucket.list_blobs(prefix=prefix))
             for blob in blobs:
+                # Blob names are {prefix}/{clip_id}.{ext} — strip the prefix
+                # and extension to get the clip_id for the keep-list check.
+                filename = blob.name.rsplit("/", 1)[-1]
+                clip_id  = filename.rsplit(".", 1)[0]
+                if clip_id in keep_clip_ids:
+                    kept += 1
+                    continue
                 blob.delete()
                 deleted += 1
-        logger.info(f"GCS cleanup: deleted {deleted} objects for job {job_id}")
+        if kept:
+            logger.info(f"GCS cleanup: deleted {deleted} objects for job {job_id}, kept {kept} showcased")
+        else:
+            logger.info(f"GCS cleanup: deleted {deleted} objects for job {job_id}")
     except Exception as e:
         # Don't fail the delete operation — log and continue
         logger.error(f"GCS cleanup failed for job {job_id}: {e}")

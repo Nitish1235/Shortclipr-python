@@ -82,9 +82,9 @@ export default function Terms() {
             <h2>5. Subscription Plans &amp; Billing</h2>
             <h3>5.1 Plan Structure</h3>
             <ul>
-              <li><strong>Free:</strong> 3 videos per month, no credit card required</li>
-              <li><strong>Starter ($12/month):</strong> 20 videos per month</li>
-              <li><strong>Pro ($145/month):</strong> 2,000 shorts per month</li>
+              <li><strong>Free:</strong> 3 shorts per month, no credit card required</li>
+              <li><strong>Starter (from $10/month):</strong> 75–200 shorts per month</li>
+              <li><strong>Pro (from $45/month):</strong> 400–1,500 shorts per month</li>
             </ul>
             <p>
               Charges are per <strong>video processed</strong>, not per minute of source video.
@@ -157,7 +157,7 @@ export default function Terms() {
             </p>
             <ul>
               <li>Every YouTube video can be processed (some have restricted transcripts)</li>
-              <li>Processing will always complete within our target 60-second window</li>
+              <li>Processing will always complete within a specific time window</li>
               <li>Generated clips will always achieve the virality scores indicated (scores are AI estimates)</li>
             </ul>
             <p>

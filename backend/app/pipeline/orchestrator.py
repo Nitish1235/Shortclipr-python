@@ -1,86 +1,31 @@
 """
-orchestrator.py — Master coordinator for the ShortClipr pipeline.
+orchestrator.py — Unified pipeline composer for single-service mode.
 
-Single-phase clip flow (per clip, all clips run concurrently). The earlier
-"Phase 1" (360p preview generation + raw-clip upload to GCS purely to show
-an early preview card) has been removed — it never fed the reframe/caption
-step, which always read the local trimmed file directly. Removing it cuts
-one ffmpeg encode (`generate_preview`) and one GCS upload/delete pair per
-clip, at the cost of the "card appears early with a 360p preview" UX —
-cards now appear once, already HD:
+After the split-worker refactor (see api_stage.py + ffmpeg_stage.py), this
+module is just a thin sequencer that runs both stages back-to-back in the
+same process. It's used ONLY in single-service mode (WORKER_SERVICE_URLS
+empty in config.py) — the split-worker deployment invokes each stage
+independently via /internal/api-stage/run and /internal/ffmpeg-stage/run.
 
-    DASH download clip → trim raw clip → INSERT placeholder row
-    (clip_ready=FALSE, preview_url="") → detect silences + face track +
-    captions → reframe + burn captions (one ffmpeg pass) → upload final
-    vertical + reframed raw + thumbnail → Supabase UPDATE
-    (clip_ready=TRUE, video_url set) → card appears (HD only)
+For split-worker deployments this file is effectively dead code, but it's
+kept so the local dev flow (`uvicorn app.main:app` with no worker URLs
+configured) still works with a single command.
 
-Progress emitted to Supabase after every major step so the frontend
-Realtime channel reflects live state.
+Timeout: 25 min total (API ~5 min + FFmpeg ~20 min). API stage's own
+timeout (300s) fires first if it hangs; if it succeeds, FFmpeg gets the
+remaining budget up to its own 1500s cap.
 """
 
 import asyncio
 import logging
-import tempfile
-import time
-import uuid
-from contextlib import asynccontextmanager
-from pathlib import Path
 
-from app.core.config import get_settings
 from app.db import supabase as db
-from app.pipeline.ai_clipper import ClipTimestamp, find_viral_clips
-from app.pipeline.captions import (
-    captions_to_dict, clamp_captions_to_silence, detect_silences, get_clip_captions,
-)
-from app.pipeline.extractor import _compute_zoom_beats, _get_source, extract_clip, probe_clip_start_offset, reframe_and_caption
-from app.pipeline.face_tracker import compute_face_track
-from app.pipeline.stream import extract_video_id, get_stream_urls, get_video_metadata
-from app.pipeline.transcript import get_transcript
-from app.pipeline.downloader import download_all_clips_parallel
-from app.pipeline.uploader import (
-    cleanup_job_files,
-    generate_thumbnail,
-    upload_clip,
-    upload_raw_clip,
-    upload_thumbnail,
-)
+from app.pipeline.api_stage import run_api_stage
+from app.pipeline.ffmpeg_stage import run_ffmpeg_stage
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
-PIPELINE_TIMEOUT_SECONDS = 1200   # 20 minutes — kill hung jobs
-
-# "Minutes gateway" — must match jobs.py's MIN_GATEWAY_SECONDS (kept here
-# too since this module independently resolves the window when jobs.py's
-# metadata prefetch failed and deferred resolution to here).
-MIN_GATEWAY_SECONDS = 60
-
-
-# Tracks how many jobs are concurrently running ON THIS INSTANCE — used to
-# size each job's own encode semaphore adaptively (see _execute_pipeline):
-# a SOLO job gets the full global MAX_CONCURRENT_ENCODES to itself (no
-# slowdown vs. before this change), but as soon as a second job lands on
-# the same instance, each job's own clips get capped to 1 concurrent
-# encode so neither can monopolize both global slots and starve the other.
-# Plain int is safe here without a lock — single-threaded asyncio event
-# loop, no actual concurrent mutation.
-_ACTIVE_JOBS_ON_INSTANCE = 0
-
-
-@asynccontextmanager
-async def _step(job_id: str, name: str):
-    """Wrap a pipeline step with start/complete/error logs + elapsed time —
-    grep logs for `job_id` to get a full timeline of where time went."""
-    t0 = time.monotonic()
-    logger.info(f"[{job_id}] -> {name} started")
-    try:
-        yield
-    except Exception as e:
-        logger.error(f"[{job_id}] x {name} FAILED after {time.monotonic() - t0:.2f}s: {e}")
-        raise
-    else:
-        logger.info(f"[{job_id}] OK {name} completed in {time.monotonic() - t0:.2f}s")
+PIPELINE_TIMEOUT_SECONDS = 1500   # matches ffmpeg_stage cap
 
 
 async def run_pipeline(
@@ -90,420 +35,43 @@ async def run_pipeline(
     options: dict,
 ) -> None:
     """
-    Main pipeline coordinator. Hard timeout of 20 minutes.
-    All exceptions are caught and written to Supabase — never crashes the worker.
+    Single-service pipeline: run API stage → check outcome → run FFmpeg stage.
+
+    Both stages have their own internal try/except (with refund logic), so
+    all we do here is sequence them. If the API stage fails, it's already
+    marked the job failed + refunded — FFmpeg stage doesn't run.
+
+    In split-worker mode this function is not called at all; the watcher
+    dispatches each stage to its own worker pool.
     """
     try:
         await asyncio.wait_for(
-            _execute_pipeline(job_id, user_id, youtube_url, options),
+            _run_both_stages(job_id, user_id, youtube_url, options),
             timeout=PIPELINE_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
+        # If api_stage's own 300s timeout didn't catch it, our outer 1500s
+        # is a hard backstop. Refund handled by whichever stage was running.
         msg = f"Pipeline timed out after {PIPELINE_TIMEOUT_SECONDS}s"
         logger.error(f"[{job_id}] {msg}")
         await db.fail_job(job_id, msg)
-    except Exception as e:
-        logger.exception(f"[{job_id}] Pipeline failed: {e}")
-        await db.fail_job(job_id, str(e))
 
 
-async def _execute_pipeline(
+async def _run_both_stages(
     job_id: str,
     user_id: str,
     youtube_url: str,
     options: dict,
 ) -> None:
+    # STAGE 1 — API (metadata, transcript, GPT, write ffmpeg_payload)
+    await run_api_stage(job_id, user_id, youtube_url, options)
 
-    clip_style      = options.get("style",          "minimal")
-    clip_count      = options.get("clip_count",     10)
-    quality         = options.get("quality",        "1080p")
-    language        = options.get("language",       "English")
-    color_combo     = options.get("color",          "white_black")
-    h_align         = options.get("h_align",        "center")
-    v_align         = options.get("v_align",        "bottom")
-    words_per_line  = options.get("words_per_line", 3)
-    short_template  = options.get("short_template", "crop_fill")
-    title_permanent = options.get("title_permanent", False)
-    hook_title_enabled = options.get("hook_title_enabled", True)
-    font            = options.get("font", "default")
-    title_color     = options.get("title_color", "white")
-    title_bg        = options.get("title_bg", "none")
-    title_bg_opacity = options.get("title_bg_opacity", 0.55)
-    bar_color       = options.get("bar_color",      "#0d0d0d")
-    aspect          = options.get("aspect",         "9:16")
+    # Verify the API stage succeeded before firing FFmpeg. If it failed,
+    # run_api_stage already flipped status to 'failed' + refunded.
+    job = await db.get_job(job_id)
+    if not job or job.get("status") != "api_done":
+        # 'failed' | 'cancelled' | anything else → don't invoke FFmpeg.
+        return
 
-    # Reservations made by jobs.py (atomic — see reserve_credits /
-    # reserve_video_minutes in supabase.py). `success` gates the `finally`
-    # below: any failure/timeout releases the FULL reservation back to the
-    # user instead of leaving it billed for a job that delivered nothing.
-    reserved_credits       = options.get("reserved_credits", 0)
-    video_minutes_reserved = options.get("video_minutes_reserved", 0.0)
-    success = False
-
-    job_dir = Path(tempfile.mkdtemp(prefix=f"sc_{job_id[:8]}_"))
-
-    # Flip "queued" → "processing" now that the pipeline has actually
-    # started (multi-region dispatch inserts jobs as "queued" — see
-    # jobs.py — since Cloud Tasks enqueue can succeed without the worker
-    # ever picking the task up; this is the actual "we're running" signal
-    # the reconciliation sweep uses to tell queued-forever apart from
-    # legitimately-running jobs).
-    await db.update_job_progress(job_id, 1, "Starting pipeline...")
-
-    global _ACTIVE_JOBS_ON_INSTANCE
-    _ACTIVE_JOBS_ON_INSTANCE += 1
-
-    try:
-        # ── STEP 1: Extract video ID ──────────────────────────────
-        video_id = extract_video_id(youtube_url)
-        if not video_id:
-            raise ValueError(f"Cannot extract video ID from: {youtube_url}")
-
-        # ── STEP 2: Video metadata ────────────────────────────────
-        prefetched_duration = options.get("prefetched_duration", 0)
-        prefetched_title    = options.get("prefetched_title", "")
-
-        if prefetched_duration > 0:
-            metadata = {"title": prefetched_title, "duration": prefetched_duration}
-            await db.update_job_metadata(job_id, metadata["title"], metadata["duration"])
-        else:
-            await db.update_job_progress(job_id, 2, "Fetching video info...")
-            async with _step(job_id, "metadata fetch"):
-                metadata = await get_video_metadata(video_id, session_id=job_id)
-            await db.update_job_metadata(job_id, metadata["title"], metadata["duration"])
-
-        logger.info(f"[{job_id}] Video: '{metadata['title']}' ({metadata['duration']}s)")
-
-        # ── STEP 2b: Resolve the "minutes gateway" window ──────────────
-        # jobs.py already resolves this against the real duration when its
-        # own metadata prefetch succeeds (prefetched_duration > 0) and
-        # overwrites options["gateway_start"/"gateway_end"] with the final
-        # values — use those as-is. Otherwise (jobs.py's prefetch failed),
-        # resolve now against the duration THIS fetch just got, using the
-        # same clamp/fallback rules (see jobs.py for why).
-        if prefetched_duration > 0:
-            gateway_start = options.get("gateway_start", 0.0)
-            gateway_end   = options.get("gateway_end")
-        else:
-            gateway_start = max(0.0, min(options.get("gateway_start", 0.0), metadata["duration"]))
-            gateway_end   = options.get("gateway_end")
-            gateway_end = metadata["duration"] if gateway_end is None else max(0.0, min(gateway_end, metadata["duration"]))
-            if gateway_end - gateway_start < MIN_GATEWAY_SECONDS:
-                gateway_start, gateway_end = 0.0, metadata["duration"]
-        billable_seconds = gateway_end - gateway_start
-        is_full_video = gateway_start == 0.0 and gateway_end == metadata["duration"]
-        if not is_full_video:
-            logger.info(f"[{job_id}] Minutes gateway: [{gateway_start:.0f}s, {gateway_end:.0f}s] ({billable_seconds:.0f}s billable)")
-
-        # ── STEP 2c: Reserve video-minutes against the GATEWAY duration
-        # (not the full video!), if jobs.py didn't already reserve it ──
-        # jobs.py reserves this pre-flight, but ONLY when its own metadata
-        # prefetch succeeds — if that prefetch fails (proxy hiccup, rate
-        # limit, etc.) it deliberately skips the gate rather than reject a
-        # possibly-legitimate video on a transient error, trusting this
-        # fetch (which has more retries/fallbacks) to get the real duration.
-        # Without this fallback reservation, that path was a full bypass of
-        # both the per-video-length cap and the monthly-hours quota — a free
-        # user could process a multi-hour video for free by simply hitting
-        # the metadata endpoint when it was already flaky. This closes that
-        # hole and aborts BEFORE any download/transcript/AI cost is spent,
-        # regardless of which path supplied `metadata["duration"]`.
-        plan = options.get("plan", "free")
-        if video_minutes_reserved <= 0:
-            ok, quota_msg, video_minutes_reserved = await db.reserve_video_minutes(
-                user_id, billable_seconds, plan,
-            )
-            if not ok:
-                logger.warning(f"[{job_id}] Video-minutes reservation failed: {quota_msg}")
-                await db.fail_job(job_id, quota_msg)
-                return  # `finally` below releases the credits reservation
-
-            # reserve_video_minutes CLAMPS to whatever's left rather than
-            # rejecting — shrink the window to match what was actually
-            # billed, so the AI never reads transcript past what's paid for.
-            reserved_seconds = video_minutes_reserved * 60
-            if reserved_seconds < billable_seconds - 0.5:  # float-safe "less than"
-                logger.info(f"[{job_id}] Video-minutes clamp: window shrunk to {reserved_seconds:.0f}s")
-                gateway_end = gateway_start + reserved_seconds
-                billable_seconds = reserved_seconds
-                is_full_video = False
-
-        # ── STEPS 3-4: Transcript + stream URL (concurrent) ───────
-        await db.update_job_progress(job_id, 5, "Reading transcript & connecting to stream...")
-        async with _step(job_id, "transcript + stream URL fetch"):
-            transcript, (stream_url, audio_url, user_agent) = await asyncio.gather(
-                get_transcript(video_id, language=language, session_id=job_id),
-                get_stream_urls(video_id, quality=quality, session_id=job_id),
-            )
-
-        # Restrict transcript to the gateway window — the AI only ever
-        # considers moments inside the user-selected range, so extracted
-        # clips naturally stay inside it too (no separate clamp needed).
-        if not is_full_video:
-            full_len = len(transcript)
-            transcript = [e for e in transcript if gateway_start <= e["start"] < gateway_end]
-            logger.info(f"[{job_id}] Gateway window: {len(transcript)}/{full_len} transcript entries kept")
-
-        # Free-tier cap: only feed GPT the first N minutes of WHATEVER
-        # window is in play (the gateway window above, or the full video if
-        # none was selected) — set in jobs.py via
-        # plan_limits.get_max_transcript_minutes_for_ai. Bounds AI cost per
-        # free-tier job regardless of video/window length. Clip extraction
-        # still uses the full window; this only limits which moments the
-        # AI is allowed to consider.
-        max_transcript_seconds = options.get("max_transcript_seconds")
-        if max_transcript_seconds is not None:
-            cutoff = gateway_start + max_transcript_seconds
-            full_len = len(transcript)
-            transcript = [e for e in transcript if e["start"] < cutoff]
-            logger.info(
-                f"[{job_id}] Free-tier transcript cap: {len(transcript)}/{full_len} "
-                f"entries kept (first {max_transcript_seconds // 60} min of the window)"
-            )
-
-        # ── STEP 5: AI finds viral moments ────────────────────────
-        await db.update_job_progress(job_id, 18, "AI analyzing best moments...")
-        async with _step(job_id, "AI viral-clip detection"):
-            timestamps = await find_viral_clips(transcript, options)
-
-        if not timestamps:
-            raise RuntimeError("AI found no suitable clip moments in this video")
-
-        logger.info(f"[{job_id}] AI found {len(timestamps)} clips")
-
-        # ── STEP 6: Download all clips in parallel via DASH ───────
-        # Each clip fetches only ~5-8 MB (its own byte range); sidx parsed once.
-        await db.update_job_progress(job_id, 25, f"Downloading {len(timestamps)} clips in parallel...")
-        clip_ranges = [(ts.start, ts.end) for ts in timestamps]
-        source_path = None
-        raw_clip_results = None
-
-        try:
-            from app.core.proxy import get_decodo_proxy
-            async with _step(job_id, f"DASH parallel download ({len(timestamps)} clips)"):
-                raw_clip_results = await download_all_clips_parallel(
-                    stream_url, clip_ranges, job_dir,
-                    audio_url=audio_url, user_agent=user_agent,
-                    proxy_url=get_decodo_proxy(job_id),   # Decodo ISP: fixed IP per job for DASH
-                    max_concurrent=5,
-                )
-        except Exception as dash_exc:
-            logger.warning(f"[{job_id}] DASH batch failed ({dash_exc}); falling back to full source")
-            await db.update_job_progress(job_id, 25, "Downloading source video (fallback)...")
-            async with _step(job_id, "full-source fallback download"):
-                source_path = await _get_source(stream_url, audio_url, user_agent, video_id, job_dir)
-
-        await db.update_job_progress(job_id, 33, f"Encoding {len(timestamps)} clips...")
-
-        total = len(timestamps)
-        clips_done = 0
-
-        # Adaptive per-job encode cap: if this is the ONLY job currently
-        # running on this instance, let it use the full global encode pool
-        # (MAX_CONCURRENT_ENCODES) — no slowdown for a solo user. As soon as
-        # a second job is sharing the instance, cap each job's own clips to
-        # 1 concurrent encode so one big job can't hold both global slots
-        # and starve the other job entirely (see extractor.py's job_semaphore
-        # param + _maybe()). Snapshot taken once here, not re-evaluated
-        # mid-job — good enough since the global semaphore is still the
-        # real backstop regardless of which snapshot a job started with.
-        job_cap = settings.MAX_CONCURRENT_ENCODES if _ACTIVE_JOBS_ON_INSTANCE <= 1 else 1
-        job_encode_semaphore = asyncio.Semaphore(job_cap)
-
-        async def _process_one_clip(i: int, ts: ClipTimestamp) -> dict:
-            nonlocal clips_done
-
-            # ── Trim raw clip ──────────────────────────────────────
-            # Downloader writes clip_{i:02d}_raw.mp4 — use a different
-            # name for the trimmed output so ffmpeg input ≠ output.
-            raw_clip_path = job_dir / f"clip_{i:02d}_trimmed.mp4"
-
-            # caption_base: the actual start of the trimmed clip content in
-            # original-video time. Always computed via probe_clip_start_offset
-            # on the FINAL trimmed file — both the DASH and full-source paths
-            # do a "-ss <offset> ... -c copy" seek that snaps to the nearest
-            # keyframe at-or-before the target, so the true start can land up
-            # to ~1 GOP earlier than the seek target. It is NOT simply
-            # actual_start_t (the pre-trim DASH file's own start) — that's the
-            # position BEFORE the seek even runs, off by the full ss_offset
-            # (often several seconds, not a sub-GOP amount), which silently
-            # desynced captions from the actual video/audio for every DASH clip.
-            caption_base: float = ts.start
-
-            async with _step(job_id, f"clip {i} trim"):
-                if raw_clip_results is not None:
-                    raw_path_dash, actual_start_t = raw_clip_results[i]
-                    ss_offset = max(0.0, ts.start - actual_start_t)
-                    duration  = ts.end - ts.start
-                    trim_cmd = [
-                        "ffmpeg", "-y",
-                        "-ss", str(ss_offset), "-i", str(raw_path_dash),
-                        "-t", str(duration), "-c", "copy",
-                        "-avoid_negative_ts", "make_zero",
-                        "-movflags", "+faststart",
-                        str(raw_clip_path),
-                    ]
-                    proc = await asyncio.create_subprocess_exec(
-                        *trim_cmd,
-                        stdout=asyncio.subprocess.DEVNULL,
-                        stderr=asyncio.subprocess.PIPE,
-                    )
-                    _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
-                    if proc.returncode != 0:
-                        raise RuntimeError(f"DASH trim failed: {stderr.decode(errors='ignore')[-300:]}")
-                    raw_path_dash.unlink(missing_ok=True)  # free disk: dash file no longer needed
-                    kf_offset = await probe_clip_start_offset(raw_clip_path, duration)
-                    caption_base = ts.start - kf_offset
-                else:
-                    raw_clip_path = await extract_clip(source_path, ts.start, ts.end, raw_clip_path)
-                    kf_offset = await probe_clip_start_offset(raw_clip_path, ts.end - ts.start)
-                    caption_base = ts.start - kf_offset
-
-            clip_id = str(uuid.uuid4())
-
-            # INSERT — placeholder row so the UPDATE below has a target row
-            # and the dashboard shows an "encoding" card immediately. No
-            # preview/source upload anymore (Phase 1 removed) — the card has
-            # no 360p preview video until the HD encode below finishes.
-            clip_data = {
-                "clip_id":            clip_id,
-                "job_id":             job_id,
-                "user_id":            user_id,
-                "video_url":          "",              # filled below
-                "thumbnail_url":      "",              # filled below
-                "raw_video_url":      "",              # filled below
-                "clip_ready":         False,
-                "duration":           ts.duration,
-                "start_time":         ts.start,
-                "end_time":           ts.end,
-                "transcript_snippet": ts.caption_preview,
-                "viral_score":        ts.viral_score,
-                "top_title":          ts.title_with_emoji,
-                "bottom_tag":         f"#{ts.title.lower().replace(' ', '')}",
-                "caption_style":      clip_style,
-                "ai_reason":          ts.reason,
-                "captions_data":      [],              # filled below
-                "editor_config":      {},
-            }
-            await db.insert_clip(clip_data)
-
-            # ════════════════════════════════════════════════════════
-            # Full encode → upload → UPDATE card to HD (Phase 1 removed —
-            # no preview generation, no source-clip GCS upload/delete)
-            # ════════════════════════════════════════════════════════
-            job_check = await db.get_job(job_id)
-            if job_check and job_check.get("status") == "cancelled":
-                raise RuntimeError(f"Job {job_id} cancelled")
-
-            # caption_base is actual clip content start (actual_start_t for DASH,
-            # ts.start for full-source).  All caption times are relative to it so
-            # they stay in sync with the clip's PTS-0 frame.
-            clip_actual_dur = ts.end - caption_base
-            captions = get_clip_captions(transcript, caption_base, ts.end)
-            async with _step(job_id, f"clip {i} silence+face detection"):
-                silences, (src_w, src_h, face_track) = await asyncio.gather(
-                    detect_silences(raw_clip_path),
-                    compute_face_track(raw_clip_path, clip_actual_dur),
-                )
-            # silences come from the trimmed clip (PTS relative to caption_base),
-            # captions are also relative to caption_base — time bases match.
-            if silences:
-                captions = clamp_captions_to_silence(captions, silences)
-            zoom_beats = _compute_zoom_beats(captions, clip_actual_dur)
-
-            async with _step(job_id, f"clip {i} reframe+caption encode"):
-                reframed_path, captioned_path = await reframe_and_caption(
-                    raw_clip_path,
-                    job_dir / f"clip_{i:02d}_vertical.mp4",
-                    job_dir / f"clip_{i:02d}_captioned.mp4",
-                    template=short_template, bar_color=bar_color,
-                    zoom_beats=zoom_beats, aspect=aspect,
-                    captions=captions, style=clip_style, color=color_combo,
-                    h_align=h_align, v_align=v_align, words_per_line=words_per_line,
-                    hook_title=(ts.title_with_emoji if hook_title_enabled else None),
-                    face_track=face_track, src_w=src_w, src_h=src_h,
-                    title_permanent=title_permanent, clip_duration=clip_actual_dur,
-                    font=font, title_color=title_color, title_bg=title_bg,
-                    title_bg_opacity=title_bg_opacity,
-                    job_semaphore=job_encode_semaphore,
-                )
-
-            # Generate thumbnail from final vertical clip
-            thumb_path = job_dir / f"clip_{i:02d}_thumb.jpg"
-            await generate_thumbnail(captioned_path, thumb_path)
-
-            async with _step(job_id, f"clip {i} phase2 upload"):
-                # Upload final + reframed + thumbnail concurrently
-                thumb_exists = thumb_path.exists() and thumb_path.stat().st_size > 0
-                upload_tasks = [
-                    upload_clip(captioned_path, job_id, clip_id),
-                    upload_raw_clip(reframed_path, job_id, clip_id),
-                    upload_thumbnail(thumb_path, job_id, clip_id) if thumb_exists else _empty_str(),
-                ]
-                final_url, raw_vertical_url, thumb_url = await asyncio.gather(*upload_tasks)
-
-            # UPDATE clip row → Realtime fires → card upgrades to HD vertical
-            await db.update_clip_final_url(
-                clip_id=clip_id,
-                video_url=final_url,
-                raw_video_url=raw_vertical_url,
-                thumbnail_url=thumb_url,
-                captions_data=captions_to_dict(captions),
-            )
-
-            clips_done += 1
-            pct = 33 + int(57 * clips_done / total)
-            await db.update_job_progress(job_id, pct, f"HD ready: {clips_done}/{total} clips encoded...")
-            logger.info(f"[{job_id}] Clip {i} HD live (clip_id={clip_id})")
-
-            # Clean up local temp files for this clip
-            for p in [raw_clip_path, captioned_path, reframed_path, thumb_path]:
-                p.unlink(missing_ok=True)
-
-            return {**clip_data, "video_url": final_url}
-
-        results = await asyncio.gather(
-            *[_process_one_clip(i, ts) for i, ts in enumerate(timestamps)],
-            return_exceptions=True,
-        )
-        uploaded_count = sum(1 for r in results if not isinstance(r, Exception))
-        for i, r in enumerate(results):
-            if isinstance(r, Exception):
-                logger.error(f"[{job_id}] Clip {i} failed: {r}")
-
-        if not uploaded_count:
-            raise RuntimeError("All clip extractions failed")
-
-        await db.update_job_progress(job_id, 90, "Finalizing...")
-        await db.complete_job(job_id, uploaded_count)
-
-        # Credits were already reserved atomically in jobs.py (one credit
-        # per clip REQUESTED — see reserve_credits). If fewer clips were
-        # actually delivered (some failed), refund the unused difference —
-        # video-minutes reservation IS the final bill as-is, since it's
-        # based on the fixed source-video duration, not clip count.
-        unused_credits = reserved_credits - uploaded_count
-        if unused_credits > 0:
-            await db.release_credits(user_id, unused_credits)
-
-        success = True
-        logger.info(
-            f"[{job_id}] ✅ Done: {uploaded_count}/{reserved_credits} clips delivered "
-            f"({video_minutes_reserved:.1f} min billed to user {user_id})"
-        )
-
-    finally:
-        if not success:
-            # Job failed/timed out before delivering anything billable —
-            # refund the FULL reservations rather than charging the user
-            # for a job that produced nothing.
-            if reserved_credits > 0:
-                await db.release_credits(user_id, reserved_credits)
-            if video_minutes_reserved > 0:
-                await db.release_video_minutes(user_id, video_minutes_reserved)
-        cleanup_job_files(job_dir)
-        _ACTIVE_JOBS_ON_INSTANCE = max(0, _ACTIVE_JOBS_ON_INSTANCE - 1)
-
-
-async def _empty_str() -> str:
-    return ""
+    # STAGE 2 — FFmpeg (DASH + encode + upload + complete)
+    await run_ffmpeg_stage(job_id)

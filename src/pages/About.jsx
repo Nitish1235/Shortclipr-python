@@ -10,7 +10,7 @@ const STATS = [
 ]
 
 const VALUES = [
-  { icon:'⚡', title:'Speed First',    desc:`We built our entire pipeline around one principle: if it takes more than 60 seconds, it's not fast enough. Our InnerTube API + parallel FFmpeg approach is 5x faster than any competitor.` },
+  { icon:'⚡', title:'Speed First',    desc:`We built our entire pipeline around one principle: minutes, not hours. Our InnerTube + parallel FFmpeg approach skips the full-video download step that slows most competitors down.` },
   { icon:'💸', title:'Fair Pricing',   desc:`No credit confusion. You pay per video, not per minute of source video. A 2-hour documentary costs the same as a 10-minute tutorial.` },
   { icon:'🎯', title:'User Control',   desc:`Your AI, your rules. Tell the AI exactly what to look for with topic/keyword search. No more blind-box clip selection — you define the strategy.` },
   { icon:'🔒', title:'No Watermarks', desc:`Even on the free plan. We don't hold your clips hostage. Try the full product, then decide if you need more.` },
@@ -29,7 +29,7 @@ export default function About() {
           <div className="legal-section">
             <h2>Our Mission</h2>
             <p>Long-form video is the most valuable content format on the internet. Podcasts, interviews, tutorials, documentaries — they contain hundreds of viral moments most creators never surface because manual editing is prohibitively time-consuming.</p>
-            <p>ShortClipr was built to fix this. Paste a YouTube URL. Get 10 viral-ready short clips in under 60 seconds. No editing skills required. No complicated software. No credit card for the first 3 videos.</p>
+            <p>ShortClipr was built to fix this. Paste a YouTube URL. Get 10 viral-ready short clips in minutes, not hours. No editing skills required. No complicated software. No credit card for the first 3 videos.</p>
           </div>
 
           <div className="about-stats">
@@ -46,11 +46,11 @@ export default function About() {
             <p>We studied every major competitor — OpusClip, Klap, WayinAI, Vidyo — and found the same problems everywhere:</p>
             <ul>
               <li>Credit systems no one understands (1 credit = 1 minute of source video? Really?)</li>
-              <li>2–5 minute processing windows long enough for users to give up and close the tab</li>
+              <li>Processing windows long enough for users to give up and close the tab</li>
               <li>AI that misses comedy, sarcasm, and nuance — picks the wrong moments</li>
               <li>Watermarks on free plans that make it impossible to actually test the product</li>
             </ul>
-            <p>We built ShortClipr as the answer to every one of these problems. Never downloads the full video → 5x faster. Per video pricing. No watermarks on free plan.</p>
+            <p>We built ShortClipr as the answer to every one of these problems. Never downloads the full video → much faster end-to-end. Per video pricing. No watermarks on free plan.</p>
           </div>
 
           <div className="legal-section">
