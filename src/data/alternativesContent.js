@@ -157,7 +157,7 @@ const alternativesContent = {
       'Looking for a Munch alternative? ShortClipr offers faster processing, per-video pricing instead of high monthly subscriptions, a watermark-free free plan, and more caption styles.',
     keywords:
       'munch alternative, munch ai alternative, alternative to munch, getmunch alternative, munch video alternative',
-    h1: 'A Munch Alternative That Doesn't Require an Enterprise Budget',
+    h1: 'A Munch Alternative That Doesn’t Require an Enterprise Budget',
     intro:
       'Munch targets marketing teams and agencies with a premium price tag to match. ShortClipr targets creators and lean teams who need the same core capability — find the best moments, reframe, caption, export — without the overhead of an enterprise subscription or per-minute credit burns.',
     rows: [
