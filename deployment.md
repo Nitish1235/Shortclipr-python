@@ -14,7 +14,7 @@ ShortClipr runs as **five** Cloud Run services now:
 | `shortclipr-api` | Auth, job CRUD, payments, webhooks | 1Gi / 1 vCPU / concurrency 40 / max 10 | See `backend/cloudbuild-api.yaml` |
 | `shortclipr-api-worker-{region}` | **API pipeline stage** — metadata, transcript, GPT viral-clip detection | 2Gi / 4 vCPU / concurrency 12 / max 5 per region | See `backend/cloudbuild-api-worker.yaml` |
 | `shortclipr-ffmpeg-worker-{region}` | **FFmpeg pipeline stage** — DASH download, reframe, caption encoding, upload | 8Gi / 4 vCPU / concurrency 2 / max 5 per region / `--no-cpu-throttling` | See `backend/cloudbuild-ffmpeg-worker.yaml` |
-| `shortclipr-watcher` | Job dispatcher (LISTEN/NOTIFY on Postgres) | 256Mi / 1 vCPU / min=1 / max=1 / `--no-cpu-throttling` | See `backend/watcher/Dockerfile` |
+| `shortclipr-watcher` | Job dispatcher (LISTEN/NOTIFY on Postgres) | 512Mi / 1 vCPU / min=1 / max=1 / `--no-cpu-throttling` | See `backend/cloudbuild-watcher.yaml` |
 
 **How they connect:**
 ```
@@ -180,7 +180,7 @@ gcloud builds submit --config=backend/cloudbuild-api-worker.yaml --substitutions
 
 ### 4.4 Deploy `shortclipr-watcher` (job dispatcher)
 
-Runs continuously (`min-instances=1`, `max-instances=1` — singleton), LISTENs on Postgres, dispatches jobs to workers. Uses a **separate small image** (256Mi, only asyncpg + httpx — no ffmpeg/opencv/openai/fastapi deps).
+Runs continuously (`min-instances=1`, `max-instances=1` — singleton), LISTENs on Postgres, dispatches jobs to workers. Uses a **separate small image** (512Mi — the minimum Cloud Run allows with `--no-cpu-throttling` — only asyncpg + httpx installed, no ffmpeg/opencv/openai/fastapi deps).
 
 1. **Cloud Run → Create Service** → **Continuously deploy from a repository** → same repo/branch.
 2. Build Configuration → **Cloud Build configuration file** → location `backend/cloudbuild-watcher.yaml`.

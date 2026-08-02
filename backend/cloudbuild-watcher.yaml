@@ -50,10 +50,14 @@ steps:
       - '--no-allow-unauthenticated'
 
       # ── Resources ────────────────────────────────────────────────────────
-      # Tiny — the watcher is 99% idle (waiting on LISTEN or sleeping between
-      # polls). 256Mi + 1 vCPU handles hundreds of dispatch calls/sec if needed.
+      # The watcher is 99% idle (waiting on LISTEN or sleeping between polls),
+      # so we'd love to run it at 256Mi — but Cloud Run's --no-cpu-throttling
+      # (aka "CPU always allocated") mode requires a MINIMUM of 512Mi memory.
+      # Trying to deploy with 256Mi + --no-cpu-throttling fails with:
+      #   "Total memory < 512 Mi is not supported with cpu always allocated"
+      # 512Mi is still a fraction of what the FFmpeg workers need.
       - '--memory'
-      - '256Mi'
+      - '512Mi'
       - '--cpu'
       - '1'
 
