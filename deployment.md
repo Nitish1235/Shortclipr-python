@@ -1,147 +1,350 @@
 # ShortClipr Deployment Guide (Manual Console UI)
 
-This guide provides step-by-step instructions for deploying ShortClipr to production manually using the Google Cloud Console, Supabase Dashboard, and Upstash Console. No CLI commands are required for deployment.
+Step-by-step for deploying ShortClipr to production using the Google Cloud Console, Supabase Dashboard, and Upstash Console. No CLI required.
 
-> **Architecture note**: ShortClipr runs as **three** Cloud Run services — `shortclipr-frontend` (static React/Vite bundle behind Nginx), `shortclipr-api` (FastAPI backend — auth, job CRUD, payments, webhooks; 1 vCPU/1Gi), and `shortclipr-worker` (same image as `shortclipr-api`, but 8 vCPU/8Gi/`--no-cpu-throttling` — runs the ffmpeg pipeline and clip re-renders, see `backend/cloudbuild-worker.yaml`). `shortclipr-api` dispatches heavy work to `shortclipr-worker` via direct fire-and-forget HTTP calls (`POST /jobs` → `/internal/pipeline/run`, `POST /editor/render` → `/internal/editor/render`), both gated on a shared `INTERNAL_TASK_SECRET` header (see `backend/app/api/internal.py`). Each `/internal/*` route returns immediately and continues the work via `asyncio.create_task()` — the worker's `--no-cpu-throttling` keeps it running after the response. If `WORKER_SERVICE_URL` is unset, `shortclipr-api` falls back to running everything in-process via `asyncio.create_task()` (single-service mode, original behavior). Auth is **not** Supabase Auth — the backend implements its own Google OAuth + JWT flow (`backend/app/api/auth.py`) and talks to Postgres directly via `asyncpg`/`SUPABASE_DB_URL`. Keep this in mind: you do not need `SUPABASE_URL`/`SUPABASE_ANON_KEY`/`SUPABASE_SERVICE_KEY`, and `auth.uid()`-based RLS policies will not work since rows aren't owned by Supabase Auth users.
+---
 
-## 1. Google Cloud Platform (GCP) Setup (Console)
+## Architecture overview (current)
+
+ShortClipr runs as **five** Cloud Run services now:
+
+| Service | Purpose | Resources | Notes |
+|---------|---------|-----------|-------|
+| `shortclipr-frontend` | React/Vite bundle behind Nginx | 256Mi / 1 vCPU / concurrency 80 / max 5 | See `cloudbuild-frontend.yaml` |
+| `shortclipr-api` | Auth, job CRUD, payments, webhooks | 1Gi / 1 vCPU / concurrency 40 / max 10 | See `backend/cloudbuild-api.yaml` |
+| `shortclipr-api-worker-{region}` | **API pipeline stage** — metadata, transcript, GPT viral-clip detection | 2Gi / 4 vCPU / concurrency 12 / max 5 per region | See `backend/cloudbuild-api-worker.yaml` |
+| `shortclipr-ffmpeg-worker-{region}` | **FFmpeg pipeline stage** — DASH download, reframe, caption encoding, upload | 8Gi / 4 vCPU / concurrency 2 / max 5 per region / `--no-cpu-throttling` | See `backend/cloudbuild-ffmpeg-worker.yaml` |
+| `shortclipr-watcher` | Job dispatcher (LISTEN/NOTIFY on Postgres) | 256Mi / 1 vCPU / min=1 / max=1 / `--no-cpu-throttling` | See `backend/watcher/Dockerfile` |
+
+**How they connect:**
+```
+POST /jobs  ──►  shortclipr-api  ──►  Postgres INSERT status='created', pipeline_stage='api'
+                                      + pg_notify('new_job')
+                                              │
+                                              ▼
+                                    shortclipr-watcher (LISTEN)
+                                              │
+                            ┌─────────────────┴─────────────────┐
+                            ▼                                   ▼
+        POST /internal/api-stage/run              POST /internal/ffmpeg-stage/run
+        (to shortclipr-api-worker)                (to shortclipr-ffmpeg-worker)
+                    │                                             │
+                    ▼                                             ▼
+         Runs steps 1-5 (metadata,                  Runs steps 6-8 (DASH download,
+         transcript, GPT viral clips)               encode, upload, complete)
+                    │                                             │
+                    ▼                                             │
+         Postgres: status='api_done',                             │
+         writes ffmpeg_payload JSONB.                             │
+         Trigger fires pg_notify('api_done')                      │
+                    │                                             │
+                    └────────────────► watcher ───────────────────┘
+```
+
+**Job status flow:**
+```
+created  →  api_processing  →  api_done  →  ffmpeg_processing  →  completed / failed
+```
+
+**Backward compatibility:** if you don't set `API_WORKER_URLS` + `FFMPEG_WORKER_URLS`, the API service falls back to running BOTH stages in-process via `asyncio.create_task()` (unified single-service mode — good for local dev). The old `WORKER_SERVICE_URLS` env still works for legacy unified-worker deployments — the watcher auto-detects mode.
+
+Auth is **not** Supabase Auth — the backend implements its own Google OAuth + JWT flow (`backend/app/api/auth.py`) and talks to Postgres directly via `asyncpg` / `SUPABASE_DB_URL`. You do not need `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_KEY`.
+
+---
+
+## 1. Google Cloud Platform (GCP) Setup
 
 ### 1.1 Project & APIs
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
-2. Create a new project (e.g., `shortclipr-prod`) from the project selector dropdown at the top.
-3. In the search bar, search for and enable the following APIs:
-   - **Cloud Run API**
-   - **Cloud Build API**
-   - **Artifact Registry API**
-   - **Secret Manager API**
-   - **Cloud Storage API**
+2. Create a new project (e.g., `shortclipr-prod`).
+3. Enable the following APIs (search bar):
+   - Cloud Run API
+   - Cloud Build API
+   - Artifact Registry API
+   - Secret Manager API
+   - Cloud Storage API
 
 ### 1.2 Storage Bucket
-1. Navigate to **Cloud Storage > Buckets** in the left menu.
-2. Click **Create**. Name it (e.g., `shortclipr-clips`), choose a region (match your Cloud Run region, e.g. `us-central1`), and leave other settings as default.
-3. Once created, go to the **Permissions** tab of the bucket.
-4. Click **Grant Access**. Add principal `allUsers` and assign the role **Storage Object Viewer** — clips are served via public URLs (`GCS_PUBLIC_BASE_URL`) directly to the dashboard/export flows.
-5. *(Optional cost safety-net)* Go to the **Lifecycle** tab and add a rule to delete objects older than e.g. 30-60 days. Note: the backend already deletes a job's clips/thumbnails from GCS the moment a user deletes that job (`delete_job_from_gcs` in `app/pipeline/uploader.py`), so a lifecycle rule is just a backstop for orphaned objects, not the primary cleanup mechanism — don't set it shorter than your expected user retention window.
+1. **Cloud Storage → Buckets → Create**. Name it (e.g., `shortclipr-clips`), region = same as Cloud Run (e.g. `us-central1`).
+2. **Permissions** tab → **Grant Access** → principal `allUsers`, role **Storage Object Viewer**. Clips serve via public URLs.
+3. *(Optional cost safety-net)* **Lifecycle** tab → add a rule to delete objects older than **≥ 30 days** so it never fires inside your app's own retention window.
+
+   > **IMPORTANT** — the app's UI retention is now **15 days** (see [Dashboard.jsx](src/pages/Dashboard.jsx) `CLIP_RETENTION_MS`). **DO NOT set the GCS lifecycle rule shorter than 15 days** — the DB rows would still exist while GCS files are gone, producing broken cards. And critically, GCS lifecycle rules ignore the `clips.is_showcased` flag, so a too-aggressive rule will delete *showcase-protected* clips too. **30-60 days is the sane range** for a safety-net rule; leave it off entirely if you're not concerned about orphaned storage.
 
 ### 1.3 Service Account & Secrets
-1. Navigate to **IAM & Admin > Service Accounts**.
-2. Click **Create Service Account** (e.g., `shortclipr-sa`).
-3. Grant it the roles: **Storage Object Admin** and **Secret Manager Secret Accessor**.
-4. Attach this service account to the `shortclipr-api` Cloud Run service (Edit Revision → Security → Service account). No `GOOGLE_APPLICATION_CREDENTIALS` JSON key is needed — Cloud Run uses the attached service account automatically for GCS access.
-5. To add secrets (API keys, DB URL, proxy credentials, etc.), go to **Security > Secret Manager**, click **Create Secret**, paste your values, and ensure the service account has the **Secret Manager Secret Accessor** role.
+1. **IAM & Admin → Service Accounts → Create Service Account** (e.g., `shortclipr-sa`).
+2. Grant roles: **Storage Object Admin** + **Secret Manager Secret Accessor**.
+3. Attach it to each Cloud Run service (Edit Revision → Security → Service account). No `GOOGLE_APPLICATION_CREDENTIALS` JSON key is needed.
+4. Add secrets: **Security → Secret Manager → Create Secret** for `SUPABASE_DB_URL`, `JWT_SECRET`, `INTERNAL_TASK_SECRET`, `OPENAI_API_KEY`, `DODO_PAYMENTS_API_KEY`, `DODO_PAYMENTS_WEBHOOK_SECRET`, `UPSTASH_REDIS_TOKEN`, `PROXYSELLER_USER`, `PROXYSELLER_PASS`.
 
 ---
 
 ## 2. Database Setup (Supabase Dashboard)
 
-### 2.1 Run the schema migration
-1. Log into your [Supabase Dashboard](https://supabase.com/dashboard) and create a project.
-2. Go to the **SQL Editor**.
-3. Open `backend/migrations/001_init_schema.sql` from the repo and run its full contents. It is **idempotent** (`CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` + backfill `UPDATE`s), so it's safe to re-run if you ever need to reconcile an existing database with a newer version of the schema.
-4. This single script creates/updates all three tables and their columns:
-   - `users` — profile, plan, credits (`credits_used`/`credits_limit`), video-bandwidth quota (`video_minutes_used`/`video_minutes_limit`), `credits_reset_at`, `social_tokens` (JSONB — for the backend-only YouTube publish flow), etc.
-   - `jobs` — video processing state and progress.
-   - `clips` — generated clip metadata, including `viral_score`.
-   It also creates the supporting indexes (`idx_jobs_user_status`, `idx_clips_viral_score`, `idx_users_plan`, etc.).
-5. The plan → quota mapping (credits + monthly video-hours per tier) lives in `backend/app/core/plan_limits.py` — that's the single source of truth; the migration only sets sane defaults/backfills.
+### 2.1 Run migrations in order
+1. Log into [Supabase](https://supabase.com/dashboard) → your project → **SQL Editor**.
+2. Run each migration in order (all are idempotent — safe to re-run):
+   - `backend/migrations/001_init_schema.sql` — base `users` / `jobs` / `clips` tables
+   - `backend/migrations/002_job_reservations.sql` — atomic credit + minute reservations
+   - `backend/migrations/003_remove_phase1_preview.sql` — removes obsolete preview columns
+   - `backend/migrations/004_pgboss_queue.sql` — Postgres-backed queue (replaced Cloud Tasks)
+   - `backend/migrations/005_split_workers.sql` — split API + FFmpeg worker columns
+   - `backend/migrations/006_clip_retention.sql` — showcase-protection flag for clips
 
-### 2.2 Row Level Security (RLS)
-**Skip this.** ShortClipr does not use Supabase Auth — users authenticate via our own Google OAuth + JWT flow, and the backend connects to Postgres with the full `SUPABASE_DB_URL` connection string (not the Supabase client SDK / `anon` key). `auth.uid()` resolves to nothing in this setup, so RLS policies built around it would either silently block all access or do nothing useful. Access control is enforced entirely at the FastAPI layer (JWT-authenticated routes + `ADMIN_EMAILS` allowlist for admin endpoints — see `backend/app/api/admin.py`).
+3. Skip Supabase Row Level Security — not applicable to our JWT/direct-connection setup. Access is enforced at the FastAPI layer.
 
-If you want defense-in-depth at the DB level, you would need to issue a dedicated low-privilege Postgres role to the backend and write policies against your own JWT claims — this is **not** currently implemented and is out of scope for a default deployment.
+### 2.2 Plan / quota reference
+The plan → quota table lives in `backend/app/core/plan_limits.py` — that's the single source of truth. Current pricing:
 
----
-
-## 3. Artifact Registry Setup (Required for Cloud Build)
-
-Before deploying anything, create a Docker repository to store your container images:
-1. Navigate to **Artifact Registry** in the Google Cloud Console.
-2. Click **+ CREATE REPOSITORY**.
-3. **Name**: `cloud-run-source-deploy`
-4. **Format**: Docker
-5. **Location**: Region `us-central1` (or your preferred region — must match the region used in `backend/cloudbuild-api.yaml` and `cloudbuild-frontend.yaml`).
-6. Click **Create**.
+| Plan | Price | Shorts / mo | Video hours / mo | Max per single video |
+|------|-------|-------------|------------------|----------------------|
+| Free | $0 | 3 | 30 min | 30 min |
+| starter_100 | $10 | 75 | 5 hrs | 2 hrs |
+| starter_250 | $25 | 200 | 10 hrs | 2 hrs |
+| pro_500 | $45 | 400 | 18 hrs | 3 hrs |
+| pro_1000 | $79 | 800 | 35 hrs | 3 hrs |
+| pro_2000 | $145 | 1500 | 60 hrs | 3 hrs |
 
 ---
 
-## 4. Backend Deployment (Cloud Run Console)
+## 3. Artifact Registry (one-time)
 
-*Assumption: Your code is hosted on GitHub.*
+1. **Artifact Registry → + CREATE REPOSITORY**
+2. **Name**: `cloud-run-source-deploy`, **Format**: Docker, **Location**: `us-central1`.
 
-### 4.1 Deploy the API service
-1. In Google Cloud Console, navigate to **Cloud Run**.
-2. Click **Create Service**.
-3. Select **Continuously deploy from a repository** and click **Setup Cloud Build**.
-4. Connect your GitHub repository and select the `main` branch.
-5. In the Build Configuration, select **Cloud Build configuration file (yaml or json)**.
-6. Set the location to `backend/cloudbuild-api.yaml` and click **Save**.
-   - This config builds the Docker image (multi-stage, FFmpeg + Python deps baked in — see `backend/Dockerfile`), pushes both a `$COMMIT_SHA` and `latest` tag to Artifact Registry, and deploys to Cloud Run with **1024Mi memory, 1 vCPU, 300s timeout, concurrency 40, min-instances 0 / max-instances 10**. This service is I/O-bound only (auth, job CRUD, payments, webhooks, metadata) — all ffmpeg work is dispatched to `shortclipr-worker` (see section 4.2 below).
-7. Set the service name to `shortclipr-api` and region to `us-central1` (must match your Artifact Registry region).
-8. Under **Authentication**, choose **Allow unauthenticated invocations** (the frontend and Dodo webhooks both need to reach it directly; auth is handled per-route via JWT inside the app).
-9. Expand **Container, Networking, Security** → **Variables & Secrets** and add every backend environment variable. Use `backend/.env.example` as your checklist — at minimum:
-   - `APP_ENV=production` (this also disables the `/testing` debug router — it only mounts when `APP_ENV == "development"`)
-   - `ADMIN_EMAILS`, `FRONTEND_URL`, `SUPABASE_DB_URL` (Secret), `JWT_SECRET` (Secret)
-   - `UPSTASH_REDIS_URL` / `UPSTASH_REDIS_TOKEN` (Secret)
+---
+
+## 4. Backend Deployment
+
+### 4.1 Deploy `shortclipr-api`
+1. **Cloud Run → Create Service** → **Continuously deploy from a repository** → connect GitHub → `main` branch.
+2. Build Configuration → **Cloud Build configuration file** → location `backend/cloudbuild-api.yaml`.
+3. Service name `shortclipr-api`, region `us-central1`, **Allow unauthenticated invocations**.
+4. Environment variables (add via **Variables & Secrets**):
+   - `APP_ENV=production`
+   - `ADMIN_EMAILS`, `FRONTEND_URL`
+   - `SUPABASE_DB_URL` (Secret), `JWT_SECRET` (Secret)
+   - `UPSTASH_REDIS_URL`, `UPSTASH_REDIS_TOKEN` (Secret)
    - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (Secret), `SOCIAL_REDIRECT_URI`
-   - `OPENAI_API_KEY` (Secret), `OPENAI_MODEL`
+   - `OPENAI_API_KEY` (Secret) — the model itself is pinned in `backend/app/pipeline/ai_clipper.py` (`CLIP_MODEL = "gpt-5-nano"`) — **no `OPENAI_MODEL` env var anymore**
    - `GCS_BUCKET_NAME`, `GCS_PUBLIC_BASE_URL`
    - `INNERTUBE_API_KEY`, `INNERTUBE_API_BASE`
-   - `PROXY_HOST`, `PROXY_USER` (Secret), `PROXY_PASS` (Secret), `PROXY_PORTS` — residential proxy used for InnerTube/stream resolution. The pipeline only routes the actual FFmpeg *download* through this proxy when the signed CDN URL is cryptographically IP-bound to it (see `_url_is_ip_bound` in `app/pipeline/extractor.py`); otherwise it downloads directly from the Cloud Run instance's IP to minimize proxy bandwidth costs.
-   - `DODO_PAYMENTS_API_KEY` (Secret), `DODO_PAYMENTS_WEBHOOK_SECRET` (Secret), and all five product IDs: `DODO_PRODUCT_STARTER_100`, `DODO_PRODUCT_STARTER_250`, `DODO_PRODUCT_PRO_500`, `DODO_PRODUCT_PRO_1000`, `DODO_PRODUCT_PRO_2000`
+   - `PROXYSELLER_USER` (Secret), `PROXYSELLER_PASS` (Secret), `PROXYSELLER_PROXIES` — residential proxy for DASH downloads
+   - `DODO_PAYMENTS_API_KEY` (Secret), `DODO_PAYMENTS_WEBHOOK_SECRET` (Secret), and all five product IDs: `DODO_PRODUCT_STARTER_100/250` + `DODO_PRODUCT_PRO_500/1000/2000`
    - `MAX_CONCURRENT_CLIPS`, `MAX_CONCURRENT_JOBS_PER_USER`
-   - **Worker dispatch** (new — see 4.2): `WORKER_SERVICE_URL` (the `shortclipr-worker` URL from step 4.2), `INTERNAL_TASK_SECRET` (Secret — any random string, must match the same value on `shortclipr-worker`)
-10. Attach the `shortclipr-sa` service account from step 1.3 (grants GCS access without a credentials file).
-11. Click **Create**. Cloud Run will build and deploy your API using the configuration file.
+   - **Worker dispatch** — set these to activate split-worker mode (leave empty for single-service in-process mode):
+     - `API_WORKER_URLS` — comma-separated URLs of the deployed API worker services
+     - `API_WORKER_REGIONS` — comma-separated region names, same count/order
+     - `FFMPEG_WORKER_URLS` — comma-separated URLs of the deployed FFmpeg worker services
+     - `FFMPEG_WORKER_REGIONS` — comma-separated region names, same count/order
+   - `INTERNAL_TASK_SECRET` (Secret) — random string, must match every worker + the watcher
+5. Attach `shortclipr-sa` service account.
+6. Click **Create**.
 
-### 4.2 Deploy the worker service
+### 4.2 Deploy API workers (light — metadata / transcript / GPT)
 
-`shortclipr-worker` runs the same image as `shortclipr-api` but sized for ffmpeg, and is only ever called internally via a direct fire-and-forget HTTP call from the API — it has no end-user-facing routes.
+**One deployment per region** — but the API stage is I/O bound and cheap, so **1 region is fine** unless you're seeing latency issues.
 
-1. In **Cloud Run**, click **Create Service** → **Continuously deploy from a repository** → same GitHub repo/branch as the API.
-2. Build Configuration: **Cloud Build configuration file**, location `backend/cloudbuild-worker.yaml`.
-   - Deploys with **8192Mi memory, 8 vCPU, `--cpu-boost --no-cpu-throttling`, 1200s timeout, concurrency 5, min-instances 0 / max-instances 2** (capped at 2 by the same `us-central1` CPU quota that affects the API — see `backend/cloudbuild-worker.yaml` comments).
-3. Service name `shortclipr-worker`, region `us-central1`.
-4. Under **Authentication**, choose **Allow unauthenticated invocations** — the `/internal/*` routes are gated by the `INTERNAL_TASK_SECRET` header instead of IAM.
-5. Add **all the same environment variables as `shortclipr-api`** (step 4.1.9) — the worker runs the full pipeline and needs the same DB/GCS/proxy/OpenAI/etc. config. Set `INTERNAL_TASK_SECRET` to the **same value** as on `shortclipr-api`. `WORKER_SERVICE_URL` is not needed on the worker itself (only the API uses it to dispatch).
-6. Attach the `shortclipr-sa` service account (same as the API).
-7. Click **Create**. Once deployed, copy its URL and set it as `WORKER_SERVICE_URL` on `shortclipr-api` (step 4.1.9), then redeploy/update the API service so the new env var takes effect.
+1. **Cloud Run → Create Service** → same GitHub repo, `main` branch.
+2. Build Configuration → **Cloud Build configuration file** → `backend/cloudbuild-api-worker.yaml`.
+3. Service name `shortclipr-api-worker-us-central1` (or whatever region you're deploying to), region `us-central1`.
+4. **Allow unauthenticated invocations** — `/internal/*` routes are gated by `X-Internal-Secret` header.
+5. **Add all the same env vars as `shortclipr-api`** (this service runs the same Docker image and needs full DB/OpenAI/etc. config). `INTERNAL_TASK_SECRET` **must match** the API + watcher.
+6. Attach `shortclipr-sa`.
+7. Click **Create**. Copy the resulting URL — you'll need it for the watcher + API `API_WORKER_URLS`.
 
-> If `WORKER_SERVICE_URL` is left unset on `shortclipr-api`, it falls back to running the pipeline in-process via `asyncio.create_task()` (single-service mode) — useful for local dev, but on the right-sized 1 vCPU/1Gi API service this will be slow/throttled in production.
+Deploy per additional region if needed:
+```
+gcloud builds submit --config=backend/cloudbuild-api-worker.yaml --substitutions=_REGION=europe-west1
+```
+
+**Capacity math**: 5 max-instances × 12 concurrency = 60 concurrent API jobs per region.
+
+### 4.3 Deploy FFmpeg workers (heavy — DASH + encode + upload)
+
+**Deploy in ≥ 2 regions** since this is the throughput bottleneck. Recommended: `us-central1` + `europe-west1`.
+
+1. **Cloud Run → Create Service** → same repo/branch.
+2. Build Configuration → **Cloud Build configuration file** → `backend/cloudbuild-ffmpeg-worker.yaml`.
+3. Service name `shortclipr-ffmpeg-worker-us-central1` (per region), region `us-central1`.
+4. **Allow unauthenticated invocations** — `/internal/*` gated on secret.
+5. **Add all the same env vars as `shortclipr-api`**. `INTERNAL_TASK_SECRET` must match.
+6. Attach `shortclipr-sa`.
+7. Click **Create**. Copy URL.
+8. Repeat for each additional region via CLI:
+   ```
+   gcloud builds submit --config=backend/cloudbuild-ffmpeg-worker.yaml --substitutions=_REGION=europe-west1
+   ```
+
+**Capacity math**: 5 max-instances × 2 concurrency = 10 concurrent FFmpeg jobs per region. 2 regions → **20 concurrent max**.
+
+### 4.4 Deploy `shortclipr-watcher` (job dispatcher)
+
+Runs continuously (`min-instances=1`), LISTENs on Postgres, dispatches jobs to workers.
+
+1. **Cloud Run → Create Service** → **Continuously deploy from a repository** → same repo/branch.
+2. **Cloud Build configuration file** — currently there's no dedicated cloudbuild.yaml for the watcher; deploy manually via gcloud once, then rely on redeploys:
+   ```
+   gcloud run deploy shortclipr-watcher \
+     --source ./backend \
+     --dockerfile ./backend/watcher/Dockerfile \
+     --region us-central1 \
+     --cpu 1 --memory 256Mi \
+     --min-instances 1 --max-instances 1 \
+     --no-cpu-throttling \
+     --no-allow-unauthenticated
+   ```
+3. Environment variables:
+   - `SUPABASE_DB_URL` (Secret)
+   - `INTERNAL_TASK_SECRET` (Secret) — same value used everywhere else
+   - `API_WORKER_URLS`, `API_WORKER_REGIONS` — from step 4.2
+   - `FFMPEG_WORKER_URLS`, `FFMPEG_WORKER_REGIONS` — from step 4.3
+   - `API_REGION_SOFT_CAP` — default 12
+   - `FFMPEG_REGION_SOFT_CAP` — default 2
+   - `RECONCILE_STUCK_MINUTES` — default 10
+   - `WATCHER_POLL_INTERVAL` — default 15 (seconds)
+   - `LOG_LEVEL=INFO`
+4. Attach `shortclipr-sa`.
+5. **After deploy, wire back**: go back to `shortclipr-api` env vars and set `API_WORKER_URLS`, `API_WORKER_REGIONS`, `FFMPEG_WORKER_URLS`, `FFMPEG_WORKER_REGIONS` (same values as watcher) → **Deploy new revision** so the API knows to insert jobs with `status='created'` (split-worker mode) instead of running in-process.
+
+> If both `API_WORKER_URLS` and `FFMPEG_WORKER_URLS` are unset on `shortclipr-api`, it runs the pipeline in-process via `asyncio.create_task()` (single-service mode). Good for local dev; slow on the 1 vCPU / 1Gi API sizing in prod.
 
 ---
 
-## 5. Frontend Deployment (Cloud Run Console)
+## 5. Frontend Deployment
 
-We deploy the React frontend to Cloud Run using a lightweight Nginx container (see `nginx.conf` — gzip, security headers, SPA routing, immutable caching for hashed JS/CSS, and a `/health` endpoint) to serve the static Vite build.
+Same as before — React/Vite bundle behind Nginx.
 
-1. In Google Cloud Console, navigate to **Cloud Run**.
-2. Click **Create Service**.
-3. Select **Continuously deploy from a repository** and click **Setup Cloud Build**.
-4. Connect your GitHub repository and select the `main` branch.
-5. In the Build Configuration, select **Cloud Build configuration file (yaml or json)**.
-6. Set the location to `cloudbuild-frontend.yaml` and click **Save**.
-   - This config builds the image with the Vite `--build-arg` substitutions baked in, pushes `$COMMIT_SHA` + `latest` tags, and deploys with `--platform managed --memory 256Mi --cpu 1 --concurrency 80 --min-instances 0 --max-instances 5`.
-7. Set the service name to `shortclipr-frontend` and region to `us-central1`.
-8. Under **Authentication**, choose **Allow unauthenticated invocations**.
-9. Click **Create** (this first build will likely fail until you set the substitution variables below — that's expected; just re-run the trigger afterward).
-
-### 5.1 Configuring Frontend Build Variables
-Because Vite bakes environment variables into the static bundle at **build time**, you must add them as **Substitution Variables** on the Cloud Build trigger — not as Cloud Run runtime variables (those would have no effect on the compiled bundle).
-
-1. Go to **Cloud Build > Triggers**.
-2. Click the `shortclipr-frontend` trigger to edit it.
-3. Scroll down to **Advanced > Substitution variables**.
-4. Add the following (exactly as written, including the leading underscore — these map to the `--build-arg` flags in `cloudbuild-frontend.yaml`):
-   - `_VITE_API_URL` → `https://<YOUR-API-CLOUD-RUN-URL>`
-   - `_VITE_GOOGLE_CLIENT_ID` → `your-google-client-id.apps.googleusercontent.com`
-   - `_VITE_DODO_MODE` → `test` (or `live`)
-5. Click **Save**, then click **Run** to rebuild the frontend with the real values injected.
+1. **Cloud Run → Create Service** → **Continuously deploy from a repository** → connect GitHub → `main` branch.
+2. Build Configuration → `cloudbuild-frontend.yaml`. Service name `shortclipr-frontend`, region `us-central1`.
+3. **Allow unauthenticated invocations**. Click Create.
+4. **Configure Vite build vars** (baked in at build time, so they MUST be Cloud Build substitutions — not Cloud Run runtime vars):
+   - **Cloud Build → Triggers → edit `shortclipr-frontend` trigger → Advanced → Substitution variables**:
+     - `_VITE_API_URL` → `https://<YOUR-API-CLOUD-RUN-URL>`
+     - `_VITE_GOOGLE_CLIENT_ID` → `your-google-client-id.apps.googleusercontent.com`
+     - `_VITE_DODO_MODE` → `test` or `live`
+5. Save → click **Run** to rebuild with real values.
 
 ---
 
 ## 6. Post-Deployment Configuration
-1. **Google OAuth**: Go to GCP **APIs & Services > Credentials**. Update your OAuth Client ID's **Authorized JavaScript origins** and **Authorized redirect URIs** to include your production frontend domain *and* the backend's `SOCIAL_REDIRECT_URI` callback path (`/social/auth/youtube/callback`) if/when you re-enable YouTube publishing in the UI (the backend support is intact — only the frontend entry points are currently hidden, see `src/pages/Dashboard.jsx`).
-2. **Webhooks**: Go to your Dodo Payments dashboard and set the webhook URL to `https://<YOUR_CLOUD_RUN_API_URL>/webhooks/dodo`. This is what drives plan upgrades/downgrades — `_handle_payment_succeeded` / `_handle_downgrade` in `backend/app/api/webhooks.py` set both `credits_limit` and `video_minutes_limit` from `app/core/plan_limits.py` based on the Dodo product ID in `DODO_PLAN_MAP`.
-3. **CORS**: The allowed origins are defined directly in `backend/app/main.py` (`http://localhost:3000`, `http://localhost:5173`, `https://shortclipr.com`, `https://www.shortclipr.com`, `https://app.shortclipr.com`), plus whatever you set as `FRONTEND_URL` in the API's environment variables (appended dynamically at startup). Make sure your real production frontend domain is covered by one of these — either it matches the hardcoded list, or you set `FRONTEND_URL` to it — *before* you push to GitHub and trigger a deploy.
-4. **Admin access**: Set `ADMIN_EMAILS` (comma-separated Google account emails) on the API service to grant access to admin-only endpoints (`backend/app/api/admin.py`).
-5. **Smoke test**: Hit `https://<frontend-url>/health` and `https://<api-url>/docs` (FastAPI auto-docs) to confirm both services are live, then run through the Google login → submit a YouTube URL → clip generation flow end-to-end with a short test video before announcing the launch.
+
+1. **Google OAuth**: **APIs & Services → Credentials**. Add your production frontend origin + backend's `SOCIAL_REDIRECT_URI` callback path.
+2. **Dodo Webhooks**: In your Dodo Payments dashboard, set webhook URL to `https://<YOUR_CLOUD_RUN_API_URL>/webhooks/dodo`.
+3. **CORS**: `backend/app/main.py` has a static allowlist. Set `FRONTEND_URL` on the API to your prod domain if it's not in the list.
+4. **Admin access**: Set `ADMIN_EMAILS` (comma-separated) on the API to grant `/admin/*` endpoint access.
+5. **Smoke test**: `https://<frontend-url>/health` + `https://<api-url>/docs`, then a full Google login → YouTube URL → clip generation flow.
+
+---
+
+## 7. What Changed (Migration Guide for Existing Deployments)
+
+If you already have ShortClipr running on the OLD architecture (single `shortclipr-worker`), here's the exact sequence to migrate to the new split-worker + retention/showcase changes.
+
+### 7.1 One-time DB migration
+Run in Supabase SQL Editor (idempotent — safe if any partially applied):
+```sql
+-- Run each in order
+-- backend/migrations/004_pgboss_queue.sql   (if not already applied)
+-- backend/migrations/005_split_workers.sql
+-- backend/migrations/006_clip_retention.sql
+```
+
+Verify with:
+```sql
+-- Should show pipeline_stage, target_api_region, target_ffmpeg_region, ffmpeg_payload
+\d jobs
+
+-- Should show is_showcased
+\d clips
+```
+
+### 7.2 Deploy the two new workers + watcher
+Follow **section 4.2 (API workers)**, **4.3 (FFmpeg workers)**, and **4.4 (watcher)** above.
+
+### 7.3 Cut over the API service
+On `shortclipr-api`:
+1. **Add** env vars: `API_WORKER_URLS`, `API_WORKER_REGIONS`, `FFMPEG_WORKER_URLS`, `FFMPEG_WORKER_REGIONS`.
+2. **Remove** (or leave as-is — they're just ignored now): `WORKER_SERVICE_URL`, `WORKER_SERVICE_URLS`, `OPENAI_MODEL`, `GCP_PROJECT_ID`, `WORKER_QUEUE_NAMES`, `WORKER_QUEUE_REGIONS`.
+3. **Redeploy**. New jobs will insert with `pipeline_stage='api'` and go through the watcher.
+
+### 7.4 Drain and delete the old unified worker
+1. Wait until no jobs are running against `shortclipr-worker` (check Cloud Run metrics for request activity).
+2. Delete `shortclipr-worker-us-central1` (and per-region copies) from Cloud Run.
+3. Delete the `shortclipr-worker` trigger in Cloud Build if you no longer need it.
+4. Delete `backend/cloudbuild-worker.yaml` if you want — it's marked deprecated in the header but harmless if kept.
+
+### 7.5 Frontend retention window change
+No env var — the change is baked into the JS bundle. Just **redeploy the frontend** to pick up the 24h → 15 days rollover in [Dashboard.jsx](src/pages/Dashboard.jsx) + [ClipsHistory.jsx](src/pages/ClipsHistory.jsx). Existing clips stay visible in the UI longer automatically.
+
+**If you have a GCS Lifecycle rule set to < 15 days** (Section 1.2 step 3): **change it** to ≥ 30 days OR remove it. Otherwise the frontend will show clips whose GCS files were already deleted → broken video cards.
+
+### 7.6 Verify the showcase protection is live
+1. As an admin (email in `ADMIN_EMAILS`), pick any clip and add it to the showcase from `/admin` UI.
+2. Verify in Supabase:
+   ```sql
+   SELECT clip_id, is_showcased FROM clips WHERE clip_id = '<the-clip-id>';
+   -- should return is_showcased = true
+   ```
+3. As the user who owns that clip, try deleting the parent job.
+4. Verify the showcased clip **still exists** in the `clips` table AND the GCS file at `clips/{job_id}/{clip_id}.mp4` still resolves.
+5. Non-showcased clips of the same job should be gone.
+
+### 7.7 GPT model change
+The model is now pinned at `gpt-5-nano` in [backend/app/pipeline/ai_clipper.py:43](backend/app/pipeline/ai_clipper.py:43) (`CLIP_MODEL`). To switch models later, edit that constant and redeploy the API worker — **no env var override on purpose**, since a model swap can affect prompt tuning and cost accounting.
+
+Verify the new model is being used by hitting `/docs` on a worker instance or checking the API-worker logs for a line like:
+```
+gpt-5-nano request — 400 entries, 10 chunks, want 10 clips
+```
+
+### 7.8 Rollback plan (if something breaks)
+- **Split workers acting up?** On `shortclipr-api`, unset `API_WORKER_URLS` + `FFMPEG_WORKER_URLS` and redeploy. It falls back to in-process unified pipeline. Existing `status='created'` / `api_done` jobs get picked up by the watcher (if still running) or the manual reconciliation endpoint `POST /internal/reconcile-stuck-jobs`.
+- **Watcher acting up?** Watcher self-restarts on crash; if truly stuck, restart the service in Cloud Run. Manual fallback: hit `POST /internal/reconcile-stuck-jobs` on `shortclipr-api` to sweep stuck jobs and refund users.
+- **Migration 006 broken?** Revert with `ALTER TABLE clips DROP COLUMN is_showcased;` — the delete-path code guards against missing rows (returns empty list from `get_showcased_clip_ids_for_job` if column is missing? No — this would crash. Only revert with the code deployed on a matching revision).
+
+---
+
+## 8. Ongoing Operations
+
+### 8.1 Where things live
+| Concern | Location |
+|---------|----------|
+| Plan limits (credits / minutes per plan) | `backend/app/core/plan_limits.py` |
+| GPT model | `backend/app/pipeline/ai_clipper.py` (`CLIP_MODEL` constant) |
+| Prompt tuning | `backend/app/pipeline/ai_clipper.py` (`_CHUNK_SYSTEM_PROMPT`) |
+| Duration flex tolerance | `backend/app/pipeline/ai_clipper.py` (`END_SNAP_TOLERANCE`) |
+| Clip retention (frontend) | `src/pages/Dashboard.jsx` (`CLIP_RETENTION_MS`) + `src/pages/ClipsHistory.jsx` |
+| Worker soft caps | Watcher env vars: `API_REGION_SOFT_CAP` / `FFMPEG_REGION_SOFT_CAP` |
+| Stuck-job reconciliation window | `RECONCILE_STUCK_MINUTES` on watcher, `RECONCILE_STUCK_JOB_MINUTES` on API |
+
+### 8.2 Common ops tasks
+
+**Change a plan's clip count**: edit `backend/app/core/plan_limits.py` → redeploy API + all workers → also update the matching entries in `src/components/Pricing.jsx` + `src/pages/Billing.jsx` and rebuild the frontend.
+
+**Change the FFmpeg concurrency**: edit `backend/cloudbuild-ffmpeg-worker.yaml` (`--concurrency`), match `FFMPEG_REGION_SOFT_CAP` on the watcher, redeploy both. Higher = more contention per instance but more throughput; sweet spot is 2 on 4 vCPU / 8Gi.
+
+**Increase clip retention**: edit `CLIP_RETENTION_MS` in `src/pages/Dashboard.jsx` and `RETENTION_MS` in `src/pages/ClipsHistory.jsx` → rebuild frontend. Also confirm the GCS Lifecycle rule (if any) is looser than the new value.
+
+**Add a new region for FFmpeg**: deploy `shortclipr-ffmpeg-worker-{new-region}` via cloudbuild-ffmpeg-worker.yaml, append its URL + region to `FFMPEG_WORKER_URLS` + `FFMPEG_WORKER_REGIONS` on both `shortclipr-api` AND `shortclipr-watcher`, redeploy both.
+
+### 8.3 Monitoring what to watch
+
+- **Cloud Run → shortclipr-watcher → Logs**: look for `Watcher starting (SPLIT MODE)` on cold start, then periodic `Poll: dispatched N job(s)` and `Reconciled N stuck job(s)` lines.
+- **Cloud Run → shortclipr-ffmpeg-worker-* → CPU utilization**: if pegged at 100% for hours = time to add another region or bump max-instances.
+- **Postgres query for backlog**:
+  ```sql
+  SELECT status, pipeline_stage, count(*)
+  FROM jobs
+  WHERE status NOT IN ('completed', 'failed', 'cancelled')
+  GROUP BY status, pipeline_stage
+  ORDER BY 3 DESC;
+  ```
+  If you see many `api_done` rows piling up = FFmpeg workers are the bottleneck. If many `created` = API workers can't keep up (unlikely at 60 concurrent slots).
+- **Alert on stuck jobs**:
+  ```sql
+  SELECT count(*) FROM jobs
+  WHERE status IN ('created','api_processing','api_done','ffmpeg_processing')
+    AND created_at < NOW() - INTERVAL '30 minutes';
+  ```
+  Anything > 0 means the reconciliation loop isn't catching everything — check watcher logs.
