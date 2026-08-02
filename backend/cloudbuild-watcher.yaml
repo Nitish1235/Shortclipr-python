@@ -1,0 +1,86 @@
+substitutions:
+  # Watcher is a SINGLETON — one instance globally, no per-region copies.
+  # It coordinates dispatch across ALL worker regions from one place, so
+  # putting it in the region closest to the primary DB (Supabase) is fine.
+  _REGION: 'us-central1'
+
+steps:
+  # ── 1. Build image ──────────────────────────────────────────────────────────
+  # Build context = ./backend so the Dockerfile can COPY watcher/requirements.txt
+  # + watcher/ into the image. Uses backend/watcher/Dockerfile which is small
+  # (only asyncpg + httpx installed — no ffmpeg/opencv/openai deps).
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'backend/watcher/Dockerfile'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-watcher:$COMMIT_SHA'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-watcher:latest'
+      - './backend'
+
+  # ── 2. Push both tags to Artifact Registry ─────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-watcher'
+
+  # ── 3. Deploy to Cloud Run ──────────────────────────────────────────────────
+  # shortclipr-watcher — LISTEN/NOTIFY consumer + dispatcher.
+  # Never receives inbound HTTP — no need for --allow-unauthenticated.
+  # Uses --no-cpu-throttling so the LISTEN connection stays alive between
+  # notifications (throttled CPU would drop the socket during idle periods).
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'shortclipr-watcher'
+      - '--image'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-watcher:$COMMIT_SHA'
+      - '--region'
+      - '$_REGION'
+      - '--platform'
+      - 'managed'
+      # No inbound HTTP — but Cloud Run REQUIRES either --allow-unauthenticated
+      # or IAM auth. Use --no-allow-unauthenticated to block public traffic;
+      # the service still runs its background loop regardless of inbound reqs.
+      - '--no-allow-unauthenticated'
+
+      # ── Resources ────────────────────────────────────────────────────────
+      # Tiny — the watcher is 99% idle (waiting on LISTEN or sleeping between
+      # polls). 256Mi + 1 vCPU handles hundreds of dispatch calls/sec if needed.
+      - '--memory'
+      - '256Mi'
+      - '--cpu'
+      - '1'
+
+      # Keep the LISTEN socket + Postgres connection pool alive between
+      # notifications. Without this, Cloud Run throttles CPU to ~5% when idle
+      # and the asyncpg pool drops connections silently.
+      - '--no-cpu-throttling'
+
+      # ── Scaling ──────────────────────────────────────────────────────────
+      # SINGLETON: exactly one instance always running. Two instances would
+      # both try to claim jobs from the same queue — the FOR UPDATE SKIP LOCKED
+      # in dispatcher.py prevents double-dispatch, but running two watchers
+      # doubles the LISTEN load on Postgres for zero benefit.
+      - '--min-instances'
+      - '1'
+      - '--max-instances'
+      - '1'
+
+      # Concurrency = 1 (only ever one request in flight — internal loop, not
+      # request-driven). Timeout doesn't really apply since there's no
+      # inbound request to time out; keep at default.
+      - '--concurrency'
+      - '1'
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-watcher:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-watcher:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

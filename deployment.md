@@ -180,21 +180,12 @@ gcloud builds submit --config=backend/cloudbuild-api-worker.yaml --substitutions
 
 ### 4.4 Deploy `shortclipr-watcher` (job dispatcher)
 
-Runs continuously (`min-instances=1`), LISTENs on Postgres, dispatches jobs to workers.
+Runs continuously (`min-instances=1`, `max-instances=1` — singleton), LISTENs on Postgres, dispatches jobs to workers. Uses a **separate small image** (256Mi, only asyncpg + httpx — no ffmpeg/opencv/openai/fastapi deps).
 
 1. **Cloud Run → Create Service** → **Continuously deploy from a repository** → same repo/branch.
-2. **Cloud Build configuration file** — currently there's no dedicated cloudbuild.yaml for the watcher; deploy manually via gcloud once, then rely on redeploys:
-   ```
-   gcloud run deploy shortclipr-watcher \
-     --source ./backend \
-     --dockerfile ./backend/watcher/Dockerfile \
-     --region us-central1 \
-     --cpu 1 --memory 256Mi \
-     --min-instances 1 --max-instances 1 \
-     --no-cpu-throttling \
-     --no-allow-unauthenticated
-   ```
-3. Environment variables:
+2. Build Configuration → **Cloud Build configuration file** → location `backend/cloudbuild-watcher.yaml`.
+3. Service name `shortclipr-watcher`, region `us-central1`, **DO NOT** allow unauthenticated invocations (the watcher receives no inbound HTTP — it only makes outbound calls to workers).
+4. Environment variables:
    - `SUPABASE_DB_URL` (Secret)
    - `INTERNAL_TASK_SECRET` (Secret) — same value used everywhere else
    - `API_WORKER_URLS`, `API_WORKER_REGIONS` — from step 4.2
@@ -204,8 +195,11 @@ Runs continuously (`min-instances=1`), LISTENs on Postgres, dispatches jobs to w
    - `RECONCILE_STUCK_MINUTES` — default 10
    - `WATCHER_POLL_INTERVAL` — default 15 (seconds)
    - `LOG_LEVEL=INFO`
-4. Attach `shortclipr-sa`.
-5. **After deploy, wire back**: go back to `shortclipr-api` env vars and set `API_WORKER_URLS`, `API_WORKER_REGIONS`, `FFMPEG_WORKER_URLS`, `FFMPEG_WORKER_REGIONS` (same values as watcher) → **Deploy new revision** so the API knows to insert jobs with `status='created'` (split-worker mode) instead of running in-process.
+5. Attach `shortclipr-sa` service account.
+6. Click **Create**.
+7. **After deploy, wire back**: go back to `shortclipr-api` env vars and set `API_WORKER_URLS`, `API_WORKER_REGIONS`, `FFMPEG_WORKER_URLS`, `FFMPEG_WORKER_REGIONS` (same values as watcher) → **Deploy new revision** so the API knows to insert jobs with `status='created'` (split-worker mode) instead of running in-process.
+
+> **Watcher does NOT need** all the env vars from `shortclipr-api`. It runs a minimal image (asyncpg + httpx only — see `backend/cloudbuild-watcher.yaml`) — no OpenAI, no proxy, no GCS, no OAuth, no Dodo, no Redis. Just DB + worker URLs + shared secret.
 
 > If both `API_WORKER_URLS` and `FFMPEG_WORKER_URLS` are unset on `shortclipr-api`, it runs the pipeline in-process via `asyncio.create_task()` (single-service mode). Good for local dev; slow on the 1 vCPU / 1Gi API sizing in prod.
 
