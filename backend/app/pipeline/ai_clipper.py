@@ -44,7 +44,7 @@ CLIP_MODEL = "gpt-5-nano"
 
 # Built-in SDK retry handles 429 + 5xx — connection errors need our own retry.
 # http_client=None lets httpx use system env (no proxy) — OpenAI must NOT go
-# through the Decodo residential proxy; it's YouTube-specific.
+# through the Proxy-Seller ISP proxy; it's YouTube-specific.
 import httpx as _httpx
 _client = AsyncOpenAI(
     api_key=settings.OPENAI_API_KEY,

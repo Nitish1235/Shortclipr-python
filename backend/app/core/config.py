@@ -135,14 +135,15 @@ class Settings(BaseSettings):
     DATAIMPULSE_USER: str = ""   # login from DataImpulse dashboard
     DATAIMPULSE_PASS: str = ""   # password from DataImpulse dashboard
 
-    # ── Decodo ISP dedicated — DASH segment downloads only ────────
-    # Fixed IP per port: port = location. Used for DASH downloads so the
-    # CDN byte-range requests share a stable IP within a job.
-    # Avoid port 10002 (LonConnect IP flagged by YouTube CDN).
-    DECODO_HOST: str = "isp.decodo.com"
-    DECODO_USER: str = "sp87mxq9dm"
-    DECODO_PASS: str = ""
-    DECODO_PORTS: str = "10001,10003,10004,10005,10006,10007,10008,10009,10010"
+    # ── Proxy-Seller ISP dedicated — DASH segment downloads only ─
+    # 10 static ISP proxies, each a distinct IP. Used for DASH downloads so
+    # CDN byte-range requests share a stable IP within a job (chosen via
+    # MD5(session_id) % len(pool) for deterministic per-job routing).
+    # Format: comma-separated "host:port" pairs, e.g.
+    #   "1.2.3.4:10000,5.6.7.8:10000,..."
+    PROXYSELLER_USER: str = ""
+    PROXYSELLER_PASS: str = ""
+    PROXYSELLER_PROXIES: str = ""   # comma-separated host:port pairs (10 ISP IPs)
 
     # ── Legacy proxy-cheap (kept for fallback / admin test lab) ───
     PROXY_HOST: str = ""
@@ -150,7 +151,6 @@ class Settings(BaseSettings):
     PROXY_PASS: str = ""
     PROXY_PORT: int = 8080
     PROXY_PORTS: str = ""
-    DECODO_PORT_COUNTRIES: str = ""  # unused — ISP ports don't need geo-suffix
 
 
 @lru_cache

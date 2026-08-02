@@ -7,7 +7,7 @@ Never exposed in production.
 Two endpoints:
   GET  /testing        — HTML UI
   POST /testing/debug  — single client audit
-  POST /testing/decodo — all-clients sweep via proxy
+  POST /testing/sweep — all-clients sweep via proxy
 """
 
 import asyncio

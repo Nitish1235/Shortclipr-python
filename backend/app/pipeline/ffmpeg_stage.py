@@ -31,7 +31,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from app.core.config import get_settings
-from app.core.proxy import get_decodo_proxy
+from app.core.proxy import get_proxyseller_proxy
 from app.db import supabase as db
 from app.pipeline.ai_clipper import ClipTimestamp
 from app.pipeline.captions import (
@@ -372,7 +372,7 @@ async def _dash_download_with_refresh(
         return await download_all_clips_parallel(
             stream_url, clip_ranges, job_dir,
             audio_url=audio_url, user_agent=user_agent,
-            proxy_url=get_decodo_proxy(job_id),
+            proxy_url=get_proxyseller_proxy(job_id),
             max_concurrent=5,
         )
     except Exception as exc:
@@ -391,7 +391,7 @@ async def _dash_download_with_refresh(
         return await download_all_clips_parallel(
             stream_url, clip_ranges, job_dir,
             audio_url=audio_url, user_agent=user_agent,
-            proxy_url=get_decodo_proxy(job_id),
+            proxy_url=get_proxyseller_proxy(job_id),
             max_concurrent=5,
         )
 

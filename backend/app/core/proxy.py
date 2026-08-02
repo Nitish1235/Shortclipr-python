@@ -1,17 +1,14 @@
 """
-proxy.py — Proxy URL helper for proxy-cheap residential proxies.
+proxy.py — Proxy URL helpers.
 
-PROXY_HOST, PROXY_USER, PROXY_PASS, PROXY_PORT, PROXY_PORTS are read from config/env.
-PROXY_PASS may include a `_country-XX` suffix (e.g. `..._country-GB`) for
-proxy-cheap's documented geo-targeting. proxy-cheap's rotating residential
-endpoint does NOT support `_session-<id>` stickiness — confirmed via testing
-(returns HTTP 500). True sticky sessions require separate dashboard-issued
-credentials, not a user-composable password suffix.
+Three providers:
+  • Proxy-Seller ISP  — 10 static ISP IPs, used for DASH segment downloads.
+                        Chosen deterministically via MD5(session_id) % pool
+                        so all byte-range requests within one job share an IP.
+  • DataImpulse       — rotating residential, used for transcript + stream URLs.
+  • proxy-cheap       — legacy, kept for fallback / admin test lab only.
 
-When session_id is provided and PROXY_PORT is unset, it is used only to pick
-a port deterministically from PROXY_PORTS (stable routing within a job).
-
-Returns None when no proxy is configured (dev mode).
+Returns None when the relevant provider is not configured (dev mode).
 """
 
 import contextvars
@@ -26,17 +23,17 @@ from app.core.config import get_settings
 _logger = logging.getLogger(__name__)
 
 # Selects which proxy provider get_proxy_url() returns for the current
-# async task (and any tasks it spawns). Defaults to proxy-cheap (production
-# user pipeline). The admin/test pipeline switches this to "decodo" for the
-# duration of a test run via use_decodo_proxy().
+# async task (and any tasks it spawns). Defaults to proxy-cheap (legacy /
+# admin test lab). The admin/test pipeline switches this to "proxyseller"
+# for the duration of a test run via use_proxyseller_proxy().
 _proxy_provider: contextvars.ContextVar[str] = contextvars.ContextVar(
     "proxy_provider", default="proxycheap"
 )
 
 
-def use_decodo_proxy() -> None:
-    """Switch the current task (and children) to the Decodo proxy pool."""
-    _proxy_provider.set("decodo")
+def use_proxyseller_proxy() -> None:
+    """Switch the current task (and children) to the Proxy-Seller ISP pool."""
+    _proxy_provider.set("proxyseller")
 
 def validate_proxy_env() -> None:
     """
@@ -56,49 +53,43 @@ def validate_proxy_env() -> None:
 
 
 
-def _parse_port_countries(spec: str) -> dict[int, str]:
-    """Parse 'port:country,port:country,...' → {port: country}."""
-    result: dict[int, str] = {}
-    for pair in spec.split(","):
-        pair = pair.strip()
-        if not pair or ":" not in pair:
+def _parse_proxyseller_list(spec: str) -> list[tuple[str, int]]:
+    """Parse 'host:port,host:port,...' → [(host, port), ...]."""
+    result: list[tuple[str, int]] = []
+    for entry in spec.split(","):
+        entry = entry.strip()
+        if not entry:
             continue
-        port_str, country = pair.split(":", 1)
-        port_str, country = port_str.strip(), country.strip()
-        if port_str.isdigit() and country:
-            result[int(port_str)] = country
+        parts = entry.rsplit(":", 1)
+        if len(parts) == 2 and parts[1].isdigit():
+            result.append((parts[0].strip(), int(parts[1])))
     return result
 
 
-def _get_decodo_proxy_url(session_id: str | None = None) -> str:
+def _get_proxyseller_proxy_url(session_id: str | None = None) -> str:
     """
-    Return a Decodo proxy URL, picking a port from DECODO_PORTS.
+    Return a Proxy-Seller ISP proxy URL chosen from the 10-proxy pool.
 
-    Each dedicated ISP port has a fixed IP tied to a specific country —
-    DECODO_PORT_COUNTRIES maps port -> country, and the username becomes
-    "{DECODO_USER}-country-{country}" for that port.
-
-    If session_id is provided, the port is chosen deterministically from the
-    MD5 hash of session_id, ensuring stable routing within the same job.
+    Each entry in PROXYSELLER_PROXIES is a distinct static ISP IP (host:port).
+    When session_id is provided the proxy is chosen deterministically via
+    MD5(session_id) % pool_size so all DASH byte-range requests within one
+    job route through the same IP.
     """
     s = get_settings()
-    host = s.DECODO_HOST.strip()
-    base_user = s.DECODO_USER.strip()
-    password = quote_plus(s.DECODO_PASS.strip())
+    proxies = _parse_proxyseller_list(s.PROXYSELLER_PROXIES)
+    if not proxies:
+        raise ValueError("[proxy.py] PROXYSELLER_PROXIES is empty — cannot build Proxy-Seller URL")
 
-    ports = _parse_ports(s.DECODO_PORTS) or [10001]
     if session_id:
-        hash_val = int(hashlib.md5(session_id.encode()).hexdigest(), 16)
-        port = ports[hash_val % len(ports)]
+        idx = int(hashlib.md5(session_id.encode()).hexdigest(), 16) % len(proxies)
     else:
-        port = random.choice(ports)
+        idx = random.randrange(len(proxies))
 
-    port_countries = _parse_port_countries(s.DECODO_PORT_COUNTRIES)
-    country = port_countries.get(port)
-    user = f"{base_user}-country-{country}" if country else base_user
-    user = quote_plus(user)
+    host, port = proxies[idx]
+    user = quote_plus(s.PROXYSELLER_USER.strip())
+    password = quote_plus(s.PROXYSELLER_PASS.strip())
 
-    _logger.info(f"[proxy.py] Loaded Decodo proxy settings — host: {host}, user: {user}, port: {port}")
+    _logger.info(f"[proxy.py] Proxy-Seller ISP — {host}:{port} (pool idx {idx}/{len(proxies)})")
     return f"http://{user}:{password}@{host}:{port}"
 
 
@@ -139,30 +130,30 @@ def get_dataimpulse_proxy(purpose: str = "req") -> str | None:
     return f"http://{user}:{pw}@{host}:{port}"
 
 
-def get_decodo_proxy(session_id: str | None = None) -> str | None:
+def get_proxyseller_proxy(session_id: str | None = None) -> str | None:
     """
-    Decodo ISP dedicated proxy — use ONLY for DASH segment downloads.
+    Proxy-Seller ISP dedicated proxy — use ONLY for DASH segment downloads.
 
-    Each port maps to a fixed IP (port = location). The port is chosen
-    deterministically from the pool using MD5(session_id) so all DASH
-    byte-range requests within one job use the same IP.
+    Each pool entry is a distinct static IP. The entry is chosen
+    deterministically via MD5(session_id) so all DASH byte-range requests
+    within one job use the same IP.
 
-    Returns None if DECODO_USER/DECODO_PASS are not configured.
+    Returns None if PROXYSELLER_USER/PASS/PROXIES are not configured.
     """
     s = get_settings()
-    if not s.DECODO_USER or not s.DECODO_PASS:
-        _logger.warning("[proxy.py] Decodo ISP not configured — DASH downloads running without proxy")
+    proxies = _parse_proxyseller_list(s.PROXYSELLER_PROXIES)
+    if not s.PROXYSELLER_USER or not s.PROXYSELLER_PASS or not proxies:
+        _logger.warning("[proxy.py] Proxy-Seller ISP not configured — DASH downloads running without proxy")
         return None
-    host  = s.DECODO_HOST.strip()
-    user  = quote_plus(s.DECODO_USER.strip())
-    pw    = quote_plus(s.DECODO_PASS.strip())
-    ports = _parse_ports(s.DECODO_PORTS) or [10001]
+    user = quote_plus(s.PROXYSELLER_USER.strip())
+    pw   = quote_plus(s.PROXYSELLER_PASS.strip())
     if session_id:
-        port = ports[int(hashlib.md5(session_id.encode()).hexdigest(), 16) % len(ports)]
+        idx = int(hashlib.md5(session_id.encode()).hexdigest(), 16) % len(proxies)
     else:
-        port = ports[0]
+        idx = 0
+    host, port = proxies[idx]
     safe_pw = f"{pw[:3]}...{pw[-2:]} (len={len(pw)})" if len(pw) > 5 else f"len={len(pw)}"
-    _logger.info(f"[proxy.py] Decodo ISP — {host}:{port} user={user} pass={safe_pw}")
+    _logger.info(f"[proxy.py] Proxy-Seller ISP — {host}:{port} user={user} pass={safe_pw}")
     return f"http://{user}:{pw}@{host}:{port}"
 
 
@@ -175,8 +166,8 @@ def get_proxy_url(session_id: str | None = None) -> str | None:
     deterministically based on the MD5 hash of the session_id from PROXY_PORTS,
     ensuring stable routing within the same job.
     """
-    if _proxy_provider.get() == "decodo":
-        return _get_decodo_proxy_url(session_id)
+    if _proxy_provider.get() == "proxyseller":
+        return _get_proxyseller_proxy_url(session_id)
 
     s = get_settings()
 
