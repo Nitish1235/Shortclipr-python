@@ -141,6 +141,46 @@ The plan → quota table lives in `backend/app/core/plan_limits.py` — that's t
 5. Attach `shortclipr-sa` service account.
 6. Click **Create**.
 
+### 4.1b Cross-project split (workers in a separate GCP project)
+
+Cloud Run's default per-project **service limit is 5**. This app needs 4 services in the main project (`frontend`, `api`, `watcher`, plus one worker) — leaving no room to also host both worker types plus future regions. The split below keeps the main project small and moves both worker types into a dedicated **Project B**.
+
+**Layout:**
+- **Project A** (main): `shortclipr-frontend`, `shortclipr-api`, `shortclipr-watcher`
+- **Project B** (workers): `shortclipr-api-worker-{region}`, `shortclipr-ffmpeg-worker-{region}` (one of each per region)
+
+**Why this works with zero code changes:** the watcher dispatches to workers via public HTTPS URLs (`API_WORKER_URLS` / `FFMPEG_WORKER_URLS`) and authenticates with a shared `INTERNAL_TASK_SECRET` header — no VPC connector, no IAM handshake between services. Cross-project calls behave identically to same-project calls. `$PROJECT_ID` in the cloudbuild files auto-resolves to whichever project the trigger runs in.
+
+**One-time Project B setup:**
+
+1. **Create the project** (`shortclipr-workers` or similar). Link billing.
+
+2. **Enable APIs** in Project B: Cloud Run API, Cloud Build API, Artifact Registry API, Secret Manager API.
+
+3. **Artifact Registry** in Project B → create repository `cloud-run-source-deploy` (Docker, `us-central1`) — same name as Project A, but a distinct project-scoped repo.
+
+4. **Service account** in Project B (e.g. `shortclipr-workers-sa`). Grant it **Secret Manager Secret Accessor** on Project B's own secrets (created in step 6 below).
+
+5. **Cross-project bucket access.** The GCS bucket (`shortclipr-clips`) lives in Project A. In Project A → **Cloud Storage → Buckets → shortclipr-clips → Permissions → Grant Access**, add the Project B service account email as **Storage Object Admin**. Bucket IAM isn't project-locked, only bucket-locked, so this grant is all that's needed.
+
+6. **Secrets in Project B.** Duplicate these secrets into Project B's Secret Manager (simplest — avoids cross-project IAM on secrets):
+   - `SUPABASE_DB_URL` — same connection string as Project A
+   - `INTERNAL_TASK_SECRET` — **must be byte-identical** to Project A's value
+   - `OPENAI_API_KEY`
+   - `PROXYSELLER_USER`, `PROXYSELLER_PASS`
+   - `DATAIMPULSE_USER`, `DATAIMPULSE_PASS`
+   - `JWT_SECRET` — the workers don't verify user JWTs, but the same env schema is loaded on boot, so keep the var set to avoid pydantic warnings (any string is fine).
+
+   (Alternative — grant Project B's SA `Secret Manager Secret Accessor` on Project A's secrets and reference them by full resource path `projects/<PROJECT_A_ID>/secrets/<NAME>/versions/latest` when wiring env vars via `gcloud run deploy --update-secrets`. Simpler to just duplicate for a small secret set.)
+
+7. **Cloud Build trigger** in Project B → connect the same GitHub repo, `main` branch. Two triggers, one each for `backend/cloudbuild-api-worker.yaml` and `backend/cloudbuild-ffmpeg-worker.yaml`. The `$PROJECT_ID` in those yaml files resolves to Project B automatically.
+
+Once Project B is set up, deploy the workers exactly as in §4.2 / §4.3 below — but attach `shortclipr-workers-sa` (Project B's SA) instead of `shortclipr-sa`.
+
+**Wiring back in Project A:** copy the Project B worker URLs and paste them into `API_WORKER_URLS` / `FFMPEG_WORKER_URLS` on both `shortclipr-api` and `shortclipr-watcher` in Project A. Redeploy both.
+
+**Cost/latency notes:** cross-project HTTPS goes over the public internet, not Google's internal backbone. The watcher→worker payloads are tiny JSON (a few KB per dispatch), so latency impact is negligible. All heavy bytes (YouTube DASH downloads, GCS uploads) still travel worker↔external endpoints directly and never transit Project A. Egress from Project B → Project A GCS is same-region intra-Google traffic and is not charged as internet egress.
+
 ### 4.2 Deploy API workers (light — metadata / transcript / GPT)
 
 **One deployment per region** — but the API stage is I/O bound and cheap, so **1 region is fine** unless you're seeing latency issues.
