@@ -407,10 +407,11 @@ async def _call_gpt(system: str, user: str) -> str:
             response = await _client.chat.completions.create(
                 model=CLIP_MODEL,
                 messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user",   "content": user},
+                    {"role": "developer", "content": system},
+                    {"role": "user",      "content": user},
                 ],
-                max_completion_tokens=1024,
+                reasoning_effort="low",
+                max_completion_tokens=4096,
                 response_format={"type": "json_object"},
             )
             choice = response.choices[0]
