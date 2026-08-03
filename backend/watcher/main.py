@@ -15,9 +15,9 @@ and drains only the legacy queue.
 """
 
 import asyncio
+import json
 import logging
 import time
-from http import HTTPStatus
 
 import asyncpg
 
@@ -39,6 +39,15 @@ _last_reconcile: float = 0.0
 RECONCILE_INTERVAL = 60.0
 
 
+async def _init_connection(conn: asyncpg.Connection) -> None:
+    """Decode jsonb columns (queue_payload) to dicts instead of raw strings —
+    without this, httpx.post(json=payload) double-encodes the string and the
+    worker's Pydantic body validation rejects it with 422."""
+    await conn.set_type_codec(
+        "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog",
+    )
+
+
 async def _ensure_pool() -> asyncpg.Pool:
     global _pool
     if _pool is not None:
@@ -54,6 +63,7 @@ async def _ensure_pool() -> asyncpg.Pool:
                 command_timeout=30,
                 statement_cache_size=0,
                 ssl="require",
+                init=_init_connection,
             )
             logger.info("DB pool ready")
             return _pool

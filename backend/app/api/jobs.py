@@ -331,7 +331,12 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
     # ── 5. Insert job row + dispatch ──────────────────────────
     job_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    multi_region = has_multi_region_workers()
+    # has_multi_region_workers() only reflects the legacy WORKER_SERVICE_URLS
+    # pool (it's scoped to editor.py/admin.py's separate render-dispatch use).
+    # Split-worker mode is driven by API_WORKER_URLS + FFMPEG_WORKER_URLS —
+    # check those directly so job creation matches what the watcher does.
+    split_worker_mode = bool(settings.API_WORKER_URLS.strip() or settings.FFMPEG_WORKER_URLS.strip())
+    multi_region = split_worker_mode or has_multi_region_workers()
     initial_status = "created" if multi_region else "processing"
 
     # In split-worker mode, jobs always enter at the API stage. In
