@@ -54,7 +54,7 @@ import tempfile
 from pathlib import Path
 
 from app.core.config import get_settings
-from app.core.proxy import get_dataimpulse_proxy
+from app.core.proxy import get_youtube_proxy
 from app.pipeline.captions import (
     Caption, build_ass_content, compute_hook_duration, _hook_position, _safe_upper,
 )
@@ -338,20 +338,18 @@ async def _get_source(
     user_agent: str | None,
     video_id: str | None,
     job_dir: Path,
+    proxy_url: str | None = None,
 ) -> Path:
     """
     Resolve a local copy of the full source video — routed through
-    DataImpulse (the SAME provider get_stream_urls() used to mint
-    `stream_url`/`audio_url` in stream.py — was previously routed through
-    the unrelated proxy-cheap pool via get_proxy_url(), which could 403/
-    return empty on IP-bound CDN URLs signed against a DataImpulse exit IP).
+    the caller's proxy (Proxy-Seller ISP in production, same IP that
+    resolved the stream URL so IP-bound CDN URLs work).
 
     Tries a parallel ranged HTTP download first (fast). If the CDN URL
     doesn't support Range requests or otherwise fails, falls back to the
     existing sequential chain: proxied ffmpeg download -> yt-dlp.
     """
     source_path = job_dir / "source.mp4"
-    proxy_url = get_dataimpulse_proxy(purpose="source-download")
 
     try:
         return await download_source_parallel(
@@ -379,6 +377,7 @@ async def get_clip_via_dash(
     audio_url: str | None = None,
     user_agent: str | None = None,
     session_id: str | None = None,
+    proxy_url: str | None = None,
 ) -> Path:
     """
     Download and extract a single clip [start, end] using the DASH sidx approach —
@@ -393,7 +392,8 @@ async def get_clip_via_dash(
     Falls back to RuntimeError on any sidx parse or fetch failure — callers
     should catch and fall back to _get_source + extract_clip.
     """
-    proxy_url = get_dataimpulse_proxy(purpose="dash-clip")  # same provider that minted stream_url (see _get_source)
+    if not proxy_url:
+        proxy_url = get_youtube_proxy(session_id=session_id, purpose="dash-clip")
     raw_path  = output_path.with_suffix(".dash_raw.mp4")
 
     try:

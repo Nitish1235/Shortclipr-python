@@ -179,7 +179,7 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
                     video_id, quality=quality, session_id=job_id,
                 )
             async with _step(job_id, "full-source fallback download"):
-                source_path = await _get_source(stream_url, audio_url, user_agent, video_id, job_dir)
+                source_path = await _get_source(stream_url, audio_url, user_agent, video_id, job_dir, proxy_url=get_proxyseller_proxy(job_id))
 
         await db.update_job_progress(job_id, 33, f"Encoding {len(timestamps)} clips...")
 

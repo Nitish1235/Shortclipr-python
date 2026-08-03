@@ -93,27 +93,33 @@ def _get_proxyseller_proxy_url(session_id: str | None = None) -> str:
     return f"http://{user}:{password}@{host}:{port}"
 
 
+def get_youtube_proxy(session_id: str | None = None, purpose: str = "req") -> str | None:
+    """
+    Return the best available proxy for YouTube requests (transcript + stream).
+
+    Priority: Proxy-Seller ISP (static, stable, less likely to be blocked)
+    → DataImpulse rotating residential (fallback if Proxy-Seller not configured).
+
+    When session_id is provided and Proxy-Seller is available, the proxy is
+    chosen deterministically via MD5(session_id) % pool_size — same IP for
+    the entire job across API stage (transcript/stream) and FFmpeg stage
+    (DASH downloads). This avoids IP-bound URL mismatches.
+
+    When falling back to DataImpulse, each call gets a fresh random sessid
+    (= fresh IP) since DataImpulse IPs are rotating residential.
+    """
+    s = get_settings()
+    proxies = _parse_proxyseller_list(s.PROXYSELLER_PROXIES)
+    if s.PROXYSELLER_USER and s.PROXYSELLER_PASS and proxies:
+        return get_proxyseller_proxy(session_id)
+    return get_dataimpulse_proxy(purpose=purpose)
+
+
 def get_dataimpulse_proxy(purpose: str = "req") -> str | None:
     """
-    DataImpulse rotating residential proxy — use for transcript + stream URL.
+    DataImpulse rotating residential proxy — fallback for transcript + stream URL.
 
-    DataImpulse pins one exit IP per `sessid` for ~30 min by default (see
-    https://dataimpulse.com docs on sticky sessions — username syntax is
-    "{login};sessid.{id}"). WITHOUT a sessid, back-to-back calls can land
-    on the same (or an already YouTube-blocked) exit IP — confirmed in
-    production logs where all 3 transcript fallback methods hit IpBlocked
-    in succession. Appending a fresh random sessid on every call forces an
-    independent rotation each time, so one blocked IP doesn't poison every
-    subsequent call within the same job.
-
-    `purpose` is just a log-friendly label (e.g. "ytta", "stream") baked
-    into the sessid — it has no effect on stickiness/rotation behavior.
-
-    Callers that need the SAME IP across multiple sub-requests (e.g. the
-    InnerTube player call + its timedtext fetch, which share an IP-tied
-    auth token) must call this ONCE and reuse the returned string — do
-    NOT call it again expecting the same IP, each call mints a new one.
-
+    Each call mints a fresh random sessid forcing an independent IP rotation.
     Returns None if DATAIMPULSE_USER is not configured.
     """
     s = get_settings()
