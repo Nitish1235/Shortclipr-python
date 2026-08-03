@@ -16,7 +16,7 @@ asyncpg==0.29.0
 # upstash-redis SDK not used — redis.py calls the REST API directly with httpx
 
 ## AI / Transcription
-openai==1.47.0
+openai==1.78.1
 youtube-transcript-api==1.2.4
 
 ## Video Stream Extraction
