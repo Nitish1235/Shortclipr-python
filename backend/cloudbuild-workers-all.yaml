@@ -13,11 +13,17 @@ substitutions:
   # workloads (I/O-bound, 60 concurrent jobs × 5 instances = plenty).
   _API_REGION: 'us-central1'
 
-  # FFmpeg worker region slots. Set 1-4 as needed; leave blank to skip.
+  # FFmpeg worker region slots. Set 1-4 on the trigger's Substitution
+  # variables as needed; leave blank on the trigger to skip a slot.
   # Each set slot becomes one Cloud Run service — add its URL to
   # FFMPEG_WORKER_URLS on the API + watcher in the main project afterwards.
-  _FFMPEG_REGION_1: 'us-central1'
-  _FFMPEG_REGION_2: 'europe-west1'
+  #
+  # IMPORTANT: defaults are intentionally EMPTY. If you set two slots to
+  # the same region, two parallel deploys race the same service and one
+  # will fail with a version conflict. Every slot must be either blank or
+  # a unique region.
+  _FFMPEG_REGION_1: ''
+  _FFMPEG_REGION_2: ''
   _FFMPEG_REGION_3: ''
   _FFMPEG_REGION_4: ''
 
@@ -88,6 +94,7 @@ steps:
       - |
         R='${_FFMPEG_REGION_1}'
         if [ -z "$$R" ]; then echo "Slot 1 empty — skipping"; exit 0; fi
+        # Slot 1 has no lower-numbered slot to defer to, so it always deploys.
         echo "=== Deploying shortclipr-ffmpeg-worker-$$R ==="
         gcloud run deploy "shortclipr-ffmpeg-worker-$$R" \
           --image="us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA" \
@@ -114,6 +121,7 @@ steps:
       - |
         R='${_FFMPEG_REGION_2}'
         if [ -z "$$R" ]; then echo "Slot 2 empty — skipping"; exit 0; fi
+        if [ "$$R" = "${_FFMPEG_REGION_1}" ]; then echo "Slot 2 duplicates slot 1 ($$R) — skipping to avoid race"; exit 0; fi
         echo "=== Deploying shortclipr-ffmpeg-worker-$$R ==="
         gcloud run deploy "shortclipr-ffmpeg-worker-$$R" \
           --image="us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA" \
@@ -140,6 +148,8 @@ steps:
       - |
         R='${_FFMPEG_REGION_3}'
         if [ -z "$$R" ]; then echo "Slot 3 empty — skipping"; exit 0; fi
+        if [ "$$R" = "${_FFMPEG_REGION_1}" ]; then echo "Slot 3 duplicates slot 1 ($$R) — skipping to avoid race"; exit 0; fi
+        if [ "$$R" = "${_FFMPEG_REGION_2}" ]; then echo "Slot 3 duplicates slot 2 ($$R) — skipping to avoid race"; exit 0; fi
         echo "=== Deploying shortclipr-ffmpeg-worker-$$R ==="
         gcloud run deploy "shortclipr-ffmpeg-worker-$$R" \
           --image="us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA" \
@@ -166,6 +176,9 @@ steps:
       - |
         R='${_FFMPEG_REGION_4}'
         if [ -z "$$R" ]; then echo "Slot 4 empty — skipping"; exit 0; fi
+        if [ "$$R" = "${_FFMPEG_REGION_1}" ]; then echo "Slot 4 duplicates slot 1 ($$R) — skipping to avoid race"; exit 0; fi
+        if [ "$$R" = "${_FFMPEG_REGION_2}" ]; then echo "Slot 4 duplicates slot 2 ($$R) — skipping to avoid race"; exit 0; fi
+        if [ "$$R" = "${_FFMPEG_REGION_3}" ]; then echo "Slot 4 duplicates slot 3 ($$R) — skipping to avoid race"; exit 0; fi
         echo "=== Deploying shortclipr-ffmpeg-worker-$$R ==="
         gcloud run deploy "shortclipr-ffmpeg-worker-$$R" \
           --image="us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA" \
