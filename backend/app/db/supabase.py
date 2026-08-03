@@ -32,6 +32,15 @@ _DB_CONNECT_RETRIES = 3
 _DB_CONNECT_DELAY   = 2.0   # seconds between retries
 
 
+async def _init_connection(conn: asyncpg.Connection) -> None:
+    # asyncpg returns JSONB columns as raw strings by default — without this,
+    # payload dicts (e.g. ffmpeg_payload) come back as str and json_payload["x"]
+    # does string indexing instead of dict lookup.
+    await conn.set_type_codec(
+        "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog",
+    )
+
+
 async def get_pool() -> asyncpg.Pool:
     global _pool
     if _pool is not None:
@@ -65,6 +74,7 @@ async def get_pool() -> asyncpg.Pool:
                 statement_cache_size=0,
                 # Supabase requires SSL — enforce it even if not in URL
                 ssl="require",
+                init=_init_connection,
             )
             logger.info("DB pool ready")
             return _pool
@@ -214,7 +224,7 @@ async def set_job_api_done(job_id: str, ffmpeg_payload: dict) -> None:
             updated_at       = NOW()
         WHERE job_id = $1
         """,
-        job_id, json.dumps(ffmpeg_payload),
+        job_id, ffmpeg_payload,
     )
 
 
@@ -267,7 +277,7 @@ async def insert_clip(clip_data: dict) -> dict:
         v = clip_data[c]
         if isinstance(v, (list, dict)):
             placeholders.append(f"${i+1}::jsonb")
-            values.append(json.dumps(v))
+            values.append(v)
         else:
             placeholders.append(f"${i+1}")
             values.append(v)
@@ -300,7 +310,7 @@ async def update_clip_final_url(
                clip_ready=TRUE
            WHERE clip_id=$1""",
         clip_id, video_url, raw_video_url, thumbnail_url,
-        json.dumps(captions_data) if captions_data is not None else None,
+        captions_data,
     )
 
 

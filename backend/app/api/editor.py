@@ -106,7 +106,7 @@ async def save_editor_config(
 
     await db._execute(
         "UPDATE clips SET editor_config=$1::jsonb WHERE clip_id=$2",
-        json.dumps(config),
+        config,
         clip_id,
     )
     return {"status": "ok"}
@@ -238,7 +238,7 @@ async def render_clip(
     )
     await db._execute(
         "UPDATE clips SET editor_config = editor_config || $1::jsonb WHERE clip_id=$2",
-        json.dumps(config), clip_id,
+        config, clip_id,
     )
 
     return {"video_url": clip_url}

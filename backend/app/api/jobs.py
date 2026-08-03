@@ -23,7 +23,6 @@ Two dispatch modes:
 """
 
 import asyncio
-import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -346,10 +345,10 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
     # split-worker while jobs are alive.
     initial_pipeline_stage = "api"
 
-    queue_payload = json.dumps({
+    queue_payload = {
         "job_id": job_id, "user_id": current_user.user_id,
         "youtube_url": body.youtube_url, "options": options,
-    }) if multi_region else None
+    } if multi_region else None
 
     try:
         await db._execute(

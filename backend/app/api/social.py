@@ -94,7 +94,7 @@ async def _save_social_tokens(user_id: str, tokens: dict) -> None:
     """Persist updated social_tokens dict back to the users table."""
     await db._execute(
         "UPDATE users SET social_tokens=$1::jsonb WHERE id=$2",
-        json.dumps(tokens),
+        tokens,
         user_id,
     )
 
