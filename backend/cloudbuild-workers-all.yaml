@@ -1,21 +1,25 @@
 # One-shot deploy for ALL worker services in the workers project.
 #
 # Builds the shared image once, then in parallel deploys:
-#   - shortclipr-api-worker-{_API_REGION}      (1 service)
-#   - shortclipr-ffmpeg-worker-{region}         (one per comma-separated region in _FFMPEG_REGIONS)
+#   - shortclipr-api-worker-{_API_REGION}                (1 service)
+#   - shortclipr-ffmpeg-worker-{_FFMPEG_REGION_1..4}     (0-4 services)
 #
 # Set up as a single Cloud Build trigger in the workers project, main branch.
-# Configure region lists via Substitution variables on the trigger.
+# Configure region slots via Substitution variables on the trigger.
+# Leave a slot blank to skip that region.
 
 substitutions:
-  # Where the API worker gets deployed. Only one API region needed for most workloads
-  # (I/O-bound, 60 concurrent jobs per instance × 5 instances = plenty).
+  # Where the API worker gets deployed. Only one API region needed for most
+  # workloads (I/O-bound, 60 concurrent jobs × 5 instances = plenty).
   _API_REGION: 'us-central1'
 
-  # Comma-separated regions where FFmpeg workers get deployed.
-  # Each region = one Cloud Run service, one URL to add to FFMPEG_WORKER_URLS.
-  # Example: 'us-central1,europe-west1,asia-south1'
-  _FFMPEG_REGIONS: 'us-central1,europe-west1'
+  # FFmpeg worker region slots. Set 1-4 as needed; leave blank to skip.
+  # Each set slot becomes one Cloud Run service — add its URL to
+  # FFMPEG_WORKER_URLS on the API + watcher in the main project afterwards.
+  _FFMPEG_REGION_1: 'us-central1'
+  _FFMPEG_REGION_2: 'europe-west1'
+  _FFMPEG_REGION_3: ''
+  _FFMPEG_REGION_4: ''
 
   # Per-instance sizing (rarely need to override).
   _API_CPU: '4'
@@ -47,7 +51,7 @@ steps:
       - '--all-tags'
       - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker'
 
-  # ── 3a. Deploy API worker (parallel with 3b) ──────────────────────────
+  # ── 3. Deploy API worker (parallel with all ffmpeg deploys) ───────────
   # Shape: 2Gi / 4 vCPU / concurrency 12 / timeout 300s — I/O bound.
   - id: deploy-api-worker
     name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -71,37 +75,112 @@ steps:
       - '--min-instances=0'
       - '--max-instances=${_API_MAX_INSTANCES}'
 
-  # ── 3b. Deploy FFmpeg workers to every region in _FFMPEG_REGIONS ──────
+  # ── 4a. Deploy FFmpeg worker to region slot 1 ─────────────────────────
   # Shape: 8Gi / 4 vCPU / concurrency 2 / timeout 1500s — CPU bound.
-  # Regions deploy sequentially (~30-40s each). If you regularly deploy
-  # to 4+ regions and want parallelism, split into per-region steps.
-  - id: deploy-ffmpeg-workers
+  # Skips gracefully if slot is blank so you never have to edit the yaml
+  # to add/remove regions — just toggle the substitution on the trigger.
+  - id: deploy-ffmpeg-worker-1
     name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: bash
     waitFor: ['push']
     args:
       - '-c'
       - |
-        set -euo pipefail
-        for region in $$(echo "${_FFMPEG_REGIONS}" | tr ',' ' '); do
-          region=$$(echo "$$region" | xargs)   # trim whitespace
-          [ -z "$$region" ] && continue
-          echo "=== Deploying shortclipr-ffmpeg-worker-$$region ==="
-          gcloud run deploy "shortclipr-ffmpeg-worker-$$region" \
-            --image="us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA" \
-            --region="$$region" \
-            --platform=managed \
-            --allow-unauthenticated \
-            --port=8080 \
-            --memory=8Gi \
-            --cpu=${_FFMPEG_CPU} \
-            --cpu-boost \
-            --no-cpu-throttling \
-            --timeout=1500 \
-            --concurrency=2 \
-            --min-instances=0 \
-            --max-instances=${_FFMPEG_MAX_INSTANCES}
-        done
+        R='${_FFMPEG_REGION_1}'
+        if [ -z "$$R" ]; then echo "Slot 1 empty — skipping"; exit 0; fi
+        echo "=== Deploying shortclipr-ffmpeg-worker-$$R ==="
+        gcloud run deploy "shortclipr-ffmpeg-worker-$$R" \
+          --image="us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA" \
+          --region="$$R" \
+          --platform=managed \
+          --allow-unauthenticated \
+          --port=8080 \
+          --memory=8Gi \
+          --cpu=${_FFMPEG_CPU} \
+          --cpu-boost \
+          --no-cpu-throttling \
+          --timeout=1500 \
+          --concurrency=2 \
+          --min-instances=0 \
+          --max-instances=${_FFMPEG_MAX_INSTANCES}
+
+  # ── 4b. Deploy FFmpeg worker to region slot 2 ─────────────────────────
+  - id: deploy-ffmpeg-worker-2
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    waitFor: ['push']
+    args:
+      - '-c'
+      - |
+        R='${_FFMPEG_REGION_2}'
+        if [ -z "$$R" ]; then echo "Slot 2 empty — skipping"; exit 0; fi
+        echo "=== Deploying shortclipr-ffmpeg-worker-$$R ==="
+        gcloud run deploy "shortclipr-ffmpeg-worker-$$R" \
+          --image="us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA" \
+          --region="$$R" \
+          --platform=managed \
+          --allow-unauthenticated \
+          --port=8080 \
+          --memory=8Gi \
+          --cpu=${_FFMPEG_CPU} \
+          --cpu-boost \
+          --no-cpu-throttling \
+          --timeout=1500 \
+          --concurrency=2 \
+          --min-instances=0 \
+          --max-instances=${_FFMPEG_MAX_INSTANCES}
+
+  # ── 4c. Deploy FFmpeg worker to region slot 3 ─────────────────────────
+  - id: deploy-ffmpeg-worker-3
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    waitFor: ['push']
+    args:
+      - '-c'
+      - |
+        R='${_FFMPEG_REGION_3}'
+        if [ -z "$$R" ]; then echo "Slot 3 empty — skipping"; exit 0; fi
+        echo "=== Deploying shortclipr-ffmpeg-worker-$$R ==="
+        gcloud run deploy "shortclipr-ffmpeg-worker-$$R" \
+          --image="us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA" \
+          --region="$$R" \
+          --platform=managed \
+          --allow-unauthenticated \
+          --port=8080 \
+          --memory=8Gi \
+          --cpu=${_FFMPEG_CPU} \
+          --cpu-boost \
+          --no-cpu-throttling \
+          --timeout=1500 \
+          --concurrency=2 \
+          --min-instances=0 \
+          --max-instances=${_FFMPEG_MAX_INSTANCES}
+
+  # ── 4d. Deploy FFmpeg worker to region slot 4 ─────────────────────────
+  - id: deploy-ffmpeg-worker-4
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    waitFor: ['push']
+    args:
+      - '-c'
+      - |
+        R='${_FFMPEG_REGION_4}'
+        if [ -z "$$R" ]; then echo "Slot 4 empty — skipping"; exit 0; fi
+        echo "=== Deploying shortclipr-ffmpeg-worker-$$R ==="
+        gcloud run deploy "shortclipr-ffmpeg-worker-$$R" \
+          --image="us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA" \
+          --region="$$R" \
+          --platform=managed \
+          --allow-unauthenticated \
+          --port=8080 \
+          --memory=8Gi \
+          --cpu=${_FFMPEG_CPU} \
+          --cpu-boost \
+          --no-cpu-throttling \
+          --timeout=1500 \
+          --concurrency=2 \
+          --min-instances=0 \
+          --max-instances=${_FFMPEG_MAX_INSTANCES}
 
 images:
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA'
@@ -109,5 +188,3 @@ images:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  # Bash loop can produce more output than default; bump to E2_HIGHCPU_8 if builds slow.
-  machineType: 'E2_HIGHCPU_8'
