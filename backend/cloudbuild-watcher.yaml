@@ -2,7 +2,7 @@ substitutions:
   # Watcher is a SINGLETON — one instance globally, no per-region copies.
   # It coordinates dispatch across ALL worker regions from one place, so
   # putting it in the region closest to the primary DB (Supabase) is fine.
-  _REGION: 'us-central1'
+  _REGION: 'europe-west1'
 
 steps:
   # ── 1. Build image ──────────────────────────────────────────────────────────
