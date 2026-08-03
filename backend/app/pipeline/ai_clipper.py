@@ -410,8 +410,7 @@ async def _call_gpt(system: str, user: str) -> str:
                     {"role": "system", "content": system},
                     {"role": "user",   "content": user},
                 ],
-                temperature=0.3,
-                max_tokens=1024,
+                max_completion_tokens=1024,
                 response_format={"type": "json_object"},
             )
             choice = response.choices[0]
