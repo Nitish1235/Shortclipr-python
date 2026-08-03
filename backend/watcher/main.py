@@ -17,6 +17,7 @@ and drains only the legacy queue.
 import asyncio
 import logging
 import time
+from http import HTTPStatus
 
 import asyncpg
 
@@ -128,6 +129,32 @@ async def _run() -> None:
         await asyncio.sleep(config.POLL_INTERVAL)
 
 
+async def _health_handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    """Minimal HTTP handler for Cloud Run health probes on port 8080."""
+    try:
+        await reader.read(1024)
+        response = (
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: text/plain\r\n"
+            "Content-Length: 2\r\n"
+            "\r\n"
+            "ok"
+        )
+        writer.write(response.encode())
+        await writer.drain()
+    except Exception:
+        pass
+    finally:
+        writer.close()
+
+
+async def _start_health_server():
+    """Start a TCP server on port 8080 that responds 200 OK to any request."""
+    server = await asyncio.start_server(_health_handler, "0.0.0.0", 8080)
+    logger.info("Health server listening on :8080")
+    await server.serve_forever()
+
+
 async def main() -> None:
     """Entrypoint — runs forever, with outer crash-recovery loop."""
     if config.SPLIT_MODE:
@@ -145,19 +172,22 @@ async def main() -> None:
             f"poll={config.POLL_INTERVAL}s, reconcile={config.RECONCILE_MINUTES}min"
         )
 
-    while True:
-        try:
-            await _run()
-        except Exception:
-            logger.exception("Watcher crashed — restarting in 5s")
-            global _pool
-            if _pool:
-                try:
-                    await _pool.close()
-                except Exception:
-                    pass
-                _pool = None
-            await asyncio.sleep(5)
+    async def _watcher_loop():
+        while True:
+            try:
+                await _run()
+            except Exception:
+                logger.exception("Watcher crashed — restarting in 5s")
+                global _pool
+                if _pool:
+                    try:
+                        await _pool.close()
+                    except Exception:
+                        pass
+                    _pool = None
+                await asyncio.sleep(5)
+
+    await asyncio.gather(_start_health_server(), _watcher_loop())
 
 
 if __name__ == "__main__":
