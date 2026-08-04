@@ -95,7 +95,10 @@ class JobOptions(BaseModel):
     @field_validator("clip_count")
     @classmethod
     def validate_clip_count(cls, v: int) -> int:
-        return max(1, min(20, v))
+        # Hard cap at 10 for every plan — 15/20 clips per job blows out our
+        # processing budget (proxy calls, FFmpeg concurrency) and gives worse
+        # per-clip quality since GPT chunks the transcript accordingly.
+        return max(1, min(10, v))
 
     @field_validator("gateway_start")
     @classmethod

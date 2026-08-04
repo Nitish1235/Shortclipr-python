@@ -104,7 +104,7 @@ def get_video_minutes_limit(plan: str) -> int:
 
 def get_max_clip_count(plan: str) -> int | None:
     """Max clips allowed per job for `plan`. None = no extra cap (use the
-    global 1-20 JobOptions validator range)."""
+    global 1-10 JobOptions validator range)."""
     return get_plan_limits(plan).get("max_clip_count")
 
 

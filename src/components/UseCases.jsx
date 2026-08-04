@@ -32,9 +32,9 @@ const cases = [
   {
     icon: '💼',
     type: 'Marketing Teams',
-    headline: 'One webinar → 20 social clips',
+    headline: 'One webinar → 10 social clips',
     bullets: ['Scale output without scaling team', 'Consistent daily posting', 'Multiple channels at once'],
-    stat: '20 clips / webinar',
+    stat: '10 clips / webinar',
     color: '#059669',
     bg: '#f0fdf4',
     border: '#bbf7d0',

@@ -176,9 +176,7 @@ const CLIP_LENGTH_OPTIONS = [
 const CLIP_COUNT_OPTIONS = [
   { val:'3',  label:'3 Shorts',           sub:'Free plan' },
   { val:'5',  label:'5 Shorts',           sub:'' },
-  { val:'10', label:'10 Shorts',          sub:'Default' },
-  { val:'15', label:'15 Shorts',          sub:'' },
-  { val:'20', label:'20 Shorts',          sub:'Max' },
+  { val:'10', label:'10 Shorts',          sub:'Max' },
 ]
 
 // ── Lockable option button — used for Clip Length / Clip Count ──────
@@ -384,7 +382,7 @@ export default function ClipEngine({ onJobCreated }) {
             // Free-tier clamps are enforced again server-side (jobs.py) —
             // these client clamps just prevent submitting something the
             // backend would silently clamp anyway.
-            clip_count:     Math.min(parseInt(clipCount) || 10, isPaid ? 20 : FREE_MAX_CLIPS),
+            clip_count:     Math.min(parseInt(clipCount) || 10, isPaid ? 10 : FREE_MAX_CLIPS),
             min_duration:   Math.min(clipLenOpt.min, isPaid ? clipLenOpt.min : FREE_MAX_CLIP_SECONDS),
             max_duration:   Math.min(clipLenOpt.max, isPaid ? clipLenOpt.max : FREE_MAX_CLIP_SECONDS),
             language:       lang,
@@ -612,7 +610,7 @@ export default function ClipEngine({ onJobCreated }) {
               </div>
               {!isPaid && (
                 <p style={{ fontSize:'0.7rem', color:'#bbb', margin:'-2px 0 8px' }}>
-                  🔒 Free plan: 3 clips per job. <strong style={{ color:'#cf1322' }}>Upgrade</strong> for up to 20.
+                  🔒 Free plan: 3 clips per job. <strong style={{ color:'#cf1322' }}>Upgrade</strong> for up to 10.
                 </p>
               )}
 

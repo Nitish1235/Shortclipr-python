@@ -5,7 +5,7 @@ const pipelineSteps = [
   { icon: '🧠', label: 'Virality Score', metric: 'LLM scoring', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe' },
   { icon: '📐', label: '9:16 Reframe', metric: 'Face tracking', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
   { icon: '💬', label: 'Caption Burn', metric: '11 styles', color: '#0891b2', bg: '#ecfeff', border: '#a5f3fc' },
-  { icon: '✅', label: 'Ready Clips', metric: '5–15 clips', color: '#059669', bg: '#f0fdf4', border: '#bbf7d0' },
+  { icon: '✅', label: 'Ready Clips', metric: '3–10 clips', color: '#059669', bg: '#f0fdf4', border: '#bbf7d0' },
 ]
 
 const metrics = [
