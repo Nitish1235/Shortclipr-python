@@ -754,10 +754,10 @@ async def get_audio_stream_url(video_id: str, session_id: str | None = None) -> 
         else:
             logger.info(f"[{video_id}] ignoring global audio cache: URL is IP-bound")
 
-    # 3. Resolve
-    proxy = get_dataimpulse_proxy(purpose="stream-audio-resolve")
+    # 3. Resolve — fresh IP per client attempt
     for client_name in ["ANDROID", "TV", "IOS"]:
         try:
+            proxy = get_dataimpulse_proxy(purpose=f"stream-audio-{client_name}")
             data = await call_player_api(video_id, client_name=client_name, send_params=True, proxy_url=proxy)
             url = _pick_best_audio_stream(data)
             if url:
