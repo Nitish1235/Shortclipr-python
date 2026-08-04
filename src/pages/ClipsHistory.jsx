@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppLayout, { SIDEBAR_W } from '../components/AppLayout'
 import { YTLogo, TTLogo } from '../components/PlatformLogos'
@@ -22,6 +23,7 @@ function fmtDate(iso) {
 
 export default function ClipsHistory() {
   const { user, logout } = useAuth()
+  const navigate = useNavigate()
 
   const [loading, setLoading]   = useState(true)
   const [groups, setGroups]     = useState([])   // [{ job, clips[] }]
@@ -172,7 +174,7 @@ export default function ClipsHistory() {
 
   const handleDownload = (e, clip) => {
     e.stopPropagation()
-    if (!isPaid) { showToast('Upgrade to download clips', 'error'); return }
+    if (!isPaid) { navigate('/billing'); return }
     const token = localStorage.getItem('sc_token')
     const clipId = clip.clip_id || clip.id
     const a = document.createElement('a')
@@ -398,10 +400,11 @@ export default function ClipsHistory() {
                               title={isPaid ? 'Download MP4' : 'Upgrade to download'}
                               style={{
                                 padding: '5px 7px', borderRadius: 7,
-                                border: '1px solid #e5e7eb', background: '#f9fafb',
-                                color: isPaid ? '#374151' : '#d1d5db', cursor: 'pointer', fontSize: '.7rem',
+                                border: isPaid ? '1px solid #e5e7eb' : '1px solid #cf1322',
+                                background: isPaid ? '#f9fafb' : '#fef2f2',
+                                color: isPaid ? '#374151' : '#cf1322', cursor: 'pointer', fontSize: '.7rem',
                               }}
-                            >{isPaid ? '⬇' : '🔒'}</button>
+                            >{isPaid ? '⬇' : '💳'}</button>
                           </div>
                         </div>
                       )
@@ -467,6 +470,8 @@ export default function ClipsHistory() {
                   key={modalClip.clip_id || modalClip.id}
                   src={modalClip.video_url || modalClip.preview_url}
                   controls
+                  controlsList="nodownload"
+                  onContextMenu={e => e.preventDefault()}
                   poster={modalClip.thumbnail_url || undefined}
                   style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                 />
@@ -496,10 +501,11 @@ export default function ClipsHistory() {
                 onClick={e => handleDownload(e, modalClip)}
                 style={{
                   padding: '9px 14px', borderRadius: 9,
-                  border: '1px solid #e5e7eb', background: '#f9fafb',
-                  color: isPaid ? '#374151' : '#d1d5db', cursor: 'pointer', fontSize: '.78rem',
+                  border: isPaid ? '1px solid #e5e7eb' : '1px solid #cf1322',
+                  background: isPaid ? '#f9fafb' : '#cf1322',
+                  color: isPaid ? '#374151' : '#fff', cursor: 'pointer', fontSize: '.78rem', fontWeight: 700,
                 }}
-              >{isPaid ? '⬇ Download' : '🔒'}</button>
+              >{isPaid ? '⬇ Download' : '💳 Upgrade'}</button>
             </div>
           </div>
         </div>

@@ -28,7 +28,7 @@ const FREE_FEATURES = [
   '720p output quality',
   '3 caption styles',
   'Viral score for every clip',
-  'Download instantly',
+  'Preview clips on platform',
 ]
 
 function getFeatures(tier) {
@@ -234,7 +234,7 @@ export default function Pricing() {
 
         {/* Bottom note */}
         <p style={{ textAlign:'center', fontSize:'0.82rem', color:'#aaa', marginTop:'32px' }}>
-          All plans include automatic 9:16 reframe, burn-in captions, and clip download.
+          All plans include automatic 9:16 reframe and burn-in captions. Paid plans unlock MP4 downloads.
         </p>
       </div>
 

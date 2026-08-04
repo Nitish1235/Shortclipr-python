@@ -440,6 +440,8 @@ export default function Editor() {
                   src={rawVideoUrl || clipUrl}
                   poster={thumbnailUrl || undefined}
                   controls
+                  controlsList="nodownload"
+                  onContextMenu={e => e.preventDefault()}
                   style={{ width:'100%', height:'100%', objectFit:'contain' }}
                 />
               ) : (

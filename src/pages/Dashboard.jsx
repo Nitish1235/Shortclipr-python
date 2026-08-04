@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppLayout, { SIDEBAR_W } from '../components/AppLayout'
 import ClipEngine from '../components/ClipEngine'
@@ -65,6 +65,7 @@ const STATUS_COLOR = {
 export default function Dashboard() {
   const { user, logout } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
 
   // Jobs & clips
   const [jobs, setJobs]               = useState([])
@@ -305,11 +306,11 @@ export default function Dashboard() {
   }
   const handleSingleDownload = (e, clip) => {
     e.stopPropagation()
-    if (!requirePlan('Download clips')) return
+    if (!isPaid) { navigate('/billing'); return }
     doDownload(clip.clip_id || clip.id)
   }
   const handleBulkDownload = async () => {
-    if (!requirePlan('Download clips')) return
+    if (!isPaid) { navigate('/billing'); return }
     const sel = filteredClips.filter(c => selectedClipIds.has(c.clip_id || c.id))
     if (sel.length > 1) alert('Allow Multiple Downloads in your browser to save all at once!')
     for (const clip of sel) { doDownload(clip.clip_id || clip.id); await new Promise(r => setTimeout(r, 600)) }
@@ -779,6 +780,8 @@ export default function Dashboard() {
                           <video
                             src={clip.preview_url}
                             muted autoPlay loop playsInline
+                            controlsList="nodownload"
+                            onContextMenu={e => e.preventDefault()}
                             style={{ width:'100%', height:'100%', objectFit:'cover', opacity:.45, display:'block' }}
                           />
                         )}
@@ -1063,10 +1066,11 @@ export default function Dashboard() {
                               title={isPaid ? 'Download MP4' : 'Upgrade to download'}
                               style={{
                                 padding:'5px 7px', borderRadius:7,
-                                border:'1px solid #e5e7eb', background:'#f9fafb',
-                                color: isPaid ? '#374151' : '#d1d5db', cursor:'pointer', fontSize:'.7rem',
+                                border: isPaid ? '1px solid #e5e7eb' : '1px solid #cf1322',
+                                background: isPaid ? '#f9fafb' : '#fef2f2',
+                                color: isPaid ? '#374151' : '#cf1322', cursor:'pointer', fontSize:'.7rem',
                               }}
-                            >{isPaid ? '⬇' : '🔒'}</button>
+                            >{isPaid ? '⬇' : '💳'}</button>
                           </div>
                         </div>
                       )
@@ -1093,9 +1097,9 @@ export default function Dashboard() {
           </span>
           <div style={{ width:1, height:20, background:'#e5e7eb' }}/>
           <button onClick={handleBulkDownload} style={{
-            background:'#111', color:'#fff', border:'none',
+            background: isPaid ? '#111' : '#cf1322', color:'#fff', border:'none',
             borderRadius:7, padding:'7px 16px', fontWeight:700, fontSize:'.76rem', cursor:'pointer',
-          }}>⬇ Download</button>
+          }}>{isPaid ? '⬇ Download' : '💳 Upgrade to Download'}</button>
           {/* Bulk publish disabled — pending platform approval. Originals
               called handleBulkPublishYT/TT (now stubbed above). */}
           <div title="YouTube publishing — coming soon" style={{
@@ -1172,6 +1176,8 @@ export default function Dashboard() {
                     key={modalClip.clip_id || modalClip.id}
                     src={modalClip.video_url || modalClip.preview_url}
                     controls
+                    controlsList="nodownload"
+                    onContextMenu={e => e.preventDefault()}
                     poster={modalClip.thumbnail_url || undefined}
                     style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
                   />
@@ -1284,12 +1290,13 @@ export default function Dashboard() {
                 </div>
 
                 {/* Download */}
-                <button onClick={e => { handleSingleDownload(e, modalClip); closeModal() }} style={{
-                  width:'100%', padding:'9px', borderRadius:8, border:'1px solid #e5e7eb',
-                  background: isPaid ? '#111' : '#f3f4f6',
-                  color: isPaid ? '#fff' : '#bbb',
-                  fontSize:'.78rem', fontWeight:700, cursor: isPaid ? 'pointer' : 'default', textAlign:'center',
-                }}>{isPaid ? '⬇ Download MP4' : '🔒 Download'}</button>
+                <button onClick={e => { handleSingleDownload(e, modalClip); if (isPaid) closeModal() }} style={{
+                  width:'100%', padding:'9px', borderRadius:8,
+                  border: isPaid ? '1px solid #e5e7eb' : '1px solid #cf1322',
+                  background: isPaid ? '#111' : '#cf1322',
+                  color:'#fff',
+                  fontSize:'.78rem', fontWeight:700, cursor:'pointer', textAlign:'center',
+                }}>{isPaid ? '⬇ Download MP4' : '💳 Upgrade to Download'}</button>
               </div>
             </div>
 
