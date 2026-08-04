@@ -764,8 +764,10 @@ def _fc_crop_fill(
 
     # Blurred background fills the thin top/bottom strips; main video is the
     # native-cropped window, scaled up once to its final size.
+    # bg scale uses fast_bilinear — boxblur destroys any high-quality-scaling
+    # advantage, so the cheaper filter is free CPU savings.
     return (
-        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=fast_bilinear,"
         f"crop={width}:{height},"
         f"boxblur=luma_radius=25:luma_power=1:chroma_radius=25:chroma_power=1[_cf_bg];"
         f"[0:v]crop={crop_w_native}:{crop_h_native}:'{cx}':'{cy}',"
@@ -792,7 +794,7 @@ def _fc_blur_bg(
     blur_radius: 25 = standard, 40 = zoom_blur heavy effect.
     """
     fc = (
-        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=fast_bilinear,"
         f"crop={width}:{height},"
         f"boxblur=luma_radius={blur_radius}:luma_power=1:"
         f"chroma_radius={blur_radius}:chroma_power=1[bg];"
@@ -817,7 +819,7 @@ def _fc_zoom_blur(
     """120 % zoomed foreground + heavy blur background — dramatic feel."""
     zoom_w = _even_round(width * 1.2)
     fc = (
-        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=fast_bilinear,"
         f"crop={width}:{height},"
         "boxblur=luma_radius=40:luma_power=2:"
         "chroma_radius=40:chroma_power=2[bg];"
@@ -844,7 +846,7 @@ def _fc_glass(
     crisp main video centred giving a frosted-glass depth effect.
     """
     fc = (
-        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=fast_bilinear,"
         f"crop={width}:{height},"
         "boxblur=luma_radius=28:luma_power=2:"
         "chroma_radius=28:chroma_power=2,"
@@ -1058,13 +1060,13 @@ async def _encode_reframed_and_captioned(
                 *extra_inputs,
                 "-filter_complex", fc,
                 "-map", "[rawv]", "-map", "0:a?",
-                "-c:v", "libx264", "-preset", "faster", "-crf", "18",
-                "-threads", "2",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                "-threads", "1",
                 "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
                 str(raw_output_path),
                 "-map", "[capout]", "-map", "0:a?",
-                "-c:v", "libx264", "-preset", "faster", "-crf", "18",
-                "-threads", "2",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                "-threads", "1",
                 "-c:a", "copy", "-movflags", "+faststart",
                 str(captioned_output_path),
             ]
@@ -1075,8 +1077,8 @@ async def _encode_reframed_and_captioned(
                 "-i", str(input_path),
                 "-filter_complex", fc,
                 "-map", "[out]", "-map", "0:a?",
-                "-c:v", "libx264", "-preset", "faster", "-crf", "18",
-                "-threads", "2",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                "-threads", "1",
                 "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
                 str(raw_output_path),
             ]
