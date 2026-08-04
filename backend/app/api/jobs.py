@@ -35,6 +35,7 @@ from app.api.deps import CurrentUser, decode_access_token
 from app.core.config import get_settings
 from app.core.plan_limits import (
     get_max_clip_count, get_max_clip_duration_seconds, get_max_transcript_minutes_for_ai,
+    get_max_video_minutes,
 )
 from app.core.worker_routing import has_multi_region_workers
 from app.db import supabase as db
@@ -268,6 +269,26 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
         if gateway_end_seconds is not None
         else video_duration_seconds
     )
+
+    # ── 2c. Auto-clamp gateway window to plan's per-video max ──
+    # Instead of hard-rejecting a video that exceeds the plan's per-video cap
+    # (e.g. 61-min video on free plan with 30-min cap), shrink the window to
+    # `max_video_minutes` and process just that. Preserves the job, gives the
+    # user their allowed slice, and mirrors reserve_credits/reserve_video_minutes'
+    # "clamp what's over, don't reject" philosophy. Only fires when duration
+    # is known here — worker's api_stage.py does the same clamp otherwise.
+    if video_duration_seconds > 0:
+        max_video_sec = get_max_video_minutes(current_user.plan) * 60
+        if billable_seconds > max_video_sec:
+            old_end = gateway_end_seconds
+            gateway_end_seconds = gateway_start_seconds + max_video_sec
+            billable_seconds = max_video_sec
+            logger.info(
+                f"Auto-clamped gateway window for user {current_user.user_id} "
+                f"({current_user.plan} plan): [{gateway_start_seconds:.0f}s, "
+                f"{old_end:.0f}s] → [{gateway_start_seconds:.0f}s, "
+                f"{gateway_end_seconds:.0f}s] (plan max {max_video_sec // 60} min/video)"
+            )
 
     # ── 3. Reserve credits (clips) — the real gate, atomic ─────
     # Credits are billed per clip DELIVERED (see orchestrator.py), so a

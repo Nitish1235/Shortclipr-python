@@ -85,12 +85,32 @@ async def run_ffmpeg_stage(job_id: str) -> None:
             timeout=FFMPEG_STAGE_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
-        msg = f"FFmpeg stage timed out after {FFMPEG_STAGE_TIMEOUT_SECONDS}s"
-        logger.error(f"[{job_id}] {msg}")
-        await _fail_and_refund_from_db(job_id, msg)
+        logger.error(f"[{job_id}] FFmpeg stage timed out after {FFMPEG_STAGE_TIMEOUT_SECONDS}s")
+        await _fail_and_refund_from_db(job_id, _friendly_ffmpeg_error("timed out"))
     except Exception as exc:
         logger.exception(f"[{job_id}] FFmpeg stage failed: {exc}")
-        await _fail_and_refund_from_db(job_id, f"FFmpeg stage: {exc}")
+        await _fail_and_refund_from_db(job_id, _friendly_ffmpeg_error(str(exc)))
+
+
+def _friendly_ffmpeg_error(raw: str) -> str:
+    """User-facing mapper for FFmpeg-stage failures (mirror of _friendly_api_error)."""
+    r = (raw or "").lower()
+
+    if "timed out" in r or "timeout" in r:
+        return "Video encoding took too long. Please try again — this can happen with unusually long videos."
+    if "403" in r and ("forbidden" in r or "cdn" in r or "stream" in r):
+        return "YouTube's video CDN rejected our request. Please retry — the video URL likely expired mid-processing."
+    if "storage" in r or "upload" in r or "gcs" in r or "s3" in r:
+        return "Failed to upload finished clips. Please try again."
+    if "cancelled" in r:
+        return "Job was cancelled."
+    if "all clip extractions failed" in r or "no clips" in r:
+        return "Could not extract any clips from this video. It may be corrupted or in an unsupported format."
+    if "ffmpeg" in r or "encode" in r or "reframe" in r:
+        return "Video encoding failed. Please try again, or contact support if it keeps happening."
+
+    first_line = raw.strip().split("\n", 1)[0][:200] if raw else ""
+    return f"Something went wrong while encoding. {first_line}".rstrip()
 
 
 async def _execute_ffmpeg_stage(job_id: str) -> None:

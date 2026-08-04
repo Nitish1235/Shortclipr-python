@@ -658,6 +658,32 @@ export default function Dashboard() {
             </div>
           )}
 
+          {/* ── Failed job banner ── */}
+          {currentJob && currentJob.status === 'failed' && (
+            <div style={{
+              background:'#fff', border:'1.5px solid #fecaca',
+              borderRadius:'12px', padding:'14px 18px',
+              marginBottom:'20px', borderLeft:'4px solid #dc2626',
+            }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'12px', marginBottom:'8px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px', minWidth:0 }}>
+                  <span style={{ fontSize:'1.1rem' }}>⚠️</span>
+                  <span style={{ fontWeight:700, fontSize:'.85rem', color:'#111', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    {currentJob.video_title || currentJob.youtube_url}
+                  </span>
+                </div>
+                <div style={{
+                  background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca',
+                  borderRadius:'100px', padding:'3px 10px',
+                  fontSize:'.68rem', fontWeight:700, textTransform:'uppercase', flexShrink:0,
+                }}>Failed</div>
+              </div>
+              <div style={{ fontSize:'.82rem', color:'#7f1d1d', lineHeight:1.5 }}>
+                {currentJob.error_message || 'Something went wrong while processing this video. Please try again or contact support if the issue persists.'}
+              </div>
+            </div>
+          )}
+
           {/* ── Empty state ── */}
           {loading && (
             <div style={{ textAlign:'center', padding:'64px 20px' }}>

@@ -24,12 +24,58 @@ same event loop already knows the API stage returned.
 import asyncio
 import logging
 
+from app.core.plan_limits import get_max_video_minutes
 from app.db import supabase as db
 from app.pipeline.ai_clipper import find_viral_clips
 from app.pipeline.stream import extract_video_id, get_stream_urls, get_video_metadata
 from app.pipeline.transcript import get_transcript
 
 logger = logging.getLogger(__name__)
+
+
+def _friendly_api_error(raw: str) -> str:
+    """
+    Map raw exception messages from the API stage into user-facing errors.
+    Falls back to a generic message rather than surfacing a stack trace or
+    a giant multi-line proxy/HTTP error to the user.
+    """
+    r = (raw or "").lower()
+
+    # Transcript layer — every method failed
+    if "all 3 transcript methods failed" in r or "transcriptsdisabled" in r:
+        return "This video doesn't have captions available. Please pick a video with subtitles/captions enabled."
+
+    # YouTube-side unavailability
+    if "playabilitystatus" in r or "login_required" in r or "sign in to confirm" in r:
+        return "YouTube is blocking access to this video right now. Try again in a few minutes, or try a different video."
+    if "video_unavailable" in r or "video is unavailable" in r or "private video" in r:
+        return "This video is private, deleted, or unavailable in our region."
+    if "age" in r and "restrict" in r:
+        return "Age-restricted videos aren't supported."
+
+    # Rate-limit / bot detection on transcript
+    if "requestblocked" in r or "ipblocked" in r or "too many requests" in r:
+        return "YouTube is rate-limiting our servers. Please try again in a few minutes."
+
+    # AI stage
+    if "no suitable clip moments" in r or "no viral" in r:
+        return "The AI couldn't find good highlight moments in this video. Try a longer or more engaging video."
+
+    # OpenAI issues
+    if "openai" in r or "gpt" in r:
+        return "AI service is temporarily unavailable. Please try again in a moment."
+
+    # Timeouts
+    if "timed out" in r or "timeout" in r:
+        return "Processing took too long. Please try again — try a shorter clip window if the issue persists."
+
+    # Plan/quota — these come from reserve_video_minutes and are already user-friendly
+    if "your" in r and ("plan" in r or "min per video" in r or "monthly" in r):
+        return raw  # already user-friendly
+
+    # Fallback — trim to the first line so we don't dump a stack
+    first_line = raw.strip().split("\n", 1)[0][:200] if raw else ""
+    return f"Something went wrong while processing this video. {first_line}".rstrip()
 
 # Minimum "minutes gateway" window — mirrors jobs.py + orchestrator.py.
 # Below this, a selection is treated as invalid/noise and the full video is used.
@@ -59,12 +105,11 @@ async def run_api_stage(
             timeout=API_STAGE_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
-        msg = f"API stage timed out after {API_STAGE_TIMEOUT_SECONDS}s"
-        logger.error(f"[{job_id}] {msg}")
-        await _fail_and_refund(job_id, user_id, options, msg)
+        logger.error(f"[{job_id}] API stage timed out after {API_STAGE_TIMEOUT_SECONDS}s")
+        await _fail_and_refund(job_id, user_id, options, _friendly_api_error("timed out"))
     except Exception as exc:
         logger.exception(f"[{job_id}] API stage failed: {exc}")
-        await _fail_and_refund(job_id, user_id, options, f"API stage: {exc}")
+        await _fail_and_refund(job_id, user_id, options, _friendly_api_error(str(exc)))
 
 
 async def _execute_api_stage(
@@ -117,11 +162,30 @@ async def _execute_api_stage(
             f"({billable_seconds:.0f}s billable)"
         )
 
-    # ── STEP 2c: Fallback video-minutes reservation ────────────────
+    plan = options.get("plan", "free")
+
+    # ── STEP 2c: Auto-clamp gateway to plan's per-video max ────────
+    # Mirrors jobs.py — only fires when jobs.py's own prefetch failed and
+    # deferred validation here. Clamp instead of reject so a free-plan user
+    # who submitted a 61-min video still gets 30 min processed.
+    if prefetched_duration <= 0:
+        max_video_sec = get_max_video_minutes(plan) * 60
+        if billable_seconds > max_video_sec:
+            old_end = gateway_end
+            gateway_end = gateway_start + max_video_sec
+            billable_seconds = max_video_sec
+            is_full_video = False
+            logger.info(
+                f"[{job_id}] Auto-clamped gateway window ({plan} plan): "
+                f"[{gateway_start:.0f}s, {old_end:.0f}s] → "
+                f"[{gateway_start:.0f}s, {gateway_end:.0f}s] "
+                f"(plan max {max_video_sec // 60} min/video)"
+            )
+
+    # ── STEP 2d: Fallback video-minutes reservation ────────────────
     # Only runs when jobs.py couldn't pre-flight (metadata prefetch failed).
     # Same reason as orchestrator.py's version — see supabase.reserve_video_minutes.
     video_minutes_reserved = options.get("video_minutes_reserved", 0.0)
-    plan = options.get("plan", "free")
     if video_minutes_reserved <= 0:
         ok, quota_msg, video_minutes_reserved = await db.reserve_video_minutes(
             user_id, billable_seconds, plan,
