@@ -102,12 +102,7 @@ function TemplatePreviewBg({ template, thumbnail, barColor }) {
         </>
       )
     case 'full_screen':
-      return (
-        <>
-          <div style={{ position:'absolute', inset:0, background:'#000' }}/>
-          {fgImg()}
-        </>
-      )
+      return <img src={img} alt="" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }}/>
     case 'crop_fill':
     default:
       return <img src={img} alt="" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }}/>
@@ -522,7 +517,7 @@ export default function ClipEngine({ onJobCreated }) {
       { val:'zoom_blur',    label:'🔍 Zoom Blur',     sub:'Dramatic' },
       { val:'glass',        label:'🪟 Glass',          sub:'Premium' },
       { val:'color_bars',   label:'🎨 Color Bars',    sub:'Branded' }, // merged: covers old Gradient/Cinema/Neon Frame — pick via frame colour below
-      { val:'full_screen',  label:'📺 Full Screen',   sub:'Letterbox' },
+      { val:'full_screen',  label:'📺 Full Screen',   sub:'No Bars · Full Fill' },
       // { val:'gameplay',  label:'🎮 Gameplay',       sub:'Gaming' }, // temporarily disabled, will rework
     ]
 

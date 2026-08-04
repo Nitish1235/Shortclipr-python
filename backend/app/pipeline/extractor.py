@@ -32,9 +32,9 @@ OUTPUT ASPECT RATIOS  (ASPECT_DIMENSIONS):
                `bar_color` — e.g. "#000000" reproduces the old cinema look)
                Custom-color bars top & bottom (brand / aesthetic).
 
-  full_screen  Full Screen / Letterbox
-               Full original frame scaled to fit 9:16, black bars fill rest.
-               Cheapest — single scale pass, no blur/overlay.
+  full_screen  Full Screen
+               Face-tracked crop fills the entire 9:16 canvas — no bars,
+               no blur, video covers every pixel. Like crop_fill at 100 %.
 
   gameplay     Gameplay / Podcast (TEMPORARILY DISABLED — registration is
                commented out below pending a rework; function kept intact)
@@ -81,7 +81,7 @@ VALID_TEMPLATES = [
     "color_bars",    # Solid coloured bars — merged: subsumes the old
                      # "gradient"/"cinema"/"neon_frame" (near-identical bar
                      # looks, pick the look via bar_color, e.g. black = cinema)
-    "full_screen",   # Letterboxed — full original frame, black bars fill rest
+    "full_screen",   # True full-screen — face-tracked crop, no bars, 100% fill
     # "gameplay",    # Portrait top 30 % / full bottom 70 % — temporarily disabled, will rework
 ]
 
@@ -787,16 +787,22 @@ def _fc_crop_fill(
 def _fc_full_screen(
     width: int,
     height: int,
+    face_track: list[tuple[float, float, float]] | None,
+    src_w: int,
+    src_h: int,
     out_label: str = "out",
 ) -> str:
     """
-    Letterboxed full frame: scale the source to fit entirely inside the 9:16
-    canvas (no crop), black bars fill the remaining space. Cheapest template
-    — single scale pass, no blur, no overlay.
+    True full-screen: face-tracked crop that fills the ENTIRE 9:16 canvas.
+    Same logic as crop_fill but with scale=1.0 — no blurred strips, no bars,
+    video covers every pixel.
     """
+    cx = _fc_crop_offset(face_track, "x", "iw", "ow", "(iw-ow)/2")
+    cy = _fc_crop_offset(face_track, "y", "ih", "oh", "(ih-oh)/2")
     return (
-        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=decrease:flags=bicubic,"
-        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black"
+        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=bicubic,"
+        f"crop={width}:{height}:'{cx}':'{cy}',"
+        f"unsharp=lx=5:ly=5:la=0.8:cx=5:cy=5:ca=0.0"
         f"[{out_label}]"
     )
 
@@ -980,7 +986,7 @@ def _build_template_filter(
     elif template == "color_bars":
         return _fc_colour_bars(bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
     elif template == "full_screen":
-        return _fc_full_screen(width, height, out_label=out_label)
+        return _fc_full_screen(width, height, face_track, src_w, src_h, out_label=out_label)
     # elif template == "gameplay":  # temporarily disabled, will rework — function kept above
     #     return _fc_gameplay(zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
     return _fc_crop_fill(width, height, face_track, src_w, src_h, out_label=out_label)
