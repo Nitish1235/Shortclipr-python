@@ -12,6 +12,7 @@ const TEMPLATES = [
   { id:'zoom_blur',    name:'Zoom Blur'    },
   { id:'glass',        name:'Glass'        },
   { id:'color_bars',   name:'Color Bars'   }, // merged: covers old Gradient/Cinema/Neon Frame looks — pick via bar colour
+  { id:'full_screen',  name:'Full Screen'  },
   // { id:'gameplay',  name:'Gameplay'     }, // temporarily disabled, will rework
 ]
 

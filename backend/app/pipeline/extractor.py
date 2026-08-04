@@ -32,6 +32,10 @@ OUTPUT ASPECT RATIOS  (ASPECT_DIMENSIONS):
                `bar_color` — e.g. "#000000" reproduces the old cinema look)
                Custom-color bars top & bottom (brand / aesthetic).
 
+  full_screen  Full Screen / Letterbox
+               Full original frame scaled to fit 9:16, black bars fill rest.
+               Cheapest — single scale pass, no blur/overlay.
+
   gameplay     Gameplay / Podcast (TEMPORARILY DISABLED — registration is
                commented out below pending a rework; function kept intact)
                Portrait crop fills top 30 %, full-width video in bottom 70 %.
@@ -77,6 +81,7 @@ VALID_TEMPLATES = [
     "color_bars",    # Solid coloured bars — merged: subsumes the old
                      # "gradient"/"cinema"/"neon_frame" (near-identical bar
                      # looks, pick the look via bar_color, e.g. black = cinema)
+    "full_screen",   # Letterboxed — full original frame, black bars fill rest
     # "gameplay",    # Portrait top 30 % / full bottom 70 % — temporarily disabled, will rework
 ]
 
@@ -777,6 +782,25 @@ def _fc_crop_fill(
     )
 
 
+# ── Template: full_screen ─────────────────────────────────────
+
+def _fc_full_screen(
+    width: int,
+    height: int,
+    out_label: str = "out",
+) -> str:
+    """
+    Letterboxed full frame: scale the source to fit entirely inside the 9:16
+    canvas (no crop), black bars fill the remaining space. Cheapest template
+    — single scale pass, no blur, no overlay.
+    """
+    return (
+        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=decrease:flags=bicubic,"
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black"
+        f"[{out_label}]"
+    )
+
+
 # ── Template 1: blur_bg ────────────────────────────────────────
 
 def _fc_blur_bg(
@@ -955,6 +979,8 @@ def _build_template_filter(
         return _fc_glass(width, height, zoom_beats, face_track, src_w, src_h, out_label=out_label)
     elif template == "color_bars":
         return _fc_colour_bars(bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
+    elif template == "full_screen":
+        return _fc_full_screen(width, height, out_label=out_label)
     # elif template == "gameplay":  # temporarily disabled, will rework — function kept above
     #     return _fc_gameplay(zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
     return _fc_crop_fill(width, height, face_track, src_w, src_h, out_label=out_label)
