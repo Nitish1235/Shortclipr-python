@@ -36,8 +36,23 @@ function formatMinutes(mins) {
   if (n < 60) return `${n}m`
   const h = Math.floor(n / 60)
   const m = n % 60
+  // At 100h+ the "and m minutes" detail is just noise and blows out the
+  // stats cell width — collapse to whole hours only.
+  if (h >= 100) return `${h}h`
   return m ? `${h}h ${m}m` : `${h}h`
 }
+
+// ── Job status helpers ───────────────────────────────────────────
+// Mirrors `count_active_jobs` in backend/app/db/supabase.py — any of these
+// mean the job is still moving through the pipeline. Split-worker mode
+// cycles through `api_processing → api_done → ffmpeg_processing`, so ALL of
+// these must be considered "in progress" or the processing banner blinks
+// off every time the status transitions between stages.
+const ACTIVE_STATUSES = [
+  'queued', 'created', 'dispatched', 'processing',
+  'api_processing', 'api_done', 'ffmpeg_processing',
+]
+const isJobActive = (job) => !!job && ACTIVE_STATUSES.includes(job.status)
 
 // ── Status colors ─────────────────────────────────────────────────
 const STATUS_COLOR = {
@@ -85,7 +100,7 @@ export default function Dashboard() {
 
   const isPaid = user?.plan && user.plan !== 'free'
   const currentJob = jobs[0] || null          // most-recent job only
-  const isActive = currentJob && ['queued','processing'].includes(currentJob.status)
+  const isActive = isJobActive(currentJob)
 
   // Friendly, non-technical status — never surface raw backend step text
   // (e.g. "Reading transcript...", "Downloading clips...") to the user.
@@ -179,7 +194,7 @@ export default function Dashboard() {
     fetchJobs()
     const interval = setInterval(() => {
       setJobs(cur => {
-        if (cur.some(j => ['queued','processing'].includes(j.status))) fetchJobs()
+        if (cur.some(isJobActive)) fetchJobs()
         return cur
       })
     }, 5000)
@@ -190,7 +205,7 @@ export default function Dashboard() {
   useEffect(() => {
     const token = localStorage.getItem('sc_token')
     if (!token) return
-    jobs.filter(j => ['queued','processing'].includes(j.status)).forEach(job => {
+    jobs.filter(isJobActive).forEach(job => {
       if (activeSseJobs.current.has(job.job_id)) return
       activeSseJobs.current.add(job.job_id)
       const es = new EventSource(`${API_BASE}/jobs/${job.job_id}/stream?token=${token}`)
@@ -239,7 +254,7 @@ export default function Dashboard() {
     setClips([])
     setLoadingClips(true)
     fetchClips(currentJob.job_id).finally(() => setLoadingClips(false))
-    if (['queued','processing'].includes(currentJob.status)) {
+    if (isJobActive(currentJob)) {
       clearInterval(clipPollRef.current)
       clipPollRef.current = setInterval(() => fetchClips(currentJob.job_id), 3000)
     }
@@ -249,7 +264,7 @@ export default function Dashboard() {
   // Stop polling when job finishes
   useEffect(() => {
     if (!currentJob) return
-    if (!['queued','processing'].includes(currentJob.status)) {
+    if (!isJobActive(currentJob)) {
       clearInterval(clipPollRef.current)
       clipPollRef.current = null
       fetchClips(currentJob.job_id)
@@ -509,7 +524,9 @@ export default function Dashboard() {
         {/* ── Platform status + stats bar ── */}
         <div style={{ background:'#fff', borderBottom:'1px solid #e5e7eb' }}>
           <div style={{ maxWidth:'1140px', margin:'0 auto', padding:'0 24px' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:'16px', height:'52px', flexWrap:'wrap' }}>
+            {/* Row 1 — pills only. Stats live on their own row (below) so they
+                never wrap awkwardly next to the pills at narrower widths. */}
+            <div style={{ display:'flex', alignItems:'center', gap:'16px', minHeight:'44px', flexWrap:'wrap' }}>
               {/* Platform pills */}
               <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
                 {ytConnected ? (
@@ -563,26 +580,42 @@ export default function Dashboard() {
                 )}
               </div>
 
-              {/* Stats */}
-              <div style={{ marginLeft:'auto', display:'flex', gap:'0', borderLeft:'1px solid #e5e7eb' }}>
-                {[
-                  { n: user?.credits_used || 0,      l:'Shorts made',      c:'#cf1322' },
-                  { n: user?.videos_remaining || 0,  l:'Credits left',     c:'#16a34a' },
-                  { n: formatMinutes(user?.video_minutes_used),      l:'Minutes used', c:'#cf1322' },
-                  { n: formatMinutes(user?.video_minutes_remaining), l:'Minutes left', c:'#16a34a' },
-                  { n: rawClips.length,              l:'Encoding',         c:'#f59e0b' },
-                  { n: hdClips.length,               l:'HD ready',         c:'#1d4ed8' },
-                  { n: publishedYT.size + publishedTT.size, l:'Published', c:'#16a34a' },
-                ].map((s, i) => (
-                  <div key={i} style={{
-                    padding:'0 20px', borderRight:'1px solid #e5e7eb',
-                    display:'flex', flexDirection:'column', justifyContent:'center', height:'52px',
-                  }}>
-                    <div style={{ fontSize:'1.1rem', fontWeight:800, letterSpacing:'-.04em', color:s.c, lineHeight:1 }}>{s.n}</div>
-                    <div style={{ fontSize:'.62rem', color:'#9ca3af', textTransform:'uppercase', letterSpacing:'.08em', marginTop:2 }}>{s.l}</div>
-                  </div>
-                ))}
-              </div>
+            </div>
+
+            {/* Row 2 — stats. Full-width, evenly divided columns so no single
+                cell (e.g. "1665h") blows out the others' widths. */}
+            <div style={{
+              display:'grid',
+              gridTemplateColumns:'repeat(7, minmax(0, 1fr))',
+              borderTop:'1px solid #e5e7eb',
+            }}>
+              {[
+                { n: user?.credits_used || 0,      l:'Shorts made',      c:'#cf1322' },
+                { n: user?.videos_remaining || 0,  l:'Credits left',     c:'#16a34a' },
+                { n: formatMinutes(user?.video_minutes_used),      l:'Minutes used', c:'#cf1322' },
+                { n: formatMinutes(user?.video_minutes_remaining), l:'Minutes left', c:'#16a34a' },
+                { n: rawClips.length,              l:'Encoding',         c:'#f59e0b' },
+                { n: hdClips.length,               l:'HD ready',         c:'#1d4ed8' },
+                { n: publishedYT.size + publishedTT.size, l:'Published', c:'#16a34a' },
+              ].map((s, i, arr) => (
+                <div key={i} style={{
+                  padding:'8px 12px',
+                  borderRight: i < arr.length - 1 ? '1px solid #e5e7eb' : 'none',
+                  display:'flex', flexDirection:'column', justifyContent:'center',
+                  minWidth:0,
+                }}>
+                  <div style={{
+                    fontSize:'1.05rem', fontWeight:800, letterSpacing:'-.04em',
+                    color:s.c, lineHeight:1.1,
+                    overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                  }}>{s.n}</div>
+                  <div style={{
+                    fontSize:'.6rem', color:'#9ca3af', textTransform:'uppercase',
+                    letterSpacing:'.08em', marginTop:3,
+                    overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                  }}>{s.l}</div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
