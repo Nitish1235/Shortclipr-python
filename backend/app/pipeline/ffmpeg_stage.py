@@ -1,7 +1,7 @@
 """
 ffmpeg_stage.py — FFmpeg-side pipeline steps for the split-worker architecture.
 
-Runs on the "FFmpeg Worker" Cloud Run service (4 vCPU + 8GB, ~2 concurrent):
+Runs on the "FFmpeg Worker" Cloud Run service (4 vCPU + 8GB, 1 concurrent — Cloud Run scales horizontally):
   1. Read `ffmpeg_payload` from the jobs table
   2. Re-resolve stream URL if the cached one expired (fallback safety net)
   3. DASH parallel download all clips (~5-8 MB each)
@@ -206,8 +206,12 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
         total      = len(timestamps)
         clips_done = 0
 
-        # Adaptive per-job encode cap (same logic as pre-split orchestrator)
-        job_cap = settings.MAX_CONCURRENT_ENCODES if _ACTIVE_JOBS_ON_INSTANCE <= 1 else 1
+        # Adaptive per-job encode cap — split the vCPU budget across whatever
+        # jobs are on this instance. With Cloud Run concurrency=1 this is
+        # always MAX (one job owns the whole instance → 4 encoders × 1 thread
+        # = 4 vCPUs). The // fallback stays defensive in case someone bumps
+        # Cloud Run concurrency later — no thrashing then either.
+        job_cap = max(1, settings.MAX_CONCURRENT_ENCODES // max(1, _ACTIVE_JOBS_ON_INSTANCE))
         job_encode_semaphore = asyncio.Semaphore(job_cap)
 
         async def _process_one_clip(i: int, ts: ClipTimestamp) -> dict:

@@ -59,7 +59,7 @@ API_WORKERS:    list[dict] = _parse_workers("API_WORKER_URLS",    "API_WORKER_RE
 FFMPEG_WORKERS: list[dict] = _parse_workers("FFMPEG_WORKER_URLS", "FFMPEG_WORKER_REGIONS")
 
 API_REGION_SOFT_CAP:    int = _int("API_REGION_SOFT_CAP",    12)
-FFMPEG_REGION_SOFT_CAP: int = _int("FFMPEG_REGION_SOFT_CAP", 2)
+FFMPEG_REGION_SOFT_CAP: int = _int("FFMPEG_REGION_SOFT_CAP", 1)
 
 # ── Legacy unified pool (WORKER_SERVICE_URLS) ──────────────────
 LEGACY_WORKERS: list[dict] = _parse_workers("WORKER_SERVICE_URLS", "WORKER_SERVICE_REGIONS")

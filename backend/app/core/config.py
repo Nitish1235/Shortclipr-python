@@ -70,7 +70,7 @@ class Settings(BaseSettings):
 
     # ── Worker / Pipeline ─────────────────────────────────────
     MAX_CONCURRENT_CLIPS: int = 10          # asyncio semaphore for cheap -c copy extraction
-    MAX_CONCURRENT_ENCODES: int = 2         # asyncio semaphore for libx264 reframe+caption encodes (each -threads 1 → 2 concurrent × 1 = 2 vCPUs, 2 spare for I/O + other work)
+    MAX_CONCURRENT_ENCODES: int = 4         # asyncio semaphore for libx264 reframe+caption encodes (each -threads 1 → 4 concurrent × 1 = 4 vCPUs fully utilised)
     SOURCE_DOWNLOAD_CHUNKS: int = 8         # parallel ranged-download chunk count
     MAX_CONCURRENT_JOBS_PER_USER: int = 1   # one job at a time — pins the user's IP + prevents Proxy-Seller IP collisions
     # Note: per-video duration limits are now plan-based — see app/core/plan_limits.py
@@ -111,9 +111,10 @@ class Settings(BaseSettings):
     # region before queueing further ones (jobs stay status='created'/'api_done'
     # in Postgres until a slot opens). Sized to match each pool's per-instance
     # capacity: an API instance handles ~12 concurrent jobs (I/O-bound), an
-    # FFmpeg instance handles ~2 (CPU-bound at ~7-8 min/job).
+    # FFmpeg instance handles 1 (CPU-bound — each job needs the full 4 vCPU;
+    # Cloud Run scales horizontally rather than piling encodes on one box).
     API_REGION_SOFT_CAP:    int = 12
-    FFMPEG_REGION_SOFT_CAP: int = 2
+    FFMPEG_REGION_SOFT_CAP: int = 1
 
     # Legacy soft cap (unified worker) — used only when neither API_WORKER_URLS
     # nor FFMPEG_WORKER_URLS is set and the watcher runs against the old

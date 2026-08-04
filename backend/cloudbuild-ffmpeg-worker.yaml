@@ -72,18 +72,19 @@ steps:
       - '1500'
 
       # ── Concurrency ──────────────────────────────────────────────────────
-      # 2 concurrent requests per instance — matches FFMPEG_REGION_SOFT_CAP
-      # in the watcher. 2 is the sweet spot on 4 vCPU: each job's own
-      # MAX_CONCURRENT_ENCODES self-caps to 1 when sharing an instance, so
-      # 2 jobs together saturate 4 vCPU. More than 2 → contention explodes
-      # per-job time without meaningful throughput gain.
+      # 1 request per instance — CPU-bound work (libx264 encoding) needs the
+      # full 4 vCPU per job, so a 2nd request on the same instance would
+      # halve encode speed for both. Cloud Run scales horizontally: when
+      # this instance is at 1/1, a 2nd job triggers a new instance.
+      # Must match FFMPEG_REGION_SOFT_CAP in the watcher (=1).
       - '--concurrency'
-      - '2'
+      - '1'
 
       # ── Scaling ──────────────────────────────────────────────────────────
       # _MAX_INSTANCES = region_quota_m / (_CPU * 1000).
       # At _CPU=4 and 20,000m regional quota: 20000/4000 = 5 instances max.
-      # 5 instances × 2 concurrency = 10 concurrent FFmpeg jobs per region.
+      # 5 instances × 1 concurrency = 5 concurrent FFmpeg jobs per region.
+      # Multi-region deploy spreads this further (e.g. 3 regions → 15 jobs).
       - '--min-instances'
       - '0'
       - '--max-instances'
