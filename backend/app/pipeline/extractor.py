@@ -733,7 +733,7 @@ def _fc_crop_fill(
         # No native source dims to compute an exact native-pixel crop window
         # (or no bars wanted) — fall back to scale-to-cover then crop.
         return (
-            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
+            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=bicubic,"
             f"crop={width}:{height}:'{cx}':'{cy}',"
             f"unsharp=lx=5:ly=5:la=0.8:cx=5:cy=5:ca=0.0"
             f"[{out_label}]"
@@ -769,7 +769,7 @@ def _fc_crop_fill(
         f"crop={width}:{height},"
         f"boxblur=luma_radius=25:luma_power=1:chroma_radius=25:chroma_power=1[_cf_bg];"
         f"[0:v]crop={crop_w_native}:{crop_h_native}:'{cx}':'{cy}',"
-        f"scale={width}:{vid_h}:flags=lanczos,"
+        f"scale={width}:{vid_h}:flags=bicubic,"
         f"unsharp=lx=5:ly=5:la=0.4:cx=5:cy=5:ca=0.0[_cf_fg];"
         f"[_cf_bg][_cf_fg]overlay=(W-w)/2:(H-h)/2[{out_label}]"
     )
@@ -1093,7 +1093,7 @@ async def _encode_reframed_and_captioned(
                 stderr=asyncio.subprocess.PIPE,
             )
             try:
-                _, stderr = await asyncio.wait_for(proc.communicate(), timeout=180)
+                _, stderr = await asyncio.wait_for(proc.communicate(), timeout=280)
             except asyncio.TimeoutError:
                 proc.kill()
                 await proc.wait()
