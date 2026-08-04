@@ -369,6 +369,258 @@ function TestLabGenerator({ showToast }) {
   )
 }
 
+function EmailBroadcast({ showToast }) {
+  const [mode, setMode]           = useState('subscribers')
+  const [query, setQuery]         = useState("SELECT email FROM users WHERE plan != 'free'")
+  const [recipients, setRecipients] = useState(null)
+  const [loadingRecipients, setLoadingRecipients] = useState(false)
+  const [subject, setSubject]     = useState('')
+  const [htmlBody, setHtmlBody]   = useState('')
+  const [sending, setSending]     = useState(false)
+  const [sendResult, setSendResult] = useState(null)
+  const [previewMode, setPreviewMode] = useState(false)
+
+  const fetchRecipients = async () => {
+    setLoadingRecipients(true)
+    setSendResult(null)
+    try {
+      const r = await authFetch('/admin/email/recipients', {
+        method: 'POST',
+        body: JSON.stringify({ mode, query: mode === 'query' ? query : '' }),
+      })
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Failed to fetch recipients')
+      const d = await r.json()
+      setRecipients(d)
+    } catch (e) {
+      showToast(e.message, 'error')
+      setRecipients(null)
+    }
+    setLoadingRecipients(false)
+  }
+
+  const handleSend = async () => {
+    if (!recipients?.emails?.length) return showToast('No recipients loaded', 'error')
+    if (!subject.trim()) return showToast('Subject is required', 'error')
+    if (!htmlBody.trim()) return showToast('Email body is required', 'error')
+
+    if (!window.confirm(`Send email to ${recipients.emails.length} recipient(s)?\n\nSubject: ${subject}`)) return
+
+    setSending(true)
+    setSendResult(null)
+    try {
+      const r = await authFetch('/admin/email/send', {
+        method: 'POST',
+        body: JSON.stringify({ to: recipients.emails, subject, html: htmlBody }),
+      })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.detail || 'Send failed')
+      setSendResult(d)
+      if (d.success) showToast(`Sent to ${d.total_sent} recipient(s)!`)
+      else showToast(`Partial send: ${d.total_sent} sent, ${d.total_failed} failed`, 'error')
+    } catch (e) {
+      showToast(e.message, 'error')
+    }
+    setSending(false)
+  }
+
+  return (
+    <div>
+      <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111', marginBottom: '4px' }}>Email Broadcast</h2>
+      <p style={{ fontSize: '0.78rem', color: '#999', marginBottom: '20px' }}>
+        Send emails to subscribed users via Resend. Choose recipients, compose your email, and send.
+      </p>
+
+      {/* Mode selector */}
+      <div style={{ ...card, marginBottom: '16px' }}>
+        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '10px' }}>
+          1. Select Recipients
+        </label>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+          <button
+            onClick={() => setMode('subscribers')}
+            style={{
+              padding: '9px 18px', fontWeight: 700, fontSize: '0.82rem', borderRadius: '8px', cursor: 'pointer',
+              background: mode === 'subscribers' ? '#cf1322' : '#f4f4f4',
+              color: mode === 'subscribers' ? '#fff' : '#555',
+              border: mode === 'subscribers' ? '2px solid #111' : '1px solid #e5e5e5',
+              boxShadow: mode === 'subscribers' ? '2px 2px 0 #111' : 'none',
+            }}
+          >
+            All Paid Subscribers
+          </button>
+          <button
+            onClick={() => setMode('query')}
+            style={{
+              padding: '9px 18px', fontWeight: 700, fontSize: '0.82rem', borderRadius: '8px', cursor: 'pointer',
+              background: mode === 'query' ? '#cf1322' : '#f4f4f4',
+              color: mode === 'query' ? '#fff' : '#555',
+              border: mode === 'query' ? '2px solid #111' : '1px solid #e5e5e5',
+              boxShadow: mode === 'query' ? '2px 2px 0 #111' : 'none',
+            }}
+          >
+            Custom SQL Query
+          </button>
+        </div>
+
+        {mode === 'query' && (
+          <div style={{ marginBottom: '14px' }}>
+            <textarea
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="SELECT email FROM users WHERE ..."
+              rows={4}
+              style={{
+                width: '100%', fontFamily: 'monospace', fontSize: '0.82rem',
+                padding: '12px', border: '1.5px solid #e5e5e5', borderRadius: '8px',
+                outline: 'none', resize: 'vertical', boxSizing: 'border-box',
+                background: '#fafafa',
+              }}
+              onFocus={e => e.target.style.borderColor = '#cf1322'}
+              onBlur={e => e.target.style.borderColor = '#e5e5e5'}
+            />
+            <p style={{ fontSize: '0.7rem', color: '#aaa', marginTop: '4px' }}>
+              Query must return an <code>email</code> column. Only SELECT queries are allowed.
+            </p>
+          </div>
+        )}
+
+        <button
+          onClick={fetchRecipients}
+          disabled={loadingRecipients}
+          style={{ ...btnRed, padding: '9px 18px', fontSize: '0.78rem' }}
+        >
+          {loadingRecipients ? 'Loading…' : 'Load Recipients'}
+        </button>
+
+        {recipients && (
+          <div style={{ marginTop: '14px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+              <span style={badge('#16a34a', '#f0fdf4')}>{recipients.count} recipient(s)</span>
+            </div>
+            {recipients.emails.length > 0 && (
+              <div style={{
+                maxHeight: '160px', overflowY: 'auto',
+                background: '#fafafa', border: '1px solid #e5e5e5', borderRadius: '8px',
+                padding: '10px 14px', fontSize: '0.78rem', color: '#555',
+                fontFamily: 'monospace', lineHeight: 1.8,
+              }}>
+                {recipients.emails.map((e, i) => (
+                  <div key={i}>{e}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Compose */}
+      <div style={{ ...card, marginBottom: '16px' }}>
+        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '10px' }}>
+          2. Compose Email
+        </label>
+
+        <div style={{ marginBottom: '14px' }}>
+          <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#333', display: 'block', marginBottom: '6px' }}>Subject</label>
+          <input
+            value={subject}
+            onChange={e => setSubject(e.target.value)}
+            placeholder="e.g. ShortClipr Update — New Features & Improvements"
+            style={{
+              width: '100%', padding: '11px 14px', border: '1.5px solid #e5e5e5',
+              borderRadius: '8px', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box',
+            }}
+            onFocus={e => e.target.style.borderColor = '#cf1322'}
+            onBlur={e => e.target.style.borderColor = '#e5e5e5'}
+          />
+        </div>
+
+        <div style={{ marginBottom: '14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#333' }}>Email Body (HTML)</label>
+            <button
+              onClick={() => setPreviewMode(!previewMode)}
+              style={{ ...btnOutline, padding: '4px 12px', fontSize: '0.72rem' }}
+            >
+              {previewMode ? 'Edit' : 'Preview'}
+            </button>
+          </div>
+          {previewMode ? (
+            <div
+              style={{
+                border: '1.5px solid #e5e5e5', borderRadius: '8px',
+                padding: '16px', minHeight: '250px', background: '#fff',
+                fontSize: '0.88rem', lineHeight: 1.6,
+              }}
+              dangerouslySetInnerHTML={{ __html: htmlBody }}
+            />
+          ) : (
+            <textarea
+              value={htmlBody}
+              onChange={e => setHtmlBody(e.target.value)}
+              placeholder={`<h2>Hey there!</h2>\n<p>Here's what's new at ShortClipr this week...</p>\n\n<h3>Pipeline Fix</h3>\n<p>Video clips were failing last week due to a pipeline issue. This is now fixed and all clips are generating correctly.</p>\n\n<h3>New: Email Updates</h3>\n<p>We've added email notifications! You'll receive a daily summary of clips generated in the last 24 hours.</p>\n\n<p>— The ShortClipr Team</p>`}
+              rows={14}
+              style={{
+                width: '100%', fontFamily: 'monospace', fontSize: '0.82rem',
+                padding: '12px', border: '1.5px solid #e5e5e5', borderRadius: '8px',
+                outline: 'none', resize: 'vertical', boxSizing: 'border-box',
+                lineHeight: 1.6,
+              }}
+              onFocus={e => e.target.style.borderColor = '#cf1322'}
+              onBlur={e => e.target.style.borderColor = '#e5e5e5'}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Send */}
+      <div style={{ ...card }}>
+        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '10px' }}>
+          3. Send
+        </label>
+
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            onClick={handleSend}
+            disabled={sending || !recipients?.emails?.length || !subject.trim() || !htmlBody.trim()}
+            style={{
+              ...btnRed, padding: '12px 28px', fontSize: '0.88rem',
+              opacity: (sending || !recipients?.emails?.length || !subject.trim() || !htmlBody.trim()) ? 0.5 : 1,
+            }}
+          >
+            {sending ? 'Sending…' : `Send to ${recipients?.count || 0} recipient(s)`}
+          </button>
+
+          {sendResult && (
+            <div style={{
+              display: 'flex', gap: '8px', alignItems: 'center',
+            }}>
+              {sendResult.success ? (
+                <span style={badge('#16a34a', '#f0fdf4')}>Sent {sendResult.total_sent}</span>
+              ) : (
+                <>
+                  <span style={badge('#16a34a', '#f0fdf4')}>Sent {sendResult.total_sent}</span>
+                  <span style={badge('#dc2626', '#fef2f2')}>Failed {sendResult.total_failed}</span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {sendResult?.errors?.length > 0 && (
+          <div style={{
+            marginTop: '12px', background: '#fef2f2', border: '1px solid #fecaca',
+            borderRadius: '8px', padding: '10px 14px', fontSize: '0.78rem', color: '#dc2626',
+          }}>
+            {sendResult.errors.map((e, i) => (
+              <div key={i}>Batch {e.batch}: {e.error}</div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ShortCard({ clip, label }) {
   return (
     <div style={{ ...card, padding: '0', overflow: 'hidden', aspectRatio: '1 / 1', display: 'flex', flexDirection: 'column' }}>
@@ -522,6 +774,7 @@ export default function Admin() {
             { key: 'jobs',     label: '📋 All Jobs'  },
             { key: 'generate', label: '⚡ Generate'  },
             { key: 'testlab',  label: '🧪 Test Lab'  },
+            { key: 'email',    label: '📧 Email'     },
           ].map(t => (
             <button key={t.key} onClick={() => setTab(t.key)} style={tabStyle(tab === t.key)}>
               {t.label}
@@ -686,6 +939,11 @@ export default function Admin() {
               ))}
             </div>
           </div>
+        )}
+
+        {/* ── Email tab ── */}
+        {tab === 'email' && (
+          <EmailBroadcast showToast={showToast} />
         )}
 
         {/* ── Test Lab tab ── */}

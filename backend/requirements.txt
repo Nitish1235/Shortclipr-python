@@ -36,3 +36,6 @@ numpy==1.26.4
 
 ## Hook-title rounded background box (text measurement + rounded-rect PNG)
 Pillow==10.4.0
+
+## Email (Resend API — admin broadcast to subscribers)
+resend==2.5.0

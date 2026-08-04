@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     # Prod: https://shortclipr.com/social/auth/tiktok/callback
     TIKTOK_REDIRECT_URI:  str = "http://localhost:8080/social/auth/tiktok/callback"
 
+    # ── Resend (email broadcast) ─────────────────────────────
+    RESEND_API_KEY: str = ""
+    RESEND_FROM_EMAIL: str = "ShortClipr <updates@shortclipr.com>"
+
     # ── Dodo Payments ─────────────────────────────────────────
     DODO_PAYMENTS_API_KEY: str = ""
     DODO_PAYMENTS_WEBHOOK_SECRET: str = ""
