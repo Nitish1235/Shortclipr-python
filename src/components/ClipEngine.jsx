@@ -299,7 +299,7 @@ export default function ClipEngine({ onJobCreated }) {
   const [shortTemplate, setShortTemplate] = useState('crop_fill')
   const [barColor,      setBarColor]      = useState('#0d0d0d')
   const [aspect,        setAspect]        = useState('9:16')
-  const [titleEnabled,  setTitleEnabled]  = useState(true)
+  const [titleEnabled,  setTitleEnabled]  = useState(false)
   const [titleColor,    setTitleColor]    = useState('white')
   const [titleBg,       setTitleBg]       = useState('none')
   const [titleBgOpacity, setTitleBgOpacity] = useState(0.55)
