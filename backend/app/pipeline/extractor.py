@@ -54,7 +54,7 @@ import tempfile
 from pathlib import Path
 
 from app.core.config import get_settings
-from app.core.proxy import get_youtube_proxy
+from app.core.proxy import get_proxyseller_proxy
 from app.pipeline.captions import (
     Caption, build_ass_content, compute_hook_duration, _hook_position, _safe_upper,
 )
@@ -393,7 +393,7 @@ async def get_clip_via_dash(
     should catch and fall back to _get_source + extract_clip.
     """
     if not proxy_url:
-        proxy_url = get_youtube_proxy(session_id=session_id, purpose="dash-clip")
+        proxy_url = get_proxyseller_proxy(session_id=session_id)
     raw_path  = output_path.with_suffix(".dash_raw.mp4")
 
     try:

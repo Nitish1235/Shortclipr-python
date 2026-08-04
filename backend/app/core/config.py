@@ -70,9 +70,9 @@ class Settings(BaseSettings):
 
     # ── Worker / Pipeline ─────────────────────────────────────
     MAX_CONCURRENT_CLIPS: int = 10          # asyncio semaphore for cheap -c copy extraction
-    MAX_CONCURRENT_ENCODES: int = 4         # asyncio semaphore for libx264 reframe+caption encodes (each -threads 1 → 4 concurrent × 1 = 4 vCPUs)
+    MAX_CONCURRENT_ENCODES: int = 2         # asyncio semaphore for libx264 reframe+caption encodes (each -threads 1 → 2 concurrent × 1 = 2 vCPUs, 2 spare for I/O + other work)
     SOURCE_DOWNLOAD_CHUNKS: int = 8         # parallel ranged-download chunk count
-    MAX_CONCURRENT_JOBS_PER_USER: int = 2   # prevent spam-submit
+    MAX_CONCURRENT_JOBS_PER_USER: int = 1   # one job at a time — pins the user's IP + prevents Proxy-Seller IP collisions
     # Note: per-video duration limits are now plan-based — see app/core/plan_limits.py
 
     # ── Worker dispatch (optional second Cloud Run services) ───
