@@ -649,7 +649,12 @@ async def get_stream_url(video_id: str, quality: str = "1080p", session_id: str 
     return url, user_agent
 
 
-async def get_stream_urls(video_id: str, quality: str = "1080p", session_id: str | None = None) -> tuple[str, str | None, str]:
+async def get_stream_urls(
+    video_id: str,
+    quality: str = "1080p",
+    session_id: str | None = None,
+    proxy_override: str | None = None,
+) -> tuple[str, str | None, str]:
     """
     Resolve both video and audio CDN URLs for clip extraction.
 
@@ -659,6 +664,11 @@ async def get_stream_urls(video_id: str, quality: str = "1080p", session_id: str
     picked video stream already has embedded audio (progressive format) or no
     separate audio stream is available, and user_agent is the UA both URLs
     must be downloaded with (CDN URLs are bound to the requesting client's UA).
+
+    proxy_override: when set, ALL resolution attempts use this proxy instead of
+    DataImpulse. Used by the FFmpeg stage to resolve URLs through the SAME IP
+    that will download them (Proxy-Seller ISP), avoiding IP-bound signature
+    mismatches.
 
     Tries yt-dlp (tv_embedded, with audio) FIRST — in production all three
     InnerTube clients (ANDROID/TV/IOS) were consistently getting blocked or
@@ -670,7 +680,7 @@ async def get_stream_urls(video_id: str, quality: str = "1080p", session_id: str
     h = int(quality.rstrip("p"))
 
     # ── 1. yt-dlp + tv_embedded + audio (now first — see docstring) ────
-    proxy = get_dataimpulse_proxy(purpose="stream-ytdlp-tv_embedded")
+    proxy = proxy_override or get_dataimpulse_proxy(purpose="stream-ytdlp-tv_embedded")
     opts = _ytdlp_base_opts(proxy)
     opts["format"] = _fmt(h)
     opts["extractor_args"] = {"youtube": {"player_client": ["tv_embedded"]}}
@@ -705,7 +715,7 @@ async def get_stream_urls(video_id: str, quality: str = "1080p", session_id: str
     last_exc: Exception | None = None
     for client_name, send_params, user_agent in _clients:
         try:
-            proxy = get_dataimpulse_proxy(purpose=f"stream-innertube-{client_name}")
+            proxy = proxy_override or get_dataimpulse_proxy(purpose=f"stream-innertube-{client_name}")
             data = await call_player_api(video_id, client_name=client_name, send_params=send_params, proxy_url=proxy)
 
             blocked, reason = _innertube_is_blocked(data)

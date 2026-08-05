@@ -453,6 +453,27 @@ async def download_clip_segments(
     return output_path, actual_start_t
 
 
+_TRANSIENT_ERRORS = ("disconnected", "reset by peer", "timed out", "connect timeout")
+
+
+async def _retry_transient(coro_factory, retries=2, backoff=2.0, label=""):
+    """Retry a coroutine on transient proxy/network errors with exponential backoff."""
+    last_exc = None
+    for attempt in range(1 + retries):
+        try:
+            return await coro_factory()
+        except Exception as exc:
+            last_exc = exc
+            msg = str(exc).lower()
+            if attempt < retries and any(tok in msg for tok in _TRANSIENT_ERRORS):
+                delay = backoff * (2 ** attempt)
+                logger.warning(f"{label} transient error (attempt {attempt+1}): {exc} — retrying in {delay:.0f}s")
+                await asyncio.sleep(delay)
+            else:
+                raise
+    raise last_exc
+
+
 async def download_all_clips_parallel(
     video_url: str,
     clips: list[tuple[float, float]],
@@ -460,7 +481,7 @@ async def download_all_clips_parallel(
     audio_url: str | None = None,
     user_agent: str | None = None,
     proxy_url: str | None = None,
-    max_concurrent: int = 5,
+    max_concurrent: int = 3,
 ) -> list[tuple[Path, float]]:
     """
     Download multiple clips in parallel, sharing one httpx client and
@@ -469,12 +490,13 @@ async def download_all_clips_parallel(
     clips: list of (start_sec, end_sec)
     Returns: list of (raw_mp4_path, actual_start_t) per clip, same order as input.
     max_concurrent: caps simultaneous downloads to avoid saturating proxy connections.
+                    Default 3 keeps peak at ~6 connections (2 tracks × 1 sequential
+                    fetch each × 3 clips) — safe for ISP proxies with ~10-conn limits.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     headers = {"User-Agent": user_agent} if user_agent else {}
-    timeout = httpx.Timeout(120.0, connect=30.0)
-    # One connection per active clip (video+audio = 2 per clip), plus headroom
-    limits = httpx.Limits(max_connections=max_concurrent * 3, max_keepalive_connections=max_concurrent * 2)
+    timeout = httpx.Timeout(60.0, connect=15.0)
+    limits = httpx.Limits(max_connections=max_concurrent * 3, max_keepalive_connections=max_concurrent)
 
     client_kwargs: dict = {"timeout": timeout, "limits": limits, "follow_redirects": True}
     if proxy_url:
@@ -507,39 +529,42 @@ async def download_all_clips_parallel(
                         raise RuntimeError(f"No segments for clip {start}-{end}s")
                     sb, eb = relevant[0]["start_b"], relevant[-1]["end_b"]
                     actual_t = relevant[0]["start_t"]
-                    init_r, seg_r = await asyncio.gather(
-                        client.get(url, headers={**headers, "Range": f"bytes=0-{init_end-1}"}),
-                        client.get(url, headers={**headers, "Range": f"bytes={sb}-{eb}"}),
-                    )
-                    for r in (init_r, seg_r):
-                        if r.status_code not in (200, 206):
-                            raise RuntimeError(f"Fetch failed HTTP {r.status_code}")
+                    # Sequential fetches — init then segments — to halve peak
+                    # connections per clip through the proxy.
+                    init_r = await client.get(url, headers={**headers, "Range": f"bytes=0-{init_end-1}"})
+                    if init_r.status_code not in (200, 206):
+                        raise RuntimeError(f"Init fetch failed HTTP {init_r.status_code}")
+                    seg_r = await client.get(url, headers={**headers, "Range": f"bytes={sb}-{eb}"})
+                    if seg_r.status_code not in (200, 206):
+                        raise RuntimeError(f"Segment fetch failed HTTP {seg_r.status_code}")
                     out_path.parent.mkdir(parents=True, exist_ok=True)
                     with open(out_path, "wb") as f:
                         f.write(init_r.content)
                         f.write(seg_r.content)
                     return actual_t
 
-                try:
-                    if audio_url and a_segs:
-                        v_start_t, a_start_t = await asyncio.gather(
-                            _dl_track(video_url, v_init_end, v_segs, video_tmp),
-                            _dl_track(audio_url, a_init_end, a_segs, audio_tmp),
-                        )
-                        await _mux(video_tmp, audio_tmp, output)
-                        # _mux uses -avoid_negative_ts make_zero which shifts all
-                        # PTS by min(v_start_t, a_start_t).  Return the min so the
-                        # orchestrator's ss_offset = ts.start - min_start stays
-                        # aligned with the muxed file's PTS-0 anchor.
-                        actual_start_t = min(v_start_t, a_start_t)
-                    else:
-                        actual_start_t = await _dl_track(video_url, v_init_end, v_segs, output)
-                finally:
-                    video_tmp.unlink(missing_ok=True)
-                    audio_tmp.unlink(missing_ok=True)
+                async def _dl_one_inner():
+                    try:
+                        if audio_url and a_segs:
+                            v_start_t, a_start_t = await asyncio.gather(
+                                _dl_track(video_url, v_init_end, v_segs, video_tmp),
+                                _dl_track(audio_url, a_init_end, a_segs, audio_tmp),
+                            )
+                            await _mux(video_tmp, audio_tmp, output)
+                            return output, min(v_start_t, a_start_t)
+                        else:
+                            actual_start_t = await _dl_track(video_url, v_init_end, v_segs, output)
+                            return output, actual_start_t
+                    finally:
+                        video_tmp.unlink(missing_ok=True)
+                        audio_tmp.unlink(missing_ok=True)
 
-                logger.info(f"Clip {i} ({start:.0f}-{end:.0f}s): {output.stat().st_size//1024}KB")
-                return output, actual_start_t
+                result = await _retry_transient(
+                    _dl_one_inner, retries=2, backoff=2.0,
+                    label=f"clip {i} ({start:.0f}-{end:.0f}s)",
+                )
+                logger.info(f"Clip {i} ({start:.0f}-{end:.0f}s): {result[0].stat().st_size//1024}KB")
+                return result
 
         results = await asyncio.gather(*[_dl_one(i, s, e) for i, (s, e) in enumerate(clips)])
 

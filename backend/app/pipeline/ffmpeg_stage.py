@@ -31,7 +31,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from app.core.config import get_settings
-from app.core.proxy import get_proxyseller_proxy
+from app.core.proxy import get_dataimpulse_proxy, get_proxyseller_proxy
 from app.db import supabase as db
 from app.pipeline.ai_clipper import ClipTimestamp
 from app.pipeline.captions import (
@@ -388,36 +388,77 @@ async def _dash_download_with_refresh(
     quality: str,
 ) -> list:
     """
-    Attempt DASH download using the cached stream URL. If it fails with a
-    signature-expired signal, re-resolve once and retry. Second failure
-    bubbles up so the caller can fall through to full-source download.
+    DASH download with IP-aware cascading fallbacks.
+
+    The core problem: stream URLs are IP-bound — the CDN signature covers
+    the exit IP that resolved them. If we resolve via DataImpulse (IP-A)
+    but download via Proxy-Seller (IP-B), the CDN returns 403.
+
+    Fallback chain (each step re-resolves URLs through the SAME proxy
+    that will download them, so IPs always match):
+
+      1. Cached URLs + Proxy-Seller DASH   (fast path — URLs from API stage)
+      2. Proxy-Seller stream resolve → Proxy-Seller DASH
+         (fixes IP mismatch: URLs now bound to Proxy-Seller's IP)
+      3. DataImpulse stream resolve → Proxy-Seller DASH
+         (different residential IP may dodge a blocked IP)
+      4. Caller's full-source fallback (downloads entire video)
     """
+    ps_proxy = get_proxyseller_proxy(job_id)
+
+    # ── Attempt 1: cached URLs + Proxy-Seller DASH ──
     try:
         return await download_all_clips_parallel(
             stream_url, clip_ranges, job_dir,
             audio_url=audio_url, user_agent=user_agent,
-            proxy_url=get_proxyseller_proxy(job_id),
-            max_concurrent=5,
+            proxy_url=ps_proxy,
+            max_concurrent=3,
         )
-    except Exception as exc:
-        exc_str = str(exc)
-        looks_expired = (
-            "403" in exc_str or "Forbidden" in exc_str or
-            "expired" in exc_str.lower() or "signature" in exc_str.lower()
-        )
-        if not looks_expired or not stream_url:
-            raise
+    except Exception as exc1:
+        logger.warning(f"[{job_id}] DASH attempt 1 failed (cached URLs + Proxy-Seller): {exc1}")
 
-        logger.info(f"[{job_id}] Cached stream URL rejected — re-resolving")
-        stream_url, audio_url, user_agent = await get_stream_urls(
-            video_id, quality=quality, session_id=job_id,
-        )
-        return await download_all_clips_parallel(
-            stream_url, clip_ranges, job_dir,
-            audio_url=audio_url, user_agent=user_agent,
-            proxy_url=get_proxyseller_proxy(job_id),
-            max_concurrent=5,
-        )
+    # ── Attempt 2: resolve URLs through Proxy-Seller → download via Proxy-Seller ──
+    # Fixes the IP mismatch: URLs are now signed for Proxy-Seller's static IP.
+    if ps_proxy:
+        try:
+            logger.info(f"[{job_id}] Re-resolving stream URLs through Proxy-Seller IP")
+            stream_url, audio_url, user_agent = await get_stream_urls(
+                video_id, quality=quality, session_id=job_id,
+                proxy_override=ps_proxy,
+            )
+            return await download_all_clips_parallel(
+                stream_url, clip_ranges, job_dir,
+                audio_url=audio_url, user_agent=user_agent,
+                proxy_url=ps_proxy,
+                max_concurrent=3,
+            )
+        except Exception as exc2:
+            logger.warning(f"[{job_id}] DASH attempt 2 failed (Proxy-Seller resolve + DASH): {exc2}")
+
+    # ── Attempt 3: resolve URLs through DataImpulse → download via Proxy-Seller ──
+    # Fresh residential IP may succeed where the Proxy-Seller IP was blocked.
+    # URLs will be bound to DataImpulse's IP, but many CDN URLs are NOT
+    # IP-bound (ip not in sparams) — worth trying before the expensive
+    # full-source fallback.
+    di_proxy = get_dataimpulse_proxy(purpose=f"dash-resolve-{job_id[:8]}")
+    if di_proxy:
+        try:
+            logger.info(f"[{job_id}] Re-resolving stream URLs through DataImpulse")
+            stream_url, audio_url, user_agent = await get_stream_urls(
+                video_id, quality=quality, session_id=job_id,
+                proxy_override=di_proxy,
+            )
+            return await download_all_clips_parallel(
+                stream_url, clip_ranges, job_dir,
+                audio_url=audio_url, user_agent=user_agent,
+                proxy_url=ps_proxy or di_proxy,
+                max_concurrent=3,
+            )
+        except Exception as exc3:
+            logger.warning(f"[{job_id}] DASH attempt 3 failed (DataImpulse resolve + DASH): {exc3}")
+
+    # All DASH attempts exhausted — caller falls through to full-source download
+    raise RuntimeError(f"All DASH download attempts failed for job {job_id}")
 
 
 async def _fail_and_refund_from_db(job_id: str, error_message: str) -> None:
