@@ -110,8 +110,8 @@ export default function Hero() {
           margin: '0 auto 36px',
           fontWeight: 400,
         }}>
-          Paste any YouTube URL and our AI extracts your best moments, auto-reframes to 9:16,
-          burns in viral captions, and delivers ready-to-post clips for TikTok, Reels &amp; Shorts.
+          The AI short clip maker that turns any YouTube video into viral shorts. Paste a URL — our YouTube clips maker
+          extracts the best moments, auto-reframes to 9:16, burns in captions, and delivers ready-to-post clips.
         </p>
 
         {/* ── BIG URL INPUT — center, above fold ── */}
