@@ -38,4 +38,4 @@ numpy==1.26.4
 Pillow==10.4.0
 
 ## Email (Resend API — admin broadcast to subscribers)
-resend==2.5.0
+resend==2.4.0
