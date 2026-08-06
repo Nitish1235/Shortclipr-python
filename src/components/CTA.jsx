@@ -6,7 +6,7 @@ export default function CTA() {
 
   const handleStartFree = (e) => {
     e.preventDefault()
-    if (location.pathname === '/') {
+    if (location.pathname === '/youtube-shorts') {
       const el = document.getElementById('hero')
       if (el) {
         el.scrollIntoView({ behavior: 'smooth' })
@@ -14,7 +14,7 @@ export default function CTA() {
         if (input) input.focus()
       }
     } else {
-      navigate('/', { state: { scrollToSection: 'hero' } })
+      navigate('/youtube-shorts', { state: { scrollToSection: 'hero' } })
     }
   }
 

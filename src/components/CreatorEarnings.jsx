@@ -620,7 +620,7 @@ export default function CreatorEarnings() {
   const handleCta = () => {
     const el = document.getElementById('pricing')
     if (el) el.scrollIntoView({ behavior: 'smooth' })
-    else navigate('/')
+    else navigate('/youtube-shorts')
   }
 
   return (

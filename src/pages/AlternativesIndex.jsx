@@ -10,12 +10,12 @@ export default function AlternativesIndex() {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
     name: 'ShortClipr — Compare Alternatives',
-    url: `${SITE}/alternatives`,
+    url: `${SITE}/youtube-shorts/alternatives`,
     description: 'Side-by-side comparisons of ShortClipr against Opus Clip, Klap, 2short.ai, Vidyo, Munch, Riverside Magic Clips, Spikes Studio, Vizard, Wisecut, and other AI video clipping tools — speed, pricing, watermarks, and feature breakdowns.',
     hasPart: alternativeSlugs.map(s => ({
       '@type': 'WebPage',
       name: `ShortClipr vs ${alternativesContent[s].name}`,
-      url: `${SITE}/alternatives/${s}`,
+      url: `${SITE}/youtube-shorts/alternatives/${s}`,
     })),
   }
 
@@ -25,7 +25,7 @@ export default function AlternativesIndex() {
         title="ShortClipr Alternatives — Compare vs Opus Clip, Klap, Munch, Riverside & More"
         description="See exactly how ShortClipr stacks up against Opus Clip, Klap, 2short.ai, Vidyo, Munch, Riverside Magic Clips, Spikes Studio, Vizard, and Wisecut — speed, pricing, watermarks, and feature breakdowns."
         keywords="opus clip alternative, klap alternative, 2short alternative, vidyo alternative, munch alternative, riverside clips alternative, spikes studio alternative, vizard alternative, ai clipping tool comparison"
-        path="/alternatives"
+        path="/youtube-shorts/alternatives"
         schema={schema}
       />
       <Navigation />
@@ -49,7 +49,7 @@ export default function AlternativesIndex() {
             {alternativeSlugs.map(s => {
               const a = alternativesContent[s]
               return (
-                <Link key={s} to={`/alternatives/${s}`} className="seo-feature" style={{ textDecoration: 'none' }}>
+                <Link key={s} to={`/youtube-shorts/alternatives/${s}`} className="seo-feature" style={{ textDecoration: 'none' }}>
                   <span className="seo-feature-icon">⚖️</span>
                   <div>
                     <h3>ShortClipr vs {a.name}</h3>
@@ -64,7 +64,7 @@ export default function AlternativesIndex() {
         <section className="seo-cta-band">
           <h2>Try it yourself — free</h2>
           <p>3 videos, no watermark, no credit card. Compare the output directly.</p>
-          <Link to="/" className="seo-btn-primary">Get started free →</Link>
+          <Link to="/youtube-shorts" className="seo-btn-primary">Get started free →</Link>
         </section>
       </div>
 

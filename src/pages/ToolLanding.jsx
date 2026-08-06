@@ -9,9 +9,9 @@ export default function ToolLanding() {
   const { slug } = useParams()
   const data = toolsContent[slug]
 
-  if (!data) return <Navigate to="/" replace />
+  if (!data) return <Navigate to="/youtube-shorts" replace />
 
-  const path = `/tools/${data.slug}`
+  const path = `/youtube-shorts/tools/${data.slug}`
 
   const schema = [
     {
@@ -37,8 +37,8 @@ export default function ToolLanding() {
       '@context': 'https://schema.org',
       '@type': 'BreadcrumbList',
       itemListElement: [
-        { '@type': 'ListItem', position: 1, name: 'Home', item: SITE },
-        { '@type': 'ListItem', position: 2, name: 'Tools', item: `${SITE}/tools` },
+        { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE}/youtube-shorts` },
+        { '@type': 'ListItem', position: 2, name: 'Tools', item: `${SITE}/youtube-shorts/tools` },
         { '@type': 'ListItem', position: 3, name: data.h1, item: `${SITE}${path}` },
       ],
     },
@@ -65,8 +65,8 @@ export default function ToolLanding() {
             <h1 className="seo-h1">{data.h1}</h1>
             <p className="seo-sub">{data.subhead}</p>
             <div className="seo-cta-row">
-              <Link to="/" className="seo-btn-primary">Try it free →</Link>
-              <Link to="/" className="seo-btn-secondary">See how it works</Link>
+              <Link to="/youtube-shorts" className="seo-btn-primary">Try it free →</Link>
+              <Link to="/youtube-shorts" className="seo-btn-secondary">See how it works</Link>
             </div>
             {data.heroStat && (
               <div className="seo-stat">
@@ -125,9 +125,9 @@ export default function ToolLanding() {
           <h2 className="seo-section-title" style={{ marginBottom: 16 }}>Explore more</h2>
           <div className="seo-crosslinks">
             {others.map(s => (
-              <Link key={s} to={`/tools/${s}`} className="seo-crosslink">{toolsContent[s].h1}</Link>
+              <Link key={s} to={`/youtube-shorts/tools/${s}`} className="seo-crosslink">{toolsContent[s].h1}</Link>
             ))}
-            <Link to="/alternatives/opus-clip" className="seo-crosslink">ShortClipr vs Opus Clip</Link>
+            <Link to="/youtube-shorts/alternatives/opus-clip" className="seo-crosslink">ShortClipr vs Opus Clip</Link>
           </div>
         </section>
 
@@ -135,7 +135,7 @@ export default function ToolLanding() {
         <section className="seo-cta-band">
           <h2>Try it on your own video — free</h2>
           <p>3 videos, no watermark, no credit card. Your first clips ready in minutes.</p>
-          <Link to="/" className="seo-btn-primary">Get started free →</Link>
+          <Link to="/youtube-shorts" className="seo-btn-primary">Get started free →</Link>
         </section>
       </div>
 

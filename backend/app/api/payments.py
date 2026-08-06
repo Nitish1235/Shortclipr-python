@@ -68,7 +68,7 @@ async def create_checkout_session(body: CheckoutRequest, current_user: CurrentUs
         product_id=product_id,
         user_email=current_user.email,
         success_url="https://shortclipr.com/payment/success",
-        cancel_url="https://shortclipr.com/#pricing",
+        cancel_url="https://shortclipr.com/youtube-shorts#pricing",
         metadata={
             "user_id": current_user.user_id,
             "plan": plan,

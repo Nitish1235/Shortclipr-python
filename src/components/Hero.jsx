@@ -15,7 +15,7 @@ export default function Hero() {
     const trimmed = url.trim()
     if (!trimmed) return
     if (user) {
-      navigate('/dashboard', { state: { pendingUrl: trimmed } })
+      navigate('/youtube-shorts/dashboard', { state: { pendingUrl: trimmed } })
     } else {
       sessionStorage.setItem('sc_pending_url', trimmed)
       setShowAuth(true)
@@ -188,7 +188,7 @@ export default function Hero() {
                   const ok = await loginWithGoogleToken(cr.credential)
                   if (ok) {
                     const saved = sessionStorage.getItem('sc_pending_url')
-                    navigate('/dashboard', { state: { pendingUrl: saved || url } })
+                    navigate('/youtube-shorts/dashboard', { state: { pendingUrl: saved || url } })
                   }
                 }}
                 onError={() => {}}

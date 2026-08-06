@@ -39,7 +39,7 @@ export default function FAQ() {
 
   const handleStartFree = (e) => {
     e.preventDefault()
-    if (location.pathname === '/') {
+    if (location.pathname === '/youtube-shorts') {
       const el = document.getElementById('hero')
       if (el) {
         el.scrollIntoView({ behavior: 'smooth' })
@@ -47,7 +47,7 @@ export default function FAQ() {
         if (input) input.focus()
       }
     } else {
-      navigate('/', { state: { scrollToSection: 'hero' } })
+      navigate('/youtube-shorts', { state: { scrollToSection: 'hero' } })
     }
   }
 
@@ -110,7 +110,7 @@ export default function FAQ() {
 
         {/* Bottom CTA */}
         <div style={{ marginTop: '28px', textAlign: 'center' }}>
-          <a href="/" onClick={handleStartFree} style={{
+          <a href="/youtube-shorts" onClick={handleStartFree} style={{
             display: 'inline-block',
             background: '#cf1322', color: '#fff',
             border: '2px solid #111', borderRadius: '8px',
@@ -128,16 +128,16 @@ export default function FAQ() {
           <p style={{ fontSize: '0.78rem', color: '#bbb', textAlign: 'center', marginBottom: '14px', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 600 }}>Explore ShortClipr</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
             {[
-              { label: 'YouTube to Shorts',    href: '/tools/youtube-to-shorts-converter'    },
-              { label: 'Podcast to Shorts',    href: '/tools/podcast-to-shorts'              },
-              { label: 'TikTok Clip Maker',    href: '/tools/tiktok-clip-maker'              },
-              { label: 'Video to Reels',       href: '/tools/video-to-reels'                 },
-              { label: 'Webinar to Clips',     href: '/tools/webinar-to-clips'               },
-              { label: 'Opus Clip Alternative',href: '/alternatives/opus-clip'               },
-              { label: '2short.ai Alternative',href: '/alternatives/2short'                  },
-              { label: 'Riverside Alternative',href: '/alternatives/riverside'               },
-              { label: 'Munch Alternative',    href: '/alternatives/munch'                   },
-              { label: 'Vizard Alternative',   href: '/alternatives/vizard'                  },
+              { label: 'YouTube to Shorts',    href: '/youtube-shorts/tools/youtube-to-shorts-converter'    },
+              { label: 'Podcast to Shorts',    href: '/youtube-shorts/tools/podcast-to-shorts'              },
+              { label: 'TikTok Clip Maker',    href: '/youtube-shorts/tools/tiktok-clip-maker'              },
+              { label: 'Video to Reels',       href: '/youtube-shorts/tools/video-to-reels'                 },
+              { label: 'Webinar to Clips',     href: '/youtube-shorts/tools/webinar-to-clips'               },
+              { label: 'Opus Clip Alternative',href: '/youtube-shorts/alternatives/opus-clip'               },
+              { label: '2short.ai Alternative',href: '/youtube-shorts/alternatives/2short'                  },
+              { label: 'Riverside Alternative',href: '/youtube-shorts/alternatives/riverside'               },
+              { label: 'Munch Alternative',    href: '/youtube-shorts/alternatives/munch'                   },
+              { label: 'Vizard Alternative',   href: '/youtube-shorts/alternatives/vizard'                  },
             ].map(({ label, href }) => (
               <a key={href} href={href} style={{
                 fontSize: '0.78rem', color: '#999', textDecoration: 'none',

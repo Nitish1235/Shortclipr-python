@@ -42,8 +42,8 @@ const Icon = {
 }
 
 const NAV_WORKSPACE = [
-  { icon: Icon.dashboard, label: 'Dashboard',     path: '/dashboard', exact: true },
-  { icon: Icon.clips,     label: 'Clips History', path: '/clips',     exact: true },
+  { icon: Icon.dashboard, label: 'Dashboard',     path: '/youtube-shorts/dashboard', exact: true },
+  { icon: Icon.clips,     label: 'Clips History', path: '/youtube-shorts/clips',     exact: true },
 ]
 const NAV_ACCOUNT = [
   { icon: Icon.billing, label: 'Billing', path: '/billing', exact: true },
@@ -233,7 +233,7 @@ export default function AppLayout({ children }) {
 
         {/* Brand */}
         <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid rgba(255,255,255,.06)' }}>
-          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+          <Link to="/youtube-shorts" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
             <span style={{ flexShrink: 0, display: 'flex' }}><Logo size={28} /></span>
             <div>
               <div style={{ fontSize: '.9rem', fontWeight: 700, color: '#fff', letterSpacing: '-.01em', lineHeight: 1.1 }}>

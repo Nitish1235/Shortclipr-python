@@ -9,7 +9,7 @@ export default function Navigation() {
   const { user, loginWithGoogleToken, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
-  const isApp = ['/dashboard','/editor','/lab'].some(p => location.pathname.startsWith(p))
+  const isApp = ['/youtube-shorts/dashboard','/youtube-shorts/editor','/youtube-shorts/lab'].some(p => location.pathname.startsWith(p))
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 10)
@@ -18,27 +18,28 @@ export default function Navigation() {
   }, [])
 
   const navLinks = isApp ? [] : [
-    { label: 'How it works', href: '/#how-it-works' },
-    { label: 'Features',     href: '/#features'     },
-    { label: 'Tools',        href: '/tools'          },
-    { label: 'Compare',      href: '/alternatives'   },
-    { label: 'Pricing',      href: '/#pricing'      },
+    { label: 'How it works', href: '/youtube-shorts#how-it-works' },
+    { label: 'Features',     href: '/youtube-shorts#features'     },
+    { label: 'Tools',        href: '/youtube-shorts/tools'          },
+    { label: 'Compare',      href: '/youtube-shorts/alternatives'   },
+    { label: 'Pricing',      href: '/youtube-shorts#pricing'      },
     { label: 'About',        href: '/about'          },
   ]
 
   const handleNavClick = (e, href) => {
-    if (href.startsWith('/#')) {
+    const hashIdx = href.indexOf('#')
+    if (hashIdx !== -1) {
       e.preventDefault()
-      const id = href.replace('/#', '')
-      if (location.pathname === '/') {
+      const id = href.slice(hashIdx + 1)
+      if (location.pathname === '/youtube-shorts') {
         const el = document.getElementById(id)
         if (el) el.scrollIntoView({ behavior: 'smooth' })
       } else {
-        navigate('/', { state: { scrollToSection: id } })
+        navigate('/youtube-shorts', { state: { scrollToSection: id } })
       }
-    } else if (href === '/') {
+    } else if (href === '/youtube-shorts') {
       e.preventDefault()
-      if (location.pathname === '/') {
+      if (location.pathname === '/youtube-shorts') {
         const el = document.getElementById('hero')
         if (el) {
           el.scrollIntoView({ behavior: 'smooth' })
@@ -46,7 +47,7 @@ export default function Navigation() {
           if (input) input.focus()
         }
       } else {
-        navigate('/', { state: { scrollToSection: 'hero' } })
+        navigate('/youtube-shorts', { state: { scrollToSection: 'hero' } })
       }
     }
   }
@@ -70,7 +71,7 @@ export default function Navigation() {
       }}>
 
         {/* Logo */}
-        <Link to="/" style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
+        <Link to="/youtube-shorts" style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
           <Logo size={30} />
           <span style={{ fontSize:'1rem', fontWeight:700, color:'#cf1322', letterSpacing:'-0.02em' }}>
             ShortClipr
@@ -110,7 +111,7 @@ export default function Navigation() {
                 🎬 {user.videos_remaining ?? '–'} clips left
               </div>
               {!isApp && (
-                <Link to="/dashboard" style={{
+                <Link to="/youtube-shorts/dashboard" style={{
                   background:'#f4f4f4', color:'#111', padding:'8px 16px',
                   borderRadius:'8px', fontSize:'0.82rem', fontWeight:700,
                   border:'1.5px solid #e5e5e5',
@@ -133,14 +134,14 @@ export default function Navigation() {
                 <GoogleLogin
                   onSuccess={async cr => {
                     const ok = await loginWithGoogleToken(cr.credential)
-                    if (ok) window.location.href = '/dashboard'
+                    if (ok) window.location.href = '/youtube-shorts/dashboard'
                   }}
                   onError={() => {}}
                   theme="outline" shape="rectangular" text="signin_with" size="medium"
                 />
               </div>
-              <a href="/"
-                onClick={(e) => handleNavClick(e, '/')}
+              <a href="/youtube-shorts"
+                onClick={(e) => handleNavClick(e, '/youtube-shorts')}
                 style={{
                   background:'#cf1322', color:'#fff',
                   padding:'10px 20px', borderRadius:'8px',

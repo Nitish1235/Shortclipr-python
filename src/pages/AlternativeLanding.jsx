@@ -10,9 +10,9 @@ export default function AlternativeLanding() {
   const { slug } = useParams()
   const data = alternativesContent[slug]
 
-  if (!data) return <Navigate to="/" replace />
+  if (!data) return <Navigate to="/youtube-shorts" replace />
 
-  const path = `/alternatives/${data.slug}`
+  const path = `/youtube-shorts/alternatives/${data.slug}`
 
   const schema = [
     {
@@ -28,8 +28,8 @@ export default function AlternativeLanding() {
       '@context': 'https://schema.org',
       '@type': 'BreadcrumbList',
       itemListElement: [
-        { '@type': 'ListItem', position: 1, name: 'Home', item: SITE },
-        { '@type': 'ListItem', position: 2, name: 'Alternatives', item: `${SITE}/alternatives` },
+        { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE}/youtube-shorts` },
+        { '@type': 'ListItem', position: 2, name: 'Alternatives', item: `${SITE}/youtube-shorts/alternatives` },
         { '@type': 'ListItem', position: 3, name: data.h1, item: `${SITE}${path}` },
       ],
     },
@@ -57,8 +57,8 @@ export default function AlternativeLanding() {
             <h1 className="seo-h1">{data.h1}</h1>
             <p className="seo-sub">{data.intro}</p>
             <div className="seo-cta-row">
-              <Link to="/" className="seo-btn-primary">Try ShortClipr free →</Link>
-              <Link to="/" className="seo-btn-secondary">Compare pricing</Link>
+              <Link to="/youtube-shorts" className="seo-btn-primary">Try ShortClipr free →</Link>
+              <Link to="/youtube-shorts" className="seo-btn-secondary">Compare pricing</Link>
             </div>
           </div>
         </section>
@@ -122,10 +122,10 @@ export default function AlternativeLanding() {
           <h2 className="seo-section-title" style={{ marginBottom: 16 }}>Explore more</h2>
           <div className="seo-crosslinks">
             {others.map(s => (
-              <Link key={s} to={`/alternatives/${s}`} className="seo-crosslink">ShortClipr vs {alternativesContent[s].name}</Link>
+              <Link key={s} to={`/youtube-shorts/alternatives/${s}`} className="seo-crosslink">ShortClipr vs {alternativesContent[s].name}</Link>
             ))}
             {toolLinks.map(s => (
-              <Link key={s} to={`/tools/${s}`} className="seo-crosslink">{toolsContent[s].h1}</Link>
+              <Link key={s} to={`/youtube-shorts/tools/${s}`} className="seo-crosslink">{toolsContent[s].h1}</Link>
             ))}
           </div>
         </section>
@@ -134,7 +134,7 @@ export default function AlternativeLanding() {
         <section className="seo-cta-band">
           <h2>See the difference on your own video</h2>
           <p>3 free videos, no watermark, no credit card — compare the output yourself.</p>
-          <Link to="/" className="seo-btn-primary">Get started free →</Link>
+          <Link to="/youtube-shorts" className="seo-btn-primary">Get started free →</Link>
         </section>
       </div>
 

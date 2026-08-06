@@ -53,7 +53,7 @@ export default function Billing() {
     setLoadingPlan(planId)
     try {
       const token = localStorage.getItem('sc_token')
-      if (!token) { navigate('/'); return }
+      if (!token) { navigate('/youtube-shorts'); return }
       const res = await fetch(`${API_BASE}/payments/checkout-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

@@ -140,16 +140,16 @@ export default function Dashboard() {
       localStorage.setItem('yt_connected', 'true')
       setYtConnected(true)
       showToast('YouTube connected successfully!')
-      window.history.replaceState({}, '', '/dashboard')
+      window.history.replaceState({}, '', '/youtube-shorts/dashboard')
     } else if (statusParam === 'tiktok_connected') {
       localStorage.setItem('tt_connected', 'true')
       setTtConnected(true)
       showToast('TikTok connected successfully!')
-      window.history.replaceState({}, '', '/dashboard')
+      window.history.replaceState({}, '', '/youtube-shorts/dashboard')
     } else if (statusParam === 'tiktok_error') {
       const reason = params.get('reason') || 'unknown error'
       showToast(`TikTok connect failed: ${reason}`, 'error')
-      window.history.replaceState({}, '', '/dashboard')
+      window.history.replaceState({}, '', '/youtube-shorts/dashboard')
     } else {
       setYtConnected(localStorage.getItem('yt_connected') === 'true')
       setTtConnected(localStorage.getItem('tt_connected') === 'true')
@@ -1365,7 +1365,7 @@ export default function Dashboard() {
               ))}
             </div>
             <div style={{ display:'flex', gap:12 }}>
-              <a href="/" onClick={() => setShowUpgradeModal(false)} style={{
+              <a href="/youtube-shorts" onClick={() => setShowUpgradeModal(false)} style={{
                 flex:1, textAlign:'center',
                 background:'#cf1322', color:'#fff',
                 border:'2px solid #111', borderRadius:8,

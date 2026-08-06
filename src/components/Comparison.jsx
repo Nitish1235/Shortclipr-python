@@ -170,11 +170,11 @@ export default function Comparison() {
           marginTop: '20px', lineHeight: 1.6,
         }}>
           ShortClipr is the fastest AI shorts generator and the best free alternative to{' '}
-          <Link to="/alternatives/opus-clip" style={{ color: '#cf1322', textDecoration: 'underline', textUnderlineOffset: '3px' }}>OpusClip</Link>,{' '}
-          <Link to="/alternatives/klap" style={{ color: '#cf1322', textDecoration: 'underline', textUnderlineOffset: '3px' }}>Klap</Link>, and{' '}
-          <Link to="/alternatives/vmaker" style={{ color: '#cf1322', textDecoration: 'underline', textUnderlineOffset: '3px' }}>Vmaker AI</Link>.{' '}
+          <Link to="/youtube-shorts/alternatives/opus-clip" style={{ color: '#cf1322', textDecoration: 'underline', textUnderlineOffset: '3px' }}>OpusClip</Link>,{' '}
+          <Link to="/youtube-shorts/alternatives/klap" style={{ color: '#cf1322', textDecoration: 'underline', textUnderlineOffset: '3px' }}>Klap</Link>, and{' '}
+          <Link to="/youtube-shorts/alternatives/vmaker" style={{ color: '#cf1322', textDecoration: 'underline', textUnderlineOffset: '3px' }}>Vmaker AI</Link>.{' '}
           Create TikTok clips, Instagram Reels, and YouTube Shorts from any long-form video in minutes — see the{' '}
-          <Link to="/alternatives" style={{ color: '#cf1322', textDecoration: 'underline', textUnderlineOffset: '3px' }}>full feature-by-feature comparison</Link>.
+          <Link to="/youtube-shorts/alternatives" style={{ color: '#cf1322', textDecoration: 'underline', textUnderlineOffset: '3px' }}>full feature-by-feature comparison</Link>.
         </p>
       </div>
     </section>

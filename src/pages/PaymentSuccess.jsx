@@ -86,7 +86,7 @@ export default function PaymentSuccess() {
           </div>
 
           <div style={{ display:'flex', gap:'12px', justifyContent:'center', flexWrap:'wrap' }}>
-            <Link to="/dashboard" style={{
+            <Link to="/youtube-shorts/dashboard" style={{
               background:'#cf1322', color:'#fff',
               border:'2px solid #111', borderRadius:'8px',
               padding:'13px 28px', fontWeight:700, fontSize:'0.9rem',

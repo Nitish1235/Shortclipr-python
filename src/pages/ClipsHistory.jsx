@@ -246,7 +246,7 @@ export default function ClipsHistory() {
               <p style={{ fontSize: '.85rem', color: '#9ca3af', marginBottom: 20, maxWidth: 320, margin: '0 auto 20px' }}>
                 No clips generated in the last 15 days. Head to the Dashboard to create some.
               </p>
-              <a href="/dashboard" style={{
+              <a href="/youtube-shorts/dashboard" style={{
                 display: 'inline-block', padding: '9px 20px', background: '#cf1322',
                 color: '#fff', borderRadius: 8, fontWeight: 700, fontSize: '.83rem', textDecoration: 'none',
               }}>Go to Dashboard →</a>

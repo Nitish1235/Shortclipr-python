@@ -192,7 +192,7 @@ export default function VideoShowcase() {
 
   const handleStartFree = (e) => {
     e.preventDefault()
-    if (location.pathname === '/') {
+    if (location.pathname === '/youtube-shorts') {
       const el = document.getElementById('hero')
       if (el) {
         el.scrollIntoView({ behavior: 'smooth' })
@@ -200,7 +200,7 @@ export default function VideoShowcase() {
         if (input) input.focus()
       }
     } else {
-      navigate('/', { state: { scrollToSection: 'hero' } })
+      navigate('/youtube-shorts', { state: { scrollToSection: 'hero' } })
     }
   }
 
@@ -299,7 +299,7 @@ export default function VideoShowcase() {
             : `✦ ${videos.filter(v => !v.isPlaceholder).length} real clips from ShortClipr`
           } · Hover a phone to play
         </p>
-        <a href="/" onClick={handleStartFree} style={{
+        <a href="/youtube-shorts" onClick={handleStartFree} style={{
           display: 'inline-block',
           background: '#cf1322', color: '#fff',
           border: '2px solid rgba(255,255,255,0.2)',

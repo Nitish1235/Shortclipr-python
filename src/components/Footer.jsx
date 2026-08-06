@@ -5,38 +5,38 @@ const COLS = [
   {
     title: 'Product',
     links: [
-      { label: 'Features',  href: '/#features'      },
-      { label: 'Pricing',   href: '/#pricing'        },
-      { label: 'Showcase',  href: '/#showcase'       },
+      { label: 'Features',  href: '/youtube-shorts#features'      },
+      { label: 'Pricing',   href: '/youtube-shorts#pricing'        },
+      { label: 'Showcase',  href: '/youtube-shorts#showcase'       },
       { label: 'Changelog', href: '/changelog'       },
     ],
   },
   {
     title: 'Tools',
     links: [
-      { label: 'YouTube to Shorts',    href: '/tools/youtube-to-shorts-converter'    },
-      { label: 'Long Video to Shorts', href: '/tools/long-video-to-shorts-ai'        },
-      { label: 'AI Clip Maker',        href: '/tools/ai-clip-maker'                  },
-      { label: 'TikTok Clip Maker',    href: '/tools/tiktok-clip-maker'              },
-      { label: 'Video to Reels',       href: '/tools/video-to-reels'                 },
-      { label: 'Podcast to Shorts',    href: '/tools/podcast-to-shorts'              },
-      { label: 'Webinar to Clips',     href: '/tools/webinar-to-clips'               },
-      { label: 'Interview to Clips',   href: '/tools/interview-to-clips'             },
-      { label: 'All tools →',          href: '/tools'                                },
+      { label: 'YouTube to Shorts',    href: '/youtube-shorts/tools/youtube-to-shorts-converter'    },
+      { label: 'Long Video to Shorts', href: '/youtube-shorts/tools/long-video-to-shorts-ai'        },
+      { label: 'AI Clip Maker',        href: '/youtube-shorts/tools/ai-clip-maker'                  },
+      { label: 'TikTok Clip Maker',    href: '/youtube-shorts/tools/tiktok-clip-maker'              },
+      { label: 'Video to Reels',       href: '/youtube-shorts/tools/video-to-reels'                 },
+      { label: 'Podcast to Shorts',    href: '/youtube-shorts/tools/podcast-to-shorts'              },
+      { label: 'Webinar to Clips',     href: '/youtube-shorts/tools/webinar-to-clips'               },
+      { label: 'Interview to Clips',   href: '/youtube-shorts/tools/interview-to-clips'             },
+      { label: 'All tools →',          href: '/youtube-shorts/tools'                                },
     ],
   },
   {
     title: 'Compare',
     links: [
-      { label: 'vs Opus Clip',      href: '/alternatives/opus-clip'    },
-      { label: 'vs Klap',           href: '/alternatives/klap'         },
-      { label: 'vs 2short.ai',      href: '/alternatives/2short'       },
-      { label: 'vs Vidyo / Quso',   href: '/alternatives/vidyo'        },
-      { label: 'vs Munch',          href: '/alternatives/munch'        },
-      { label: 'vs Riverside Clips',href: '/alternatives/riverside'    },
-      { label: 'vs Spikes Studio',  href: '/alternatives/spikes-studio'},
-      { label: 'vs Vizard AI',      href: '/alternatives/vizard'       },
-      { label: 'All comparisons →', href: '/alternatives'              },
+      { label: 'vs Opus Clip',      href: '/youtube-shorts/alternatives/opus-clip'    },
+      { label: 'vs Klap',           href: '/youtube-shorts/alternatives/klap'         },
+      { label: 'vs 2short.ai',      href: '/youtube-shorts/alternatives/2short'       },
+      { label: 'vs Vidyo / Quso',   href: '/youtube-shorts/alternatives/vidyo'        },
+      { label: 'vs Munch',          href: '/youtube-shorts/alternatives/munch'        },
+      { label: 'vs Riverside Clips',href: '/youtube-shorts/alternatives/riverside'    },
+      { label: 'vs Spikes Studio',  href: '/youtube-shorts/alternatives/spikes-studio'},
+      { label: 'vs Vizard AI',      href: '/youtube-shorts/alternatives/vizard'       },
+      { label: 'All comparisons →', href: '/youtube-shorts/alternatives'              },
     ],
   },
   {
@@ -83,7 +83,7 @@ export default function Footer() {
 
           {/* Brand */}
           <div>
-            <Link to="/" style={{ display:'inline-flex', alignItems:'center', gap:'10px', marginBottom:'14px' }}>
+            <Link to="/youtube-shorts" style={{ display:'inline-flex', alignItems:'center', gap:'10px', marginBottom:'14px' }}>
               <Logo size={32}/>
               <span style={{ fontWeight:700, fontSize:'1rem', color:'#cf1322', letterSpacing:'-0.02em' }}>ShortClipr</span>
             </Link>

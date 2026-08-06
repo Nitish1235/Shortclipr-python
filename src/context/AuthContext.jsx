@@ -59,7 +59,7 @@ export function AuthProvider({ children }) {
   const logout = () => {
     localStorage.removeItem('sc_token')
     setUser(null)
-    window.location.href = '/' // Force hard redirect home to clear all state safely
+    window.location.href = '/youtube-shorts' // Force hard redirect home to clear all state safely
   }
 
   return (

@@ -40,7 +40,7 @@ def clips_ready_email_html(video_title: str, clip_count: int, is_paid: bool) -> 
     plural = "s" if clip_count != 1 else ""
 
     if is_paid:
-        cta_url   = f"{fe}/dashboard"
+        cta_url   = f"{fe}/youtube-shorts/dashboard"
         cta_label = "View &amp; Download Your Clips &rarr;"
         upsell    = ""
     else:
@@ -111,7 +111,7 @@ def clips_ready_email_html(video_title: str, clip_count: int, is_paid: bool) -> 
             <td style="padding:28px 32px 24px 32px;border-top:1px solid #eeeeee;">
               <div style="font-size:12px;color:#9ca3af;line-height:1.7;">
                 You're receiving this because you generated clips on ShortClipr.<br>
-                &copy; ShortClipr &mdash; <a href="{fe}" style="color:#9ca3af;">shortclipr.com</a>
+                &copy; ShortClipr &mdash; <a href="{fe}/youtube-shorts" style="color:#9ca3af;">shortclipr.com</a>
               </div>
             </td>
           </tr>

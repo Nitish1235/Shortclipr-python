@@ -136,7 +136,7 @@ function ProtectedRoute({ children }) {
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
-  if (!user) return <Navigate to="/" replace />
+  if (!user) return <Navigate to="/youtube-shorts" replace />
   return children
 }
 
@@ -155,8 +155,10 @@ export default function App() {
         <BrowserRouter>
           <ScrollToTop />
           <Routes>
-            {/* Public */}
-            <Route path="/"                      element={<LandingPage />} />
+            {/* Root — client-side safety net; nginx 301s the actual HTTP request */}
+            <Route path="/"                      element={<Navigate to="/youtube-shorts" replace />} />
+
+            {/* Company-wide / account-level — not product-specific, stay at root */}
             <Route path="/privacy"               element={<Privacy />} />
             <Route path="/terms"                 element={<Terms />} />
             <Route path="/contact"               element={<Contact />} />
@@ -166,23 +168,26 @@ export default function App() {
             <Route path="/careers"               element={<Careers />} />
             <Route path="/dmca"                  element={<DMCA />} />
             <Route path="/payment/success"       element={<PaymentSuccess />} />
-
-            {/* SEO programmatic landing pages */}
-            <Route path="/tools"                 element={<ToolsIndex />} />
-            <Route path="/tools/:slug"           element={<ToolLanding />} />
-            <Route path="/alternatives"          element={<AlternativesIndex />} />
-            <Route path="/alternatives/:slug"    element={<AlternativeLanding />} />
-
-            {/* Protected — user must be logged in */}
-            <Route path="/dashboard"             element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/clips"                 element={<ProtectedRoute><ClipsHistory /></ProtectedRoute>} />
             <Route path="/billing"               element={<ProtectedRoute><Billing /></ProtectedRoute>} />
-            <Route path="/editor/:jobId/:clipId" element={<ProtectedRoute><Editor /></ProtectedRoute>} />
-            <Route path="/lab"                   element={<ProtectedRoute><Lab /></ProtectedRoute>} />
 
             {/* Admin — no separate auth guard on frontend, backend enforces admin check */}
             <Route path="/admin"                 element={<ProtectedRoute><Admin /></ProtectedRoute>} />
             <Route path="/admin/marketing-editor" element={<ProtectedRoute><AdminMarketingEditor /></ProtectedRoute>} />
+
+            {/* ── YouTube Shorts product ────────────────────────── */}
+            <Route path="/youtube-shorts"                      element={<LandingPage />} />
+
+            {/* SEO programmatic landing pages */}
+            <Route path="/youtube-shorts/tools"                 element={<ToolsIndex />} />
+            <Route path="/youtube-shorts/tools/:slug"           element={<ToolLanding />} />
+            <Route path="/youtube-shorts/alternatives"          element={<AlternativesIndex />} />
+            <Route path="/youtube-shorts/alternatives/:slug"    element={<AlternativeLanding />} />
+
+            {/* Protected — user must be logged in */}
+            <Route path="/youtube-shorts/dashboard"             element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/youtube-shorts/clips"                 element={<ProtectedRoute><ClipsHistory /></ProtectedRoute>} />
+            <Route path="/youtube-shorts/editor/:jobId/:clipId" element={<ProtectedRoute><Editor /></ProtectedRoute>} />
+            <Route path="/youtube-shorts/lab"                   element={<ProtectedRoute><Lab /></ProtectedRoute>} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

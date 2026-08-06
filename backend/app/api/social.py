@@ -176,14 +176,14 @@ async def youtube_auth_callback(code: str, state: str):
     except Exception as exc:
         logger.error(f"YouTube OAuth token exchange failed: {type(exc).__name__}: {exc}")
         return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/dashboard?status=youtube_error&reason=token_exchange_failed"
+            url=f"{settings.FRONTEND_URL}/youtube-shorts/dashboard?status=youtube_error&reason=token_exchange_failed"
         )
 
     tokens = await _get_social_tokens(user_id)
     tokens["youtube"] = token_data
     await _save_social_tokens(user_id, tokens)
 
-    return RedirectResponse(url=f"{settings.FRONTEND_URL}/dashboard?status=youtube_connected")
+    return RedirectResponse(url=f"{settings.FRONTEND_URL}/youtube-shorts/dashboard?status=youtube_connected")
 
 
 @router.post("/publish/youtube")
@@ -304,7 +304,7 @@ async def tiktok_auth_callback(code: str, state: str, error: str = None):
     if error:
         logger.warning(f"TikTok OAuth error from user {state}: {error}")
         return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/dashboard?status=tiktok_error&reason={error}"
+            url=f"{settings.FRONTEND_URL}/youtube-shorts/dashboard?status=tiktok_error&reason={error}"
         )
 
     user_id = state
@@ -335,7 +335,7 @@ async def tiktok_auth_callback(code: str, state: str, error: str = None):
         err_msg = err.get("message", data.get("message", "unknown")) if isinstance(err, dict) else str(err)
         logger.error(f"TikTok token error for user {user_id}: {err_msg} — raw: {data}")
         return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/dashboard?status=tiktok_error&reason={err_msg}"
+            url=f"{settings.FRONTEND_URL}/youtube-shorts/dashboard?status=tiktok_error&reason={err_msg}"
         )
 
     tiktok_token = {
@@ -353,7 +353,7 @@ async def tiktok_auth_callback(code: str, state: str, error: str = None):
     await _save_social_tokens(user_id, tokens)
 
     logger.info(f"TikTok connected for user {user_id} (open_id={tiktok_token['open_id']})")
-    return RedirectResponse(url=f"{settings.FRONTEND_URL}/dashboard?status=tiktok_connected")
+    return RedirectResponse(url=f"{settings.FRONTEND_URL}/youtube-shorts/dashboard?status=tiktok_connected")
 
 
 async def _tiktok_refresh_token(user_id: str, tt_tokens: dict) -> dict:

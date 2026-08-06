@@ -705,7 +705,7 @@ export default function Admin() {
     e.preventDefault()
     if (!genUrl.trim()) return
     sessionStorage.setItem('sc_pending_url', genUrl.trim())
-    navigate('/dashboard')
+    navigate('/youtube-shorts/dashboard')
   }
 
   // Status badge helper
@@ -745,7 +745,7 @@ export default function Admin() {
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <span style={{ fontSize: '0.8rem', color: '#999', alignSelf: 'center' }}>{user?.email}</span>
-          <button onClick={() => navigate('/dashboard')} style={{ ...btnOutline, fontSize: '0.78rem' }}>
+          <button onClick={() => navigate('/youtube-shorts/dashboard')} style={{ ...btnOutline, fontSize: '0.78rem' }}>
             ← Dashboard
           </button>
         </div>

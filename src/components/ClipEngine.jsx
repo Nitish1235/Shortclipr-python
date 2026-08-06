@@ -416,7 +416,7 @@ export default function ClipEngine({ onJobCreated }) {
       setStatusMsg('Job queued! Redirecting to dashboard…')
       setTimeout(() => {
         if (onJobCreated) onJobCreated()
-        if (window.location.pathname !== '/dashboard') navigate('/dashboard')
+        if (window.location.pathname !== '/youtube-shorts/dashboard') navigate('/youtube-shorts/dashboard')
         else { setMode('input'); setUrl(''); setProcessing(false); setProgress(0) }
       }, 1800)
     } catch (err) {
@@ -494,7 +494,7 @@ export default function ClipEngine({ onJobCreated }) {
               const pending = sessionStorage.getItem('sc_pending_url')
               if (pending) { sessionStorage.removeItem('sc_pending_url'); setUrl(pending) }
               setMode('input')
-              if (window.location.pathname !== '/dashboard') window.location.href = '/dashboard'
+              if (window.location.pathname !== '/youtube-shorts/dashboard') window.location.href = '/youtube-shorts/dashboard'
               else setTimeout(() => handleFetchMetadata(), 200)
             }
           }}

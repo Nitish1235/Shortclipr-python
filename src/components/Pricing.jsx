@@ -63,7 +63,7 @@ export default function Pricing() {
     setLoading(true)
     try {
       const token = localStorage.getItem('sc_token')
-      if (!token) { window.location.href = '/'; return }
+      if (!token) { window.location.href = '/youtube-shorts'; return }
       const res = await fetch(`${API_BASE}/payments/checkout-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -86,7 +86,7 @@ export default function Pricing() {
     setFreeLoading(true)
     setTimeout(() => {
       setFreeLoading(false)
-      if (location.pathname === '/') {
+      if (location.pathname === '/youtube-shorts') {
         const el = document.getElementById('hero')
         if (el) {
           el.scrollIntoView({ behavior: 'smooth' })
@@ -94,7 +94,7 @@ export default function Pricing() {
           if (input) input.focus()
         }
       } else {
-        navigate('/', { state: { scrollToSection: 'hero' } })
+        navigate('/youtube-shorts', { state: { scrollToSection: 'hero' } })
       }
     }, 300)
   }

@@ -256,7 +256,7 @@ export default function Editor() {
       if (res.status === 401) { logout(); return }
       if (!res.ok) throw new Error('Save failed')
       alert('Configuration saved successfully')
-      navigate('/dashboard')
+      navigate('/youtube-shorts/dashboard')
     } catch (e) { alert('Error saving configuration') }
     finally     { setIsSaving(false) }
   }
@@ -335,12 +335,12 @@ export default function Editor() {
             ))}
           </div>
           <div style={{ display:'flex', gap:'10px', justifyContent:'center' }}>
-            <a href="/" style={{
+            <a href="/youtube-shorts" style={{
               background:'#cf1322', color:'#fff', border:'2px solid #111',
               borderRadius:'8px', padding:'11px 24px', fontWeight:700, fontSize:'0.875rem',
               boxShadow:'2px 2px 0 #111', display:'inline-block',
             }}>Upgrade now →</a>
-            <button onClick={() => navigate('/dashboard')} style={{
+            <button onClick={() => navigate('/youtube-shorts/dashboard')} style={{
               background:'transparent', border:'1.5px solid #e5e5e5', borderRadius:'8px',
               color:'#666', padding:'11px 18px', cursor:'pointer', fontWeight:600, fontSize:'0.875rem',
             }}>← Back</button>
@@ -387,7 +387,7 @@ export default function Editor() {
             }}>
               {isAdvanced ? 'Quick Mode' : 'Advanced'}
             </button>
-            <button onClick={() => navigate('/dashboard')} style={{
+            <button onClick={() => navigate('/youtube-shorts/dashboard')} style={{
               background:'transparent', border:'1.5px solid #e5e5e5', borderRadius:'8px',
               color:'#666', padding:'8px 16px', cursor:'pointer', fontWeight:600, fontSize:'0.8rem',
             }}>← Back</button>

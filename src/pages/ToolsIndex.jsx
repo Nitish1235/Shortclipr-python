@@ -11,12 +11,12 @@ export default function ToolsIndex() {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
     name: 'ShortClipr Tools — AI Video Repurposing',
-    url: `${SITE}/tools`,
+    url: `${SITE}/youtube-shorts/tools`,
     description: 'Free AI tools for turning long-form video into short-form clips: YouTube to Shorts converters, AI clip makers, transcript-based clipping, and podcast repurposing.',
     hasPart: toolSlugs.map(s => ({
       '@type': 'WebPage',
       name: toolsContent[s].h1,
-      url: `${SITE}/tools/${s}`,
+      url: `${SITE}/youtube-shorts/tools/${s}`,
     })),
   }
 
@@ -26,7 +26,7 @@ export default function ToolsIndex() {
         title="Free AI Tools — YouTube to Shorts, TikTok Clips, Reels, Webinar & More | ShortClipr"
         description="Explore ShortClipr's free AI tools: convert YouTube to Shorts, make TikTok clips, create Instagram Reels, turn podcasts, webinars, and interviews into viral vertical clips automatically."
         keywords="ai video tools, youtube to shorts, tiktok clip maker, video to reels, podcast to shorts, webinar to clips, interview to clips, ai clip maker, free shorts generator"
-        path="/tools"
+        path="/youtube-shorts/tools"
         schema={schema}
       />
       <Navigation />
@@ -50,7 +50,7 @@ export default function ToolsIndex() {
             {toolSlugs.map(s => {
               const t = toolsContent[s]
               return (
-                <Link key={s} to={`/tools/${s}`} className="seo-feature" style={{ textDecoration: 'none' }}>
+                <Link key={s} to={`/youtube-shorts/tools/${s}`} className="seo-feature" style={{ textDecoration: 'none' }}>
                   <span className="seo-feature-icon">{t.features[0].icon}</span>
                   <div>
                     <h3>{t.h1}</h3>
@@ -66,7 +66,7 @@ export default function ToolsIndex() {
           <h2 className="seo-section-title" style={{ marginBottom: 16 }}>Comparing alternatives?</h2>
           <div className="seo-crosslinks">
             {alternativeSlugs.map(s => (
-              <Link key={s} to={`/alternatives/${s}`} className="seo-crosslink">
+              <Link key={s} to={`/youtube-shorts/alternatives/${s}`} className="seo-crosslink">
                 ShortClipr vs {alternativesContent[s].name}
               </Link>
             ))}
@@ -76,7 +76,7 @@ export default function ToolsIndex() {
         <section className="seo-cta-band">
           <h2>Pick a tool, paste a link, get clips</h2>
           <p>Every tool above runs on the same fast pipeline — 3 free videos, no watermark.</p>
-          <Link to="/" className="seo-btn-primary">Get started free →</Link>
+          <Link to="/youtube-shorts" className="seo-btn-primary">Get started free →</Link>
         </section>
       </div>
 

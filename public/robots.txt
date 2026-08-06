@@ -1,10 +1,10 @@
 User-agent: *
 Allow: /
-Disallow: /dashboard
-Disallow: /editor
+Disallow: /youtube-shorts/dashboard
+Disallow: /youtube-shorts/editor
+Disallow: /youtube-shorts/clips
+Disallow: /youtube-shorts/lab
 Disallow: /billing
-Disallow: /clips
-Disallow: /lab
 Disallow: /admin
 Disallow: /payment/
 
