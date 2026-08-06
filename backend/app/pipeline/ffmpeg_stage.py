@@ -31,6 +31,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from app.core.config import get_settings
+from app.core.email import send_email
+from app.core.email_templates import clips_ready_email_html
 from app.core.proxy import get_dataimpulse_proxy, get_proxyseller_proxy
 from app.db import supabase as db
 from app.pipeline.ai_clipper import ClipTimestamp
@@ -381,6 +383,23 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
             f"[{job_id}] Done: {uploaded_count}/{reserved_credits} clips delivered "
             f"({video_minutes_reserved:.1f} min billed to user {user_id})"
         )
+
+        # "Your clips are ready" email — best-effort, never allowed to fail
+        # a job that already succeeded. send_email() itself never raises,
+        # but the DB lookup here could, so this whole block is wrapped too.
+        try:
+            user = await db.get_user(user_id)
+            if user and user.get("email"):
+                is_paid = bool(user.get("plan")) and user.get("plan") != "free"
+                plural = uploaded_count != 1
+                await asyncio.to_thread(
+                    send_email,
+                    user["email"],
+                    f"Your {uploaded_count} clip{'s' if plural else ''} {'are' if plural else 'is'} ready 🎬",
+                    clips_ready_email_html(metadata.get("title", ""), uploaded_count, is_paid),
+                )
+        except Exception as email_exc:
+            logger.warning(f"[{job_id}] Failed to send 'clips ready' email: {email_exc}")
 
     finally:
         if not success:

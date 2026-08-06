@@ -684,6 +684,9 @@ export default function Dashboard() {
                   boxShadow:'0 1px 4px rgba(207,19,34,0.5)',
                 }}/>
               </div>
+              <div style={{ marginTop:'8px', fontSize:'.73rem', color:'#9ca3af', display:'flex', alignItems:'center', gap:'5px' }}>
+                📧 We'll email you the moment your clips are ready — feel free to close this tab.
+              </div>
               {hdClips.length > 0 && (
                 <div style={{ marginTop:'8px', fontSize:'.73rem', color:'#16a34a', fontWeight:600 }}>
                   ✓ {hdClips.length} clip{hdClips.length !== 1 ? 's' : ''} ready below — more generating…
