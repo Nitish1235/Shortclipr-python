@@ -136,13 +136,21 @@ def get_dataimpulse_proxy(purpose: str = "req") -> str | None:
     return f"http://{user}:{pw}@{host}:{port}"
 
 
-def get_proxyseller_proxy(session_id: str | None = None) -> str | None:
+def get_proxyseller_proxy(session_id: str | None = None, attempt: int = 0) -> str | None:
     """
     Proxy-Seller ISP dedicated proxy — use ONLY for DASH segment downloads.
 
     Each pool entry is a distinct static IP. The entry is chosen
-    deterministically via MD5(session_id) so all DASH byte-range requests
-    within one job use the same IP.
+    deterministically via MD5(session_id [+ attempt]) so all DASH byte-range
+    requests WITHIN one attempt use the same IP (required for IP-bound CDN
+    URLs), but a retry with a higher `attempt` lands on a DIFFERENT pool IP —
+    in case the first one is degraded/blocklisted specifically (rather than
+    the whole failure being an IP-mismatch issue between resolution and
+    download, which rotating proxies alone can't fix — see
+    ffmpeg_stage.py's _dash_download_with_refresh for the full picture).
+
+    attempt=0 keeps the original deterministic single-IP behavior (matches
+    pre-existing callers that don't pass attempt).
 
     Returns None if PROXYSELLER_USER/PASS/PROXIES are not configured.
     """
@@ -154,12 +162,13 @@ def get_proxyseller_proxy(session_id: str | None = None) -> str | None:
     user = quote_plus(s.PROXYSELLER_USER.strip())
     pw   = quote_plus(s.PROXYSELLER_PASS.strip())
     if session_id:
-        idx = int(hashlib.md5(session_id.encode()).hexdigest(), 16) % len(proxies)
+        key = f"{session_id}:{attempt}" if attempt else session_id
+        idx = int(hashlib.md5(key.encode()).hexdigest(), 16) % len(proxies)
     else:
-        idx = 0
+        idx = attempt % len(proxies)
     host, port = proxies[idx]
     safe_pw = f"{pw[:3]}...{pw[-2:]} (len={len(pw)})" if len(pw) > 5 else f"len={len(pw)}"
-    _logger.info(f"[proxy.py] Proxy-Seller ISP — {host}:{port} user={user} pass={safe_pw}")
+    _logger.info(f"[proxy.py] Proxy-Seller ISP — {host}:{port} (pool idx {idx}/{len(proxies)}, attempt {attempt}) user={user} pass={safe_pw}")
     return f"http://{user}:{pw}@{host}:{port}"
 
 
