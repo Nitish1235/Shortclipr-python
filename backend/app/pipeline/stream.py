@@ -365,7 +365,18 @@ def _pick_best_stream(data: dict, target_height: int) -> str | None:
 
 
 def _pick_best_audio_stream(data: dict) -> str | None:
-    """Pick best audio-only stream URL from InnerTube response (legacy helper)."""
+    """
+    Pick best audio-only stream URL from InnerTube response (legacy helper).
+
+    Prefers mp4a (AAC-in-MP4) over opus/vorbis (served in a WebM/Matroska
+    container) even when opus has a higher declared bitrate — YouTube's
+    opus stream (itag 251, ~160kbps) usually outranks its m4a sibling
+    (itag 140, ~128kbps) on bitrate alone, so a plain sort-by-bitrate picks
+    WebM most of the time. WebM has no MP4 sidx box, so the DASH
+    downloader's byte-range slicer (which parses sidx) can't target it —
+    picking mp4a here keeps that fast path working. Falls back to the
+    highest-bitrate stream of any container if no mp4a option exists.
+    """
     sd = data.get("streamingData", {})
     audio = [
         f for f in sd.get("adaptiveFormats", [])
@@ -373,8 +384,10 @@ def _pick_best_audio_stream(data: dict) -> str | None:
     ]
     if not audio:
         return None
-    audio.sort(key=lambda f: int(f.get("bitrate", 0)), reverse=True)
-    return audio[0]["url"]
+    mp4_audio = [f for f in audio if "mp4a" in f.get("mimeType", "")]
+    pool = mp4_audio or audio
+    pool.sort(key=lambda f: int(f.get("bitrate", 0)), reverse=True)
+    return pool[0]["url"]
 
 
 def _format_has_audio(fmt: dict) -> bool:
@@ -529,9 +542,18 @@ def _fmt(height: int) -> str:
     got a chance to find a non-AV1 option. If every tier here fails to
     match, yt-dlp raises and the caller's fallback chain moves on instead —
     which is the correct behaviour.
+
+    Audio stays pinned to `ext=m4a` for one extra tier (2) before the fully
+    unconstrained `+bestaudio` (3) — YouTube's opus/WebM audio usually beats
+    m4a/AAC on declared bitrate, so an unconstrained `bestaudio` picks WebM
+    most of the time. WebM has no MP4 sidx box, so the DASH downloader's
+    byte-range slicer can't target it. Tier 2 relaxes the VIDEO ext=mp4
+    constraint (in case THAT was what tier 1 couldn't match) while still
+    keeping audio sidx-compatible; only tier 3 gives up that guarantee.
     """
     return (
         f"bestvideo[height<={height}][ext=mp4][vcodec!^=av01]+bestaudio[ext=m4a]"
+        f"/bestvideo[height<={height}][vcodec!^=av01]+bestaudio[ext=m4a]"
         f"/bestvideo[height<={height}][vcodec!^=av01]+bestaudio"
         f"/best[height<={height}][vcodec!^=av01]"
     )

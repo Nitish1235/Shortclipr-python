@@ -474,6 +474,65 @@ async def _retry_transient(coro_factory, retries=2, backoff=2.0, label=""):
     raise last_exc
 
 
+async def _download_full_track(client: httpx.AsyncClient, url: str, headers: dict, out_path: Path) -> None:
+    """
+    Stream an entire (non-range) track to disk.
+
+    Fallback for when sidx parsing fails on a track — most commonly the
+    audio track when it turned out to be served in a WebM/Matroska
+    container (Opus), which has no MP4 sidx box for our byte-range slicer
+    to find. Audio tracks are small (a few MB to a few tens of MB even for
+    long videos), so downloading the whole thing is cheap next to falling
+    all the way back to a full-source VIDEO download.
+    """
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    async with client.stream("GET", url, headers=headers) as resp:
+        if resp.status_code not in (200, 206):
+            raise RuntimeError(f"Full track download failed: HTTP {resp.status_code}")
+        with open(out_path, "wb") as f:
+            async for chunk in resp.aiter_bytes():
+                f.write(chunk)
+
+
+async def _trim_local_track(src_path: Path, start: float, duration: float, out_path: Path) -> None:
+    """
+    Trim [start, start+duration] from a fully-downloaded local track file.
+
+    -copyts preserves the TRUE absolute PTS instead of rebasing to 0, so
+    this lines up with the sidx-sliced video track's real segment
+    timestamps for _mux()'s min(v_start_t, a_start_t) alignment — same
+    contract as the sidx-based path (see _fetch_clip_segments_for_url).
+
+    -f matroska forces the output muxer explicitly: out_path is a ".tmp"
+    file (matching the sidx path's raw-bytes temp naming), and ffmpeg
+    otherwise picks the muxer from the file EXTENSION, which would fail on
+    an unrecognized one. Matroska accepts virtually any audio codec
+    (opus, aac, vorbis, ...) so this is safe regardless of what the
+    source track's actual codec turns out to be. _mux()'s own -i on this
+    file still content-probes it correctly — the extension only mattered
+    for THIS write, not for reading it back.
+    """
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", str(max(0.0, start)), "-i", str(src_path),
+        "-t", str(duration),
+        "-c", "copy", "-copyts",
+        "-f", "matroska",
+        str(out_path),
+    ]
+    proc = await asyncio.create_subprocess_exec(
+        *cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise RuntimeError("Local track trim timed out")
+    if proc.returncode != 0:
+        raise RuntimeError(f"Local track trim failed: {stderr.decode(errors='ignore')[-300:]}")
+
+
 async def download_all_clips_parallel(
     video_url: str,
     clips: list[tuple[float, float]],
@@ -504,18 +563,47 @@ async def download_all_clips_parallel(
 
     sem = asyncio.Semaphore(max_concurrent)
 
+    audio_full_path: Path | None = None
+
     async with httpx.AsyncClient(**client_kwargs) as client:
-        # Parse sidx for video (and audio) ONCE, then reuse for all clips
+        # Parse sidx for video (and audio) ONCE, then reuse for all clips.
+        # Video sidx failing is fatal (raised as-is — caller falls back to
+        # full-source download). Audio sidx failing is isolated: this is
+        # the common case where the picked audio stream turned out to be
+        # WebM/Opus (no MP4 sidx box to find) despite stream.py now
+        # preferring m4a/AAC — some videos genuinely have no m4a option.
+        # Rather than let that kill the whole batch (video included), fall
+        # back to downloading the audio track in full ONCE and trimming
+        # per-clip locally with ffmpeg (see _dl_audio_track below).
         if audio_url:
-            (v_init_end, v_segs), (a_init_end, a_segs) = await asyncio.gather(
+            v_result, a_result = await asyncio.gather(
                 _parse_sidx_from_url(client, video_url, headers),
                 _parse_sidx_from_url(client, audio_url, headers),
+                return_exceptions=True,
             )
+            if isinstance(v_result, Exception):
+                raise v_result
+            v_init_end, v_segs = v_result
+
+            if isinstance(a_result, Exception) or not a_result[1]:
+                reason = a_result if isinstance(a_result, Exception) else "sidx parsed but had zero segments"
+                logger.warning(
+                    f"Audio sidx unusable ({reason}) — likely a non-MP4 container "
+                    f"(e.g. WebM/Opus); falling back to a full audio download for this track"
+                )
+                a_init_end, a_segs = None, None
+                audio_full_path = out_dir / "_audio_full.tmp"
+                await _download_full_track(client, audio_url, headers, audio_full_path)
+            else:
+                a_init_end, a_segs = a_result
         else:
             v_init_end, v_segs = await _parse_sidx_from_url(client, video_url, headers)
             a_init_end, a_segs = None, None
 
-        logger.info(f"sidx parsed: {len(v_segs)} video segs, {len(a_segs) if a_segs else 0} audio segs")
+        logger.info(
+            f"sidx parsed: {len(v_segs)} video segs, "
+            + (f"{len(a_segs)} audio segs" if a_segs else ("full-track audio" if audio_full_path else "0 audio segs"))
+        )
 
         async def _dl_one(i: int, start: float, end: float) -> tuple[Path, float]:
             async with sem:
@@ -543,12 +631,21 @@ async def download_all_clips_parallel(
                         f.write(seg_r.content)
                     return actual_t
 
+                async def _dl_audio_track():
+                    if audio_full_path is not None:
+                        # sidx was unusable for this track — trim the one
+                        # locally-cached full download instead of range-fetching.
+                        actual_t = max(0.0, start)
+                        await _trim_local_track(audio_full_path, start, end - start, audio_tmp)
+                        return actual_t
+                    return await _dl_track(audio_url, a_init_end, a_segs, audio_tmp)
+
                 async def _dl_one_inner():
                     try:
-                        if audio_url and a_segs:
+                        if audio_url:
                             v_start_t, a_start_t = await asyncio.gather(
                                 _dl_track(video_url, v_init_end, v_segs, video_tmp),
-                                _dl_track(audio_url, a_init_end, a_segs, audio_tmp),
+                                _dl_audio_track(),
                             )
                             await _mux(video_tmp, audio_tmp, output)
                             return output, min(v_start_t, a_start_t)
@@ -566,6 +663,10 @@ async def download_all_clips_parallel(
                 logger.info(f"Clip {i} ({start:.0f}-{end:.0f}s): {result[0].stat().st_size//1024}KB")
                 return result
 
-        results = await asyncio.gather(*[_dl_one(i, s, e) for i, (s, e) in enumerate(clips)])
+        try:
+            results = await asyncio.gather(*[_dl_one(i, s, e) for i, (s, e) in enumerate(clips)])
+        finally:
+            if audio_full_path is not None:
+                audio_full_path.unlink(missing_ok=True)
 
     return list(results)
