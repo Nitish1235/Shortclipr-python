@@ -64,10 +64,19 @@ LANG_MAP = {
     "Japanese":             "ja",
     "Korean":               "ko",
     "Chinese":              "zh",
-    # "Auto" variants → default to English
-    "Auto":                 "en",
-    "Auto / No translation": "en",
-    "auto":                 "en",
+    # "Auto" variants → None, meaning "no language bias — use the video's
+    # REAL spoken language." This used to map to "en", which was a bug:
+    # requesting English explicitly can win over the video's actual
+    # original-language track whenever a manually-uploaded (possibly
+    # translated) English caption track also exists — e.g. a Hindi video
+    # with a community-contributed English subtitle track would get that
+    # translation burned in instead of the real Hindi transcript. `None`
+    # tells every fetch method below to skip language bias entirely and
+    # prefer the auto-generated (ASR) track, which YouTube transcribes
+    # directly from the audio and never translates.
+    "Auto":                 None,
+    "Auto / No translation": None,
+    "auto":                 None,
 }
 
 # ── Sentinel for hard "no captions" signal ─────────────────────
@@ -94,6 +103,10 @@ async def get_transcript(video_id: str, language: str = "en", session_id: str | 
     """
     Return transcript entries via 3-method proxy-backed fallback chain.
     Raises RuntimeError if all methods fail.
+
+    lang_code resolves to None for "Auto" — every fetch method below treats
+    None as "no language bias, prefer the video's real spoken-language
+    (auto-generated) track" rather than defaulting to English.
     """
     lang_code = LANG_MAP.get(language, language)
     errors: list[str] = []
@@ -150,7 +163,7 @@ class _VideoUnavailableError(Exception):
 
 def _ytta_fetch_sync(
     video_id: str,
-    lang_code: str,
+    lang_code: str | None,
     proxy_url: str | None,
 ) -> list[TranscriptEntry]:
     """Synchronous YTTA call — runs inside thread pool."""
@@ -197,35 +210,58 @@ def _ytta_fetch_sync(
         session.request = _request_with_timeout
         api = YouTubeTranscriptApi(http_client=session)
 
-        # Preferred language, then English fallbacks, then auto-generated English
-        lang_prefs = list(dict.fromkeys([lang_code, "en", "en-US", "en-GB", "a.en"]))
-        try:
-            fetched = api.fetch(video_id, languages=lang_prefs)
-        except NoTranscriptFound:
-            # Requested language not available — discover what IS available and
-            # grab any transcript (preferring auto-generated for speed).
-            # This handles videos with only Hindi, Japanese, etc. auto-captions.
-            try:
-                transcript_list = api.list(video_id)
-                # Prefer generated (auto) over manual; take first available
-                chosen = None
+        def _pick_original_language_transcript(transcript_list):
+            """Auto mode: prefer the auto-generated (ASR) track — YouTube
+            transcribes that directly from the audio, so it's always the
+            video's REAL spoken language, never a translation. A manually
+            uploaded track can be a translation (e.g. a Hindi video with a
+            community-contributed English subtitle) — those are only used
+            as a last resort here, not preferred just for being English."""
+            chosen = None
+            for t in transcript_list:
+                if t.is_generated:
+                    chosen = t
+                    break
+            if chosen is None:
                 for t in transcript_list:
-                    if t.is_generated:
-                        chosen = t
-                        break
-                if chosen is None:
-                    for t in transcript_list:
-                        chosen = t
-                        break
-                if chosen is None:
-                    raise NoTranscriptFound(video_id, lang_prefs, transcript_list)
-                logger.info(
-                    f"[{video_id}] No {lang_prefs} transcript — falling back to "
-                    f"{chosen.language_code} ({'generated' if chosen.is_generated else 'manual'})"
-                )
-                fetched = chosen.fetch()
-            except Exception:
-                raise  # let outer handler catch it
+                    chosen = t
+                    break
+            return chosen
+
+        if lang_code is None:
+            # Auto — skip language-biased fetch entirely, go straight to
+            # "list available transcripts, prefer the real spoken-language
+            # (auto-generated) one." Never asks for English specifically.
+            transcript_list = api.list(video_id)
+            chosen = _pick_original_language_transcript(transcript_list)
+            if chosen is None:
+                raise NoTranscriptFound(video_id, [], transcript_list)
+            logger.info(
+                f"[{video_id}] Auto language — using {chosen.language_code} "
+                f"({'generated' if chosen.is_generated else 'manual'})"
+            )
+            fetched = chosen.fetch()
+        else:
+            # Preferred language, then English fallbacks, then auto-generated English
+            lang_prefs = list(dict.fromkeys([lang_code, "en", "en-US", "en-GB", "a.en"]))
+            try:
+                fetched = api.fetch(video_id, languages=lang_prefs)
+            except NoTranscriptFound:
+                # Requested language not available — discover what IS available and
+                # grab any transcript (preferring auto-generated for speed).
+                # This handles videos with only Hindi, Japanese, etc. auto-captions.
+                try:
+                    transcript_list = api.list(video_id)
+                    chosen = _pick_original_language_transcript(transcript_list)
+                    if chosen is None:
+                        raise NoTranscriptFound(video_id, lang_prefs, transcript_list)
+                    logger.info(
+                        f"[{video_id}] No {lang_prefs} transcript — falling back to "
+                        f"{chosen.language_code} ({'generated' if chosen.is_generated else 'manual'})"
+                    )
+                    fetched = chosen.fetch()
+                except Exception:
+                    raise  # let outer handler catch it
 
         return [
             {"text": _clean(s.text), "start": s.start, "duration": s.duration}
@@ -241,7 +277,7 @@ def _ytta_fetch_sync(
         raise RuntimeError(f"YTTA {type(e).__name__}: {e}")
 
 
-async def _ytta_proxy(video_id: str, lang_code: str, session_id: str | None = None) -> list[TranscriptEntry]:
+async def _ytta_proxy(video_id: str, lang_code: str | None, session_id: str | None = None) -> list[TranscriptEntry]:
     proxy = get_dataimpulse_proxy(purpose="transcript-ytta")
     loop = asyncio.get_running_loop()
     # _TranscriptsDisabledError and _VideoUnavailableError propagate naturally
@@ -256,7 +292,7 @@ async def _ytta_proxy(video_id: str, lang_code: str, session_id: str | None = No
 
 # ── Method 2: InnerTube ANDROID + proxy-cheap ─────────────────
 
-async def _innertube_android_proxy(video_id: str, lang_code: str, session_id: str | None = None) -> list[TranscriptEntry]:
+async def _innertube_android_proxy(video_id: str, lang_code: str | None, session_id: str | None = None) -> list[TranscriptEntry]:
     """
     Fetch caption track list via InnerTube ANDROID player call, then download
     the timedtext URL — both via the SAME DataImpulse rotating residential proxy.
@@ -285,8 +321,24 @@ async def _innertube_android_proxy(video_id: str, lang_code: str, session_id: st
     return await _fetch_timedtext(base_url, video_id, proxy_url=proxy)
 
 
-def _pick_caption_track(tracks: list[dict], lang_code: str) -> dict:
-    """Return best caption track for the requested language code."""
+def _pick_caption_track(tracks: list[dict], lang_code: str | None) -> dict:
+    """Return best caption track for the requested language code.
+
+    lang_code=None means Auto: skip language bias entirely and prefer the
+    auto-generated (ASR) track — YouTube transcribes that directly from
+    the audio, so it's always the video's REAL spoken language, never a
+    translation. A manually uploaded track (which explicit-language
+    fallback below WILL consider) can be a translation — e.g. a Hindi
+    video with a community-contributed English subtitle track — so Auto
+    deliberately does NOT fall back to "any English track" the way an
+    explicit language request does.
+    """
+    if lang_code is None:
+        for t in tracks:
+            if t.get("kind") == "asr":
+                return t
+        return tracks[0]
+
     # 1. Requested language
     for t in tracks:
         if t.get("languageCode", "").startswith(lang_code):
@@ -373,7 +425,7 @@ def _parse_caption_xml(xml_text: str, video_id: str) -> list[TranscriptEntry]:
 
 def _ytdlp_subs_sync(
     video_id: str,
-    lang_code: str,
+    lang_code: str | None,
     proxy_url: str | None,
 ) -> list[TranscriptEntry]:
     """yt-dlp subtitle fetch — sync, runs inside thread pool."""
@@ -403,21 +455,39 @@ def _ytdlp_subs_sync(
     subs = info.get("subtitles", {})
     auto = info.get("automatic_captions", {})
 
-    # Try manual captions first, then auto-generated
-    # Priority: requested lang → English variants → any available lang
     sub_url: str | None = None
-    preferred_langs = [lang_code, f"{lang_code}-orig", "en", "en-orig", "en-US"]
-    for source in (subs, auto):
-        for lang in preferred_langs:
-            if lang in source:
-                for track in source[lang]:
+
+    if lang_code is None:
+        # Auto — prefer automatic_captions (ASR, transcribed straight from
+        # audio, always the real spoken language) over manual `subs`
+        # (which CAN be a translation, e.g. a community-contributed English
+        # track on a Hindi video). No English bias here at all.
+        for source in (auto, subs):
+            for lang_key, tracks in source.items():
+                for track in tracks:
                     if track.get("ext") in ("json3", "vtt", "srv1"):
                         sub_url = track.get("url")
                         break
+                if sub_url:
+                    logger.info(f"[{video_id}] Auto language — using yt-dlp caption '{lang_key}'")
+                    break
             if sub_url:
                 break
-        if sub_url:
-            break
+    else:
+        # Try manual captions first, then auto-generated
+        # Priority: requested lang → English variants → any available lang
+        preferred_langs = [lang_code, f"{lang_code}-orig", "en", "en-orig", "en-US"]
+        for source in (subs, auto):
+            for lang in preferred_langs:
+                if lang in source:
+                    for track in source[lang]:
+                        if track.get("ext") in ("json3", "vtt", "srv1"):
+                            sub_url = track.get("url")
+                            break
+                if sub_url:
+                    break
+            if sub_url:
+                break
 
     # Last resort: grab ANY available language track
     if not sub_url:
@@ -455,7 +525,7 @@ def _ytdlp_subs_sync(
     return entries
 
 
-async def _ytdlp_subs_proxy(video_id: str, lang_code: str, session_id: str | None = None) -> list[TranscriptEntry]:
+async def _ytdlp_subs_proxy(video_id: str, lang_code: str | None, session_id: str | None = None) -> list[TranscriptEntry]:
     proxy = get_dataimpulse_proxy(purpose="transcript-ytdlp")
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(

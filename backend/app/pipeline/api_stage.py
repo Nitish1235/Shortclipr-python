@@ -29,6 +29,7 @@ from app.db import supabase as db
 from app.pipeline.ai_clipper import find_viral_clips
 from app.pipeline.stream import extract_video_id, get_stream_urls, get_video_metadata
 from app.pipeline.transcript import get_transcript
+from app.pipeline.transcript_cleanup import clean_transcript
 
 logger = logging.getLogger(__name__)
 
@@ -233,6 +234,15 @@ async def _execute_api_stage(
             f"[{job_id}] Free-tier transcript cap: {len(transcript)}/{full_len} "
             f"entries kept (first {max_transcript_seconds // 60} min of the window)"
         )
+
+    # ── STEP 4b: OpenAI transcript cleanup ──────────────────────────
+    # Fixes ASR/garbled-text artifacts in the transcript BEFORE it feeds
+    # both GPT clip-selection below and caption burning in ffmpeg_stage.py
+    # (get_clip_captions() copies entry["text"] through unmodified, so
+    # cleaning it once here covers both consumers). Best-effort — falls
+    # back to the original transcript on any failure, never blocks the job.
+    await db.update_job_progress(job_id, 12, "Cleaning up transcript...")
+    transcript = await clean_transcript(transcript, video_id=job_id)
 
     # ── STEP 5: AI finds viral moments ─────────────────────────────
     await db.update_job_progress(job_id, 18, "AI analyzing best moments...")
