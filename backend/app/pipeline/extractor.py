@@ -1088,6 +1088,18 @@ async def _encode_reframed_and_captioned(
 
             cmd = [
                 "ffmpeg", "-y",
+                # Cap decode + filtergraph threads to 1 each — without this,
+                # ffmpeg auto-picks decode/filter thread counts matching the
+                # host's vCPU count (4 on this worker). With MAX_CONCURRENT_ENCODES
+                # clips running concurrently, that's N_clips × ~4 decode threads
+                # PLUS 2 encoder threads (raw+captioned, each -threads 1 below)
+                # all fighting over the same 4 physical cores — 4-5x thread
+                # oversubscription that silently turned a ~30-60s encode into
+                # 180-230s. Pinning every stage to 1 thread makes each ffmpeg
+                # process's real CPU footprint match what MAX_CONCURRENT_ENCODES
+                # actually budgeted for.
+                "-threads", "1",
+                "-filter_complex_threads", "1",
                 "-i", str(input_path),
                 *extra_inputs,
                 "-filter_complex", fc,
@@ -1106,6 +1118,8 @@ async def _encode_reframed_and_captioned(
             fc = _build_template_filter(template, bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label="out")
             cmd = [
                 "ffmpeg", "-y",
+                "-threads", "1",
+                "-filter_complex_threads", "1",
                 "-i", str(input_path),
                 "-filter_complex", fc,
                 "-map", "[out]", "-map", "0:a?",

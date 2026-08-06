@@ -14,6 +14,7 @@ import HowItWorks        from './components/HowItWorks'
 import Features          from './components/Features'
 import UseCases          from './components/UseCases'
 import VideoShowcase     from './components/VideoShowcase'
+import CreatorEarnings   from './components/CreatorEarnings'
 import Comparison        from './components/Comparison'
 import Testimonials      from './components/Testimonials'
 import Pricing           from './components/Pricing'
@@ -91,6 +92,9 @@ function LandingPage() {
 
         {/* 6. INFINITE VIDEO SHOWCASE — admin-curated clips from GCS */}
         <VideoShowcase />
+
+        {/* 6b. Real creator earnings — YouTube Studio dashboards */}
+        <CreatorEarnings />
 
         {/* 7. AI pipeline flow */}
         <VisualHighlights />

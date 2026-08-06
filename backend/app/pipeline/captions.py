@@ -1056,6 +1056,11 @@ async def burn_captions(
         filter_flag = "-filter_complex" if extra_inputs else "-vf"
         cmd = [
             "ffmpeg", "-y",
+            # Cap decode/filter threads so this doesn't oversubscribe alongside
+            # concurrent re-renders on the same instance — see the matching
+            # comment in extractor.py's _encode_reframed_and_captioned.
+            "-threads", "1",
+            "-filter_complex_threads", "1",
             "-i", str(clip_path),
             *extra_inputs,
             filter_flag, vf,

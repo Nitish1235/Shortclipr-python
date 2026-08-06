@@ -74,7 +74,15 @@ class Settings(BaseSettings):
 
     # ── Worker / Pipeline ─────────────────────────────────────
     MAX_CONCURRENT_CLIPS: int = 10          # asyncio semaphore for cheap -c copy extraction
-    MAX_CONCURRENT_ENCODES: int = 4         # asyncio semaphore for libx264 reframe+caption encodes (each -threads 1 → 4 concurrent × 1 = 4 vCPUs fully utilised)
+    # asyncio semaphore for libx264 reframe+caption encodes. Each concurrent
+    # encode is now pinned to ~3 real threads (1 decode + 2 x264 encoders
+    # for the raw+captioned outputs — see extractor.py's
+    # _encode_reframed_and_captioned for the -threads/-filter_complex_threads
+    # pins). At 4 vCPU that means MAX_CONCURRENT_ENCODES=4 clips in flight
+    # can demand up to ~12 threads — some oversubscription remains for
+    # 4+-clip jobs, but far less than before those pins existed (decode
+    # previously defaulted to ~vCPU-count threads per process, unbounded).
+    MAX_CONCURRENT_ENCODES: int = 4
     SOURCE_DOWNLOAD_CHUNKS: int = 8         # parallel ranged-download chunk count
     MAX_CONCURRENT_JOBS_PER_USER: int = 1   # one job at a time — pins the user's IP + prevents Proxy-Seller IP collisions
     # Note: per-video duration limits are now plan-based — see app/core/plan_limits.py
