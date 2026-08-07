@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Brainrot Character Selector (112)</title>
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --card-bg: #ffffff;
+    --border: #e0e0e5;
+    --text: #1a1a1e;
+    --muted: #6a6a75;
+    --accent: #cf1322;
+    --accent-bg: #fdecee;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(245,245,247,0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+  h1 { font-size: 16px; margin: 0; font-weight: 600; margin-right: auto; }
+  button, select {
+    font: inherit;
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: white;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  button:hover { background: #f0f0f2; }
+  button.primary { background: var(--text); color: white; border-color: var(--text); }
+  button.primary:hover { background: #333; }
+  #count { font-size: 13px; color: var(--muted); font-weight: 600; }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+    padding: 16px 20px 100px;
+  }
+  .card {
+    background: var(--card-bg);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color .12s, transform .12s;
+    position: relative;
+    user-select: none;
+  }
+  .card:hover { transform: translateY(-2px); }
+  .card.selected { border-color: var(--accent); background: var(--accent-bg); }
+  .card .thumb {
+    aspect-ratio: 3/4;
+    background: #fafafa repeating-conic-gradient(#f0f0f0 0% 25%, transparent 0% 50%) 50%/16px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card img { width: 100%; height: 100%; object-fit: contain; }
+  .card .info { padding: 8px 10px 10px; }
+  .card .name { font-size: 12.5px; font-weight: 700; line-height: 1.25; }
+  .card .arche { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.2; }
+  .card .fam-tag {
+    display: inline-block; margin-top: 5px; font-size: 9.5px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted);
+    background: #f0f0f2; padding: 2px 6px; border-radius: 5px;
+  }
+  .check {
+    position: absolute; top: 8px; right: 8px; width: 22px; height: 22px;
+    border-radius: 50%; background: rgba(255,255,255,0.9); border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 900;
+    color: white;
+  }
+  .card.selected .check { background: var(--accent); border-color: var(--accent); }
+  #exportBar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: white; border-top: 1px solid var(--border);
+    padding: 12px 20px; display: flex; gap: 10px; align-items: center;
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.06);
+  }
+  #exportOut {
+    flex: 1; font-family: ui-monospace, monospace; font-size: 12px;
+    padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: #fafafa; height: 34px; resize: none; overflow: auto; white-space: nowrap;
+  }
+  .toast {
+    position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+    background: var(--text); color: white; padding: 8px 16px; border-radius: 20px;
+    font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Brainrot Character Library — 112 characters</h1>
+  <select id="familyFilter"><option value="">All families</option></select>
+  <button id="selAll">Select all</button>
+  <button id="selNone">Deselect all</button>
+  <span id="count">0 selected</span>
+</header>
+
+<div id="grid"></div>
+
+<div id="exportBar">
+  <textarea id="exportOut" readonly placeholder="Selected IDs will appear here as JSON..."></textarea>
+  <button class="primary" id="copyBtn">Copy selection</button>
+</div>
+
+<div class="toast" id="toast">Copied to clipboard</div>
+
+<script>
+const CHARACTERS = [{"id": "dougie-blunt", "name": "Dougie Blunt", "family": "Household", "archetype": "Loud Dumb Dad"}, {"id": "marla-blunt", "name": "Marla Blunt", "family": "Household", "archetype": "Exhausted Mom"}, {"id": "kip-blunt", "name": "Kip Blunt", "family": "Household", "archetype": "Sarcastic Genius Toddler"}, {"id": "tanner-blunt", "name": "Tanner Blunt", "family": "Household", "archetype": "Phone-Glued Teen"}, {"id": "nana-ratchet", "name": "Nana Ratchet", "family": "Household", "archetype": "Feral Grandma"}, {"id": "uncle-sherm", "name": "Uncle Sherm", "family": "Household", "archetype": "Conspiracy Uncle"}, {"id": "bev-nettles", "name": "Bev Nettles", "family": "Household", "archetype": "Nosy Neighbor"}, {"id": "chad-pemberton", "name": "Chad Pemberton", "family": "Household", "archetype": "Insufferable Neighbor Dad"}, {"id": "grill-hutch", "name": "Gerald 'Grill' Hutch", "family": "Household", "archetype": "Backyard BBQ Guy"}, {"id": "trisha-vane", "name": "Trisha Vane", "family": "Household", "archetype": "Mom-Influencer"}, {"id": "nibs", "name": "Nibs", "family": "Gremlins", "archetype": "Screaming Tiny Gremlin"}, {"id": "mop", "name": "Mop", "family": "Gremlins", "archetype": "Obsessive Janitor"}, {"id": "snacc", "name": "Snacc", "family": "Gremlins", "archetype": "Food-Obsessed Blob"}, {"id": "gnawl", "name": "Gnawl", "family": "Gremlins", "archetype": "Meathead Enforcer"}, {"id": "wizzo", "name": "Wizzo", "family": "Gremlins", "archetype": "Washed-Up Party Clown"}, {"id": "bloop", "name": "Bloop", "family": "Gremlins", "archetype": "Innocent Chaos"}, {"id": "ratticus", "name": "Ratticus", "family": "Gremlins", "archetype": "Sewer Schemer"}, {"id": "skitter", "name": "Skitter", "family": "Gremlins", "archetype": "Coffee-Addicted Runner"}, {"id": "lugg", "name": "Lugg", "family": "Gremlins", "archetype": "Dumb Strong Lump"}, {"id": "pixel-imp", "name": "Pixel Imp", "family": "Gremlins", "archetype": "Glitch Gremlin"}, {"id": "vex-corliss", "name": "Dr. Vex Corliss", "family": "Science", "archetype": "Burnt-Out Mad Scientist"}, {"id": "prof-umbra", "name": "Professor Umbra", "family": "Science", "archetype": "Pompous Academic"}, {"id": "bitsy-quark", "name": "Bitsy Quark", "family": "Science", "archetype": "Child Prodigy"}, {"id": "norm-plimm", "name": "Dr. Norm Plimm", "family": "Science", "archetype": "Depressed Lab Tech"}, {"id": "ada-vole", "name": "Ada Vole", "family": "Science", "archetype": "Cold Rationalist"}, {"id": "the-calculator", "name": "The Calculator", "family": "Science", "archetype": "Literal Thinking Machine"}, {"id": "grigori-slyme", "name": "Grigori Slyme", "family": "Science", "archetype": "Unethical Bio Guy"}, {"id": "nell-fathom", "name": "Nell Fathom", "family": "Science", "archetype": "Unsettling Deep-Sea Researcher"}, {"id": "dr-fizzwick", "name": "Dr. Fizzwick", "family": "Science", "archetype": "Inventor Whose Stuff Explodes"}, {"id": "oracle-9", "name": "Oracle 9", "family": "Science", "archetype": "Smug AI"}, {"id": "brent-callahan", "name": "Brent Callahan", "family": "Corporate", "archetype": "Hustle-Culture CEO"}, {"id": "deb-from-hr", "name": "Deb from HR", "family": "Corporate", "archetype": "Passive-Aggressive Enforcer"}, {"id": "todd-synergy", "name": "Todd Synergy", "family": "Corporate", "archetype": "Buzzword Middle Manager"}, {"id": "marcy-mulch", "name": "Marcy Mulch", "family": "Corporate", "archetype": "Escalation Specialist"}, {"id": "intern-greg", "name": "Intern Greg", "family": "Corporate", "archetype": "Terrified Intern"}, {"id": "sharon-quill", "name": "Sharon Quill", "family": "Corporate", "archetype": "Office Gossip"}, {"id": "reginald-cost", "name": "Reginald Cost", "family": "Corporate", "archetype": "Ruthless CFO"}, {"id": "chip-vandergraff", "name": "Chip Vandergraff", "family": "Corporate", "archetype": "Nepo Hire"}, {"id": "doreen-sludge", "name": "Doreen Sludge", "family": "Corporate", "archetype": "Cafeteria Lady"}, {"id": "beige", "name": "Beige", "family": "Corporate", "archetype": "The Forgettable Man"}, {"id": "krungar", "name": "Krungar the Weary", "family": "Fantasy", "archetype": "Tired Barbarian"}, {"id": "elowen-mistvale", "name": "Elowen Mistvale", "family": "Fantasy", "archetype": "Haughty Elf"}, {"id": "borin-copperfist", "name": "Borin Copperfist", "family": "Fantasy", "archetype": "Perpetually Drunk Dwarf"}, {"id": "zathrix", "name": "Zathrix", "family": "Fantasy", "archetype": "Theatrical Dark Lord"}, {"id": "puddle", "name": "Puddle the Bog Witch", "family": "Fantasy", "archetype": "Swamp Hag"}, {"id": "ambrose-dunn", "name": "Sir Ambrose Dunn", "family": "Fantasy", "archetype": "Cowardly Knight"}, {"id": "thistle", "name": "Thistle", "family": "Fantasy", "archetype": "Fairy With Anger Issues"}, {"id": "old-man-runes", "name": "Old Man Runes", "family": "Fantasy", "archetype": "Cryptic Wizard"}, {"id": "gnash", "name": "Gnash", "family": "Fantasy", "archetype": "Goblin Merchant"}, {"id": "seraphine-dawnhollow", "name": "Seraphine Dawnhollow", "family": "Fantasy", "archetype": "Insufferably Pure Paladin"}, {"id": "tito-ramirez", "name": "Tito Ramirez", "family": "Street", "archetype": "Bodega Philosopher"}, {"id": "big-marv", "name": "Big Marv", "family": "Street", "archetype": "Gentle Giant Bouncer"}, {"id": "slick-dime", "name": "Slick Dime", "family": "Street", "archetype": "Small-Time Hustler"}, {"id": "ms-yolanda", "name": "Ms. Yolanda", "family": "Street", "archetype": "No-Nonsense Building Super"}, {"id": "two-phone-tommy", "name": "Two-Phone Tommy", "family": "Street", "archetype": "Always On A Deal"}, {"id": "reseller-ray", "name": "Reseller Ray", "family": "Street", "archetype": "Sneaker Flipper"}, {"id": "dj-kettle", "name": "DJ Kettle", "family": "Street", "archetype": "Aging Club DJ"}, {"id": "curb", "name": "Curb", "family": "Street", "archetype": "Skate Kid"}, {"id": "auntie-fern", "name": "Auntie Fern", "family": "Street", "archetype": "Church Aunt With Opinions"}, {"id": "rico-static", "name": "Rico Static", "family": "Street", "archetype": "Mixtape Rapper"}, {"id": "sgt-waffles", "name": "Sergeant Waffles", "family": "Animals", "archetype": "Pug Drill Sergeant"}, {"id": "miso", "name": "Miso", "family": "Animals", "archetype": "Contemptuous Cat"}, {"id": "chonkers", "name": "Chonkers", "family": "Animals", "archetype": "Obese Raccoon"}, {"id": "beaks", "name": "Beaks", "family": "Animals", "archetype": "Pigeon Con Artist"}, {"id": "prof-scales", "name": "Professor Scales", "family": "Animals", "archetype": "Smooth Lizard Intellectual"}, {"id": "moobert", "name": "Moobert", "family": "Animals", "archetype": "Chaotic Hippo"}, {"id": "gulp", "name": "Gulp", "family": "Animals", "archetype": "Melancholy Frog"}, {"id": "capt-gilfin", "name": "Captain Gilfin", "family": "Animals", "archetype": "Weathered Sea Captain"}, {"id": "hoot", "name": "Hoot", "family": "Animals", "archetype": "Sleep-Deprived Owl"}, {"id": "bark-twain", "name": "Bark Twain", "family": "Animals", "archetype": "Literary Dog"}, {"id": "unit-7-delta", "name": "Unit 7-Delta", "family": "SciFi", "archetype": "Malfunctioning Bot"}, {"id": "glorp", "name": "GLORP", "family": "SciFi", "archetype": "Overfriendly Alien"}, {"id": "xanthar", "name": "Xanthar the Conqueror", "family": "SciFi", "archetype": "Failing Invader"}, {"id": "bleep", "name": "Bleep", "family": "SciFi", "archetype": "Small Helper Bot"}, {"id": "vance-steele", "name": "Commander Vance Steele", "family": "SciFi", "archetype": "Action Hero Parody"}, {"id": "the-cube", "name": "The Cube", "family": "SciFi", "archetype": "Ominous Monolith"}, {"id": "zorbo", "name": "Zorbo", "family": "SciFi", "archetype": "Alien Tourist"}, {"id": "oxide", "name": "OXIDE", "family": "SciFi", "archetype": "Ancient War Machine"}, {"id": "nova-kade", "name": "Nova Kade", "family": "SciFi", "archetype": "Space Bounty Hunter"}, {"id": "mainframe", "name": "Mainframe", "family": "SciFi", "archetype": "Exhausted Sentient Server"}, {"id": "bartholomew-crumb", "name": "Bartholomew Crumb", "family": "Period", "archetype": "Victorian Gentleman"}, {"id": "agnes-grim", "name": "Sister Agnes Grim", "family": "Period", "archetype": "Stern Nun"}, {"id": "duke-pomp", "name": "Duke Ferdinand Pomp", "family": "Period", "archetype": "Decadent Noble"}, {"id": "clyde-barrelhouse", "name": "Clyde Barrelhouse", "family": "Period", "archetype": "1920s Gangster"}, {"id": "wilhelmina-frost", "name": "Wilhelmina Frost", "family": "Period", "archetype": "Suffragette Firebrand"}, {"id": "cowboy-jed", "name": "Cowboy Jed", "family": "Period", "archetype": "Laconic Cowboy"}, {"id": "pharaoh-ozy", "name": "Pharaoh Ozy", "family": "Period", "archetype": "Bored God-King"}, {"id": "brother-cassian", "name": "Brother Cassian", "family": "Period", "archetype": "Medieval Monk"}, {"id": "mordecai-blackrot", "name": "Captain Mordecai Blackrot", "family": "Period", "archetype": "Pirate Captain"}, {"id": "madame-vespertine", "name": "Madame Vespertine", "family": "Period", "archetype": "Fortune Teller"}, {"id": "streamer-jax", "name": "Streamer Jax", "family": "Internet", "archetype": "Twitch Streamer"}, {"id": "lore-guy", "name": "Lore Guy", "family": "Internet", "archetype": "Over-Explainer"}, {"id": "doomscroll", "name": "Doomscroll", "family": "Internet", "archetype": "Perpetually Online"}, {"id": "ad-break", "name": "Ad Break", "family": "Internet", "archetype": "Sentient Advertisement"}, {"id": "npc-dave", "name": "NPC Dave", "family": "Internet", "archetype": "Self-Aware Background Character"}, {"id": "grindset-gary", "name": "Grindset Gary", "family": "Internet", "archetype": "Hustle Influencer"}, {"id": "captcha", "name": "Captcha", "family": "Internet", "archetype": "Paranoid Verifier"}, {"id": "buffer", "name": "Buffer", "family": "Internet", "archetype": "Perpetually Lagging"}, {"id": "megamod", "name": "MegaMod", "family": "Internet", "archetype": "Power-Tripping Moderator"}, {"id": "the-algorithm", "name": "The Algorithm", "family": "Internet", "archetype": "Omniscient Narrator"}, {"id": "boris-hoggard", "name": "Boris Hoggard", "family": "Hybrids", "archetype": "Corrupt Union Boss"}, {"id": "vinnie-tuscato", "name": "Vinnie Tuscato", "family": "Hybrids", "archetype": "Aging Mob Rat"}, {"id": "marco-ramline", "name": "Marco Ramline", "family": "Hybrids", "archetype": "Washed-Up Boxer"}, {"id": "gary-strand", "name": "Gary Strand", "family": "Hybrids", "archetype": "Middle-Aged Divorce"}, {"id": "karla-krest", "name": "Karla Krest", "family": "Hybrids", "archetype": "Karen Manager"}, {"id": "reggie-kessler", "name": "Reggie Kessler", "family": "Hybrids", "archetype": "Podcast Bro"}, {"id": "mira-vosk", "name": "Mira Vosk", "family": "Hybrids", "archetype": "Cold-Blooded Lawyer"}, {"id": "felix-noire", "name": "Felix Noire", "family": "Hybrids", "archetype": "Sleazy Nightclub Owner"}, {"id": "benji-ford", "name": "Benji Ford", "family": "Hybrids", "archetype": "Overeager New Hire"}, {"id": "olga-brandt", "name": "Olga Brandt", "family": "Hybrids", "archetype": "Retired Circus Strongwoman"}, {"id": "cornelius-blatt", "name": "Cornelius Blatt", "family": "Hybrids", "archetype": "Miserly Landlord"}, {"id": "riley-carve", "name": "Riley Carve", "family": "Hybrids", "archetype": "Extreme Sports Instructor"}];
+
+const grid = document.getElementById('grid');
+const familyFilter = document.getElementById('familyFilter');
+const countEl = document.getElementById('count');
+const exportOut = document.getElementById('exportOut');
+const toast = document.getElementById('toast');
+
+const selected = new Set(); // start empty — you pick what you want
+
+// populate family filter
+const families = [...new Set(CHARACTERS.map(c => c.family))].sort();
+families.forEach(f => {
+  const opt = document.createElement('option');
+  opt.value = f; opt.textContent = f;
+  familyFilter.appendChild(opt);
+});
+
+function render() {
+  const filterVal = familyFilter.value;
+  grid.innerHTML = '';
+  CHARACTERS
+    .filter(c => !filterVal || c.family === filterVal)
+    .forEach(c => {
+      const card = document.createElement('div');
+      card.className = 'card' + (selected.has(c.id) ? ' selected' : '');
+      card.dataset.id = c.id;
+      card.innerHTML = `
+        <div class="thumb"><img src="assets/${c.id}/canon.png" loading="lazy" alt="${c.name}"></div>
+        <div class="info">
+          <div class="name">${c.name}</div>
+          <div class="arche">${c.archetype}</div>
+          <div class="fam-tag">${c.family}</div>
+        </div>
+        <div class="check">${selected.has(c.id) ? '✓' : ''}</div>
+      `;
+      card.addEventListener('click', () => {
+        if (selected.has(c.id)) selected.delete(c.id); else selected.add(c.id);
+        render();
+        updateExport();
+      });
+      grid.appendChild(card);
+    });
+  countEl.textContent = `${selected.size} selected`;
+}
+
+function updateExport() {
+  exportOut.value = JSON.stringify([...selected]);
+}
+
+familyFilter.addEventListener('change', render);
+
+document.getElementById('selAll').addEventListener('click', () => {
+  const filterVal = familyFilter.value;
+  CHARACTERS.filter(c => !filterVal || c.family === filterVal).forEach(c => selected.add(c.id));
+  render(); updateExport();
+});
+document.getElementById('selNone').addEventListener('click', () => {
+  const filterVal = familyFilter.value;
+  if (!filterVal) { selected.clear(); }
+  else { CHARACTERS.filter(c => c.family === filterVal).forEach(c => selected.delete(c.id)); }
+  render(); updateExport();
+});
+document.getElementById('copyBtn').addEventListener('click', async () => {
+  updateExport();
+  try {
+    await navigator.clipboard.writeText(exportOut.value);
+  } catch (e) {
+    exportOut.select();
+    document.execCommand('copy');
+  }
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 1200);
+});
+
+render();
+updateExport();
+</script>
+
+</body>
+</html>

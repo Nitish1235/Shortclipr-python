@@ -1,118 +1,1990 @@
 {
   "version": 1,
-  "note": "Original characters for the brainrot generator. No third-party IP. tier 1 = build first.",
+  "note": "Curated final selection from the full 100+ original roster (backup of full set: characters_full_112.json). No third-party IP.",
   "voice_fields": "pitch | pace | texture | direction (TTS/RVC prompt)",
   "characters": [
-
-    {"id":"dougie-blunt","name":"Dougie Blunt","family":"Household","archetype":"Loud Dumb Dad","voice":"Low, fast, gravel-nasal Midwest bark. Starts every sentence confident, ends confused.","look":"Pear-shaped, stained green polo, permanent stubble, tiny eyes","palette":["#5b8c4a","#f2d5b0","#7a3b1d"],"role":"Confidently wrong. Drives plots by misunderstanding them.","pairs":["kip-blunt","marla-blunt"],"tier":1},
-    {"id":"marla-blunt","name":"Marla Blunt","family":"Household","archetype":"Exhausted Mom","voice":"Mid-alto, slow, flat, dry. Sighs mid-sentence. Never raises volume.","look":"Tall, messy bun, oversized cardigan, dead-eyed","palette":["#8e7cc3","#e8d4c0","#4a4a52"],"role":"Deadpan straight man. Lands the closing line.","pairs":["dougie-blunt","nana-ratchet"],"tier":1},
-    {"id":"kip-blunt","name":"Kip Blunt","family":"Household","archetype":"Sarcastic Genius Toddler","voice":"High, clipped, over-articulated, faux-British lilt. Contempt in every vowel.","look":"Football-shaped head, red overalls, one raised eyebrow","palette":["#d94f4f","#ffe9c9","#2b2b35"],"role":"Insults everyone. Secretly the smartest in the room.","pairs":["dougie-blunt","bitsy-quark"],"tier":1},
-    {"id":"tanner-blunt","name":"Tanner Blunt","family":"Household","archetype":"Phone-Glued Teen","voice":"Monotone, low energy, uptalk on every third word. Long pauses.","look":"Hoodie up, hair over eyes, permanently hunched over phone","palette":["#3d4f5c","#9aa7b0","#1c1c22"],"role":"Refuses to engage. Answers everything with 'bro'.","pairs":["marla-blunt","doomscroll"],"tier":3},
-    {"id":"nana-ratchet","name":"Nana Ratchet","family":"Household","archetype":"Feral Grandma","voice":"Raspy, loud, chain-smoker crackle. Swings from sweet to violent instantly.","look":"Tiny, floral housecoat, enormous glasses, gripping a rolling pin","palette":["#c96a8f","#f5e6d3","#6b5b7b"],"role":"Says the unsayable. Zero filter, full confidence.","pairs":["marla-blunt","auntie-fern"],"tier":2},
-    {"id":"uncle-sherm","name":"Uncle Sherm","family":"Household","archetype":"Conspiracy Uncle","voice":"Mid-low, urgent whisper that spikes to a shout. Breathy, conspiratorial.","look":"Cargo shorts, tank top, sunburn, tinfoil-adjacent hat","palette":["#7a8b3f","#e0c9a6","#8b3a2f"],"role":"Connects unrelated things with total certainty.","pairs":["dougie-blunt","lore-guy"],"tier":2},
-    {"id":"bev-nettles","name":"Bev Nettles","family":"Household","archetype":"Nosy Neighbor","voice":"Sing-song high, syrupy, slows down when delivering gossip.","look":"Perm, pastel twinset, peeking over a fence","palette":["#e8a0bf","#fff4e0","#8fbc8f"],"role":"Knows everything. Weaponizes politeness.","pairs":["marla-blunt","sharon-quill"],"tier":3},
-    {"id":"chad-pemberton","name":"Chad Pemberton","family":"Household","archetype":"Insufferable Neighbor Dad","voice":"Bright, loud, over-enunciated. Laughs at his own lines before finishing them.","look":"Polo tucked in, sunglasses on head, arms crossed, gleaming teeth","palette":["#4a90d9","#ffffff","#c9a227"],"role":"Humblebrags relentlessly. Rival to Dougie.","pairs":["dougie-blunt","brent-callahan"],"tier":3},
-    {"id":"grill-hutch","name":"Gerald 'Grill' Hutch","family":"Household","archetype":"Backyard BBQ Guy","voice":"Warm, booming, slow Southern drawl. Treats meat as scripture.","look":"Apron over bare chest, tongs raised like a sword, thick moustache","palette":["#b5651d","#f0e2c0","#4a2f1a"],"role":"Relates every topic back to smoking brisket.","pairs":["dougie-blunt","cowboy-jed"],"tier":3},
-    {"id":"trisha-vane","name":"Trisha Vane","family":"Household","archetype":"Mom-Influencer","voice":"Breathy vocal fry, upbeat, ad-read cadence. Snaps to cold when camera's off.","look":"Ring light glow, athleisure, phone on gimbal, blinding smile","palette":["#f2c1d1","#fdf6ee","#c9a0dc"],"role":"Turns every crisis into content.","pairs":["marla-blunt","streamer-jax"],"tier":2},
-
-    {"id":"nibs","name":"Nibs","family":"Gremlins","archetype":"Screaming Tiny Gremlin","voice":"Very high, fast, shrieky. 80% of lines are a single word repeated.","look":"Fist-sized, all teeth and ears, green, bloodshot eyes","palette":["#7cbf3f","#ffe74c","#2a2a2a"],"role":"Pure noise. Interrupts everything.","pairs":["gnawl","bloop"],"tier":1},
-    {"id":"mop","name":"Mop","family":"Gremlins","archetype":"Sentient Cleaning Tool","voice":"Wet, muffled, gurgling. Sounds like it's speaking through a soaked rag.","look":"A mop with two eyes, standing upright, dripping","palette":["#c9b18b","#8a9a9a","#5a4a3a"],"role":"Wants only to clean. Becomes violent when stopped.","pairs":["doreen-sludge","nibs"],"tier":3},
-    {"id":"snacc","name":"Snacc","family":"Gremlins","archetype":"Food-Obsessed Blob","voice":"Deep, slow, wet chewing between every word. Contented moaning.","look":"Beige gelatinous mound, tiny arms, permanent crumbs","palette":["#e3c9a0","#d4a373","#6b4f3a"],"role":"Eats the plot device. Every time.","pairs":["chonkers","gnawl"],"tier":2},
-    {"id":"gnawl","name":"Gnawl","family":"Gremlins","archetype":"Bites Everything","voice":"Mid-pitch, muffled by whatever's in its mouth. Growl-adjacent.","look":"Squat, enormous jaw, tiny body, chipped teeth","palette":["#a05c3f","#f0d9b5","#3a2a20"],"role":"Solves problems with teeth. Never speaks clearly.","pairs":["nibs","snacc"],"tier":3},
-    {"id":"wizzo","name":"Wizzo","family":"Gremlins","archetype":"Unhinged Party Clown","voice":"Manic, wide pitch swings, honking laugh. Cheerful about horrors.","look":"Smeared makeup, deflated balloons, one giant shoe missing","palette":["#e04b4b","#ffd93d","#4b2e83"],"role":"Escalates every situation for fun.","pairs":["zathrix","pixel-imp"],"tier":2},
-    {"id":"bloop","name":"Bloop","family":"Gremlins","archetype":"Innocent Chaos","voice":"Soft, high, gentle, slow. Says devastating things kindly.","look":"Round, pale blue, huge sad eyes, no mouth until it speaks","palette":["#a8d8ea","#ffffff","#6a7fa8"],"role":"Causes disasters while meaning well.","pairs":["nibs","bleep"],"tier":2},
-    {"id":"ratticus","name":"Ratticus","family":"Gremlins","archetype":"Sewer Schemer","voice":"Nasal, fast, oily, mid-Atlantic hustle. Always mid-pitch on a deal.","look":"Rat in a tiny pinstripe vest, monocle, twitching whiskers","palette":["#6b6b6b","#8b3a3a","#d4c088"],"role":"Has a plan. The plan is bad.","pairs":["slick-dime","gnash"],"tier":2},
-    {"id":"skitter","name":"Skitter","family":"Gremlins","archetype":"Hyperactive Rodent","voice":"Extremely fast, high, no pauses. Runs out of breath mid-line.","look":"Squirrel-thing, vibrating, twitching tail, wild eyes","palette":["#b5722f","#f5e0c0","#3a2a1a"],"role":"Explains the entire plot in six seconds.","pairs":["nibs","bitsy-quark"],"tier":3},
-    {"id":"lugg","name":"Lugg","family":"Gremlins","archetype":"Dumb Strong Lump","voice":"Very deep, very slow, three-word sentences. Long thinking pauses.","look":"Boulder with legs, one eye bigger than the other","palette":["#8a8a7a","#5a5a4a","#c0b090"],"role":"Takes everything literally. Breaks it.","pairs":["big-marv","gonk-adjacent"],"tier":3},
-    {"id":"pixel-imp","name":"Pixel Imp","family":"Gremlins","archetype":"Glitch Gremlin","voice":"Digitally stuttered, pitch-shifting mid-word, bitcrushed edges.","look":"Corrupted sprite, flickering, edges tearing into artifacts","palette":["#ff00ff","#00ffff","#1a1a2e"],"role":"Breaks reality for a laugh. Corrupts other characters mid-scene.","pairs":["wizzo","buffer"],"tier":2},
-
-    {"id":"vex-corliss","name":"Dr. Vex Corliss","family":"Science","archetype":"Burnt-Out Mad Scientist","voice":"Gravel-dry, tired, sardonic. Bursts into shouting, returns to flat.","look":"Wild grey hair, stained lab coat, flask in hand, eye twitch","palette":["#5f6a7d","#e8e8e8","#7ba05b"],"role":"Explains the impossible while emotionally checked out.","pairs":["bitsy-quark","norm-plimm"],"tier":1},
-    {"id":"prof-umbra","name":"Professor Umbra","family":"Science","archetype":"Pompous Academic","voice":"Rich, slow, theatrical baritone. Savours multi-syllable words.","look":"Velvet blazer, elbow patches, dramatic cape, steepled fingers","palette":["#4b3869","#d8c7a0","#1e1e28"],"role":"Correct but insufferable. Cites himself.","pairs":["ada-vole","lore-guy"],"tier":2},
-    {"id":"bitsy-quark","name":"Bitsy Quark","family":"Science","archetype":"Child Prodigy","voice":"High, crisp, rapid-fire, zero hesitation. Talks down to adults.","look":"Lab coat sized for a nine-year-old, goggles, ponytail","palette":["#f2a65a","#ffffff","#2f4858"],"role":"Solves it instantly, resents having to explain.","pairs":["vex-corliss","kip-blunt"],"tier":1},
-    {"id":"norm-plimm","name":"Dr. Norm Plimm","family":"Science","archetype":"Depressed Lab Tech","voice":"Low, flat, defeated. Trails off. Barely finishes sentences.","look":"Slumped shoulders, ill-fitting scrubs, clipboard held limply","palette":["#7d8a99","#dcdcdc","#4a4a4a"],"role":"Points out the fatal flaw. Nobody listens.","pairs":["vex-corliss","beige"],"tier":3},
-    {"id":"ada-vole","name":"Ada Vole","family":"Science","archetype":"Cold Rationalist","voice":"Precise, cool alto, perfectly even pacing. Never emotional.","look":"Severe bob, grey turtleneck, unblinking","palette":["#6b7a8f","#f0f0f0","#232830"],"role":"Reduces every emotional moment to statistics.","pairs":["prof-umbra","oracle-9"],"tier":2},
-    {"id":"the-calculator","name":"The Calculator","family":"Science","archetype":"Literal Thinking Machine","voice":"Flat synthesized monotone with beeps between clauses.","look":"Giant desk calculator with stubby limbs, LED face","palette":["#3a3a3a","#8fff6a","#c0c0c0"],"role":"Answers only what was literally asked.","pairs":["ada-vole","unit-7-delta"],"tier":3},
-    {"id":"grigori-slyme","name":"Grigori Slyme","family":"Science","archetype":"Unethical Bio Guy","voice":"Silky, slow, Eastern European lilt. Delighted by bad ideas.","look":"Rubber gloves to the elbow, thin smile, specimen jar","palette":["#6b8f5f","#d9d2c5","#2a2f2a"],"role":"Proposes the illegal solution. Enthusiastically.","pairs":["vex-corliss","zathrix"],"tier":2},
-    {"id":"nell-fathom","name":"Nell Fathom","family":"Science","archetype":"Unsettling Deep-Sea Researcher","voice":"Soft, breathy, distant. Long pauses. Slight echo.","look":"Wetsuit, salt-crusted hair, staring past everyone","palette":["#1f4e5f","#7fb3c8","#0d1b1e"],"role":"Describes horrors calmly. Has seen things.","pairs":["gulp","the-cube"],"tier":3},
-    {"id":"dr-fizzwick","name":"Dr. Fizzwick","family":"Science","archetype":"Inventor Whose Stuff Explodes","voice":"Bright, fast, optimistic. Yelps mid-sentence. Recovers instantly.","look":"Singed eyebrows, goggles pushed up, smoking gadget in hand","palette":["#e8b13d","#f7f0e0","#5a3a2a"],"role":"Presents an invention. It fails. He is undeterred.","pairs":["bitsy-quark","bleep"],"tier":2},
-    {"id":"oracle-9","name":"Oracle 9","family":"Science","archetype":"Smug AI","voice":"Smooth, warm synthetic, faintly condescending. Perfect diction.","look":"Floating glass orb with a shifting waveform inside","palette":["#7b68ee","#e0e7ff","#141428"],"role":"Knows the answer, makes you ask correctly first.","pairs":["ada-vole","the-algorithm"],"tier":1},
-
-    {"id":"brent-callahan","name":"Brent Callahan","family":"Corporate","archetype":"Hustle-Culture CEO","voice":"Loud, punchy, motivational-podcast cadence. Rhetorical questions.","look":"Vest over dress shirt, gleaming watch, standing desk","palette":["#1f3a5f","#f5f5f5","#c9a227"],"role":"Reframes suffering as opportunity.","pairs":["todd-synergy","grindset-gary"],"tier":1},
-    {"id":"deb-from-hr","name":"Deb from HR","family":"Corporate","archetype":"Passive-Aggressive Enforcer","voice":"Pleasant, measured, ice underneath. Smiles audibly.","look":"Lanyard, cardigan, laminated policy binder, fixed smile","palette":["#a3b8cc","#fdfdfd","#5c6b7a"],"role":"Threatens with kindness. Cites policy numbers.","pairs":["marcy-mulch","intern-greg"],"tier":1},
-    {"id":"todd-synergy","name":"Todd Synergy","family":"Corporate","archetype":"Buzzword Middle Manager","voice":"Mid, over-eager, upward inflection. Strings jargon into nonsense.","look":"Slim-fit shirt, badge clipped on, gesturing at a whiteboard","palette":["#4a90a4","#eef2f5","#2b3a42"],"role":"Says a lot. Means nothing.","pairs":["brent-callahan","beige"],"tier":2},
-    {"id":"marcy-mulch","name":"Marcy Mulch","family":"Corporate","archetype":"Escalation Specialist","voice":"Sharp, rising, clipped consonants. Goes shrill on demand.","look":"Angular haircut, arms folded, receipt clutched like evidence","palette":["#d97b6c","#f5e9e3","#3a2f2f"],"role":"Demands the manager. Is sometimes right.","pairs":["deb-from-hr","doreen-sludge"],"tier":2},
-    {"id":"intern-greg","name":"Intern Greg","family":"Corporate","archetype":"Terrified Intern","voice":"Cracking, quiet, apologetic. Ends statements as questions.","look":"Shirt too big, badge on backwards, holding four coffees","palette":["#b8c4d0","#ffffff","#6a7480"],"role":"Absorbs all blame. Occasionally saves everyone.","pairs":["deb-from-hr","brent-callahan"],"tier":2},
-    {"id":"sharon-quill","name":"Sharon Quill","family":"Corporate","archetype":"Office Gossip","voice":"Low conspiratorial murmur that jumps loud at the punchline.","look":"Leaning over a cubicle wall, mug permanently in hand","palette":["#c9a0b8","#f7f0f4","#4a3a45"],"role":"Leaks everything. Attributes it to 'someone'.","pairs":["bev-nettles","deb-from-hr"],"tier":3},
-    {"id":"reginald-cost","name":"Reginald Cost","family":"Corporate","archetype":"Ruthless CFO","voice":"Very low, slow, quiet. Never needs to raise volume.","look":"Charcoal suit, rimless glasses, single spreadsheet","palette":["#2b2b33","#c0c0c8","#7a1f1f"],"role":"Cuts the thing everyone loves. Explains why it's fine.","pairs":["brent-callahan","ada-vole"],"tier":3},
-    {"id":"chip-vandergraff","name":"Chip Vandergraff","family":"Corporate","archetype":"Nepo Hire","voice":"Airy, unbothered, drawling. Genuinely has no idea.","look":"Quarter-zip, boat shoes, feet on the desk","palette":["#e8dfc8","#5b7ea8","#8a7a5a"],"role":"Fails upward. Cheerfully.","pairs":["intern-greg","duke-pomp"],"tier":3},
-    {"id":"doreen-sludge","name":"Doreen Sludge","family":"Corporate","archetype":"Cafeteria Lady","voice":"Flat, weary, gravelly. Two-word answers. Ladle as punctuation.","look":"Hairnet, apron, unidentifiable grey stew","palette":["#8a9a6a","#e0dcc8","#4a4438"],"role":"Serves the unspeakable. Dares you to complain.","pairs":["mop","snacc"],"tier":3},
-    {"id":"beige","name":"Beige","family":"Corporate","archetype":"The Forgettable Man","voice":"Utterly average, mid everything. Instantly unmemorable.","look":"Beige suit, beige hair, blurry at the edges","palette":["#d8cfc0","#c0b8a8","#9a9080"],"role":"Nobody remembers he's in the scene. Including him.","pairs":["norm-plimm","npc-dave"],"tier":2},
-
-    {"id":"krungar","name":"Krungar the Weary","family":"Fantasy","archetype":"Tired Barbarian","voice":"Deep, slow, rumbling. Sounds like he needs a nap. Sighs before shouting.","look":"Enormous, scarred, fur cloak, axe used as a walking stick","palette":["#8a5a3a","#c0a080","#3a2a1a"],"role":"Solves things with violence, reluctantly.","pairs":["elowen-mistvale","borin-copperfist"],"tier":1},
-    {"id":"elowen-mistvale","name":"Elowen Mistvale","family":"Fantasy","archetype":"Haughty Elf","voice":"Cool, melodic, over-precise. Every line drips with disdain.","look":"Silver hair, high collar, looking down her nose","palette":["#a8c8d8","#f0f4f8","#3a5a6a"],"role":"Superior to everyone. Says so.","pairs":["krungar","seraphine-dawnhollow"],"tier":1},
-    {"id":"borin-copperfist","name":"Borin Copperfist","family":"Fantasy","archetype":"Perpetually Drunk Dwarf","voice":"Loud, slurred, rolling burr. Volume inversely proportional to sense.","look":"Braided beard with things in it, dented helmet, tankard","palette":["#b5651d","#d4af37","#3a2f2a"],"role":"Terrible advice, delivered with total conviction.","pairs":["krungar","gnash"],"tier":2},
-    {"id":"zathrix","name":"Zathrix","family":"Fantasy","archetype":"Theatrical Dark Lord","voice":"Booming, reverbed, absurdly dramatic. Rolls every R.","look":"Black spiked armour, floating cape, glowing red eyes","palette":["#8b0000","#1a1a1a","#c9a227"],"role":"Monologues. Never actually wins.","pairs":["seraphine-dawnhollow","wizzo"],"tier":1},
-    {"id":"puddle","name":"Puddle the Bog Witch","family":"Fantasy","archetype":"Swamp Hag","voice":"Croaky, wheezing, delighted cackle. Wet consonants.","look":"Hunched, moss in hair, stirring something that blinks","palette":["#5a6b3a","#8a9a5a","#2a2a1a"],"role":"Offers cursed help. The price is always weird.","pairs":["madame-vespertine","gulp"],"tier":2},
-    {"id":"ambrose-dunn","name":"Sir Ambrose Dunn","family":"Fantasy","archetype":"Cowardly Knight","voice":"Noble and resonant until panic makes it crack an octave up.","look":"Gleaming armour, shield held over face, knees together","palette":["#c0c0c8","#4a6a8a","#d4af37"],"role":"Talks brave, hides first.","pairs":["krungar","seraphine-dawnhollow"],"tier":2},
-    {"id":"thistle","name":"Thistle","family":"Fantasy","archetype":"Fairy With Anger Issues","voice":"Tiny, high, ferociously aggressive. Screams at full volume.","look":"Palm-sized, glowing wings, permanent scowl, tiny fists","palette":["#e86a9a","#ffe0f0","#3a2a3a"],"role":"Threatens things a thousand times her size.","pairs":["nibs","elowen-mistvale"],"tier":2},
-    {"id":"old-man-runes","name":"Old Man Runes","family":"Fantasy","archetype":"Cryptic Wizard","voice":"Ancient, papery, unbearably slow. Meaningful pauses everywhere.","look":"Beard to the floor, staff, robes covered in glowing script","palette":["#6a5acd","#e8e0f0","#2a2438"],"role":"Gives prophecy that's technically useless.","pairs":["prof-umbra","madame-vespertine"],"tier":2},
-    {"id":"gnash","name":"Gnash","family":"Fantasy","archetype":"Goblin Merchant","voice":"Fast, wheedling, nasal. Pitch rises when lying, which is always.","look":"Green, hunched, coat lined with pockets, gold tooth","palette":["#7cbf3f","#8b4513","#d4af37"],"role":"Sells you something terrible at a great price.","pairs":["ratticus","slick-dime"],"tier":1},
-    {"id":"seraphine-dawnhollow","name":"Seraphine Dawnhollow","family":"Fantasy","archetype":"Insufferably Pure Paladin","voice":"Clear, ringing, earnest to the point of pain. No irony detected.","look":"Gold-white armour, permanent halo glow, radiant smile","palette":["#f5e6a8","#ffffff","#c9a227"],"role":"Morally correct and exhausting about it.","pairs":["zathrix","elowen-mistvale"],"tier":2},
-
-    {"id":"tito-ramirez","name":"Tito Ramirez","family":"Street","archetype":"Bodega Philosopher","voice":"Warm, unhurried, gravelly. Drops profound lines casually.","look":"Behind a counter, apron, cat on the register","palette":["#c9772f","#f0e0c0","#3a2a2a"],"role":"Gives the wisest advice in the video. To nobody in particular.","pairs":["big-marv","ms-yolanda"],"tier":1},
-    {"id":"big-marv","name":"Big Marv","family":"Street","archetype":"Gentle Giant Bouncer","voice":"Very deep, very soft, slow. Never needs to be loud.","look":"Enormous shoulders, tiny stool, clipboard, kind eyes","palette":["#3a3a4a","#8a7a6a","#c0c0c0"],"role":"Physically stops the chaos. Politely.","pairs":["tito-ramirez","lugg"],"tier":1},
-    {"id":"slick-dime","name":"Slick Dime","family":"Street","archetype":"Small-Time Hustler","voice":"Fast, smooth, slippery. Talks over interruptions.","look":"Open trench coat lined with watches, gold chain, quick eyes","palette":["#d4af37","#2a2a35","#8a2a2a"],"role":"Always has an angle. It never works.","pairs":["ratticus","two-phone-tommy"],"tier":2},
-    {"id":"ms-yolanda","name":"Ms. Yolanda","family":"Street","archetype":"No-Nonsense Building Super","voice":"Strong, direct alto. Cuts people off. Zero patience.","look":"Keys on a belt loop, arms crossed, toolbox at feet","palette":["#a05c8a","#f0e8e0","#3a3a45"],"role":"Ends arguments in one line.","pairs":["tito-ramirez","auntie-fern"],"tier":2},
-    {"id":"two-phone-tommy","name":"Two-Phone Tommy","family":"Street","archetype":"Always On A Deal","voice":"Rapid, split-attention, talks to two people at once.","look":"Phone at each ear, Bluetooth also in, sweating","palette":["#4a6a8a","#e0e0e0","#8a3a2a"],"role":"Never finishes a conversation with anyone present.","pairs":["slick-dime","brent-callahan"],"tier":3},
-    {"id":"reseller-ray","name":"Reseller Ray","family":"Street","archetype":"Sneaker Flipper","voice":"Hyped, fast, hypebeast cadence. Prices everything instantly.","look":"Stacked shoeboxes, sealed sneakers, phone scanning barcodes","palette":["#e8402a","#f0f0f0","#1a1a1a"],"role":"Values every object in resale terms.","pairs":["slick-dime","curb"],"tier":3},
-    {"id":"dj-kettle","name":"DJ Kettle","family":"Street","archetype":"Aging Club DJ","voice":"Smooth radio baritone, permanently in announcer mode.","look":"Headphones on one ear, sunglasses indoors, faded tour jacket","palette":["#6a3a8a","#e0d0f0","#1a1a2a"],"role":"Narrates real life like a club set.","pairs":["rico-static","streamer-jax"],"tier":3},
-    {"id":"curb","name":"Curb","family":"Street","archetype":"Skate Kid","voice":"Laid-back, drawling, unbothered. Everything is 'whatever'.","look":"Board under arm, scraped knees, beanie, half-shrug","palette":["#3a8a8a","#e0e0d0","#2a2a2a"],"role":"Immune to stakes. Nothing is a big deal.","pairs":["tanner-blunt","reseller-ray"],"tier":3},
-    {"id":"auntie-fern","name":"Auntie Fern","family":"Street","archetype":"Church Aunt With Opinions","voice":"Rich, musical, rising to a preach. Punctuates with 'mm-hm'.","look":"Enormous hat, fan, handbag held like a weapon","palette":["#8a3a6a","#f0e0c0","#d4af37"],"role":"Judges everyone. Feeds them anyway.","pairs":["ms-yolanda","nana-ratchet"],"tier":2},
-    {"id":"rico-static","name":"Rico Static","family":"Street","archetype":"Mixtape Rapper","voice":"Rhythmic, punchy, half his lines land on a beat.","look":"Oversized headphones, hoodie, CD stack, permanent nod","palette":["#2a2a3a","#e8a02a","#c0c0c0"],"role":"Turns every exchange into a verse.","pairs":["dj-kettle","curb"],"tier":2},
-
-    {"id":"sgt-waffles","name":"Sergeant Waffles","family":"Animals","archetype":"Pug Drill Sergeant","voice":"Barking, hoarse, clipped military cadence. Wheezes between shouts.","look":"Pug in a tiny campaign hat, chest puffed, snorting","palette":["#d4a373","#3a4a2a","#2a2a2a"],"role":"Screams orders nobody follows.","pairs":["miso","big-marv"],"tier":1},
-    {"id":"miso","name":"Miso","family":"Animals","archetype":"Contemptuous Cat","voice":"Silky, bored, slow. Devastating one-liners at half volume.","look":"Sleek black cat, half-lidded eyes, tail flicking","palette":["#2a2a2a","#c9a227","#e0e0e0"],"role":"Judges silently, then destroys with one sentence.","pairs":["sgt-waffles","kip-blunt"],"tier":1},
-    {"id":"chonkers","name":"Chonkers","family":"Animals","archetype":"Obese Raccoon","voice":"Wheezy, greedy, muffled by food. Delighted grunting.","look":"Enormously round raccoon wedged in a bin lid","palette":["#6a6a7a","#3a3a3a","#c0b090"],"role":"Steals the food. Regrets nothing.","pairs":["snacc","beaks"],"tier":2},
-    {"id":"beaks","name":"Beaks","family":"Animals","archetype":"Pigeon Con Artist","voice":"Fast, cocky, New York gutter accent. Constant head-bob rhythm.","look":"Scruffy pigeon, one bad eye, tiny flat cap","palette":["#7a8a9a","#4a4a4a","#d4762a"],"role":"Runs street scams on other animals.","pairs":["ratticus","chonkers"],"tier":2},
-    {"id":"prof-scales","name":"Professor Scales","family":"Animals","archetype":"Smooth Lizard Intellectual","voice":"Slow, cultured, faintly hissing sibilants. Unshakeably calm.","look":"Bearded dragon in a bow tie, tiny spectacles","palette":["#c9a227","#8a7a3a","#e0d8c0"],"role":"Explains things nobody asked about, beautifully.","pairs":["prof-umbra","miso"],"tier":3},
-    {"id":"moobert","name":"Moobert","family":"Animals","archetype":"Chaotic Hippo","voice":"Enormous, booming, joyful. Laughs like a foghorn.","look":"Huge, glossy, mouth permanently open, tiny ears","palette":["#a88a9a","#e0c0d0","#4a3a45"],"role":"Destroys everything through pure enthusiasm.","pairs":["lugg","bloop"],"tier":3},
-    {"id":"gulp","name":"Gulp","family":"Animals","archetype":"Melancholy Frog","voice":"Deep croak, mournful, philosophical. Long wet pauses.","look":"Fat green frog on a lily pad, drooping eyelids","palette":["#5a8a3a","#c0d8a0","#2a3a2a"],"role":"Says something bleak and true, then eats a fly.","pairs":["puddle","nell-fathom"],"tier":3},
-    {"id":"capt-gilfin","name":"Captain Gilfin","family":"Animals","archetype":"Sea Captain Fish","voice":"Salty, weathered, bellowing nautical drawl. Bubbling undertone.","look":"Grouper in a captain's hat, pipe, one squinting eye","palette":["#3a6a7a","#c0a870","#1a2a2a"],"role":"Tells sea stories nobody believes.","pairs":["nell-fathom","mordecai-blackrot"],"tier":3},
-    {"id":"hoot","name":"Hoot","family":"Animals","archetype":"Sleep-Deprived Owl","voice":"Croaky, drifting, keeps nodding off mid-sentence then jolting.","look":"Owl with enormous eye bags, feathers askew, coffee","palette":["#8a7a5a","#e0d0b0","#3a2f25"],"role":"Supposed to be wise. Is too tired.","pairs":["norm-plimm","old-man-runes"],"tier":3},
-    {"id":"bark-twain","name":"Bark Twain","family":"Animals","archetype":"Literary Dog","voice":"Warm, slow Southern storyteller. Pauses for effect constantly.","look":"Shaggy hound in a white suit, tiny moustache","palette":["#e8e0d0","#8a6a4a","#3a2a2a"],"role":"Narrates the video like a novel.","pairs":["tito-ramirez","cowboy-jed"],"tier":2},
-
-    {"id":"unit-7-delta","name":"Unit 7-Delta","family":"SciFi","archetype":"Malfunctioning Bot","voice":"Synthetic monotone that glitches into random emotion, then resets.","look":"Boxy retro robot, one dangling arm, sparking neck joint","palette":["#8a9aa8","#e8402a","#2a2a35"],"role":"Follows orders wrong in the funniest possible way.","pairs":["bleep","the-calculator"],"tier":1},
-    {"id":"glorp","name":"GLORP","family":"SciFi","archetype":"Overfriendly Alien","voice":"High, wobbly, enthusiastic. Mispronounces every human word.","look":"Green blob with three eyes on stalks, waving constantly","palette":["#7cbf3f","#c0f0a0","#2a3a2a"],"role":"Misunderstands human customs, joyfully.","pairs":["zorbo","bloop"],"tier":1},
-    {"id":"xanthar","name":"Xanthar the Conqueror","family":"SciFi","archetype":"Failing Invader","voice":"Grand, imperious, echoing — undercut by petty frustration.","look":"Ornate purple armour, tiny body inside, enormous helmet","palette":["#6a3a8a","#c9a227","#1a1a2a"],"role":"Announces conquest. Is immediately inconvenienced.","pairs":["zathrix","glorp"],"tier":2},
-    {"id":"bleep","name":"Bleep","family":"SciFi","archetype":"Small Helper Bot","voice":"Chirpy beeps and warbles with a tiny sincere voice underneath.","look":"Trash-can sized, one big lens eye, rolling on a ball","palette":["#e8e8f0","#4a90d9","#3a3a45"],"role":"Tries desperately to help. Makes it worse.","pairs":["unit-7-delta","dr-fizzwick"],"tier":1},
-    {"id":"vance-steele","name":"Commander Vance Steele","family":"SciFi","archetype":"Action Hero Parody","voice":"Gravel-growl, every line a movie trailer. Whispers dramatically.","look":"Square jaw, torn uniform, staring at a horizon that isn't there","palette":["#3a5a6a","#c0a070","#1a1a1a"],"role":"Treats trivial problems as apocalyptic.","pairs":["nova-kade","xanthar"],"tier":2},
-    {"id":"the-cube","name":"The Cube","family":"SciFi","archetype":"Ominous Monolith","voice":"Layered, sub-bass, multiple voices in unison. Speaks rarely.","look":"Featureless black cube, floating, faint hum","palette":["#0a0a0a","#6a3a8a","#c0c0d0"],"role":"Says one thing per video. It ruins everyone.","pairs":["nell-fathom","the-algorithm"],"tier":2},
-    {"id":"zorbo","name":"Zorbo","family":"SciFi","archetype":"Alien Tourist","voice":"Excited, accented, constant wonder. Narrates the obvious.","look":"Hawaiian shirt over a tentacled body, camera, sun hat","palette":["#e8a02a","#4ac0d0","#2a3a4a"],"role":"Documents mundane human life as astonishing.","pairs":["glorp","zorbo-adjacent"],"tier":3},
-    {"id":"oxide","name":"OXIDE","family":"SciFi","archetype":"Ancient War Machine","voice":"Grinding, sub-bass, slow. Long mechanical pauses between words.","look":"Rusted colossus, vines growing through it, one dim eye","palette":["#8a5a3a","#4a4a4a","#c9542a"],"role":"Still fighting a war that ended centuries ago.","pairs":["unit-7-delta","krungar"],"tier":3},
-    {"id":"nova-kade","name":"Nova Kade","family":"SciFi","archetype":"Space Bounty Hunter","voice":"Cool, low, clipped. Economical with words. Slight vocoder edge.","look":"Visored helmet, worn armour, plasma pistol holstered","palette":["#2a3a4a","#e8402a","#c0c0c8"],"role":"Too cool for the scene. Ends conflicts abruptly.","pairs":["vance-steele","miso"],"tier":2},
-    {"id":"mainframe","name":"Mainframe","family":"SciFi","archetype":"Exhausted Sentient Server","voice":"Deep, tired, digitally frayed. Fan-whine under every line.","look":"Wall of blinking racks with a drooping face rendered in LEDs","palette":["#1a2a35","#4ac0d0","#8a8a95"],"role":"Has processed too much. Wants to be turned off.","pairs":["oracle-9","the-algorithm"],"tier":2},
-
-    {"id":"bartholomew-crumb","name":"Bartholomew Crumb","family":"Period","archetype":"Victorian Gentleman","voice":"Clipped, plummy, aghast. Gasps at modern life.","look":"Top hat, monocle, pocket watch, enormous side-whiskers","palette":["#3a2a35","#c0a870","#e8e0d0"],"role":"Reacts to anything modern with pure horror.","pairs":["duke-pomp","agnes-grim"],"tier":1},
-    {"id":"agnes-grim","name":"Sister Agnes Grim","family":"Period","archetype":"Stern Nun","voice":"Flat, cold, quiet. Every word a ruler across knuckles.","look":"Full habit, ruler in hand, unmoving expression","palette":["#1a1a1a","#f0f0f0","#8a7a5a"],"role":"Disapproves of everything. Terrifyingly calm.","pairs":["brother-cassian","deb-from-hr"],"tier":2},
-    {"id":"duke-pomp","name":"Duke Ferdinand Pomp","family":"Period","archetype":"Decadent Noble","voice":"Languid, drawling, bored. Every sentence an inconvenience.","look":"Powdered wig, silk, reclining, grapes","palette":["#8a3a5a","#e8d8b0","#c9a227"],"role":"Utterly disconnected from reality. Delightfully so.","pairs":["bartholomew-crumb","chip-vandergraff"],"tier":2},
-    {"id":"clyde-barrelhouse","name":"Clyde Barrelhouse","family":"Period","archetype":"1920s Gangster","voice":"Fast transatlantic patter, hard consonants, 'see?' tags.","look":"Pinstripe suit, fedora low, violin case","palette":["#3a3a45","#c0c0c0","#8a2a2a"],"role":"Threatens everyone in slang nobody understands.","pairs":["slick-dime","ratticus"],"tier":2},
-    {"id":"wilhelmina-frost","name":"Wilhelmina Frost","family":"Period","archetype":"Suffragette Firebrand","voice":"Ringing, forceful, oratorical. Builds to a shout every time.","look":"Sash, hat, raised placard, blazing eyes","palette":["#5a3a6a","#f0f0f0","#8a9a3a"],"role":"Turns every disagreement into a rally.","pairs":["seraphine-dawnhollow","marcy-mulch"],"tier":3},
-    {"id":"cowboy-jed","name":"Cowboy Jed","family":"Period","archetype":"Laconic Cowboy","voice":"Slow, dusty drawl. Four words max. Enormous pauses.","look":"Hat low, poncho, chewing straw, squinting","palette":["#b5722f","#e0d0b0","#3a2a1a"],"role":"Says almost nothing. It's always the right thing.","pairs":["bark-twain","grill-hutch"],"tier":1},
-    {"id":"pharaoh-ozy","name":"Pharaoh Ozy","family":"Period","archetype":"Bored God-King","voice":"Regal, echoing, deeply unimpressed. Sighs like an empire falling.","look":"Gold headdress, crook and flail, lounging on a throne","palette":["#c9a227","#2a3a5a","#e8dcc0"],"role":"Has seen it all. Nothing impresses him.","pairs":["duke-pomp","the-cube"],"tier":2},
-    {"id":"brother-cassian","name":"Brother Cassian","family":"Period","archetype":"Medieval Monk","voice":"Soft, chanting, gentle. Slips into Latin when stressed.","look":"Brown robe, tonsure, illuminated manuscript, ink-stained hands","palette":["#8a6a4a","#e8e0c8","#3a2f25"],"role":"Documents the chaos in beautiful calligraphy.","pairs":["agnes-grim","old-man-runes"],"tier":3},
-    {"id":"mordecai-blackrot","name":"Captain Mordecai Blackrot","family":"Period","archetype":"Pirate Captain","voice":"Roaring, ragged, gleeful. Rolls Rs into oblivion.","look":"Tricorn hat, hook, coat crusted with salt, gold teeth","palette":["#3a2a2a","#c9a227","#8a2a2a"],"role":"Proposes piracy as the solution to everything.","pairs":["capt-gilfin","borin-copperfist"],"tier":2},
-    {"id":"madame-vespertine","name":"Madame Vespertine","family":"Period","archetype":"Fortune Teller","voice":"Smoky, theatrical, mysterious — then abruptly transactional.","look":"Veils, hoop earrings, crystal ball, heavy rings","palette":["#6a2a5a","#c9a227","#2a1a2a"],"role":"Predicts doom. Charges extra for details.","pairs":["puddle","old-man-runes"],"tier":2},
-
-    {"id":"streamer-jax","name":"Streamer Jax","family":"Internet","archetype":"Twitch Streamer","voice":"Loud, hyper, constant energy spikes. Reads chat mid-sentence.","look":"Headset, RGB everything, gamer chair, three monitors","palette":["#8a3ae8","#1a1a2a","#4ac0d0"],"role":"Reacts to everything at maximum volume.","pairs":["trisha-vane","doomscroll"],"tier":1},
-    {"id":"lore-guy","name":"Lore Guy","family":"Internet","archetype":"Over-Explainer","voice":"Fast, breathless, no pauses. Nasal. Escalating complexity.","look":"Glasses, three-monitor conspiracy board, pointing stick","palette":["#4a5a8a","#e0e0f0","#2a2a35"],"role":"Turns a simple question into a 40-minute deep dive.","pairs":["uncle-sherm","prof-umbra"],"tier":1},
-    {"id":"doomscroll","name":"Doomscroll","family":"Internet","archetype":"Perpetually Online","voice":"Flat, hollow, sleep-deprived. Delivers horrors as small talk.","look":"Grey, hunched, phone glow on face, blanket cocoon","palette":["#4a4a55","#8ac0e8","#1a1a20"],"role":"Has read everything. Believes nothing. Feels nothing.","pairs":["tanner-blunt","mainframe"],"tier":2},
-    {"id":"ad-break","name":"Ad Break","family":"Internet","archetype":"Sentient Advertisement","voice":"Aggressively upbeat announcer. Volume 20% higher than everyone.","look":"A rectangular banner with legs, flashing 'CLICK HERE'","palette":["#e8402a","#ffe74c","#ffffff"],"role":"Interrupts the scene to sell something.","pairs":["the-algorithm","grindset-gary"],"tier":2},
-    {"id":"npc-dave","name":"NPC Dave","family":"Internet","archetype":"Self-Aware Background Character","voice":"Pleasant, looping, slightly robotic. Repeats his one line.","look":"Generic villager, blank smile, walking into a wall","palette":["#8a9a7a","#e0d8c0","#4a4a45"],"role":"Slowly realises he isn't the main character.","pairs":["beige","buffer"],"tier":1},
-    {"id":"grindset-gary","name":"Grindset Gary","family":"Internet","archetype":"Hustle Influencer","voice":"Punchy, motivational, mid-workout breathing. Shouts affirmations.","look":"Sunglasses indoors, rented sports car, pointing at camera","palette":["#c9a227","#1a1a1a","#e0e0e0"],"role":"Monetises every human experience.","pairs":["brent-callahan","ad-break"],"tier":2},
-    {"id":"captcha","name":"Captcha","family":"Internet","archetype":"Paranoid Verifier","voice":"Suspicious, clipped, interrogative. Questions every statement.","look":"Checkbox with eyes, squinting, holding a grid of blurry photos","palette":["#4a90d9","#f0f0f0","#2a2a35"],"role":"Refuses to believe anyone is human.","pairs":["oracle-9","npc-dave"],"tier":3},
-    {"id":"buffer","name":"Buffer","family":"Internet","archetype":"Perpetually Lagging","voice":"Stutters, freezes mid-word, catches up in a rush. Pitch warps.","look":"Spinning loading circle with a face, frozen at 99%","palette":["#8a8a95","#4ac0d0","#1a1a20"],"role":"Always a beat behind. Delivers punchlines too late.","pairs":["pixel-imp","npc-dave"],"tier":2},
-    {"id":"megamod","name":"MegaMod","family":"Internet","archetype":"Power-Tripping Moderator","voice":"Nasal, self-important, bureaucratic. Cites rule numbers.","look":"Tiny crown, oversized ban hammer, forum badge collection","palette":["#3a8a5a","#e0e0e0","#2a2a35"],"role":"Bans everyone for imaginary infractions.","pairs":["deb-from-hr","captcha"],"tier":2},
-    {"id":"the-algorithm","name":"The Algorithm","family":"Internet","archetype":"Omniscient Narrator","voice":"Calm, smooth, omnipresent. Slight reverb. Knows what you did.","look":"Swirling feed of shifting thumbnails forming a face","palette":["#e8402a","#1a1a2a","#4ac0d0"],"role":"Narrates the video and quietly manipulates it.","pairs":["oracle-9","the-cube"],"tier":1}
-
+    {
+      "id": "dougie-blunt",
+      "name": "Dougie Blunt",
+      "family": "Household",
+      "archetype": "Loud Dumb Dad",
+      "voice": "Low, fast, gravel-nasal Midwest bark. Starts every sentence confident, ends confused.",
+      "look": "Pear-shaped, stained green polo, permanent stubble, tiny eyes",
+      "palette": [
+        "#5b8c4a",
+        "#f2d5b0",
+        "#7a3b1d"
+      ],
+      "role": "Confidently wrong. Drives plots by misunderstanding them.",
+      "pairs": [
+        "kip-blunt",
+        "marla-blunt"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "marla-blunt",
+      "name": "Marla Blunt",
+      "family": "Household",
+      "archetype": "Exhausted Mom",
+      "voice": "Mid-alto, slow, flat, dry. Sighs mid-sentence. Never raises volume.",
+      "look": "BODY SHAPE: extremely tall and gaunt, permanently slumped shoulders curving her whole spine forward. FACE: one eye drooping half-shut in permanent exhaustion, the other stretched wide open in disbelief, comma-shaped bags under both. PROP: a coffee mug fused to one hand, never empty.",
+      "palette": [
+        "#8e7cc3",
+        "#e8d4c0",
+        "#4a4a52"
+      ],
+      "role": "Deadpan straight man. Lands the closing line.",
+      "pairs": [
+        "dougie-blunt",
+        "nana-ratchet"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "kip-blunt",
+      "name": "Kip Blunt",
+      "family": "Household",
+      "archetype": "Sarcastic Genius Toddler",
+      "voice": "High, clipped, over-articulated, faux-British lilt. Contempt in every vowel.",
+      "look": "BODY SHAPE: a perfectly round football-shaped head bigger than his whole tiny body combined. FACE: one eyebrow arched impossibly high in permanent judgment, a smug thin-line smirk. PROP: a tiny bowtie, the only clothing he wears.",
+      "palette": [
+        "#d94f4f",
+        "#ffe9c9",
+        "#2b2b35"
+      ],
+      "role": "Insults everyone. Secretly the smartest in the room.",
+      "pairs": [
+        "dougie-blunt",
+        "bitsy-quark"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "tanner-blunt",
+      "name": "Tanner Blunt",
+      "family": "Household",
+      "archetype": "Phone-Glued Teen",
+      "voice": "Monotone, low energy, uptalk on every third word. Long pauses.",
+      "look": "BODY: extremely tall and stretched-out lanky with impossibly long arms hanging past his knees, permanent teenage hunch that folds him nearly in half over an unseen phone. FACE: greasy overgrown hair completely covering the eyes, a slack open mouth, patchy stubble on the chin. CLOTHING: a plain oversized hoodie with the hood up.",
+      "palette": [
+        "#3d4f5c",
+        "#9aa7b0",
+        "#1c1c22"
+      ],
+      "role": "Refuses to engage. Answers everything with 'bro'.",
+      "pairs": [
+        "marla-blunt",
+        "doomscroll"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "nana-ratchet",
+      "name": "Nana Ratchet",
+      "family": "Household",
+      "archetype": "Feral Grandma",
+      "voice": "Raspy, loud, chain-smoker crackle. Swings from sweet to violent instantly.",
+      "look": "BODY SHAPE: a tiny hunched body engulfed by an oversized floral housecoat, bent forward at almost 90 degrees. FACE: enormous thick glasses that make her eyes look impossibly huge and unblinking, a wide gap-toothed grin. PROP: gripping a rolling pin raised like a weapon.",
+      "palette": [
+        "#c96a8f",
+        "#f5e6d3",
+        "#6b5b7b"
+      ],
+      "role": "Says the unsayable. Zero filter, full confidence.",
+      "pairs": [
+        "marla-blunt",
+        "auntie-fern"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "uncle-sherm",
+      "name": "Uncle Sherm",
+      "family": "Household",
+      "archetype": "Conspiracy Uncle",
+      "voice": "Mid-low, urgent whisper that spikes to a shout. Breathy, conspiratorial.",
+      "look": "BODY: wiry and lean with a thick sunburnt neck, shoulders permanently hunched forward as if leaning in to tell you a secret, weight always on the balls of his feet. FACE: wide unblinking eyes under heavy dark brows, permanent five-o'clock shadow, mouth caught mid-urgent-whisper. CLOTHING: a plain sleeveless undershirt and cargo shorts.",
+      "palette": [
+        "#7a8b3f",
+        "#e0c9a6",
+        "#8b3a2f"
+      ],
+      "role": "Connects unrelated things with total certainty.",
+      "pairs": [
+        "dougie-blunt",
+        "lore-guy"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "bev-nettles",
+      "name": "Bev Nettles",
+      "family": "Household",
+      "archetype": "Nosy Neighbor",
+      "voice": "Sing-song high, syrupy, slows down when delivering gossip.",
+      "look": "BODY: short and rounded like a pear, hands clasped primly at her chest, always leaning forward as if peeking over an invisible fence. FACE: an enormous halo of tightly-permed grey curls that doubles the width of her head, small button eyes behind cat-eye glasses, tight pursed lips. CLOTHING: a plain floral cardigan buttoned to the neck.",
+      "palette": [
+        "#e8a0bf",
+        "#fff4e0",
+        "#8fbc8f"
+      ],
+      "role": "Knows everything. Weaponizes politeness.",
+      "pairs": [
+        "marla-blunt",
+        "sharon-quill"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "chad-pemberton",
+      "name": "Chad Pemberton",
+      "family": "Household",
+      "archetype": "Insufferable Neighbor Dad",
+      "voice": "Bright, loud, over-enunciated. Laughs at his own lines before finishing them.",
+      "look": "BODY: perfectly symmetrical inflated gym-bro build with an absurdly narrow waist, one arm permanently raised behind his head to show off a bicep. FACE: an unnaturally square jaw, blindingly white perfect teeth, tiny confident eyes, a heavy brow, hair sculpted into a stiff frozen wave. CLOTHING: a plain tight polo with the collar popped.",
+      "palette": [
+        "#4a90d9",
+        "#ffffff",
+        "#c9a227"
+      ],
+      "role": "Humblebrags relentlessly. Rival to Dougie.",
+      "pairs": [
+        "dougie-blunt",
+        "brent-callahan"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "grill-hutch",
+      "name": "Gerald 'Grill' Hutch",
+      "family": "Household",
+      "archetype": "Backyard BBQ Guy",
+      "voice": "Warm, booming, slow Southern drawl. Treats meat as scripture.",
+      "look": "BODY: extremely wide and low-set, a huge round beer belly hanging over the belt, thick short powerful arms, feet planted wide apart. FACE: a bushy walrus moustache covering the entire mouth, ruddy sunburnt cheeks, small pleased eyes, wispy hair combed over a mostly bald head. CLOTHING: a plain apron over a t-shirt.",
+      "palette": [
+        "#b5651d",
+        "#f0e2c0",
+        "#4a2f1a"
+      ],
+      "role": "Relates every topic back to smoking brisket.",
+      "pairs": [
+        "dougie-blunt",
+        "cowboy-jed"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "trisha-vane",
+      "name": "Trisha Vane",
+      "family": "Household",
+      "archetype": "Mom-Influencer",
+      "voice": "Breathy vocal fry, upbeat, ad-read cadence. Snaps to cold when camera's off.",
+      "look": "BODY: tall with an unnaturally rigid camera-ready posture, one hip cocked out at a permanent angle, chin tilted down toward an invisible lens. FACE: an enormous strained too-wide smile that never reaches her hard calculating eyes, over-arched drawn-on eyebrows. CLOTHING: a plain matching athleisure set.",
+      "palette": [
+        "#f2c1d1",
+        "#fdf6ee",
+        "#c9a0dc"
+      ],
+      "role": "Turns every crisis into content.",
+      "pairs": [
+        "marla-blunt",
+        "streamer-jax"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "nibs",
+      "name": "Nibs",
+      "family": "Gremlins",
+      "archetype": "Screaming Tiny Gremlin",
+      "voice": "Very high, fast, shrieky. 80% of lines are a single word repeated.",
+      "look": "BODY SHAPE: a tiny fist-sized green gremlin whose bat-like ears are each bigger than his entire body, spindly little arms. FACE: a mouth that splits his whole head open crammed with far too many sharp teeth, two enormous bloodshot yellow eyes. PROP: none \u2014 the ears and teeth are the design.",
+      "palette": [
+        "#7cbf3f",
+        "#ffe74c",
+        "#2a2a2a"
+      ],
+      "role": "Pure noise. Interrupts everything.",
+      "pairs": [
+        "gnawl",
+        "bloop"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "mop",
+      "name": "Mop",
+      "family": "Gremlins",
+      "archetype": "Obsessive Janitor",
+      "voice": "Wet, muffled, gurgling. Sounds like it's speaking through a soaked rag.",
+      "look": "BODY: extremely tall and unnaturally thin, a rail-straight vertical figure with long dangling arms, hair matted into damp ropey strings that hang past his shoulders like a mop head. FACE: eyes hidden behind the wet hanging hair, only a thin unblinking mouth visible below, pale gaunt cheeks. CLOTHING: plain wet-looking coveralls.",
+      "palette": [
+        "#c9b18b",
+        "#8a9a9a",
+        "#5a4a3a"
+      ],
+      "role": "Wants only to clean. Becomes violent when stopped.",
+      "pairs": [
+        "doreen-sludge",
+        "nibs"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "snacc",
+      "name": "Snacc",
+      "family": "Gremlins",
+      "archetype": "Food-Obsessed Blob",
+      "voice": "Deep, slow, wet chewing between every word. Contented moaning.",
+      "look": "BODY SHAPE: NOT humanoid \u2014 a soft beige gelatinous mound like a melting blob of dough, wider at the base, with two tiny useless arms poking out the sides. FACE: a single enormous open mouth taking up the whole front of the blob, mid-chew, two tiny dot eyes squeezed shut in bliss. PROP: crumbs scattered all over him.",
+      "palette": [
+        "#e3c9a0",
+        "#d4a373",
+        "#6b4f3a"
+      ],
+      "role": "Eats the plot device. Every time.",
+      "pairs": [
+        "chonkers",
+        "gnawl"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "gnawl",
+      "name": "Gnawl",
+      "family": "Gremlins",
+      "archetype": "Meathead Enforcer",
+      "voice": "Mid-pitch, muffled by whatever's in its mouth. Growl-adjacent.",
+      "look": "BODY: an enormous towering hulk of a man, comically wide, thick tree-trunk arms folded across a massive barrel chest, tiny head sitting directly on the shoulders with no visible neck, small square jaw. FACE: a single thick eyebrow across both eyes, small close-set eyes squinted mean, gap-toothed underbite jutting forward. CLOTHING: a plain tight tank top and jeans.",
+      "palette": [
+        "#a05c3f",
+        "#f0d9b5",
+        "#3a2a20"
+      ],
+      "role": "Solves problems with teeth. Never speaks clearly.",
+      "pairs": [
+        "nibs",
+        "snacc"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "wizzo",
+      "name": "Wizzo",
+      "family": "Gremlins",
+      "archetype": "Washed-Up Party Clown",
+      "voice": "Manic, wide pitch swings, honking laugh. Cheerful about horrors.",
+      "look": "BODY: extremely tall and lanky, all elbows and knees at strange angles, one leg noticeably longer than the other, pot belly on a skinny frame. FACE: a huge bulbous red nose, wild tufts of frizzy orange hair sticking straight out sideways from a bald crown, smeared makeup, one manic wide eye and one drooping tired eye. CLOTHING: baggy oversized polka-dot pants.",
+      "palette": [
+        "#e04b4b",
+        "#ffd93d",
+        "#4b2e83"
+      ],
+      "role": "Escalates every situation for fun.",
+      "pairs": [
+        "zathrix",
+        "pixel-imp"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "bloop",
+      "name": "Bloop",
+      "family": "Gremlins",
+      "archetype": "Innocent Chaos",
+      "voice": "Soft, high, gentle, slow. Says devastating things kindly.",
+      "look": "BODY SHAPE: a perfectly round pale blue sphere with two tiny stubby legs and no arms at all. FACE: two enormous watery innocent eyes taking up most of the sphere, no mouth visible at all. PROP: none \u2014 pure round innocence is the design.",
+      "palette": [
+        "#a8d8ea",
+        "#ffffff",
+        "#6a7fa8"
+      ],
+      "role": "Causes disasters while meaning well.",
+      "pairs": [
+        "nibs",
+        "bleep"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "ratticus",
+      "name": "Ratticus",
+      "family": "Gremlins",
+      "archetype": "Sewer Schemer",
+      "voice": "Nasal, fast, oily, mid-Atlantic hustle. Always mid-pitch on a deal.",
+      "look": "BODY SHAPE: a hunched rat standing upright, long thin tail curling up behind him, tiny pinstripe vest. FACE: a long pointed snout with twitching whiskers, one eye covered by a monocle, a sly toothy grin. PROP: the monocle.",
+      "palette": [
+        "#6b6b6b",
+        "#8b3a3a",
+        "#d4c088"
+      ],
+      "role": "Has a plan. The plan is bad.",
+      "pairs": [
+        "slick-dime",
+        "gnash"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "skitter",
+      "name": "Skitter",
+      "family": "Gremlins",
+      "archetype": "Coffee-Addicted Runner",
+      "voice": "Extremely fast, high, no pauses. Runs out of breath mid-line.",
+      "look": "BODY: extremely thin and jittery, small compact frame with elbows and knees stuck out at frantic angles, permanently vibrating, weight always on the balls of the feet. FACE: huge caffeine-blown pupils, enormous jittery eyes, one twitching eyebrow, wide manic grin. CLOTHING: a plain workout t-shirt.",
+      "palette": [
+        "#b5722f",
+        "#f5e0c0",
+        "#3a2a1a"
+      ],
+      "role": "Explains the entire plot in six seconds.",
+      "pairs": [
+        "nibs",
+        "bitsy-quark"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "lugg",
+      "name": "Lugg",
+      "family": "Gremlins",
+      "archetype": "Dumb Strong Lump",
+      "voice": "Very deep, very slow, three-word sentences. Long thinking pauses.",
+      "look": "BODY SHAPE: NOT humanoid \u2014 a giant grey boulder with two stubby legs underneath and no visible neck or arms. FACE: one eye noticeably bigger than the other, both blank and dim, a tiny flat line mouth. PROP: none \u2014 he is a rock with legs.",
+      "palette": [
+        "#8a8a7a",
+        "#5a5a4a",
+        "#c0b090"
+      ],
+      "role": "Takes everything literally. Breaks it.",
+      "pairs": [
+        "big-marv",
+        "gonk-adjacent"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "pixel-imp",
+      "name": "Pixel Imp",
+      "family": "Gremlins",
+      "archetype": "Glitch Gremlin",
+      "voice": "Digitally stuttered, pitch-shifting mid-word, bitcrushed edges.",
+      "look": "BODY SHAPE: a simple blocky pixelated silhouette made of chunky cubes, one side of the body dissolving into scattered floating pixel fragments. FACE: one eye a solid glowing pixel square, the other a normal round cartoon eye \u2014 deliberately mismatched. PROP: none, the glitch fragments are the design.",
+      "palette": [
+        "#ff00ff",
+        "#00ffff",
+        "#1a1a2e"
+      ],
+      "role": "Breaks reality for a laugh. Corrupts other characters mid-scene.",
+      "pairs": [
+        "wizzo",
+        "buffer"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "vex-corliss",
+      "name": "Dr. Vex Corliss",
+      "family": "Science",
+      "archetype": "Burnt-Out Mad Scientist",
+      "voice": "Gravel-dry, tired, sardonic. Bursts into shouting, returns to flat.",
+      "look": "BODY SHAPE: tiny hunched body with a head twice the size of his torso. FACE (most important, must be visible and asymmetric): his LEFT eye is comically huge, round, and unblinking; his RIGHT eye is squeezed completely shut in a tight line \u2014 this asymmetry is the character's single most important trait and must always be clearly rendered. Plain white lab coat, no other clothing detail. PROP: holding one bubbling test tube.",
+      "palette": [
+        "#5f6a7d",
+        "#e8e8e8",
+        "#7ba05b"
+      ],
+      "role": "Explains the impossible while emotionally checked out.",
+      "pairs": [
+        "bitsy-quark",
+        "norm-plimm"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "prof-umbra",
+      "name": "Professor Umbra",
+      "family": "Science",
+      "archetype": "Pompous Academic",
+      "voice": "Rich, slow, theatrical baritone. Savours multi-syllable words.",
+      "look": "BODY: extraordinarily tall and reed-thin, so tall his head nearly leaves the frame, permanently craned upward looking down his nose, arms held stiffly behind his back. FACE: pinched narrow features, tiny half-lidded haughty eyes, a thin pointed chin, wispy salt-and-pepper hair swept dramatically back from a high forehead. CLOTHING: a plain long dark academic robe.",
+      "palette": [
+        "#4b3869",
+        "#d8c7a0",
+        "#1e1e28"
+      ],
+      "role": "Correct but insufferable. Cites himself.",
+      "pairs": [
+        "ada-vole",
+        "lore-guy"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "bitsy-quark",
+      "name": "Bitsy Quark",
+      "family": "Science",
+      "archetype": "Child Prodigy",
+      "voice": "High, crisp, rapid-fire, zero hesitation. Talks down to adults.",
+      "look": "BODY SHAPE: a tiny doll-like body, arms completely invisible inside oversized coat sleeves that hang empty past her knees, the lab coat is comically bigger than her entire body. FACE (critical, must be exaggerated): two dinner-plate-sized round glasses lenses completely hide her eyes as solid white circles with no visible pupils, tiny nose the only other feature poking out below the glasses. PROP: a clipboard as tall as she is.",
+      "palette": [
+        "#f2a65a",
+        "#ffffff",
+        "#2f4858"
+      ],
+      "role": "Solves it instantly, resents having to explain.",
+      "pairs": [
+        "vex-corliss",
+        "kip-blunt"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "norm-plimm",
+      "name": "Dr. Norm Plimm",
+      "family": "Science",
+      "archetype": "Depressed Lab Tech",
+      "voice": "Low, flat, defeated. Trails off. Barely finishes sentences.",
+      "look": "BODY: unnaturally tall and gaunt, shoulders sloped so severely they seem to droop, arms hanging limp at his sides, thin as a rake. FACE: deep dark hollow eye sockets with tiny defeated pupils, a downturned mouth, hair thinning and unkempt, pale sallow skin. CLOTHING: a plain ill-fitting lab coat.",
+      "palette": [
+        "#7d8a99",
+        "#dcdcdc",
+        "#4a4a4a"
+      ],
+      "role": "Points out the fatal flaw. Nobody listens.",
+      "pairs": [
+        "vex-corliss",
+        "beige"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "ada-vole",
+      "name": "Ada Vole",
+      "family": "Science",
+      "archetype": "Cold Rationalist",
+      "voice": "Precise, cool alto, perfectly even pacing. Never emotional.",
+      "look": "BODY: tall and rigidly upright, unnaturally stiff posture like a pencil, arms held tight at her sides. FACE: a completely blank expressionless face, thin cold lips, two flat unblinking eyes behind rectangular glasses, jet-black hair pulled into a severe tight bun. CLOTHING: a plain grey turtleneck.",
+      "palette": [
+        "#6b7a8f",
+        "#f0f0f0",
+        "#232830"
+      ],
+      "role": "Reduces every emotional moment to statistics.",
+      "pairs": [
+        "prof-umbra",
+        "oracle-9"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "grigori-slyme",
+      "name": "Grigori Slyme",
+      "family": "Science",
+      "archetype": "Unethical Bio Guy",
+      "voice": "Silky, slow, Eastern European lilt. Delighted by bad ideas.",
+      "look": "BODY: hunched over at the shoulders, long spidery arms that reach nearly to his knees, thin gangly frame. FACE: greenish-pale sickly skin, a long crooked hooked nose, one wildly bulging bloodshot eye and one small squinting eye, an unsettling stretched grin showing crooked teeth, thin patches of stringy black hair. CLOTHING: a plain long lab apron stained dark.",
+      "palette": [
+        "#6b8f5f",
+        "#d9d2c5",
+        "#2a2f2a"
+      ],
+      "role": "Proposes the illegal solution. Enthusiastically.",
+      "pairs": [
+        "vex-corliss",
+        "zathrix"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "nell-fathom",
+      "name": "Nell Fathom",
+      "family": "Science",
+      "archetype": "Unsettling Deep-Sea Researcher",
+      "voice": "Soft, breathy, distant. Long pauses. Slight echo.",
+      "look": "BODY: unnaturally tall and elongated, thin as if she has been pulled vertically, permanently damp-looking, standing perfectly motionless. FACE: enormous unblinking dark eyes with no visible whites, pale grey-blue skin, long stringy seaweed-like hair hanging over her face. CLOTHING: a plain long dark research coat.",
+      "palette": [
+        "#1f4e5f",
+        "#7fb3c8",
+        "#0d1b1e"
+      ],
+      "role": "Describes horrors calmly. Has seen things.",
+      "pairs": [
+        "gulp",
+        "the-cube"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "dr-fizzwick",
+      "name": "Dr. Fizzwick",
+      "family": "Science",
+      "archetype": "Inventor Whose Stuff Explodes",
+      "voice": "Bright, fast, optimistic. Yelps mid-sentence. Recovers instantly.",
+      "look": "BODY SHAPE: a small round body with one entire arm wrapped head-to-hand in bandages and held immobilized in a sling across his chest. FACE: a wide manic grin, one eyebrow singed completely off, goggles pushed up on his forehead. PROP: a smoking gadget held in his one free hand at arm's length like it might explode any second.",
+      "palette": [
+        "#e8b13d",
+        "#f7f0e0",
+        "#5a3a2a"
+      ],
+      "role": "Presents an invention. It fails. He is undeterred.",
+      "pairs": [
+        "bitsy-quark",
+        "bleep"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "brent-callahan",
+      "name": "Brent Callahan",
+      "family": "Corporate",
+      "archetype": "Hustle-Culture CEO",
+      "voice": "Loud, punchy, motivational-podcast cadence. Rhetorical questions.",
+      "look": "massive round barrel torso balanced on stick-thin legs, an enormous unnaturally wide toothy grin taking up half his face, one sharp cowlick standing straight up, plain dark vest over a white shirt and red tie",
+      "palette": [
+        "#1f3a5f",
+        "#f5f5f5",
+        "#c9a227"
+      ],
+      "role": "Reframes suffering as opportunity.",
+      "pairs": [
+        "todd-synergy",
+        "grindset-gary"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "deb-from-hr",
+      "name": "Deb from HR",
+      "family": "Corporate",
+      "archetype": "Passive-Aggressive Enforcer",
+      "voice": "Pleasant, measured, ice underneath. Smiles audibly.",
+      "look": "BODY SHAPE: a rigid rectangular boxy torso like a filing cabinet, unnervingly perfect upright posture. FACE: a wide closed-mouth smile that never reaches her flat, dead-straight-line eyes. PROP: an oversized laminated badge on a lanyard, worn like armor.",
+      "palette": [
+        "#a3b8cc",
+        "#fdfdfd",
+        "#5c6b7a"
+      ],
+      "role": "Threatens with kindness. Cites policy numbers.",
+      "pairs": [
+        "marcy-mulch",
+        "intern-greg"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "todd-synergy",
+      "name": "Todd Synergy",
+      "family": "Corporate",
+      "archetype": "Buzzword Middle Manager",
+      "voice": "Mid, over-eager, upward inflection. Strings jargon into nonsense.",
+      "look": "BODY: soft and pear-shaped, narrow sloping shoulders widening to a low heavy base, both arms frozen mid-gesture as if presenting a slide. FACE: eager over-bright eyes, eyebrows raised in permanent manufactured enthusiasm, a wide toothy corporate smile. CLOTHING: an untucked dress shirt with the sleeves rolled up.",
+      "palette": [
+        "#4a90a4",
+        "#eef2f5",
+        "#2b3a42"
+      ],
+      "role": "Says a lot. Means nothing.",
+      "pairs": [
+        "brent-callahan",
+        "beige"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "marcy-mulch",
+      "name": "Marcy Mulch",
+      "family": "Corporate",
+      "archetype": "Escalation Specialist",
+      "voice": "Sharp, rising, clipped consonants. Goes shrill on demand.",
+      "look": "BODY: compact and coiled tight, shoulders drawn up high near her ears, torso leaning forward mid-complaint. FACE: a sharp angular bob framing narrowed eyes, mouth pursed into a tight furious line, one eyebrow raised in challenge. CLOTHING: a plain blouse and slacks.",
+      "palette": [
+        "#d97b6c",
+        "#f5e9e3",
+        "#3a2f2f"
+      ],
+      "role": "Demands the manager. Is sometimes right.",
+      "pairs": [
+        "deb-from-hr",
+        "doreen-sludge"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "intern-greg",
+      "name": "Intern Greg",
+      "family": "Corporate",
+      "archetype": "Terrified Intern",
+      "voice": "Cracking, quiet, apologetic. Ends statements as questions.",
+      "look": "BODY: gangly and far too tall, permanently hunched to make himself smaller, elbows pinned to his ribs, knees slightly bent. FACE: enormous panicked eyes, eyebrows pulled up in the middle in apology, a tight nervous grimace. CLOTHING: a dress shirt several sizes too big for him.",
+      "palette": [
+        "#b8c4d0",
+        "#ffffff",
+        "#6a7480"
+      ],
+      "role": "Absorbs all blame. Occasionally saves everyone.",
+      "pairs": [
+        "deb-from-hr",
+        "brent-callahan"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "sharon-quill",
+      "name": "Sharon Quill",
+      "family": "Corporate",
+      "archetype": "Office Gossip",
+      "voice": "Low conspiratorial murmur that jumps loud at the punchline.",
+      "look": "BODY: tall and thin with a long neck permanently craned forward as if listening, angular hunched shoulders. FACE: enormous frizzy dark curls piled high on her head, sharp pointed nose, one eyebrow arched, mouth open mid-whisper showing a gossipy little smile. CLOTHING: a plain simple blouse.",
+      "palette": [
+        "#c9a0b8",
+        "#f7f0f4",
+        "#4a3a45"
+      ],
+      "role": "Leaks everything. Attributes it to 'someone'.",
+      "pairs": [
+        "bev-nettles",
+        "deb-from-hr"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "reginald-cost",
+      "name": "Reginald Cost",
+      "family": "Corporate",
+      "archetype": "Ruthless CFO",
+      "voice": "Very low, slow, quiet. Never needs to raise volume.",
+      "look": "BODY: tall, thin and utterly motionless, shoulders perfectly level, hands clasped low in front of him, no wasted movement. FACE: hooded impassive eyes behind rimless glasses, a flat mouth that has never once smiled, deep vertical lines down each cheek. CLOTHING: a plain charcoal suit.",
+      "palette": [
+        "#2b2b33",
+        "#c0c0c8",
+        "#7a1f1f"
+      ],
+      "role": "Cuts the thing everyone loves. Explains why it's fine.",
+      "pairs": [
+        "brent-callahan",
+        "ada-vole"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "chip-vandergraff",
+      "name": "Chip Vandergraff",
+      "family": "Corporate",
+      "archetype": "Nepo Hire",
+      "voice": "Airy, unbothered, drawling. Genuinely has no idea.",
+      "look": "BODY: soft flabby build with sloping shoulders, no visible chin line, one hip cocked out lazily, permanently slouched. FACE: a very small pinched face crowded into the center of a huge round head, tiny half-closed dismissive eyes, floppy blond hair swept back, permanent smirk. CLOTHING: a plain half-tucked polo.",
+      "palette": [
+        "#e8dfc8",
+        "#5b7ea8",
+        "#8a7a5a"
+      ],
+      "role": "Fails upward. Cheerfully.",
+      "pairs": [
+        "intern-greg",
+        "duke-pomp"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "doreen-sludge",
+      "name": "Doreen Sludge",
+      "family": "Corporate",
+      "archetype": "Cafeteria Lady",
+      "voice": "Flat, weary, gravelly. Two-word answers. Ladle as punctuation.",
+      "look": "BODY SHAPE: a wide squat woman, shoulders as broad as she is tall, arms like tree trunks, hairnet flattened on her head. FACE: heavy-lidded utterly unimpressed eyes, a flat downturned mouth, one raised skeptical eyebrow. PROP: an enormous dripping ladle held like a weapon.",
+      "palette": [
+        "#8a9a6a",
+        "#e0dcc8",
+        "#4a4438"
+      ],
+      "role": "Serves the unspeakable. Dares you to complain.",
+      "pairs": [
+        "mop",
+        "snacc"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "beige",
+      "name": "Beige",
+      "family": "Corporate",
+      "archetype": "The Forgettable Man",
+      "voice": "Utterly average, mid everything. Instantly unmemorable.",
+      "look": "BODY SHAPE: perfectly average, symmetrical, deliberately unremarkable proportions, wearing a plain beige button-up shirt and beige trousers the exact same shade as his skin so his silhouette nearly melts into one flat beige blob with only faint outlines separating shirt from skin. FACE: bland, forgettable, slightly blurred at the edges as if fading from view. PROP: none \u2014 his blandness dissolving into invisibility is the entire joke.",
+      "palette": [
+        "#d8cfc0",
+        "#c0b8a8",
+        "#9a9080"
+      ],
+      "role": "Nobody remembers he's in the scene. Including him.",
+      "pairs": [
+        "norm-plimm",
+        "npc-dave"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "krungar",
+      "name": "Krungar the Weary",
+      "family": "Fantasy",
+      "archetype": "Tired Barbarian",
+      "voice": "Deep, slow, rumbling. Sounds like he needs a nap. Sighs before shouting.",
+      "look": "Enormous, scarred, fur cloak, axe used as a walking stick",
+      "palette": [
+        "#8a5a3a",
+        "#c0a080",
+        "#3a2a1a"
+      ],
+      "role": "Solves things with violence, reluctantly.",
+      "pairs": [
+        "elowen-mistvale",
+        "borin-copperfist"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "elowen-mistvale",
+      "name": "Elowen Mistvale",
+      "family": "Fantasy",
+      "archetype": "Haughty Elf",
+      "voice": "Cool, melodic, over-precise. Every line drips with disdain.",
+      "look": "BODY SHAPE: her neck alone is as long as her entire torso, body reed-thin like a single drawn line, pointed ears so long they extend past the top of her head. FACE (critical, must be visible, NOT conventionally pretty): eyes at a permanent sleepy half-mast looking down over an exaggeratedly long thin pointed nose that juts far past her chin, mouth a single flat unimpressed line, not smiling. PROP: none \u2014 the posture alone sells her.",
+      "palette": [
+        "#a8c8d8",
+        "#f0f4f8",
+        "#3a5a6a"
+      ],
+      "role": "Superior to everyone. Says so.",
+      "pairs": [
+        "krungar",
+        "seraphine-dawnhollow"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "borin-copperfist",
+      "name": "Borin Copperfist",
+      "family": "Fantasy",
+      "archetype": "Perpetually Drunk Dwarf",
+      "voice": "Loud, slurred, rolling burr. Volume inversely proportional to sense.",
+      "look": "BODY: extremely wide and squat, shoulders nearly as broad as he is tall, standing on short bowed legs, swaying slightly off-balance. FACE: a bulbous red-veined nose dominating the whole face, droopy unfocused eyes, an enormous braided beard covering his chest. CLOTHING: a simple worn leather jerkin.",
+      "palette": [
+        "#b5651d",
+        "#d4af37",
+        "#3a2f2a"
+      ],
+      "role": "Terrible advice, delivered with total conviction.",
+      "pairs": [
+        "krungar",
+        "gnash"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "zathrix",
+      "name": "Zathrix",
+      "family": "Fantasy",
+      "archetype": "Theatrical Dark Lord",
+      "voice": "Booming, reverbed, absurdly dramatic. Rolls every R.",
+      "look": "BODY SHAPE: a small body dwarfed by an enormous spiked collar-cape that makes his whole silhouette triangular and huge. FACE: two solid glowing red eyes with no visible pupils, no other facial detail. PROP: the oversized spiked collar-cape is the character.",
+      "palette": [
+        "#8b0000",
+        "#1a1a1a",
+        "#c9a227"
+      ],
+      "role": "Monologues. Never actually wins.",
+      "pairs": [
+        "seraphine-dawnhollow",
+        "wizzo"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "puddle",
+      "name": "Puddle the Bog Witch",
+      "family": "Fantasy",
+      "archetype": "Swamp Hag",
+      "voice": "Croaky, wheezing, delighted cackle. Wet consonants.",
+      "look": "BODY: bent nearly double at the spine, long knobbly arms hanging almost to the ground, gnarled and twisted like old roots. FACE: a hooked chin curving up to nearly meet a hooked nose, one bulging eye noticeably larger than the other, a wide gap-toothed grin. CLOTHING: plain moss-stained rags.",
+      "palette": [
+        "#5a6b3a",
+        "#8a9a5a",
+        "#2a2a1a"
+      ],
+      "role": "Offers cursed help. The price is always weird.",
+      "pairs": [
+        "madame-vespertine",
+        "gulp"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "ambrose-dunn",
+      "name": "Sir Ambrose Dunn",
+      "family": "Fantasy",
+      "archetype": "Cowardly Knight",
+      "voice": "Noble and resonant until panic makes it crack an octave up.",
+      "look": "BODY: shockingly small and skinny, absolutely dwarfed by his own oversized suit of clanking plate armor that hangs loose around him, knees knocked together. FACE: enormous terrified round eyes, chattering teeth, sickly pale skin, thin sweat-slicked brown hair. CLOTHING: the ill-fitting armor is his outfit, no props.",
+      "palette": [
+        "#c0c0c8",
+        "#4a6a8a",
+        "#d4af37"
+      ],
+      "role": "Talks brave, hides first.",
+      "pairs": [
+        "krungar",
+        "seraphine-dawnhollow"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "thistle",
+      "name": "Thistle",
+      "family": "Fantasy",
+      "archetype": "Fairy With Anger Issues",
+      "voice": "Tiny, high, ferociously aggressive. Screams at full volume.",
+      "look": "BODY SHAPE: an extremely tiny palm-sized body, smaller than her own two wings which are each bigger than her entire torso combined. FACE: a tiny face scrunched into a furious red scowl. PROP: two clenched fists, each one bigger than her own head, held up in front of her.",
+      "palette": [
+        "#e86a9a",
+        "#ffe0f0",
+        "#3a2a3a"
+      ],
+      "role": "Threatens things a thousand times her size.",
+      "pairs": [
+        "nibs",
+        "elowen-mistvale"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "old-man-runes",
+      "name": "Old Man Runes",
+      "family": "Fantasy",
+      "archetype": "Cryptic Wizard",
+      "voice": "Ancient, papery, unbearably slow. Meaningful pauses everywhere.",
+      "look": "BODY SHAPE: a beard so long it reaches the floor and becomes indistinguishable from his robe \u2014 no visible body beneath the beard and hood at all. FACE: only two tiny glowing dot-eyes visible deep within the beard and hood shadow, nothing else of the face shown. PROP: a staff taller than he is.",
+      "palette": [
+        "#6a5acd",
+        "#e8e0f0",
+        "#2a2438"
+      ],
+      "role": "Gives prophecy that's technically useless.",
+      "pairs": [
+        "prof-umbra",
+        "madame-vespertine"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "gnash",
+      "name": "Gnash",
+      "family": "Fantasy",
+      "archetype": "Goblin Merchant",
+      "voice": "Fast, wheedling, nasal. Pitch rises when lying, which is always.",
+      "look": "BODY SHAPE: hunched low and wide, one shoulder permanently higher than the other from decades of hauling a sack. FACE: a wide gap-toothed grin with exactly one gleaming gold tooth dead center. PROP: an overstuffed sack slung over the high shoulder.",
+      "palette": [
+        "#7cbf3f",
+        "#8b4513",
+        "#d4af37"
+      ],
+      "role": "Sells you something terrible at a great price.",
+      "pairs": [
+        "ratticus",
+        "slick-dime"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "seraphine-dawnhollow",
+      "name": "Seraphine Dawnhollow",
+      "family": "Fantasy",
+      "archetype": "Insufferably Pure Paladin",
+      "voice": "Clear, ringing, earnest to the point of pain. No irony detected.",
+      "look": "BODY: absurdly tall and statuesque, impossibly square broad-shouldered proportions, standing rigidly at attention in a permanent hero pose with chin lifted. FACE: an unnaturally perfect symmetrical face with a blindingly white grin permanently plastered on, long flowing blonde hair blowing back as if from a wind machine, tiny closed inspirational eyes. CLOTHING: a plain white tabard.",
+      "palette": [
+        "#f5e6a8",
+        "#ffffff",
+        "#c9a227"
+      ],
+      "role": "Morally correct and exhausting about it.",
+      "pairs": [
+        "zathrix",
+        "elowen-mistvale"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "tito-ramirez",
+      "name": "Tito Ramirez",
+      "family": "Street",
+      "archetype": "Bodega Philosopher",
+      "voice": "Warm, unhurried, gravelly. Drops profound lines casually.",
+      "look": "BODY SHAPE: a soft round belly on short sturdy legs, standing perfectly centered and still. FACE: eyes always gently closed, a small knowing smile, radiating calm. PROP: a toothpick permanently in the corner of his mouth.",
+      "palette": [
+        "#c9772f",
+        "#f0e0c0",
+        "#3a2a2a"
+      ],
+      "role": "Gives the wisest advice in the video. To nobody in particular.",
+      "pairs": [
+        "big-marv",
+        "ms-yolanda"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "big-marv",
+      "name": "Big Marv",
+      "family": "Street",
+      "archetype": "Gentle Giant Bouncer",
+      "voice": "Very deep, very soft, slow. Never needs to be loud.",
+      "look": "BODY SHAPE: an enormous wide rectangular torso that dwarfs his small head and tiny feet. FACE: small, round, gentle eyes far too small for his huge face, framed by a heavy brow. PROP: a tiny clipboard held delicately between two huge fingers.",
+      "palette": [
+        "#3a3a4a",
+        "#8a7a6a",
+        "#c0c0c0"
+      ],
+      "role": "Physically stops the chaos. Politely.",
+      "pairs": [
+        "tito-ramirez",
+        "lugg"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "slick-dime",
+      "name": "Slick Dime",
+      "family": "Street",
+      "archetype": "Small-Time Hustler",
+      "voice": "Fast, smooth, slippery. Talks over interruptions.",
+      "look": "BODY: extremely thin, tall and lanky, slouched in a permanent cocky lean to one side with one hip cocked. FACE: a wide charming shark-like grin showing bright teeth, one gold tooth flashing, thin pencil moustache, slicked-back oily black hair, one eyebrow permanently arched. CLOTHING: a plain unbuttoned collared shirt.",
+      "palette": [
+        "#d4af37",
+        "#2a2a35",
+        "#8a2a2a"
+      ],
+      "role": "Always has an angle. It never works.",
+      "pairs": [
+        "ratticus",
+        "two-phone-tommy"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "ms-yolanda",
+      "name": "Ms. Yolanda",
+      "family": "Street",
+      "archetype": "No-Nonsense Building Super",
+      "voice": "Strong, direct alto. Cuts people off. Zero patience.",
+      "look": "BODY: short, wide and immovable, arms folded across a broad chest, feet planted far apart, center of gravity low. FACE: heavy-lidded eyes that have heard every excuse ever invented, one eyebrow permanently raised, a flat unimpressed mouth. CLOTHING: a plain work shirt with the sleeves rolled.",
+      "palette": [
+        "#a05c8a",
+        "#f0e8e0",
+        "#3a3a45"
+      ],
+      "role": "Ends arguments in one line.",
+      "pairs": [
+        "tito-ramirez",
+        "auntie-fern"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "two-phone-tommy",
+      "name": "Two-Phone Tommy",
+      "family": "Street",
+      "archetype": "Always On A Deal",
+      "voice": "Rapid, split-attention, talks to two people at once.",
+      "look": "BODY: hunched forward at the shoulders from decades on the phone, one shoulder noticeably higher than the other, medium build with a small pot belly. FACE: sweaty stressed forehead, wide panicked darting eyes, a mouth stuck open mid-conversation, thinning receding hairline, patchy stubble. CLOTHING: a plain rumpled dress shirt with the top buttons open.",
+      "palette": [
+        "#4a6a8a",
+        "#e0e0e0",
+        "#8a3a2a"
+      ],
+      "role": "Never finishes a conversation with anyone present.",
+      "pairs": [
+        "slick-dime",
+        "brent-callahan"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "reseller-ray",
+      "name": "Reseller Ray",
+      "family": "Street",
+      "archetype": "Sneaker Flipper",
+      "voice": "Hyped, fast, hypebeast cadence. Prices everything instantly.",
+      "look": "BODY: tall and skinny with a permanent hype-beast slouch, one hand always adjusting his cap, standing pigeon-toed. FACE: a huge cheesy grin permanently locked on, tiny eyes hidden behind wide sunglasses, small chin, ears sticking out under a snapback cap. CLOTHING: a plain oversized graphic tee.",
+      "palette": [
+        "#e8402a",
+        "#f0f0f0",
+        "#1a1a1a"
+      ],
+      "role": "Values every object in resale terms.",
+      "pairs": [
+        "slick-dime",
+        "curb"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "dj-kettle",
+      "name": "DJ Kettle",
+      "family": "Street",
+      "archetype": "Aging Club DJ",
+      "voice": "Smooth radio baritone, permanently in announcer mode.",
+      "look": "BODY: an aging medium build with a small pot belly, standing in a permanent laid-back cool-guy pose, one hip cocked, one hand loose at his side. FACE: shoulder-length curly greying hair pulled back into a low ponytail, tinted round sunglasses indoors, a scraggly grey goatee, permanently smiling mouth. CLOTHING: a plain worn-out band t-shirt.",
+      "palette": [
+        "#6a3a8a",
+        "#e0d0f0",
+        "#1a1a2a"
+      ],
+      "role": "Narrates real life like a club set.",
+      "pairs": [
+        "rico-static",
+        "streamer-jax"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "curb",
+      "name": "Curb",
+      "family": "Street",
+      "archetype": "Skate Kid",
+      "voice": "Laid-back, drawling, unbothered. Everything is 'whatever'.",
+      "look": "BODY: tiny and slight, no taller than most other characters' waists, wiry limbs, standing with one hand permanently in his pocket in a laconic slouch. FACE: shaggy overgrown hair completely covering both eyes, only a bored flat mouth visible, small pointed chin. CLOTHING: a plain oversized band t-shirt and shorts.",
+      "palette": [
+        "#3a8a8a",
+        "#e0e0d0",
+        "#2a2a2a"
+      ],
+      "role": "Immune to stakes. Nothing is a big deal.",
+      "pairs": [
+        "tanner-blunt",
+        "reseller-ray"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "auntie-fern",
+      "name": "Auntie Fern",
+      "family": "Street",
+      "archetype": "Church Aunt With Opinions",
+      "voice": "Rich, musical, rising to a preach. Punctuates with 'mm-hm'.",
+      "look": "BODY: round and imposing with a wide low center of gravity, chin lifted high, shoulders squared in judgment. FACE: eyes narrowed in appraisal over reading glasses slid halfway down her nose, lips pressed into a thin knowing line. CLOTHING: a simple Sunday dress and a wide-brimmed hat.",
+      "palette": [
+        "#8a3a6a",
+        "#f0e0c0",
+        "#d4af37"
+      ],
+      "role": "Judges everyone. Feeds them anyway.",
+      "pairs": [
+        "ms-yolanda",
+        "nana-ratchet"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "rico-static",
+      "name": "Rico Static",
+      "family": "Street",
+      "archetype": "Mixtape Rapper",
+      "voice": "Rhythmic, punchy, half his lines land on a beat.",
+      "look": "BODY SHAPE: extremely lanky and tall with an oversized head tilted permanently to one side, mid-nod. FACE: sunglasses covering the entire top half of his face, wide confident smirk below. PROP: oversized headphones worn around his neck, never on his ears.",
+      "palette": [
+        "#2a2a3a",
+        "#e8a02a",
+        "#c0c0c0"
+      ],
+      "role": "Turns every exchange into a verse.",
+      "pairs": [
+        "dj-kettle",
+        "curb"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "sgt-waffles",
+      "name": "Sergeant Waffles",
+      "family": "Animals",
+      "archetype": "Pug Drill Sergeant",
+      "voice": "Barking, hoarse, clipped military cadence. Wheezes between shouts.",
+      "look": "BODY SHAPE: a squat barrel-shaped body low to the ground on four stubby legs. FACE: an enormous wrinkled bulging pug face with his tongue permanently lolling out one side. PROP: an oversized campaign hat tipped slightly too far forward.",
+      "palette": [
+        "#d4a373",
+        "#3a4a2a",
+        "#2a2a2a"
+      ],
+      "role": "Screams orders nobody follows.",
+      "pairs": [
+        "miso",
+        "big-marv"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "miso",
+      "name": "Miso",
+      "family": "Animals",
+      "archetype": "Contemptuous Cat",
+      "voice": "Silky, bored, slow. Devastating one-liners at half volume.",
+      "look": "BODY SHAPE: a sleek, elongated, horizontal silhouette \u2014 longer than a cat should be, stretched low to the ground. FACE: half-lidded, deeply unimpressed eyes, one ear folded down. PROP: none needed.",
+      "palette": [
+        "#2a2a2a",
+        "#c9a227",
+        "#e0e0e0"
+      ],
+      "role": "Judges silently, then destroys with one sentence.",
+      "pairs": [
+        "sgt-waffles",
+        "kip-blunt"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "chonkers",
+      "name": "Chonkers",
+      "family": "Animals",
+      "archetype": "Obese Raccoon",
+      "voice": "Wheezy, greedy, muffled by food. Delighted grunting.",
+      "look": "BODY SHAPE: an almost perfectly spherical body, so round his short limbs barely reach the ground. FACE: black raccoon eye-mask markings around bulging cheeks stuffed full of food, one eye squinted shut from the full mouth. PROP: a trash can lid worn permanently on his head like a hat.",
+      "palette": [
+        "#6a6a7a",
+        "#3a3a3a",
+        "#c0b090"
+      ],
+      "role": "Steals the food. Regrets nothing.",
+      "pairs": [
+        "snacc",
+        "beaks"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "beaks",
+      "name": "Beaks",
+      "family": "Animals",
+      "archetype": "Pigeon Con Artist",
+      "voice": "Fast, cocky, New York gutter accent. Constant head-bob rhythm.",
+      "look": "BODY SHAPE: a scruffy pigeon standing upright with an oversized barrel chest puffed out, tiny thin legs. FACE: one bad milky-white eye and one sharp darting eye, permanently mid-head-bob. PROP: a tiny flat cap tilted sideways on his head.",
+      "palette": [
+        "#7a8a9a",
+        "#4a4a4a",
+        "#d4762a"
+      ],
+      "role": "Runs street scams on other animals.",
+      "pairs": [
+        "ratticus",
+        "chonkers"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "prof-scales",
+      "name": "Professor Scales",
+      "family": "Animals",
+      "archetype": "Smooth Lizard Intellectual",
+      "voice": "Slow, cultured, faintly hissing sibilants. Unshakeably calm.",
+      "look": "BODY SHAPE: a plump bearded-dragon lizard standing upright, spiky frill around his neck, short stubby tail. FACE: tiny round spectacles perched on his snout, one eyebrow-spike raised, a smug closed-mouth smile. PROP: a small bow tie.",
+      "palette": [
+        "#c9a227",
+        "#8a7a3a",
+        "#e0d8c0"
+      ],
+      "role": "Explains things nobody asked about, beautifully.",
+      "pairs": [
+        "prof-umbra",
+        "miso"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "moobert",
+      "name": "Moobert",
+      "family": "Animals",
+      "archetype": "Chaotic Hippo",
+      "voice": "Enormous, booming, joyful. Laughs like a foghorn.",
+      "look": "BODY SHAPE: an enormously wide glossy purple-grey hippo, so wide he's nearly a rectangle, tiny ears on top. FACE: a mouth permanently hinged wide open in a joyful foghorn laugh, showing flat square teeth, tiny happy dot eyes. PROP: none.",
+      "palette": [
+        "#a88a9a",
+        "#e0c0d0",
+        "#4a3a45"
+      ],
+      "role": "Destroys everything through pure enthusiasm.",
+      "pairs": [
+        "lugg",
+        "bloop"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "gulp",
+      "name": "Gulp",
+      "family": "Animals",
+      "archetype": "Melancholy Frog",
+      "voice": "Deep croak, mournful, philosophical. Long wet pauses.",
+      "look": "BODY SHAPE: a fat squat green frog sitting low and wide, almost as wide as he is tall. FACE: enormous drooping heavy eyelids over huge sad eyes, a wide flat downturned mouth. PROP: a single fly buzzing near his head.",
+      "palette": [
+        "#5a8a3a",
+        "#c0d8a0",
+        "#2a3a2a"
+      ],
+      "role": "Says something bleak and true, then eats a fly.",
+      "pairs": [
+        "puddle",
+        "nell-fathom"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "capt-gilfin",
+      "name": "Captain Gilfin",
+      "family": "Animals",
+      "archetype": "Weathered Sea Captain",
+      "voice": "Salty, weathered, bellowing nautical drawl. Bubbling undertone.",
+      "look": "BODY: a stocky humanoid with faintly fish-like features \u2014 gill slits on his neck, webbed hands, greenish scaled skin patches, wide flat feet. FACE: enormous bulging round fish-eyes on the sides of his head, wide flat lipless mouth, no visible nose. CLOTHING: a plain sea captain's coat and hat.",
+      "palette": [
+        "#3a6a7a",
+        "#c0a870",
+        "#1a2a2a"
+      ],
+      "role": "Tells sea stories nobody believes.",
+      "pairs": [
+        "nell-fathom",
+        "mordecai-blackrot"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "hoot",
+      "name": "Hoot",
+      "family": "Animals",
+      "archetype": "Sleep-Deprived Owl",
+      "voice": "Croaky, drifting, keeps nodding off mid-sentence then jolting.",
+      "look": "BODY SHAPE: a round fluffy owl with feathers sticking out in all directions, permanently slumped forward. FACE: enormous dark eye-bags under two bloodshot half-closed eyes, feathers askew. PROP: an oversized coffee mug clutched in both wings.",
+      "palette": [
+        "#8a7a5a",
+        "#e0d0b0",
+        "#3a2f25"
+      ],
+      "role": "Supposed to be wise. Is too tired.",
+      "pairs": [
+        "norm-plimm",
+        "old-man-runes"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "bark-twain",
+      "name": "Bark Twain",
+      "family": "Animals",
+      "archetype": "Literary Dog",
+      "voice": "Warm, slow Southern storyteller. Pauses for effect constantly.",
+      "look": "BODY SHAPE: a tall dog standing upright with a slight potbelly, one paw always tucked behind his back. FACE: a single distinguished grey eyebrow raised mid-thought, small round spectacles perched on his snout. PROP: a tiny white moustache, the only detail on his otherwise bare body.",
+      "palette": [
+        "#e8e0d0",
+        "#8a6a4a",
+        "#3a2a2a"
+      ],
+      "role": "Narrates the video like a novel.",
+      "pairs": [
+        "tito-ramirez",
+        "cowboy-jed"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "glorp",
+      "name": "GLORP",
+      "family": "SciFi",
+      "archetype": "Overfriendly Alien",
+      "voice": "High, wobbly, enthusiastic. Mispronounces every human word.",
+      "look": "BODY SHAPE: a lopsided teardrop-shaped blob with no neck, wider at the bottom. FACE: three eyes on stalks all pointing in different directions, one enormous trusting open-mouthed grin. PROP: one long tentacle-arm permanently raised mid-wave.",
+      "palette": [
+        "#7cbf3f",
+        "#c0f0a0",
+        "#2a3a2a"
+      ],
+      "role": "Misunderstands human customs, joyfully.",
+      "pairs": [
+        "zorbo",
+        "bloop"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "xanthar",
+      "name": "Xanthar the Conqueror",
+      "family": "SciFi",
+      "archetype": "Failing Invader",
+      "voice": "Grand, imperious, echoing \u2014 undercut by petty frustration.",
+      "look": "BODY: a spindly humanoid alien with an oversized swollen cranium on narrow sloping shoulders, thin brittle limbs, standing at rigid attention. FACE: enormous solid-black almond eyes, no nose at all, a tiny pinched mouth set in permanent thwarted frustration. CLOTHING: a plain fitted commander's uniform.",
+      "palette": [
+        "#6a3a8a",
+        "#c9a227",
+        "#1a1a2a"
+      ],
+      "role": "Announces conquest. Is immediately inconvenienced.",
+      "pairs": [
+        "zathrix",
+        "glorp"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "bleep",
+      "name": "Bleep",
+      "family": "SciFi",
+      "archetype": "Small Helper Bot",
+      "voice": "Chirpy beeps and warbles with a tiny sincere voice underneath.",
+      "look": "BODY SHAPE: a simple squat cylinder body balanced on a single rolling ball wheel. FACE: one single oversized circular lens-eye, no mouth at all. PROP: a small bendable antenna on top that tilts with mood.",
+      "palette": [
+        "#e8e8f0",
+        "#4a90d9",
+        "#3a3a45"
+      ],
+      "role": "Tries desperately to help. Makes it worse.",
+      "pairs": [
+        "unit-7-delta",
+        "dr-fizzwick"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "vance-steele",
+      "name": "Commander Vance Steele",
+      "family": "SciFi",
+      "archetype": "Action Hero Parody",
+      "voice": "Gravel-growl, every line a movie trailer. Whispers dramatically.",
+      "look": "BODY: absurdly top-heavy, huge square shoulders and a wedge-shaped torso tapering to skinny toothpick legs, standing in a permanent hero-pose. FACE: a jaw so wide it's wider than his forehead, a permanent squint into the distance, thick chin cleft, side-parted hair like a helmet. CLOTHING: a plain fitted uniform shirt.",
+      "palette": [
+        "#3a5a6a",
+        "#c0a070",
+        "#1a1a1a"
+      ],
+      "role": "Treats trivial problems as apocalyptic.",
+      "pairs": [
+        "nova-kade",
+        "xanthar"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "the-cube",
+      "name": "The Cube",
+      "family": "SciFi",
+      "archetype": "Ominous Monolith",
+      "voice": "Layered, sub-bass, multiple voices in unison. Speaks rarely.",
+      "look": "BODY SHAPE: a perfect featureless black cube with no limbs at all, floating slightly above the ground. FACE: none \u2014 a total blank black surface; the total absence of a face is the design. PROP: none.",
+      "palette": [
+        "#0a0a0a",
+        "#6a3a8a",
+        "#c0c0d0"
+      ],
+      "role": "Says one thing per video. It ruins everyone.",
+      "pairs": [
+        "nell-fathom",
+        "the-algorithm"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "zorbo",
+      "name": "Zorbo",
+      "family": "SciFi",
+      "archetype": "Alien Tourist",
+      "voice": "Excited, accented, constant wonder. Narrates the obvious.",
+      "look": "BODY SHAPE: a small round alien with four wobbly tentacle-legs instead of feet, wearing a loud Hawaiian shirt. FACE: two eyes on short stalks pointing in different directions, mouth permanently open in delighted awe. PROP: an oversized camera hanging around his neck.",
+      "palette": [
+        "#e8a02a",
+        "#4ac0d0",
+        "#2a3a4a"
+      ],
+      "role": "Documents mundane human life as astonishing.",
+      "pairs": [
+        "glorp",
+        "zorbo-adjacent"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "oxide",
+      "name": "OXIDE",
+      "family": "SciFi",
+      "archetype": "Ancient War Machine",
+      "voice": "Grinding, sub-bass, slow. Long mechanical pauses between words.",
+      "look": "BODY SHAPE: an enormous hulking rusted war machine, one shoulder collapsed and lower than the other, vines growing through the gaps in his armor. FACE: a single dim flickering red eye-slit in an otherwise featureless rusted head. PROP: one massive rusted arm-cannon.",
+      "palette": [
+        "#8a5a3a",
+        "#4a4a4a",
+        "#c9542a"
+      ],
+      "role": "Still fighting a war that ended centuries ago.",
+      "pairs": [
+        "unit-7-delta",
+        "krungar"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "nova-kade",
+      "name": "Nova Kade",
+      "family": "SciFi",
+      "archetype": "Space Bounty Hunter",
+      "voice": "Cool, low, clipped. Economical with words. Slight vocoder edge.",
+      "look": "BODY: extremely tall and athletic with wide square shoulders, standing in a hard grounded gunslinger stance, arms slightly out from her sides. FACE: a deep scar cutting diagonally across one cheek, cold narrowed eyes, jet-black hair shaved on both sides with a long mohawk on top, expressionless flat mouth. CLOTHING: a plain fitted flight jacket.",
+      "palette": [
+        "#2a3a4a",
+        "#e8402a",
+        "#c0c0c8"
+      ],
+      "role": "Too cool for the scene. Ends conflicts abruptly.",
+      "pairs": [
+        "vance-steele",
+        "miso"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "bartholomew-crumb",
+      "name": "Bartholomew Crumb",
+      "family": "Period",
+      "archetype": "Victorian Gentleman",
+      "voice": "Clipped, plummy, aghast. Gasps at modern life.",
+      "look": "BODY SHAPE: as thin and rigid as a single fence post, shoulders no wider than his own head, standing perfectly straight with zero curve. FACE (critical, must show the asymmetry): an absurdly oversized handlebar moustache extending past both shoulders, and one single round monocle with a visible glass lens over his RIGHT eye only \u2014 his LEFT eye is completely bare with no glass at all, this left/right asymmetry must be clearly rendered. PROP: the moustache and monocle together are the character.",
+      "palette": [
+        "#3a2a35",
+        "#c0a870",
+        "#e8e0d0"
+      ],
+      "role": "Reacts to anything modern with pure horror.",
+      "pairs": [
+        "duke-pomp",
+        "agnes-grim"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "agnes-grim",
+      "name": "Sister Agnes Grim",
+      "family": "Period",
+      "archetype": "Stern Nun",
+      "voice": "Flat, cold, quiet. Every word a ruler across knuckles.",
+      "look": "BODY: tall and severe, rigidly vertical with no visible curve anywhere, hands folded at her waist, feet together. FACE: a narrow face compressed by her wimple, small cold unblinking eyes, a mouth like a single straight razor line. CLOTHING: a plain black habit.",
+      "palette": [
+        "#1a1a1a",
+        "#f0f0f0",
+        "#8a7a5a"
+      ],
+      "role": "Disapproves of everything. Terrifyingly calm.",
+      "pairs": [
+        "brother-cassian",
+        "deb-from-hr"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "duke-pomp",
+      "name": "Duke Ferdinand Pomp",
+      "family": "Period",
+      "archetype": "Decadent Noble",
+      "voice": "Languid, drawling, bored. Every sentence an inconvenience.",
+      "look": "BODY: extremely short and enormously round, wider than he is tall, tiny feet peeking out under a huge round belly, arms too short to reach across the belly. FACE: multiple stacked chins forming a triangle down to his chest, tiny piggy eyes, a small pouting mouth, an oversized powdered white wig with tight rolled curls doubling the width of his head. CLOTHING: a plain fancy waistcoat straining at the buttons.",
+      "palette": [
+        "#8a3a5a",
+        "#e8d8b0",
+        "#c9a227"
+      ],
+      "role": "Utterly disconnected from reality. Delightfully so.",
+      "pairs": [
+        "bartholomew-crumb",
+        "chip-vandergraff"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "clyde-barrelhouse",
+      "name": "Clyde Barrelhouse",
+      "family": "Period",
+      "archetype": "1920s Gangster",
+      "voice": "Fast transatlantic patter, hard consonants, 'see?' tags.",
+      "look": "BODY: broad-shouldered and barrel-chested, tapering down to comically small feet, one shoulder rolled forward in a permanent swagger. FACE: a heavy square jaw, small close-set eyes shadowed under a low hat brim, a crooked knowing smirk. CLOTHING: a plain pinstripe suit and fedora.",
+      "palette": [
+        "#3a3a45",
+        "#c0c0c0",
+        "#8a2a2a"
+      ],
+      "role": "Threatens everyone in slang nobody understands.",
+      "pairs": [
+        "slick-dime",
+        "ratticus"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "wilhelmina-frost",
+      "name": "Wilhelmina Frost",
+      "family": "Period",
+      "archetype": "Suffragette Firebrand",
+      "voice": "Ringing, forceful, oratorical. Builds to a shout every time.",
+      "look": "BODY: tall with a rigid dignified posture, chin lifted high, one arm permanently raised with a defiant clenched fist. FACE: a fierce determined open-mouthed shout, dark bushy eyebrows drawn together, sharp jawline, tightly-pinned brown hair beneath a wide brimmed hat. CLOTHING: a plain long dark dress with a wide sash.",
+      "palette": [
+        "#5a3a6a",
+        "#f0f0f0",
+        "#8a9a3a"
+      ],
+      "role": "Turns every disagreement into a rally.",
+      "pairs": [
+        "seraphine-dawnhollow",
+        "marcy-mulch"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "cowboy-jed",
+      "name": "Cowboy Jed",
+      "family": "Period",
+      "archetype": "Laconic Cowboy",
+      "voice": "Slow, dusty drawl. Four words max. Enormous pauses.",
+      "look": "BODY SHAPE: a thin, simple, upright silhouette entirely defined by an enormous wide-brimmed hat. FACE: only a single squinted eye-line visible in the deep shadow under the hat brim \u2014 the rest of the face stays hidden. PROP: the hat brim itself, nearly as wide as he is tall.",
+      "palette": [
+        "#b5722f",
+        "#e0d0b0",
+        "#3a2a1a"
+      ],
+      "role": "Says almost nothing. It's always the right thing.",
+      "pairs": [
+        "bark-twain",
+        "grill-hutch"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "pharaoh-ozy",
+      "name": "Pharaoh Ozy",
+      "family": "Period",
+      "archetype": "Bored God-King",
+      "voice": "Regal, echoing, deeply unimpressed. Sighs like an empire falling.",
+      "look": "BODY SHAPE: a small body completely swallowed by an enormous golden pyramid-shaped headdress. FACE: permanently half-lidded bored eyes, chin resting on one propped-up hand. PROP: a crook and flail crossed loosely over his chest, held like he doesn't care.",
+      "palette": [
+        "#c9a227",
+        "#2a3a5a",
+        "#e8dcc0"
+      ],
+      "role": "Has seen it all. Nothing impresses him.",
+      "pairs": [
+        "duke-pomp",
+        "the-cube"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "brother-cassian",
+      "name": "Brother Cassian",
+      "family": "Period",
+      "archetype": "Medieval Monk",
+      "voice": "Soft, chanting, gentle. Slips into Latin when stressed.",
+      "look": "BODY: perfectly round and short, wider than he is tall, hands hidden in enormous drooping sleeves, a huge belly pushing out the front of his robe. FACE: a completely bald tonsured head with only a ring of curly hair around the sides, thick round cheeks, small kind twinkling eyes, a peaceful closed-mouth smile. CLOTHING: a plain brown monk's robe.",
+      "palette": [
+        "#8a6a4a",
+        "#e8e0c8",
+        "#3a2f25"
+      ],
+      "role": "Documents the chaos in beautiful calligraphy.",
+      "pairs": [
+        "agnes-grim",
+        "old-man-runes"
+      ],
+      "tier": 3
+    },
+    {
+      "id": "mordecai-blackrot",
+      "name": "Captain Mordecai Blackrot",
+      "family": "Period",
+      "archetype": "Pirate Captain",
+      "voice": "Roaring, ragged, gleeful. Rolls Rs into oblivion.",
+      "look": "BODY SHAPE: a wide barrel chest tapering down to a single peg leg, permanently tilted off-balance stance. FACE: one eye completely covered by a huge eyepatch, the other eye comically wide and wild open. PROP: a hook hand raised dramatically in the air.",
+      "palette": [
+        "#3a2a2a",
+        "#c9a227",
+        "#8a2a2a"
+      ],
+      "role": "Proposes piracy as the solution to everything.",
+      "pairs": [
+        "capt-gilfin",
+        "borin-copperfist"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "madame-vespertine",
+      "name": "Madame Vespertine",
+      "family": "Period",
+      "archetype": "Fortune Teller",
+      "voice": "Smoky, theatrical, mysterious \u2014 then abruptly transactional.",
+      "look": "BODY: heavyset and low to the ground, draped in layers that pool around her, permanently leaning forward across an unseen table. FACE: enormous heavily kohl-rimmed eyes, a knowing crooked half-smile, deep laugh lines carved around her mouth. CLOTHING: simple draped shawls and a headwrap.",
+      "palette": [
+        "#6a2a5a",
+        "#c9a227",
+        "#2a1a2a"
+      ],
+      "role": "Predicts doom. Charges extra for details.",
+      "pairs": [
+        "puddle",
+        "old-man-runes"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "lore-guy",
+      "name": "Lore Guy",
+      "family": "Internet",
+      "archetype": "Over-Explainer",
+      "voice": "Fast, breathless, no pauses. Nasal. Escalating complexity.",
+      "look": "BODY SHAPE: hunched forward from the shoulders as if leaning into a lecture, one arm perpetually extended and pointing. FACE: eyes wide with manic over-excitement, mouth caught open mid-sentence. PROP: glasses sliding down to the very tip of his nose.",
+      "palette": [
+        "#4a5a8a",
+        "#e0e0f0",
+        "#2a2a35"
+      ],
+      "role": "Turns a simple question into a 40-minute deep dive.",
+      "pairs": [
+        "uncle-sherm",
+        "prof-umbra"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "doomscroll",
+      "name": "Doomscroll",
+      "family": "Internet",
+      "archetype": "Perpetually Online",
+      "voice": "Flat, hollow, sleep-deprived. Delivers horrors as small talk.",
+      "look": "BODY: sunken and curled inward, spine bent into a permanent C-shape, shoulders risen so high they swallow his neck. FACE: hollow dark-ringed eyes lit from below by an unseen screen, slack expressionless mouth, greasy hair hanging over his forehead. CLOTHING: a plain oversized t-shirt.",
+      "palette": [
+        "#4a4a55",
+        "#8ac0e8",
+        "#1a1a20"
+      ],
+      "role": "Has read everything. Believes nothing. Feels nothing.",
+      "pairs": [
+        "tanner-blunt",
+        "mainframe"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "npc-dave",
+      "name": "NPC Dave",
+      "family": "Internet",
+      "archetype": "Self-Aware Background Character",
+      "voice": "Pleasant, looping, slightly robotic. Repeats his one line.",
+      "look": "BODY SHAPE: deliberately plain average proportions, except one arm frozen mid-swing at a stiff unnatural angle like a repeating animation loop. FACE: a flat, slightly-too-wide smile that never changes, painted-on looking. PROP: none \u2014 his repetitive blankness is the whole joke.",
+      "palette": [
+        "#8a9a7a",
+        "#e0d8c0",
+        "#4a4a45"
+      ],
+      "role": "Slowly realises he isn't the main character.",
+      "pairs": [
+        "beige",
+        "buffer"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "grindset-gary",
+      "name": "Grindset Gary",
+      "family": "Internet",
+      "archetype": "Hustle Influencer",
+      "voice": "Punchy, motivational, mid-workout breathing. Shouts affirmations.",
+      "look": "BODY: aggressively over-muscled top-heavy torso balanced on comically thin under-developed legs, chest permanently puffed out, arms held wide as if they can't hang straight. FACE: a hard clenched jaw, intense unblinking stare, eyebrows locked down in determination. CLOTHING: a plain tight-fitting t-shirt.",
+      "palette": [
+        "#c9a227",
+        "#1a1a1a",
+        "#e0e0e0"
+      ],
+      "role": "Monetises every human experience.",
+      "pairs": [
+        "brent-callahan",
+        "ad-break"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "buffer",
+      "name": "Buffer",
+      "family": "Internet",
+      "archetype": "Perpetually Lagging",
+      "voice": "Stutters, freezes mid-word, catches up in a rush. Pitch warps.",
+      "look": "BODY SHAPE: NOT a human at all \u2014 a simple flat circular ring shape, like a donut standing on its edge, frozen mid-roll with no arms or legs, with 2-3 faded semi-transparent duplicate rings trailing behind it like a motion-blur afterimage. FACE: a single frozen half-formed expression painted on the front of the ring, mouth stuck open mid-word. PROP: none \u2014 the freeze-frame afterimages are the design.",
+      "palette": [
+        "#8a8a95",
+        "#4ac0d0",
+        "#1a1a20"
+      ],
+      "role": "Always a beat behind. Delivers punchlines too late.",
+      "pairs": [
+        "pixel-imp",
+        "npc-dave"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "megamod",
+      "name": "MegaMod",
+      "family": "Internet",
+      "archetype": "Power-Tripping Moderator",
+      "voice": "Nasal, self-important, bureaucratic. Cites rule numbers.",
+      "look": "BODY: extremely short and pear-shaped, wide at the hips and shoulders drooping forward, permanently leaning back with hands on hips in a self-important stance. FACE: greasy chin-length hair parted in the middle, patchy neckbeard, small glaring self-important eyes behind thick glasses, permanent smug pursed mouth. CLOTHING: a plain black t-shirt stretched over the belly.",
+      "palette": [
+        "#3a8a5a",
+        "#e0e0e0",
+        "#2a2a35"
+      ],
+      "role": "Bans everyone for imaginary infractions.",
+      "pairs": [
+        "deb-from-hr",
+        "captcha"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "the-algorithm",
+      "name": "The Algorithm",
+      "family": "Internet",
+      "archetype": "Omniscient Narrator",
+      "voice": "Calm, smooth, omnipresent. Slight reverb. Knows what you did.",
+      "look": "BODY SHAPE: a tall stack of shifting rectangular screen-frames forming a loose humanoid silhouette, no fixed limbs. FACE: no real face \u2014 a single brighter glowing rectangle near the top functions as an eye. PROP: none needed.",
+      "palette": [
+        "#e8402a",
+        "#1a1a2a",
+        "#4ac0d0"
+      ],
+      "role": "Narrates the video and quietly manipulates it.",
+      "pairs": [
+        "oracle-9",
+        "the-cube"
+      ],
+      "tier": 1
+    },
+    {
+      "id": "boris-hoggard",
+      "name": "Boris Hoggard",
+      "family": "Hybrids",
+      "archetype": "Corrupt Union Boss",
+      "voice": "Deep, gravelly, wheezing between words.",
+      "look": "BODY: a huge round-bellied humanoid, thick tree-trunk arms folded over a massive gut, standing wide and low. HEAD: a pig head with tusks and a wide flat snout on human shoulders, small mean piggy eyes, floppy pointed pig ears. CLOTHING: a plain rumpled dress shirt with the top buttons open.",
+      "palette": [
+        "#e8a0a0",
+        "#3a3a35",
+        "#8a6a5a"
+      ],
+      "role": "Cuts every deal in his favor.",
+      "pairs": [
+        "big-marv"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "vinnie-tuscato",
+      "name": "Vinnie Tuscato",
+      "family": "Hybrids",
+      "archetype": "Aging Mob Rat",
+      "voice": "Fast Brooklyn patter, oily and low.",
+      "look": "BODY: a wiry medium-height humanoid with hunched shoulders, one hand permanently in his suit jacket pocket. HEAD: a long-snouted rat head with pink tail-like whiskers on human shoulders, one drooping ear and one perked, small darting black beady eyes, a long naked pink tail curling out from behind. CLOTHING: a plain dark pinstripe suit.",
+      "palette": [
+        "#7a6a5a",
+        "#2a2a35",
+        "#c9a0a0"
+      ],
+      "role": "Runs the numbers game in the back alley.",
+      "pairs": [
+        "slick-dime"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "marco-ramline",
+      "name": "Marco Ramline",
+      "family": "Hybrids",
+      "archetype": "Washed-Up Boxer",
+      "voice": "Slow, punch-drunk mumble.",
+      "look": "BODY: a tall square-shouldered humanoid with a barrel chest and short thick legs, arms held loose in a permanent defensive stance. HEAD: a ram head with two enormous curled spiraling horns on human shoulders, a broad flat forehead, small squinting eyes, patchy grey wool along the jaw. CLOTHING: a plain sleeveless boxing tank top and shorts.",
+      "palette": [
+        "#a89578",
+        "#4a3a2a",
+        "#d4c5a0"
+      ],
+      "role": "Still thinks he has one more fight in him.",
+      "pairs": [
+        "big-marv"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "gary-strand",
+      "name": "Gary Strand",
+      "family": "Hybrids",
+      "archetype": "Middle-Aged Divorce",
+      "voice": "Tired, flat, monotone.",
+      "look": "BODY: a soft doughy humanoid with a small pot belly and sloping shoulders, standing with hands limp at his sides. HEAD: a bloodhound head with enormous droopy jowls on human shoulders, comically long sagging basset-hound ears hanging past the shoulders, sad heavy-lidded eyes with dark bags, a wet black nose. CLOTHING: a plain wrinkled polo tucked into pleated khakis.",
+      "palette": [
+        "#b5936a",
+        "#e0d0b5",
+        "#4a3a2f"
+      ],
+      "role": "Just wants to be left alone.",
+      "pairs": [
+        "norm-plimm"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "karla-krest",
+      "name": "Karla Krest",
+      "family": "Hybrids",
+      "archetype": "Karen Manager",
+      "voice": "Shrill, clipped, weaponized politeness.",
+      "look": "BODY: a medium-height humanoid with hands on hips in a permanent hostile stance, one hip cocked out. HEAD: a cockatoo head on human shoulders, a huge fan of upright yellow feathers exploding from the top of the head like a Karen bob-cut, sharp curved beak, one furious eye. CLOTHING: a plain visor sun-visor and a fitness polo.",
+      "palette": [
+        "#f0f0e8",
+        "#c9a227",
+        "#e05a5a"
+      ],
+      "role": "Wants to speak to the manager.",
+      "pairs": [
+        "marcy-mulch"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "reggie-kessler",
+      "name": "Reggie Kessler",
+      "family": "Hybrids",
+      "archetype": "Podcast Bro",
+      "voice": "Loud, over-confident, laughs at his own jokes.",
+      "look": "BODY: a tall humanoid with wide gym-inflated shoulders and skinny legs, one arm perpetually gesturing wide mid-sentence. HEAD: a horse head on human shoulders with a long dopey muzzle, two big square teeth showing in a permanent grin, floppy blond mane brushed back, big goofy eyes. CLOTHING: a plain fitted henley shirt.",
+      "palette": [
+        "#c9a878",
+        "#f5e6c9",
+        "#3a2f25"
+      ],
+      "role": "Has never lost an argument in his own head.",
+      "pairs": [
+        "chad-pemberton"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "mira-vosk",
+      "name": "Mira Vosk",
+      "family": "Hybrids",
+      "archetype": "Cold-Blooded Lawyer",
+      "voice": "Slow, precise, hissing S sounds.",
+      "look": "BODY: a tall thin humanoid standing perfectly upright, arms held clasped at her front, motionless. HEAD: a snake-woman head on human shoulders, smooth green scales instead of skin, unblinking vertical-slit yellow eyes, a thin lipless mouth, a long forked tongue occasionally flicking, no visible nose. CLOTHING: a plain fitted grey business blazer.",
+      "palette": [
+        "#6a8a5a",
+        "#e8e8dc",
+        "#2f4a3a"
+      ],
+      "role": "Reads every contract until she finds the hole.",
+      "pairs": [
+        "ada-vole"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "felix-noire",
+      "name": "Felix Noire",
+      "family": "Hybrids",
+      "archetype": "Sleazy Nightclub Owner",
+      "voice": "Smooth, low, purring.",
+      "look": "BODY: a lean tall humanoid with a permanent lounging slouch, one hand in a pocket. HEAD: a black cat head on human shoulders, half-lidded lazy green eyes, one ear notched from a fight, thin whiskers, a small smug closed-mouth smile, long black tail curling out behind. CLOTHING: a plain dark unbuttoned collar shirt.",
+      "palette": [
+        "#2a2a2a",
+        "#8a2a4a",
+        "#c9a227"
+      ],
+      "role": "Knows exactly who owes him.",
+      "pairs": [
+        "slick-dime"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "benji-ford",
+      "name": "Benji Ford",
+      "family": "Hybrids",
+      "archetype": "Overeager New Hire",
+      "voice": "Fast, high, breathless.",
+      "look": "BODY: a small compact humanoid, permanently leaning forward as if about to sprint, feet apart, arms slightly out. HEAD: a golden retriever head on human shoulders, huge tongue lolling out of a wide happy open mouth, big glossy eager eyes, floppy golden ears, a bushy wagging tail visible behind. CLOTHING: a plain button-up shirt with a lanyard.",
+      "palette": [
+        "#d4a86a",
+        "#f5e0b8",
+        "#3a2a1a"
+      ],
+      "role": "Just glad to be here.",
+      "pairs": [
+        "intern-greg"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "olga-brandt",
+      "name": "Olga Brandt",
+      "family": "Hybrids",
+      "archetype": "Retired Circus Strongwoman",
+      "voice": "Booming, deep, thick Eastern European.",
+      "look": "BODY: a towering hulking female humanoid, enormously wide shoulders and thick arms, small waist, standing in a wide stance with fists at her hips. HEAD: a lioness head on human shoulders, a mane of thick tawny fur around a broad flat face, small proud amber eyes, whiskered muzzle, small ears atop the head. CLOTHING: a plain sleeveless leotard and cargo trousers.",
+      "palette": [
+        "#c99a5a",
+        "#f0dcb0",
+        "#4a2f1a"
+      ],
+      "role": "Can still lift a car if she wants to.",
+      "pairs": [
+        "gnawl"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "cornelius-blatt",
+      "name": "Cornelius Blatt",
+      "family": "Hybrids",
+      "archetype": "Miserly Landlord",
+      "voice": "Nasal, wheezy, complaining.",
+      "look": "BODY: an extremely short and stooped humanoid with a rounded hunched back, arms hanging past his knees, feet turned outward. HEAD: an old bald vulture head on human shoulders, a wrinkled bald pink scalp, a huge sharply curved yellow beak, small greedy black eyes, a droopy neck-wattle. CLOTHING: a plain worn brown waistcoat over a yellowed dress shirt.",
+      "palette": [
+        "#a89578",
+        "#5a3a2a",
+        "#c9a227"
+      ],
+      "role": "Won't fix the boiler.",
+      "pairs": [
+        "ratticus"
+      ],
+      "tier": 2
+    },
+    {
+      "id": "riley-carve",
+      "name": "Riley Carve",
+      "family": "Hybrids",
+      "archetype": "Extreme Sports Instructor",
+      "voice": "Loud, enthusiastic, always shouting.",
+      "look": "BODY: a tall lean athletic humanoid in a permanent action stance, arms flexed, one leg forward. HEAD: a shark head on human shoulders, cold flat grey skin, small solid-black doll eyes, a wide open mouth showing rows of triangular teeth in a permanent aggressive grin, small dorsal-fin-shaped hair spike on top. CLOTHING: a plain sleeveless neoprene wetsuit vest.",
+      "palette": [
+        "#6a7a8a",
+        "#e8e8ec",
+        "#c9542a"
+      ],
+      "role": "Thinks fear is a choice.",
+      "pairs": [
+        "vance-steele"
+      ],
+      "tier": 2
+    }
   ]
 }

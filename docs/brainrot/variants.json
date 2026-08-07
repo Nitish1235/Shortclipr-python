@@ -1,0 +1,50 @@
+{
+  "note": "Shared variant catalog — every entry is written to be archetype-agnostic so it applies to ANY character in the cast. 'starter_pack' flags the small set generated first per character for cost control; the rest expand later based on which characters/variants actually get used.",
+
+  "canon": {
+    "key": "canon",
+    "label": "Default",
+    "category": "base",
+    "prompt": "neutral confident standing pose, friendly default expression, wearing their signature default outfit",
+    "starter_pack": true
+  },
+
+  "expressions": [
+    {"key": "exp_angry",    "label": "Furious",   "prompt": "FURIOUS rage expression, steam-red face, gritted bared teeth, veins popping on forehead, fists clenched tight, aggressive lunging pose, same default outfit", "starter_pack": true},
+    {"key": "exp_happy",    "label": "Overjoyed",  "prompt": "massive over-the-top joyful grin, eyes squeezed shut with joy, cheeks puffed up, both arms thrown up in celebration, same default outfit", "starter_pack": true},
+    {"key": "exp_laughing", "label": "Cackling",   "prompt": "uncontrollable laughing fit, head thrown back, mouth wide open cackling, doubled over holding stomach with one hand, same default outfit", "starter_pack": false},
+    {"key": "exp_crying",   "label": "Bawling",    "prompt": "exaggerated bawling cry, waterfall tears streaming down, scrunched wet face, trembling lip, hunched sobbing pose, same default outfit", "starter_pack": false},
+    {"key": "exp_shocked",  "label": "Shocked",    "prompt": "eyes bulging wide in shock, jaw dropped to the floor, both hands slapped on cheeks, frozen stiff pose, same default outfit", "starter_pack": false},
+    {"key": "exp_normal",   "label": "Calm",       "prompt": "calm friendly neutral smile, relaxed casual stance, same default outfit", "starter_pack": false}
+  ],
+
+  "gestures": [
+    {"key": "ges_pointing",  "label": "Pointing",     "prompt": "pointing aggressively straight at the camera with one hand, confident smirk, same default outfit", "starter_pack": true},
+    {"key": "ges_facepalm",  "label": "Facepalm",     "prompt": "one hand covering face in an exasperated facepalm, slouched defeated posture, same default outfit", "starter_pack": true},
+    {"key": "ges_shrug",     "label": "Shrug",        "prompt": "big exaggerated shrug, both palms up at shoulder height, confused open-mouth expression, same default outfit", "starter_pack": false},
+    {"key": "ges_crossed",   "label": "Crossed Arms", "prompt": "arms crossed tightly over chest, smug superior expression, same default outfit", "starter_pack": false},
+    {"key": "ges_jumping",   "label": "Jumping",      "prompt": "captured mid-air jump, arms and legs spread wide, excited open-mouth yell, same default outfit", "starter_pack": false},
+    {"key": "ges_dancing",   "label": "Dancing",      "prompt": "goofy dance pose, one leg kicked up high, arms flailing sideways, same default outfit", "starter_pack": false},
+    {"key": "ges_phone",     "label": "On Phone",     "prompt": "looking down at a phone held in both hands, glowing screen light on face, same default outfit", "starter_pack": false},
+    {"key": "ges_thinking",  "label": "Thinking",     "prompt": "hand on chin in an exaggerated thinking pose, eyes looking up and to the side, one eyebrow raised, same default outfit", "starter_pack": false},
+    {"key": "ges_thumbsup",  "label": "Thumbs Up",    "prompt": "big thumbs up gesture with both hands, wide cheesy grin, winking one eye, same default outfit", "starter_pack": false}
+  ],
+
+  "costumes": [
+    {"key": "cos_zombie",       "label": "Zombie",       "prompt": "reanimated zombie version of the character, pale sickly green-grey skin, torn shredded default outfit, visible stitches, hollow undead eyes, still clearly recognizable as the same character", "starter_pack": true},
+    {"key": "cos_pirate",       "label": "Pirate",       "prompt": "wearing a pirate captain outfit with tricorn hat, eyepatch, and a hook hand, neutral confident expression", "starter_pack": false},
+    {"key": "cos_astronaut",    "label": "Astronaut",    "prompt": "wearing a bulky white astronaut spacesuit with the helmet tucked under one arm, neutral confident expression", "starter_pack": false},
+    {"key": "cos_suit",         "label": "Business Suit", "prompt": "wearing a sharp formal business suit and tie, neutral confident expression", "starter_pack": false},
+    {"key": "cos_hoodie",       "label": "Streetwear",   "prompt": "wearing a baggy streetwear hoodie and sneakers, relaxed casual expression", "starter_pack": false},
+    {"key": "cos_sportswear",   "label": "Sportswear",   "prompt": "wearing an athletic tracksuit and a headband, energetic expression", "starter_pack": false},
+    {"key": "cos_christmas",    "label": "Christmas",    "prompt": "wearing a Santa hat and an ugly Christmas sweater, cheerful expression", "starter_pack": false},
+    {"key": "cos_halloween",    "label": "Halloween",    "prompt": "wearing a cheap homemade monster Halloween costume over their default outfit, mischievous expression", "starter_pack": false},
+    {"key": "cos_construction", "label": "Construction", "prompt": "wearing a hi-vis safety vest and a hard hat, holding a small wrench, neutral confident expression", "starter_pack": false},
+    {"key": "cos_chef",         "label": "Chef",         "prompt": "wearing a chef's white coat and a tall chef hat, proud expression", "starter_pack": false},
+    {"key": "cos_police",       "label": "Police",       "prompt": "wearing a police uniform and cap, stern authoritative expression", "starter_pack": false},
+    {"key": "cos_ninja",        "label": "Ninja",        "prompt": "wearing a black ninja outfit with a face mask covering everything but the eyes, focused expression", "starter_pack": false},
+    {"key": "cos_rich",         "label": "Rich",         "prompt": "wearing an over-the-top flashy rich outfit dripping with gold chains and jewelry, smug expression", "starter_pack": false},
+    {"key": "cos_homeless",     "label": "Homeless",     "prompt": "wearing a tattered ragged version of their default outfit with dirt smudges, weary expression", "starter_pack": false},
+    {"key": "cos_baby",         "label": "Baby Version", "prompt": "shrunk into a chibi baby version of themselves, even more oversized head, wearing a diaper or onesie, tiny stubby body proportions, innocent expression", "starter_pack": false}
+  ]
+}

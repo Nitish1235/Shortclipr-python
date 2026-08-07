@@ -1,0 +1,980 @@
+[
+  {
+    "character_id": "krungar",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\krungar\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/44f47229-f5d6-46dc-9c8d-af95ec6326fc.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/4c794cb3-e1ac-45d2-b427-d0814a847fe1.png",
+    "cost": null
+  },
+  {
+    "character_id": "brent-callahan",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\brent-callahan\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/0d784808-6aef-4c43-aac4-652632315b34.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/1de9442f-af33-45cd-8358-a6c984da32fb.png",
+    "cost": null
+  },
+  {
+    "character_id": "unit-7-delta",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\unit-7-delta\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/be679349-ebaf-41ba-a903-d1a5403c644d.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/b1edf2fc-fd5d-4e51-9b30-99c1870b0451.png",
+    "cost": null
+  },
+  {
+    "character_id": "streamer-jax",
+    "variant": "canon",
+    "status": "error",
+    "error": "RunwareAPIError: {'code': 'inferenceError', 'error': 'standardError', 'message': 'An error has occurred please read documentation for additional details.', 'documentation': 'https://runware.ai/docs', 'taskUUID': 'c163da30-b9a3-4b32-89f8-b23e764e81fd'}"
+  },
+  {
+    "character_id": "dougie-blunt",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\dougie-blunt\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/6e51c506-e8c0-4b43-8718-7387def8ac3d.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/33dd68a3-4aac-470c-a819-dea94c6d4c6c.png",
+    "cost": null
+  },
+  {
+    "character_id": "vex-corliss",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\vex-corliss\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/e440d79f-1ba3-4a73-a45f-ae0b6dca14a9.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/a8fef399-32d4-43ea-bee1-045a272d5da9.png",
+    "cost": null
+  },
+  {
+    "character_id": "marla-blunt",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\marla-blunt\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/2d65fc98-2bb0-4c33-b57b-da711c6aa418.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/e53d782d-71ed-41c0-9af0-972c5f6d505f.png",
+    "cost": null
+  },
+  {
+    "character_id": "kip-blunt",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\kip-blunt\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/472ec8a3-915f-4004-a6af-1a7d75dcebf1.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/0c73a817-9d5a-4536-9a09-1198bdda9b52.png",
+    "cost": null
+  },
+  {
+    "character_id": "oracle-9",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\oracle-9\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/2289a3bd-9ae1-4d53-967f-0f66e1e05272.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/dd9b8ad3-a7ae-40a0-a69a-6a2d25c7a693.png",
+    "cost": null
+  },
+  {
+    "character_id": "deb-from-hr",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\deb-from-hr\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/3bf78339-e02f-48ca-8cfd-1063fffc161f.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/881a7fb9-2770-4fc6-9557-fd5964bd25b1.png",
+    "cost": null
+  },
+  {
+    "character_id": "zathrix",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\zathrix\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/8d7740e6-3920-45f8-bca3-7fb37fbe30ac.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/a72d8016-21cb-4187-be32-c90e3e04fb67.png",
+    "cost": null
+  },
+  {
+    "character_id": "gnash",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\gnash\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/c1708969-8bc8-4fa5-aed2-0f0752239e4f.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/b49e4717-c9d6-4d6e-83d8-09a40a71b15d.png",
+    "cost": null
+  },
+  {
+    "character_id": "tito-ramirez",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\tito-ramirez\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/9af4b26e-bb96-439f-995b-74e26bf2cd3b.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/69049753-eaa0-4d43-97a5-c6808bc43ceb.png",
+    "cost": null
+  },
+  {
+    "character_id": "big-marv",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\big-marv\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/417e52ec-36a8-41d2-800e-42f61d0fe647.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/f68b8565-666e-4f78-9676-ad7eec7003a5.png",
+    "cost": null
+  },
+  {
+    "character_id": "sgt-waffles",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\sgt-waffles\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/364fc8b8-ec81-4943-83a2-a240f755eb03.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/ca78b3e1-249b-4e22-aa6e-0125f0ed2d2d.png",
+    "cost": null
+  },
+  {
+    "character_id": "miso",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\miso\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/d3c06502-103d-4e82-b530-5a9a955e0290.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/6e6b70e1-a412-489b-b86c-92470d70e434.png",
+    "cost": null
+  },
+  {
+    "character_id": "glorp",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\glorp\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/40f6614c-437e-4156-acbc-3250e8adc7d7.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/fb4237e2-a2b5-4ae0-971c-7792025ff016.png",
+    "cost": null
+  },
+  {
+    "character_id": "bleep",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\bleep\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/4859f276-5ec0-497e-803e-e2733f8290be.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/99f9be5a-e7a2-44c1-8394-40144a55d5ee.png",
+    "cost": null
+  },
+  {
+    "character_id": "cowboy-jed",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\cowboy-jed\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/d4b107f8-5af3-46e5-a34d-ee8a313e1e6a.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/c2f29572-8c3e-428a-9d7d-44798b6de89d.png",
+    "cost": null
+  },
+  {
+    "character_id": "lore-guy",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\lore-guy\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/f9b5efa0-7a70-40cb-8522-ea408cbbc069.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/bb6e26b5-82e9-4195-883a-eac092fb5ace.png",
+    "cost": null
+  },
+  {
+    "character_id": "npc-dave",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\npc-dave\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/75a8c5e5-5ab7-4da8-8d5b-f6756fcf6493.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/217a9a8e-5e66-48a2-86bb-b79cb65ee10e.png",
+    "cost": null
+  },
+  {
+    "character_id": "the-algorithm",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\the-algorithm\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/15f0e6f8-2066-4189-ab8b-b2366ffca477.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/cfdf14b6-db0f-4424-8ba7-0dd1c62ccb5b.png",
+    "cost": null
+  },
+  {
+    "character_id": "bitsy-quark",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\bitsy-quark\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/6247b6f2-e05b-4efb-a2e1-9418798618ce.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/f82f26ae-d864-4d33-8663-ecd444574ec6.png",
+    "cost": null
+  },
+  {
+    "character_id": "elowen-mistvale",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\elowen-mistvale\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/2ef13486-e04d-4311-b4e3-1a67cf0e4f1b.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/81d7e414-103b-4e62-8de5-2d61c3df3d1a.png",
+    "cost": null
+  },
+  {
+    "character_id": "bartholomew-crumb",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\bartholomew-crumb\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/7264d396-57b2-4abe-b8dd-6c66f7ff74ff.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/c1ad42d5-77c0-4da8-bb64-75849a17423b.png",
+    "cost": null
+  },
+  {
+    "character_id": "nana-ratchet",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\nana-ratchet\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/71b93b12-8c04-4a6b-85f5-e7d0e2c762a4.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/73300848-d996-4bca-9d9c-7011b082c0d0.png",
+    "cost": null
+  },
+  {
+    "character_id": "pixel-imp",
+    "variant": "canon",
+    "status": "error",
+    "error": "RunwareAPIError: {'code': 'inferenceError', 'error': 'standardError', 'message': 'An error has occurred please read documentation for additional details.', 'documentation': 'https://runware.ai/docs', 'taskUUID': 'e8a908d5-b8a6-478a-9c20-25e28a20aac2'}"
+  },
+  {
+    "character_id": "old-man-runes",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\old-man-runes\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/db30b56b-e3eb-4923-a019-2f4f193b30f0.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/46548c3c-0f23-4cef-8e5e-75d8aa70da67.png",
+    "cost": null
+  },
+  {
+    "character_id": "rico-static",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\rico-static\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/f62b561a-0116-49ae-9f63-016f6f32c107.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/da50b39b-56c6-4bf7-9100-2684287fb869.png",
+    "cost": null
+  },
+  {
+    "character_id": "chonkers",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\chonkers\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/9d3ab1a9-531d-4265-8fe8-4c4b2e4751f0.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/dfc25707-ded0-4397-9669-5630c57e0441.png",
+    "cost": null
+  },
+  {
+    "character_id": "bark-twain",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\bark-twain\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/0cf5cb95-9a53-49b5-83c4-54dd7bea0fa9.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/6c09bbf0-01d0-4a0a-a8c2-19f07840039b.png",
+    "cost": null
+  },
+  {
+    "character_id": "the-cube",
+    "variant": "canon",
+    "status": "error",
+    "error": "RunwareAPIError: {'code': 'inferenceError', 'error': 'standardError', 'message': 'An error has occurred please read documentation for additional details.', 'documentation': 'https://runware.ai/docs', 'taskUUID': '4a2ccb32-d9be-472d-bc8c-a9d66dd3248e'}"
+  },
+  {
+    "character_id": "mainframe",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\mainframe\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/ca890e90-8c44-42a2-b05c-833ec185c41f.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/a93e9e34-feb0-4328-8b65-6389fa9d838c.png",
+    "cost": null
+  },
+  {
+    "character_id": "pharaoh-ozy",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\pharaoh-ozy\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/e418671a-51fa-4feb-abfd-615b07e870c7.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/e4062112-96b4-44c0-96aa-004862ccc633.png",
+    "cost": null
+  },
+  {
+    "character_id": "mordecai-blackrot",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\mordecai-blackrot\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/22e7ef74-bc49-4167-ae72-a14483fdb0ab.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/780d3aad-e16b-46af-ba65-b7cae9e8e118.png",
+    "cost": null
+  },
+  {
+    "character_id": "dr-fizzwick",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\dr-fizzwick\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/1e87ea0f-16d1-4659-9f23-85a888183e74.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/fe541406-b2a9-479c-aa6b-71c09d504829.png",
+    "cost": null
+  },
+  {
+    "character_id": "beige",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\beige\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/edba5faa-9f9c-44f7-aaf4-3e2bb34c8d0f.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/71f1832d-f177-433f-86de-fe69ab399fd7.png",
+    "cost": null
+  },
+  {
+    "character_id": "thistle",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\thistle\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/df33c028-5a7d-46cf-8197-af29c2207b38.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/a38bc725-8fe7-401a-8620-282dd004c5ac.png",
+    "cost": null
+  },
+  {
+    "character_id": "ad-break",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\ad-break\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/c0d2eb36-202d-4b10-bb46-9660b4222217.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/8f4902cf-3b90-4ebd-b780-844587a2cba8.png",
+    "cost": null
+  },
+  {
+    "character_id": "buffer",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\buffer\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/58bf0496-f495-4df9-a732-94d6fccc9fac.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/d37c4fe9-47cb-4b64-a134-1ac3a40ac73c.png",
+    "cost": null
+  },
+  {
+    "character_id": "nibs",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\nibs\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/ca558ecf-d3b8-4ed7-a5a8-c437b4b97a45.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/301ca7ee-ebd9-4dd9-9316-903bd5f0de6f.png",
+    "cost": null
+  },
+  {
+    "character_id": "snacc",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\snacc\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/0a25085a-48b3-4bf2-978d-604a073ca829.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/6435953c-3137-491a-876c-1992960bbe80.png",
+    "cost": null
+  },
+  {
+    "character_id": "bloop",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\bloop\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/2b73040a-cec3-400f-af4e-fd5ab07dc20d.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/50b3be21-7a9f-422f-8311-8c1e86924205.png",
+    "cost": null
+  },
+  {
+    "character_id": "ratticus",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\ratticus\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/965b51b3-1664-482a-b173-72e54e269bc5.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/98322c25-feaf-4dc4-8dfc-d925051fa810.png",
+    "cost": null
+  },
+  {
+    "character_id": "lugg",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\lugg\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/2a66602e-b672-4310-b425-14b0ec92c12e.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/c16c3ccb-e587-4a11-a81e-a70f83fa76b9.png",
+    "cost": null
+  },
+  {
+    "character_id": "the-calculator",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\the-calculator\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/1b6e64d6-20d4-40b9-b55a-f115a8745fae.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/4ea0d866-e6f5-49f0-ab64-3f58a1babe99.png",
+    "cost": null
+  },
+  {
+    "character_id": "doreen-sludge",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\doreen-sludge\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/d98fbd00-927f-4925-a863-545042e9f4a0.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/8857e3fb-879c-4d53-a3ae-ecebe2fcebf7.png",
+    "cost": null
+  },
+  {
+    "character_id": "beaks",
+    "variant": "canon",
+    "status": "error",
+    "error": "RunwareAPIError: {'code': 'inferenceError', 'error': 'standardError', 'message': 'An error has occurred please read documentation for additional details.', 'documentation': 'https://runware.ai/docs', 'taskUUID': '914f5b94-ac77-4e45-8ff7-113275ff6c0b'}"
+  },
+  {
+    "character_id": "prof-scales",
+    "variant": "canon",
+    "status": "error",
+    "error": "RunwareAPIError: {'code': 'inferenceError', 'error': 'standardError', 'message': 'An error has occurred please read documentation for additional details.', 'documentation': 'https://runware.ai/docs', 'taskUUID': 'b73d00cf-951d-4b93-81f1-e091a1e10fc4'}"
+  },
+  {
+    "character_id": "moobert",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\moobert\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/72df1539-9dc6-421b-83b2-d431918b10a2.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/75d44833-f1d8-4a21-93b6-91074f9b6b73.png",
+    "cost": null
+  },
+  {
+    "character_id": "gulp",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\gulp\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/2b6aa1e6-2936-4b02-a81f-44b564aecf75.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/d1d0c7ee-7f92-4930-ac07-fd844df5e8d1.png",
+    "cost": null
+  },
+  {
+    "character_id": "hoot",
+    "variant": "canon",
+    "status": "error",
+    "error": "RunwareAPIError: {'code': 'inferenceError', 'error': 'standardError', 'message': 'An error has occurred please read documentation for additional details.', 'documentation': 'https://runware.ai/docs', 'taskUUID': 'b5b12565-48a9-4c20-8f47-e5aca5a52ff4'}"
+  },
+  {
+    "character_id": "zorbo",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\zorbo\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w03d10/ws/3/ii/fe2aef71-36c3-4a68-a38a-d19ebbb7d476.jpg",
+    "final_url": "https://im.runware.ai/image/os/w03d10/ws/5/ii/45c208ec-5a45-4837-b08b-7c88aec35556.png",
+    "cost": null
+  },
+  {
+    "character_id": "oxide",
+    "variant": "canon",
+    "status": "error",
+    "error": "RunwareAPIError: {'code': 'inferenceError', 'error': 'standardError', 'message': 'An error has occurred please read documentation for additional details.', 'documentation': 'https://runware.ai/docs', 'taskUUID': '62bbefe7-a8bd-469b-ab64-c0177b5520c4'}"
+  },
+  {
+    "character_id": "captcha",
+    "variant": "canon",
+    "status": "error",
+    "error": "RunwareAPIError: {'code': 'inferenceError', 'error': 'standardError', 'message': 'An error has occurred please read documentation for additional details.', 'documentation': 'https://runware.ai/docs', 'taskUUID': '3122b9f8-92e9-4ddf-bf61-e3800d537af1'}"
+  },
+  {
+    "character_id": "uncle-sherm",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\uncle-sherm\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w04dlim3/ws/3/ii/faa3a70a-50f4-4b71-b009-db60dfcf5c64.jpg",
+    "final_url": "https://im.runware.ai/image/os/w04dlim3/ws/5/ii/01070323-31d7-4cfd-8b46-8ce3598c7e0b.png",
+    "cost": null
+  },
+  {
+    "character_id": "trisha-vane",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\trisha-vane\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w04dlim3/ws/3/ii/e320d6c1-e6b5-4b37-b225-00a0725ac760.jpg",
+    "final_url": "https://im.runware.ai/image/os/w04dlim3/ws/5/ii/a6df52df-2b53-4d52-87de-5a0f71ce8428.png",
+    "cost": null
+  },
+  {
+    "character_id": "todd-synergy",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\todd-synergy\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w04dlim3/ws/3/ii/3a246982-b7bb-4f25-a83f-3bea3ffaa72f.jpg",
+    "final_url": "https://im.runware.ai/image/os/w04dlim3/ws/5/ii/3bd20d76-a04c-4520-a5cd-70db1e4123ea.png",
+    "cost": null
+  },
+  {
+    "character_id": "marcy-mulch",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\marcy-mulch\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w04dlim3/ws/3/ii/3edbeb58-497a-4fa1-aca6-f5628be56ba9.jpg",
+    "final_url": "https://im.runware.ai/image/os/w04dlim3/ws/5/ii/96bb14a2-708c-4cb2-9085-d76fa3c3585b.png",
+    "cost": null
+  },
+  {
+    "character_id": "intern-greg",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\intern-greg\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w04dlim3/ws/3/ii/b31a0895-1071-4c6c-ba07-10621a4d7360.jpg",
+    "final_url": "https://im.runware.ai/image/os/w04dlim3/ws/5/ii/e0bc61a5-4bd3-49bb-b06d-46d91853547e.png",
+    "cost": null
+  },
+  {
+    "character_id": "reginald-cost",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\reginald-cost\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w04dlim3/ws/3/ii/18ca68e3-a8e4-4fc5-aec2-f09bb6519dbe.jpg",
+    "final_url": "https://im.runware.ai/image/os/w04dlim3/ws/5/ii/c1860b84-29c6-4865-af72-ed971070b3e4.png",
+    "cost": null
+  },
+  {
+    "character_id": "borin-copperfist",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\borin-copperfist\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w04dlim3/ws/3/ii/458f51ef-bc42-4072-b272-733d84d05949.jpg",
+    "final_url": "https://im.runware.ai/image/os/w04dlim3/ws/5/ii/a0d14524-7261-47c9-a095-837a3893d30d.png",
+    "cost": null
+  },
+  {
+    "character_id": "puddle",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\puddle\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w04dlim3/ws/3/ii/89792093-b0dd-4fe4-b4bc-7bba55f7876e.jpg",
+    "final_url": "https://im.runware.ai/image/os/w04dlim3/ws/5/ii/7c3c9d44-07fe-4534-98ff-09fde2c87db4.png",
+    "cost": null
+  },
+  {
+    "character_id": "ms-yolanda",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\ms-yolanda\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w04dlim3/ws/3/ii/f8e7ae10-d373-4e9a-9548-3b3d65cae480.jpg",
+    "final_url": "https://im.runware.ai/image/os/w04dlim3/ws/5/ii/01dbeebc-f01c-4b89-a659-43a5fef8760e.png",
+    "cost": null
+  },
+  {
+    "character_id": "auntie-fern",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\auntie-fern\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w04dlim3/ws/3/ii/3ac4354a-e4d6-459b-a1e7-c2bb1a68e3de.jpg",
+    "final_url": "https://im.runware.ai/image/os/w04dlim3/ws/5/ii/c28675aa-9db9-4726-92ca-33accb074edd.png",
+    "cost": null
+  },
+  {
+    "character_id": "xanthar",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\xanthar\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w04dlim3/ws/3/ii/017e6430-aac8-4ccd-ac5f-113f02859ab5.jpg",
+    "final_url": "https://im.runware.ai/image/os/w04dlim3/ws/5/ii/415e9f5f-50a4-4be4-85dc-678b364fbc19.png",
+    "cost": null
+  },
+  {
+    "character_id": "agnes-grim",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\agnes-grim\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w04dlim3/ws/3/ii/904f3ae2-fae8-4029-9a00-05268aaddef0.jpg",
+    "final_url": "https://im.runware.ai/image/os/w04dlim3/ws/5/ii/662eff3f-9bf4-4d45-a208-cea97898dc81.png",
+    "cost": null
+  },
+  {
+    "character_id": "clyde-barrelhouse",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\clyde-barrelhouse\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w04dlim3/ws/3/ii/056c1569-d727-4973-bd8e-423172ec79c3.jpg",
+    "final_url": "https://im.runware.ai/image/os/w04dlim3/ws/5/ii/e1055849-042a-43ac-883d-1c8feaa8ac59.png",
+    "cost": null
+  },
+  {
+    "character_id": "madame-vespertine",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\madame-vespertine\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w04dlim3/ws/3/ii/81afef38-de74-4bcc-880e-637d25bfa697.jpg",
+    "final_url": "https://im.runware.ai/image/os/w04dlim3/ws/5/ii/4f02cc34-39a4-4761-a6a9-5259b828967c.png",
+    "cost": null
+  },
+  {
+    "character_id": "doomscroll",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\doomscroll\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w04dlim3/ws/3/ii/a52e7e97-54a0-4bea-9dde-96465eb4e3ac.jpg",
+    "final_url": "https://im.runware.ai/image/os/w04dlim3/ws/5/ii/580cafb3-d6d4-4547-8f60-7d706c1e7751.png",
+    "cost": null
+  },
+  {
+    "character_id": "grindset-gary",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\grindset-gary\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w04dlim3/ws/3/ii/10a61b3a-a16c-4f5c-b057-1b711493c5d4.jpg",
+    "final_url": "https://im.runware.ai/image/os/w04dlim3/ws/5/ii/432a4f89-58a8-4626-8324-56f299f1bb70.png",
+    "cost": null
+  },
+  {
+    "character_id": "tanner-blunt",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\tanner-blunt\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/64a41948-b238-473d-9b3d-b3a7c50279b4.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/cfc2cd6f-11f1-4a82-a0e5-50deb7901ef1.png",
+    "cost": null
+  },
+  {
+    "character_id": "bev-nettles",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\bev-nettles\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/828a2d74-ef64-43fc-9c89-3c329d559671.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/09cd051b-dd4a-44a2-b60d-c7e5a3e85fc9.png",
+    "cost": null
+  },
+  {
+    "character_id": "chad-pemberton",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\chad-pemberton\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/0e236799-c796-4b3f-a13b-d778c32aa2b8.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/aa0267b8-37be-4df2-bb79-046da6c2ad5c.png",
+    "cost": null
+  },
+  {
+    "character_id": "grill-hutch",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\grill-hutch\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/5632efba-ae46-481e-9b9e-974300dacfaf.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/7744d0ce-8938-450a-90e7-ea21b58adb30.png",
+    "cost": null
+  },
+  {
+    "character_id": "mop",
+    "variant": "canon",
+    "status": "error",
+    "error": "RunwareAPIError: {'code': 'inferenceError', 'error': 'standardError', 'message': 'An error has occurred please read documentation for additional details.', 'documentation': 'https://runware.ai/docs', 'taskUUID': 'ca01dac1-5db2-45fb-a774-b032fbd2c1a5'}"
+  },
+  {
+    "character_id": "gnawl",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\gnawl\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/cd1fd925-fa31-4fd8-acb5-c0a0dc0cc82d.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/004b353e-216c-46ba-8c0b-130d38eae86d.png",
+    "cost": null
+  },
+  {
+    "character_id": "wizzo",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\wizzo\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/fe3335c2-94db-4061-bcd4-7188e7af6181.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/a4bf455b-7cb6-4248-bac0-a7159084ec75.png",
+    "cost": null
+  },
+  {
+    "character_id": "skitter",
+    "variant": "canon",
+    "status": "error",
+    "error": "RunwareAPIError: {'code': 'inferenceError', 'error': 'standardError', 'message': 'An error has occurred please read documentation for additional details.', 'documentation': 'https://runware.ai/docs', 'taskUUID': '10f49a91-95bf-4642-b494-1e4fa2284d52'}"
+  },
+  {
+    "character_id": "norm-plimm",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\norm-plimm\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/d2f776dd-b1a9-47d4-b1d3-919aea39835b.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/dec4f10f-fa85-4dc7-8517-d773d49d614c.png",
+    "cost": null
+  },
+  {
+    "character_id": "nell-fathom",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\nell-fathom\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/f5515608-0710-4199-b02e-21505e88634c.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/7d997cc1-79b8-48a2-846f-7829392e8a5c.png",
+    "cost": null
+  },
+  {
+    "character_id": "sharon-quill",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\sharon-quill\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/82767a74-014a-40dc-85ad-5d2e00fda953.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/d86ea2d6-697b-4db4-a6a2-38a373f30cc0.png",
+    "cost": null
+  },
+  {
+    "character_id": "chip-vandergraff",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\chip-vandergraff\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/5acf3d22-bf46-4856-a7b8-ffd1cfd7d348.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/8d778123-6096-4222-bb11-9976a569966e.png",
+    "cost": null
+  },
+  {
+    "character_id": "curb",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\curb\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/642395cf-ba51-4f0a-984b-b61be5fd7e9f.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/cc2f1818-d935-4364-9841-67f65eacc8e2.png",
+    "cost": null
+  },
+  {
+    "character_id": "capt-gilfin",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\capt-gilfin\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/ef81f826-9a78-40ab-89d8-042f5fcd8465.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/7c8bb042-6c5b-4160-b0fe-ad2e39aa360c.png",
+    "cost": null
+  },
+  {
+    "character_id": "vance-steele",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\vance-steele\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/03dfe715-830a-4cb7-a90a-cc21cd84ac99.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/2dccb604-3a3a-47fe-9a44-911d25a7d1eb.png",
+    "cost": null
+  },
+  {
+    "character_id": "brother-cassian",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\brother-cassian\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/cf980bfe-4c3d-4b20-93cf-bdc37292b407.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/7ad498b0-c529-4500-9420-a9a1c92fdb9b.png",
+    "cost": null
+  },
+  {
+    "character_id": "prof-umbra",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\prof-umbra\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/1b13213a-ddd1-4176-8f5d-3d089b63215f.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/9a8cd782-b07d-4e11-ad9d-e74bb35d7120.png",
+    "cost": null
+  },
+  {
+    "character_id": "grigori-slyme",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\grigori-slyme\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/7d943a43-762a-4151-9561-61ce0c39b0b8.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/ec9511e9-efc8-4512-a140-2959f242e8c1.png",
+    "cost": null
+  },
+  {
+    "character_id": "seraphine-dawnhollow",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\seraphine-dawnhollow\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/335f72e5-cb5b-4c7d-9fc0-8434a81ab1e2.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/c929fea6-286e-45f4-ad01-d00dbf7751f0.png",
+    "cost": null
+  },
+  {
+    "character_id": "slick-dime",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\slick-dime\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/3b265b03-cec2-4113-8f93-18c3cc9a607b.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/73a3bb24-3bdf-4ecc-8a49-6b9ff43d69dc.png",
+    "cost": null
+  },
+  {
+    "character_id": "two-phone-tommy",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\two-phone-tommy\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/5b085180-c167-4886-96b2-478038b0a73b.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/7e01c5f3-b727-4594-b1d2-12f5ef4f5973.png",
+    "cost": null
+  },
+  {
+    "character_id": "reseller-ray",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\reseller-ray\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/1dd723a2-3c81-466d-b6a7-368c36d0393d.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/ddfd9024-4ba3-4e87-94d2-4f7d7aa6a6bc.png",
+    "cost": null
+  },
+  {
+    "character_id": "dj-kettle",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\dj-kettle\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/49be587e-ad78-44ca-92c5-1e3d5fbd097b.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/cb2af87f-f1b6-48b5-a718-1fc988dbac1c.png",
+    "cost": null
+  },
+  {
+    "character_id": "nova-kade",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\nova-kade\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/d9f9f188-03e3-442a-acf4-369464eb11d1.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/a789d038-ef6a-47ea-80af-50c1572bbd29.png",
+    "cost": null
+  },
+  {
+    "character_id": "wilhelmina-frost",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\wilhelmina-frost\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/92a4d21e-db03-426d-82f9-3fcd1751c07b.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/d63433f4-d5e5-4d66-b75c-0c633dc205c0.png",
+    "cost": null
+  },
+  {
+    "character_id": "megamod",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\megamod\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/99de9619-a963-4992-8c8f-374b72ddda6b.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/a26a8992-6747-45c1-8a88-f46b0452dd2c.png",
+    "cost": null
+  },
+  {
+    "character_id": "ada-vole",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\ada-vole\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/bb276bb9-05ca-4923-b368-de81f689e7f1.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/67858cd6-2e97-4c78-be2e-326b67486096.png",
+    "cost": null
+  },
+  {
+    "character_id": "ambrose-dunn",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\ambrose-dunn\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/d3eb782a-c67f-4b33-8418-829828b38da2.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/6ea59e02-eb16-42dd-af04-de568f759d64.png",
+    "cost": null
+  },
+  {
+    "character_id": "duke-pomp",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\duke-pomp\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/74465161-b720-4e22-9f70-11d86f6360f7.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/16ec8981-0716-4339-baa1-f2414da42068.png",
+    "cost": null
+  },
+  {
+    "character_id": "boris-hoggard",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\boris-hoggard\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/ed41b88c-b866-49c6-b0ea-a5a6d6c738a7.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/c2f8fe94-6647-481b-8510-32512fbf579f.png",
+    "cost": null
+  },
+  {
+    "character_id": "vinnie-tuscato",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\vinnie-tuscato\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/bacbd090-388d-4646-9fd9-dcb9feaf0313.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/9c534f44-16cd-4871-ac52-952cd28387fb.png",
+    "cost": null
+  },
+  {
+    "character_id": "marco-ramline",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\marco-ramline\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/aae10fba-441d-4163-9b8d-4f54fa8d11ac.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/bb17b385-d397-4dea-9eb3-fd41ebc98801.png",
+    "cost": null
+  },
+  {
+    "character_id": "gary-strand",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\gary-strand\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/f142690c-d3f8-4faf-97f5-ef0b4d707825.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/9f72ce2f-71c1-468d-a468-bd53bb8dc970.png",
+    "cost": null
+  },
+  {
+    "character_id": "karla-krest",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\karla-krest\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/e7e9300c-7ff0-49d8-986c-0a25bfa1c4bf.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/37cb8424-bb4b-44ec-8ea4-f1113dd4bb0d.png",
+    "cost": null
+  },
+  {
+    "character_id": "mira-vosk",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\mira-vosk\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/21478c74-2423-4533-b07c-9a1c089ea2c4.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/ab5e64af-88fc-453e-a3d1-77d7baa8c575.png",
+    "cost": null
+  },
+  {
+    "character_id": "felix-noire",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\felix-noire\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/5ccc2c06-422f-4b14-8d84-d6cd47783e5d.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/9d221948-de83-4167-b5dd-9d757f41acea.png",
+    "cost": null
+  },
+  {
+    "character_id": "olga-brandt",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\olga-brandt\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/172fd049-9cfc-49b6-b132-03716f196d4e.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/5518ebd9-a8a2-4cb8-8428-b4b17964dc9d.png",
+    "cost": null
+  },
+  {
+    "character_id": "cornelius-blatt",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\cornelius-blatt\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/71408b56-cb15-4b5c-a0eb-e26a989c0f39.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/21af4ed4-ee80-4235-b5b0-58f8f78c9c0f.png",
+    "cost": null
+  },
+  {
+    "character_id": "riley-carve",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\riley-carve\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/d3e007b9-8aba-4f1c-978f-c7f299f7471c.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/b460c1ca-c28a-4c04-8543-30278984c1c5.png",
+    "cost": null
+  },
+  {
+    "character_id": "reggie-kessler",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\reggie-kessler\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/1b1d9c60-9e28-4143-9709-d298f31029df.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/f2b43577-8b76-402f-bc69-4e5fb47cfdf0.png",
+    "cost": null
+  },
+  {
+    "character_id": "benji-ford",
+    "variant": "canon",
+    "status": "ok",
+    "local_path": "docs\\brainrot\\assets\\benji-ford\\canon.png",
+    "raw_url": "https://im.runware.ai/image/os/w01d10/ws/3/ii/8bf7cba2-4d01-419e-b9fa-8052aaac6e95.jpg",
+    "final_url": "https://im.runware.ai/image/os/w01d10/ws/5/ii/7890763e-b2d0-4949-bba6-203e79fb9a77.png",
+    "cost": null
+  }
+]
