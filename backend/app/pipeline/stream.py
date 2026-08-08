@@ -761,13 +761,38 @@ async def get_stream_urls(
             last_exc = exc
 
     # ── 3. All else failed — video-only chain as the final fallback ────
+    # get_stream_url()'s own internal chain only ever returns (url, user_agent)
+    # — even when one of its yt-dlp attempts happened to also resolve audio,
+    # that info is discarded. Rather than silently ship video-only clips,
+    # make ONE more explicit attempt at a separate audio stream via the
+    # dedicated audio resolver below before giving up on audio entirely.
     logger.warning(f"[{video_id}] yt-dlp + all InnerTube clients failed ({last_exc}); falling back to video-only chain")
     video_url, user_agent = await get_stream_url(video_id, quality, session_id)
-    return video_url, None, user_agent
+
+    audio_url = None
+    try:
+        audio_url = await get_audio_stream_url(video_id, session_id, proxy_override=proxy_override)
+        logger.info(f"[{video_id}] Video-only fallback still recovered a separate audio stream")
+    except Exception as audio_exc:
+        logger.warning(f"[{video_id}] Could not resolve audio for video-only fallback ({audio_exc}) — proceeding video-only")
+
+    return video_url, audio_url, user_agent
 
 
-async def get_audio_stream_url(video_id: str, session_id: str | None = None) -> str:
-    """Audio-only stream URL — used by testing.py Lab."""
+async def get_audio_stream_url(
+    video_id: str,
+    session_id: str | None = None,
+    proxy_override: str | None = None,
+) -> str:
+    """Audio-only stream URL — used by testing.py Lab, and as get_stream_urls's
+    last-resort audio attempt when its own video+audio resolution chain is
+    fully exhausted (see step 3 above).
+
+    proxy_override: when set, use this proxy for every attempt instead of a
+    fresh DataImpulse IP per client — keeps this call consistent with
+    whatever proxy resolved the paired video URL (see get_stream_urls'
+    proxy_override docstring for why that matters for IP-bound CDN URLs).
+    """
     # 1. Look up job-specific cache first
     if session_id:
         job_cache_key = f"{video_id}:audio:{session_id}"
@@ -786,10 +811,10 @@ async def get_audio_stream_url(video_id: str, session_id: str | None = None) -> 
         else:
             logger.info(f"[{video_id}] ignoring global audio cache: URL is IP-bound")
 
-    # 3. Resolve — fresh IP per client attempt
+    # 3. Resolve — fresh IP per client attempt (unless proxy_override pins one)
     for client_name in ["ANDROID", "TV", "IOS"]:
         try:
-            proxy = get_dataimpulse_proxy(purpose=f"stream-audio-{client_name}")
+            proxy = proxy_override or get_dataimpulse_proxy(purpose=f"stream-audio-{client_name}")
             data = await call_player_api(video_id, client_name=client_name, send_params=True, proxy_url=proxy)
             url = _pick_best_audio_stream(data)
             if url:
