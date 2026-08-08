@@ -155,6 +155,48 @@ async def get_transcript(video_id: str, language: str = "en", session_id: str | 
     )
 
 
+async def get_transcript_with_retries(
+    video_id: str,
+    language: str = "en",
+    session_id: str | None = None,
+    max_retries: int = 2,
+) -> list[TranscriptEntry]:
+    """
+    Resilient wrapper around get_transcript() for the main job pipeline.
+
+    Retries the FULL 3-method fallback chain up to `max_retries` additional
+    times (so up to 1 + max_retries attempts total) on transient failures —
+    proxy blips, rate limits, etc. Skips remaining retries immediately once
+    a video is confirmed to have transcripts disabled outright; that's a
+    permanent state, retrying just burns time for the same result.
+
+    Never raises: returns an empty list if every attempt is exhausted,
+    letting the caller fall back to random (non-transcript-driven) clip
+    selection (see ai_clipper.find_random_clips) instead of failing the
+    whole job over one missing/broken transcript.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(1 + max_retries):
+        try:
+            return await get_transcript(video_id, language=language, session_id=session_id)
+        except Exception as e:
+            last_exc = e
+            logger.warning(
+                f"[{video_id}] Transcript fetch attempt {attempt + 1}/{1 + max_retries} failed: {e}"
+            )
+            if "transcripts disabled" in str(e).lower():
+                logger.warning(f"[{video_id}] Transcripts disabled — skipping remaining retries")
+                break
+            if attempt < max_retries:
+                await asyncio.sleep(2.0 * (attempt + 1))
+
+    logger.error(
+        f"[{video_id}] Transcript unavailable after retries ({last_exc}) — "
+        f"proceeding without transcript (random clip selection)"
+    )
+    return []
+
+
 # ── Method 1: youtube-transcript-api + proxy-cheap ────────────
 
 class _VideoUnavailableError(Exception):

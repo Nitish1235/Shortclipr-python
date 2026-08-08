@@ -27,6 +27,7 @@ Flow:
 import asyncio
 import json
 import logging
+import random
 from dataclasses import dataclass
 from typing import Any
 
@@ -571,6 +572,71 @@ def find_sequential_clips(
             caption_preview=preview[:200],
         ))
         cursor = end
+
+    return clips
+
+
+def find_random_clips(
+    video_duration: float,
+    options:        dict,
+) -> list[ClipTimestamp]:
+    """
+    No-transcript fallback: when transcript fetching fails entirely (see
+    transcript.get_transcript_with_retries — a video with no captions at
+    all, or every fetch method blocked), there's no text for GPT to score
+    or for boundaries to snap to. Instead of failing the job, divide the
+    job's allowed video window (options['gateway_start']/['gateway_end'],
+    same window find_viral_clips would have used) into `clip_count` equal
+    time buckets and pick ONE randomly-placed, randomly-durationed clip per
+    bucket — same "one pick per time-bucket" spread as find_viral_clips's
+    per-chunk approach, just without any transcript-driven scoring.
+
+    Clips ship with no burned-in captions (get_clip_captions has no
+    transcript text to search) and viral_score=0 — unscored, not
+    comparable to AI-scored clips from a normal run.
+    """
+    clip_count = max(1, int(options.get("clip_count", 10)))
+    min_dur    = float(options.get("min_duration", 30))
+    max_dur    = float(options.get("max_duration", 90))
+
+    window_start = max(0.0, float(options.get("gateway_start", 0.0) or 0.0))
+    window_end   = float(options.get("gateway_end", 0.0) or 0.0)
+    window_end   = min(video_duration, window_end) if window_end > 0 else video_duration
+    span = window_end - window_start
+
+    if span < min_dur:
+        logger.warning(
+            f"Random-clip fallback: window too short ({span:.1f}s < min_duration {min_dur:.0f}s)"
+        )
+        return []
+
+    bucket_size = span / clip_count
+    clips: list[ClipTimestamp] = []
+
+    for i in range(clip_count):
+        bucket_start = window_start + i * bucket_size
+        bucket_end   = window_start + (i + 1) * bucket_size
+
+        # Random duration within [min_dur, max_dur], but never wider than
+        # this bucket (leaves room for a random start point within it) and
+        # never past the actual video end.
+        dur = random.uniform(min_dur, max_dur)
+        dur = min(dur, bucket_end - bucket_start, video_duration - bucket_start)
+        if dur < min_dur * 0.5:
+            continue  # bucket too small to fit anything worthwhile
+
+        latest_start = bucket_end - dur
+        start = bucket_start if latest_start <= bucket_start else random.uniform(bucket_start, latest_start)
+        end = min(start + dur, video_duration)
+
+        clips.append(ClipTimestamp(
+            start=start,
+            end=end,
+            title=f"Clip {i + 1}",
+            viral_score=0,
+            reason="No transcript was available for this video — a random segment was selected (AI scoring skipped).",
+            caption_preview="",
+        ))
 
     return clips
 

@@ -26,9 +26,9 @@ import logging
 
 from app.core.plan_limits import get_max_video_minutes
 from app.db import supabase as db
-from app.pipeline.ai_clipper import find_viral_clips
+from app.pipeline.ai_clipper import find_random_clips, find_viral_clips
 from app.pipeline.stream import extract_video_id, get_stream_urls, get_video_metadata
-from app.pipeline.transcript import get_transcript
+from app.pipeline.transcript import get_transcript_with_retries
 from app.pipeline.transcript_cleanup import clean_transcript
 
 logger = logging.getLogger(__name__)
@@ -214,7 +214,7 @@ async def _execute_api_stage(
     language = options.get("language", "English")
     quality  = options.get("quality",  "1080p")
     transcript, (stream_url, audio_url, user_agent) = await asyncio.gather(
-        get_transcript(video_id, language=language, session_id=job_id),
+        get_transcript_with_retries(video_id, language=language, session_id=job_id),
         get_stream_urls(video_id, quality=quality, session_id=job_id),
     )
 
@@ -244,13 +244,24 @@ async def _execute_api_stage(
     await db.update_job_progress(job_id, 12, "Cleaning up transcript...")
     transcript = await clean_transcript(transcript, video_id=job_id)
 
-    # ── STEP 5: AI finds viral moments ─────────────────────────────
-    await db.update_job_progress(job_id, 18, "AI analyzing best moments...")
-    timestamps = await find_viral_clips(transcript, options)
-    if not timestamps:
-        raise RuntimeError("AI found no suitable clip moments in this video")
+    # ── STEP 5: Clip selection — AI (transcript available) or random fallback ──
+    # transcript is [] here only after get_transcript_with_retries exhausted
+    # every method + retry — a video with no captions at all, or every fetch
+    # path blocked. GPT can't score or boundary-snap without transcript text,
+    # so fall back to randomly-placed clips across the job's allowed window
+    # instead of failing the job outright.
+    if transcript:
+        await db.update_job_progress(job_id, 18, "AI analyzing best moments...")
+        timestamps = await find_viral_clips(transcript, options)
+    else:
+        logger.warning(f"[{job_id}] No transcript available — selecting random clips instead")
+        await db.update_job_progress(job_id, 18, "No transcript found — selecting highlights...")
+        timestamps = find_random_clips(metadata["duration"], options)
 
-    logger.info(f"[{job_id}] AI found {len(timestamps)} clips")
+    if not timestamps:
+        raise RuntimeError("Could not find any suitable clip moments in this video")
+
+    logger.info(f"[{job_id}] {'AI' if transcript else 'Random (no transcript)'} found {len(timestamps)} clips")
 
     # ── STEP 6: Hand off to FFmpeg stage ───────────────────────────
     # ffmpeg_payload is the entire state the FFmpeg stage needs to run
