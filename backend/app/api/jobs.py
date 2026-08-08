@@ -78,7 +78,7 @@ class JobOptions(BaseModel):
     title_color:     str = "white"      # title TEXT colour — independent of caption `color`
     title_bg:        str = "none"       # title background box — "none" (default) | swatch key
     title_bg_opacity: float = 0.55      # 0.0-1.0, only used when title_bg != "none"
-    short_template:  str = "crop_fill"  # 9:16 layout template
+    short_template:  str = "full_screen"  # 9:16 layout template
     bar_color:       str = "#0d0d0d"    # hex colour for bars / frame / gradient
     aspect:          str = "9:16"       # output aspect ratio — 9:16 | 16:9 | 1:1
     topic:           str = ""
@@ -153,7 +153,7 @@ class JobOptions(BaseModel):
     @field_validator("short_template")
     @classmethod
     def validate_short_template(cls, v: str) -> str:
-        return v if v in VALID_TEMPLATES else "crop_fill"
+        return v if v in VALID_TEMPLATES else "full_screen"
 
     @field_validator("bar_color")
     @classmethod

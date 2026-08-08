@@ -153,7 +153,7 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
     h_align          = options.get("h_align",         "center")
     v_align          = options.get("v_align",         "bottom")
     words_per_line   = options.get("words_per_line",  3)
-    short_template   = options.get("short_template",  "crop_fill")
+    short_template   = options.get("short_template",  "full_screen")
     title_permanent  = options.get("title_permanent",  False)
     hook_title_enabled = options.get("hook_title_enabled", True)
     font             = options.get("font",            "default")

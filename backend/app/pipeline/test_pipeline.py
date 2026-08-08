@@ -35,7 +35,7 @@ from app.pipeline.uploader import cleanup_job_files, process_and_upload_clip
 logger = logging.getLogger(__name__)
 
 SEGMENT_DURATION  = 30
-DEFAULT_TEMPLATE  = "crop_fill"
+DEFAULT_TEMPLATE  = "full_screen"
 DEFAULT_STYLE     = "minimal"
 TOTAL_CLIPS       = len(VALID_STYLES) + len(VALID_TEMPLATES)
 

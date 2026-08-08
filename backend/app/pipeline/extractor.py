@@ -74,14 +74,14 @@ settings = get_settings()
 # ── Public constants ───────────────────────────────────────────
 
 VALID_TEMPLATES = [
-    "crop_fill",     # Full-fill crop — video fills entire frame (default)
+    "crop_fill",     # Full-fill crop — video fills entire frame, blurred strips
     "blur_bg",       # Blur background
     "zoom_blur",     # Heavy zoom + blur
     "glass",         # Glassmorphism
     "color_bars",    # Solid coloured bars — merged: subsumes the old
                      # "gradient"/"cinema"/"neon_frame" (near-identical bar
                      # looks, pick the look via bar_color, e.g. black = cinema)
-    "full_screen",   # True full-screen — face-tracked crop, no bars, 100% fill
+    "full_screen",   # True full-screen — face-tracked crop, no bars, 100% fill (default)
     # "gameplay",    # Portrait top 30 % / full bottom 70 % — temporarily disabled, will rework
 ]
 
@@ -1167,7 +1167,7 @@ async def reframe_and_caption(
     input_path: Path,
     raw_output_path: Path,
     captioned_output_path: Path,
-    template: str = "crop_fill",
+    template: str = "full_screen",
     bar_color: str = "#0d0d0d",
     zoom_beats: list[float] | None = None,
     aspect: str = "9:16",
@@ -1226,7 +1226,7 @@ async def reframe_and_caption(
 
     Returns (raw_output_path, captioned_output_path) on success.
     """
-    tpl = template if template in VALID_TEMPLATES else "crop_fill"
+    tpl = template if template in VALID_TEMPLATES else "full_screen"
     asp = aspect if aspect in VALID_ASPECTS else "9:16"
     width, height = ASPECT_DIMENSIONS[asp]
 
