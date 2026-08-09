@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     ADMIN_EMAILS: str = ""   # comma-separated admin email list, e.g. "you@gmail.com,other@gmail.com"
     PORT: int = 8080
     LOG_LEVEL: str = "INFO"
-    FRONTEND_URL: str = "http://localhost:5173"
+    FRONTEND_URL: str = "https://shortclipr.com"
 
     # ── Supabase ───────────────────────────────────────────────
     SUPABASE_DB_URL: str = ""  # postgresql://postgres:password@db.<project>.supabase.co:5432/postgres
