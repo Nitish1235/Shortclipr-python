@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import AppLayout, { SIDEBAR_W } from '../components/AppLayout'
 import ClipEngine from '../components/ClipEngine'
 import FeedbackModal from '../components/FeedbackModal'
+import SocialProofModal from '../components/SocialProofModal'
 import { YTLogo, TTLogo } from '../components/PlatformLogos'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
@@ -101,6 +102,7 @@ export default function Dashboard() {
   // just for showing the right button/lock state without an extra fetch).
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
   const [feedbackJobId, setFeedbackJobId]         = useState(null)
+  const [showSocialProofModal, setShowSocialProofModal] = useState(false)
   const [feedbackReward, setFeedbackReward]       = useState(() => {
     const jobId = localStorage.getItem('sc_feedback_reward_job_id')
     return jobId ? { jobId, clipId: localStorage.getItem('sc_feedback_reward_clip_id') || null } : null
@@ -1372,11 +1374,17 @@ export default function Dashboard() {
             localStorage.setItem('sc_feedback_reward_job_id', feedbackJobId)
             setFeedbackReward({ jobId: feedbackJobId, clipId: null })
             setShowFeedbackModal(false)
+            setShowSocialProofModal(true)
             const token = localStorage.getItem('sc_token')
             if (token) fetchUser(token)
             showToast('Thanks! A free download is unlocked for this job 🎁')
           }}
         />
+      )}
+
+      {/* ── Social proof, shown right after feedback submission ── */}
+      {showSocialProofModal && (
+        <SocialProofModal onClose={() => setShowSocialProofModal(false)} />
       )}
 
       {/* ── Upgrade Modal ── */}
