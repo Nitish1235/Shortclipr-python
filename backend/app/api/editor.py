@@ -288,10 +288,8 @@ async def download_clip(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
-    _require_plan(user)
-
     rows = await db._fetch(
-        "SELECT video_url, user_id FROM clips WHERE clip_id=$1",
+        "SELECT video_url, user_id, job_id FROM clips WHERE clip_id=$1",
         clip_id,
     )
     if not rows:
@@ -300,6 +298,24 @@ async def download_clip(
     clip = rows[0]
     if str(clip["user_id"]) != payload.sub:
         raise HTTPException(status_code=403, detail="Access denied")
+
+    # Free-plan users can still download here if they've submitted the
+    # post-queue feedback survey (see feedback.py) and this clip is either
+    # the one job_feedback's reward is scoped to (still unused) or the
+    # SAME clip they already used it on (idempotent re-download). Any
+    # other free-plan attempt falls through to the normal paid-plan gate.
+    if user.get("plan", "free") == "free":
+        feedback = await db.get_user_feedback(payload.sub)
+        reward_available = (
+            feedback is not None
+            and str(feedback["job_id"]) == str(clip["job_id"])
+            and (feedback["reward_clip_id"] is None or str(feedback["reward_clip_id"]) == clip_id)
+        )
+        if reward_available:
+            if feedback["reward_clip_id"] is None:
+                await db.consume_feedback_reward(str(feedback["feedback_id"]), clip_id)
+        else:
+            _require_plan(user)
 
     filename = f"ShortClipr_{clip_id.split('-')[0]}.mp4"
 

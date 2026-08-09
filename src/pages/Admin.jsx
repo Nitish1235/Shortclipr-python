@@ -190,6 +190,68 @@ function JobClips({ jobId, onAddToShowcase }) {
   )
 }
 
+const FEEDBACK_LABELS = {
+  source:       'Where they found us',
+  visit_reason: 'Why they\'re here',
+  blocker:      'What\'s stopping them from buying',
+}
+
+function JobFeedback({ jobId }) {
+  const [feedback, setFeedback] = useState(undefined) // undefined = loading, null = none
+  useEffect(() => {
+    setFeedback(undefined)
+    authFetch(`/admin/jobs/${jobId}/feedback`)
+      .then(r => r.json()).then(d => setFeedback(d.feedback || null))
+      .catch(() => setFeedback(null))
+  }, [jobId])
+
+  if (feedback === undefined) return <div style={{ color: '#aaa', padding: '12px', fontSize: '0.82rem' }}>Loading feedback…</div>
+  if (!feedback) return (
+    <div style={{ ...card, background: '#fafafa', color: '#aaa', fontSize: '0.82rem', textAlign: 'center', padding: '18px' }}>
+      No feedback submitted for this job.
+    </div>
+  )
+
+  return (
+    <div style={{ ...card, background: '#faf5ff', border: '1px solid #e9d5ff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+        <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#111' }}>📝 Feedback response</span>
+        <span style={badge('#7c3aed', '#f5f3ff')}>{new Date(feedback.created_at).toLocaleString()}</span>
+        {feedback.reward_clip_id && (
+          <span style={badge('#16a34a', '#f0fdf4')}>🎁 Reward used</span>
+        )}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: feedback.comment ? '14px' : 0 }}>
+        {['source', 'visit_reason', 'blocker'].map(key => {
+          const val = feedback[key]
+          const other = feedback[`${key}_other`]
+          if (!val) return null
+          return (
+            <div key={key}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' }}>
+                {FEEDBACK_LABELS[key]}
+              </div>
+              <div style={{ fontSize: '0.85rem', color: '#111', fontWeight: 600 }}>
+                {val}{val === 'Other' && other ? `: ${other}` : ''}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      {feedback.comment && (
+        <div>
+          <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>
+            Comment
+          </div>
+          <div style={{ fontSize: '0.83rem', color: '#333', lineHeight: 1.5, fontStyle: 'italic' }}>
+            "{feedback.comment}"
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function GcsClipBrowser() {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(false)
@@ -852,8 +914,8 @@ export default function Admin() {
                   <div key={job.job_id} style={{ ...card }}>
                     {/* Job header */}
                     <div
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: job.status === 'completed' ? 'pointer' : 'default', flexWrap: 'wrap', gap: '10px' }}
-                      onClick={() => job.status === 'completed' && setExpandedJob(expandedJob === job.job_id ? null : job.job_id)}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: (job.status === 'completed' || job.feedback_count > 0) ? 'pointer' : 'default', flexWrap: 'wrap', gap: '10px' }}
+                      onClick={() => (job.status === 'completed' || job.feedback_count > 0) && setExpandedJob(expandedJob === job.job_id ? null : job.job_id)}
                     >
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '3px' }}>
@@ -865,23 +927,29 @@ export default function Admin() {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         {statusBadge(job.status)}
-                        {job.status === 'completed' && (
+                        {job.feedback_count > 0 && <span style={badge('#7c3aed', '#f5f3ff')}>📝 Feedback</span>}
+                        {(job.status === 'completed' || job.feedback_count > 0) && (
                           <span style={{ fontSize: '0.78rem', color: '#cf1322', fontWeight: 600 }}>
-                            {expandedJob === job.job_id ? '▲ Hide' : '▼ View clips'}
+                            {expandedJob === job.job_id ? '▲ Hide' : '▼ View'}
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {/* Expanded clip list */}
-                    {expandedJob === job.job_id && job.status === 'completed' && (
+                    {/* Expanded clip list + feedback */}
+                    {expandedJob === job.job_id && (job.status === 'completed' || job.feedback_count > 0) && (
                       <div style={{ borderTop: '1px solid #f0f0f0', marginTop: '14px' }}>
-                        <JobClips
-                          jobId={job.job_id}
-                          onAddToShowcase={(payload) => {
-                            handleAddToShowcase(payload)
-                          }}
-                        />
+                        {job.status === 'completed' && (
+                          <JobClips
+                            jobId={job.job_id}
+                            onAddToShowcase={(payload) => {
+                              handleAddToShowcase(payload)
+                            }}
+                          />
+                        )}
+                        <div style={{ marginTop: job.status === 'completed' ? '14px' : 0 }}>
+                          <JobFeedback jobId={job.job_id} />
+                        </div>
                       </div>
                     )}
                   </div>

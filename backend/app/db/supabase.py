@@ -356,6 +356,63 @@ async def get_showcased_clip_ids_for_job(job_id: str) -> list[str]:
     return [str(r["clip_id"]) for r in rows]
 
 
+# ── Post-queue feedback survey (migration 007) ─────────────────
+
+async def has_submitted_feedback(user_id: str) -> bool:
+    """True if this user has already submitted the feedback survey —
+    UNIQUE(user_id) on job_feedback means at most one row ever exists."""
+    row = await _fetchrow("SELECT 1 FROM job_feedback WHERE user_id = $1", user_id)
+    return row is not None
+
+
+async def insert_job_feedback(
+    job_id: str,
+    user_id: str,
+    source: str | None,
+    source_other: str | None,
+    visit_reason: str | None,
+    visit_reason_other: str | None,
+    blocker: str | None,
+    blocker_other: str | None,
+    comment: str | None,
+) -> dict:
+    """Record a feedback submission. Raises asyncpg.UniqueViolationError if
+    this user already has one — callers should catch that and return a
+    friendly "already submitted" response rather than a raw 500."""
+    return await _fetchrow(
+        """
+        INSERT INTO job_feedback
+            (job_id, user_id, source, source_other, visit_reason,
+             visit_reason_other, blocker, blocker_other, comment)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING *
+        """,
+        job_id, user_id, source, source_other, visit_reason,
+        visit_reason_other, blocker, blocker_other, comment,
+    )
+
+
+async def get_user_feedback(user_id: str) -> dict | None:
+    """The single feedback row for this user, if they've submitted one —
+    used by the download endpoint to check for an unused reward."""
+    return await _fetchrow("SELECT * FROM job_feedback WHERE user_id = $1", user_id)
+
+
+async def get_feedback_for_job(job_id: str) -> dict | None:
+    """Feedback row for a job, if any — used by the admin panel."""
+    return await _fetchrow("SELECT * FROM job_feedback WHERE job_id = $1", job_id)
+
+
+async def consume_feedback_reward(feedback_id: str, clip_id: str) -> None:
+    """Mark this user's one-time free-download reward as used, pinned to
+    the specific clip they chose. Only fires once — see the download
+    endpoint's NULL check before calling this."""
+    await _execute(
+        "UPDATE job_feedback SET reward_clip_id = $1 WHERE feedback_id = $2",
+        clip_id, feedback_id,
+    )
+
+
 # ── User operations ───────────────────────────────────────────
 
 async def get_user(user_id: str) -> dict | None:

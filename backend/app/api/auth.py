@@ -91,6 +91,7 @@ async def google_auth(body: GoogleAuthRequest):
                 "plan": user.get("plan", "free"),
                 "credits_used": user.get("credits_used", 0),
                 "credits_limit": user.get("credits_limit", 1),
+                "has_submitted_feedback": await db.has_submitted_feedback(user_id),
             },
         )
     except HTTPException:
@@ -125,4 +126,5 @@ async def get_me(current_user: CurrentUser):
         "video_minutes_used":      vm_used,
         "video_minutes_limit":     vm_limit,
         "video_minutes_remaining": max(0, vm_limit - vm_used),
+        "has_submitted_feedback": await db.has_submitted_feedback(str(user["id"])),
     }

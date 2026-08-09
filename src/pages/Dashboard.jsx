@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppLayout, { SIDEBAR_W } from '../components/AppLayout'
 import ClipEngine from '../components/ClipEngine'
+import FeedbackModal from '../components/FeedbackModal'
 import { YTLogo, TTLogo } from '../components/PlatformLogos'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
@@ -63,7 +64,7 @@ const STATUS_COLOR = {
 }
 
 export default function Dashboard() {
-  const { user, logout } = useAuth()
+  const { user, logout, fetchUser } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -94,6 +95,16 @@ export default function Dashboard() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [upgradeReason, setUpgradeReason]       = useState('')
   const [toast, setToast]                       = useState(null) // { msg, type }
+
+  // Post-queue feedback survey — see FeedbackModal.jsx. Reward state
+  // mirrors what the backend enforces (server is authoritative; this is
+  // just for showing the right button/lock state without an extra fetch).
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false)
+  const [feedbackJobId, setFeedbackJobId]         = useState(null)
+  const [feedbackReward, setFeedbackReward]       = useState(() => {
+    const jobId = localStorage.getItem('sc_feedback_reward_job_id')
+    return jobId ? { jobId, clipId: localStorage.getItem('sc_feedback_reward_clip_id') || null } : null
+  })
 
   const activeSseJobs = useRef(new Set())
   const clipPollRef   = useRef(null)
@@ -297,17 +308,34 @@ export default function Dashboard() {
   }
 
   // ── Download ───────────────────────────────────────────────────
-  const doDownload = (clipId) => {
+  // Free-plan users normally can't download — but if they submitted the
+  // post-queue feedback survey, one clip from THAT job is unlocked. This
+  // mirrors the server-side check in editor.py's download endpoint (which
+  // is the actual enforcement point); it just keeps the button state
+  // honest without a separate fetch.
+  const canFreeDownload = (clip) => {
+    if (!feedbackReward || !currentJob) return false
+    if (String(feedbackReward.jobId) !== String(currentJob.job_id)) return false
+    const clipId = String(clip.clip_id || clip.id)
+    return !feedbackReward.clipId || String(feedbackReward.clipId) === clipId
+  }
+
+  const doDownload = (clipId, isFreeReward) => {
     const token = localStorage.getItem('sc_token')
     const a = document.createElement('a')
     a.href = `${API_BASE}/clips/${clipId}/download?token=${token}`
     a.download = `ShortClipr_${clipId.split('-')[0]}.mp4`
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    if (isFreeReward && !feedbackReward.clipId) {
+      localStorage.setItem('sc_feedback_reward_clip_id', clipId)
+      setFeedbackReward(r => ({ ...r, clipId }))
+    }
   }
   const handleSingleDownload = (e, clip) => {
     e.stopPropagation()
-    if (!isPaid) { navigate('/billing'); return }
-    doDownload(clip.clip_id || clip.id)
+    const clipId = clip.clip_id || clip.id
+    if (!isPaid && !canFreeDownload(clip)) { navigate('/billing'); return }
+    doDownload(clipId, !isPaid && canFreeDownload(clip))
   }
   const handleBulkDownload = async () => {
     if (!isPaid) { navigate('/billing'); return }
@@ -647,7 +675,14 @@ export default function Dashboard() {
             </button>
             {showGeneratePanel && (
               <div style={{ padding:'16px 18px' }}>
-                <ClipEngine onJobCreated={() => { fetchJobs(); setShowGeneratePanel(false) }} />
+                <ClipEngine onJobCreated={(jobId) => {
+                  fetchJobs()
+                  setShowGeneratePanel(false)
+                  if (jobId && !user?.has_submitted_feedback && !localStorage.getItem('sc_feedback_skipped')) {
+                    setFeedbackJobId(jobId)
+                    setShowFeedbackModal(true)
+                  }
+                }} />
               </div>
             )}
           </div>
@@ -1066,14 +1101,14 @@ export default function Dashboard() {
                             </div>
                             <button
                               onClick={e => handleSingleDownload(e, clip)}
-                              title={isPaid ? 'Download MP4' : 'Upgrade to download'}
+                              title={isPaid ? 'Download MP4' : canFreeDownload(clip) ? 'Download free (feedback reward)' : 'Upgrade to download'}
                               style={{
                                 padding:'5px 7px', borderRadius:7,
-                                border: isPaid ? '1px solid #e5e7eb' : '1px solid #cf1322',
-                                background: isPaid ? '#f9fafb' : '#fef2f2',
-                                color: isPaid ? '#374151' : '#cf1322', cursor:'pointer', fontSize:'.7rem',
+                                border: (isPaid || canFreeDownload(clip)) ? '1px solid #e5e7eb' : '1px solid #cf1322',
+                                background: (isPaid || canFreeDownload(clip)) ? '#f9fafb' : '#fef2f2',
+                                color: (isPaid || canFreeDownload(clip)) ? '#374151' : '#cf1322', cursor:'pointer', fontSize:'.7rem',
                               }}
-                            >{isPaid ? '⬇' : '💳'}</button>
+                            >{isPaid ? '⬇' : canFreeDownload(clip) ? '🎁' : '💳'}</button>
                           </div>
                         </div>
                       )
@@ -1293,13 +1328,13 @@ export default function Dashboard() {
                 </div>
 
                 {/* Download */}
-                <button onClick={e => { handleSingleDownload(e, modalClip); if (isPaid) closeModal() }} style={{
+                <button onClick={e => { handleSingleDownload(e, modalClip); if (isPaid || canFreeDownload(modalClip)) closeModal() }} style={{
                   width:'100%', padding:'9px', borderRadius:8,
-                  border: isPaid ? '1px solid #e5e7eb' : '1px solid #cf1322',
-                  background: isPaid ? '#111' : '#cf1322',
+                  border: (isPaid || canFreeDownload(modalClip)) ? '1px solid #e5e7eb' : '1px solid #cf1322',
+                  background: (isPaid || canFreeDownload(modalClip)) ? '#111' : '#cf1322',
                   color:'#fff',
                   fontSize:'.78rem', fontWeight:700, cursor:'pointer', textAlign:'center',
-                }}>{isPaid ? '⬇ Download MP4' : '💳 Upgrade to Download'}</button>
+                }}>{isPaid ? '⬇ Download MP4' : canFreeDownload(modalClip) ? '🎁 Free Download' : '💳 Upgrade to Download'}</button>
               </div>
             </div>
 
@@ -1323,6 +1358,25 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Post-queue feedback survey ── */}
+      {showFeedbackModal && feedbackJobId && (
+        <FeedbackModal
+          jobId={feedbackJobId}
+          onSkip={() => {
+            localStorage.setItem('sc_feedback_skipped', '1')
+            setShowFeedbackModal(false)
+          }}
+          onSubmitted={() => {
+            localStorage.setItem('sc_feedback_reward_job_id', feedbackJobId)
+            setFeedbackReward({ jobId: feedbackJobId, clipId: null })
+            setShowFeedbackModal(false)
+            const token = localStorage.getItem('sc_token')
+            if (token) fetchUser(token)
+            showToast('Thanks! A free download is unlocked for this job 🎁')
+          }}
+        />
       )}
 
       {/* ── Upgrade Modal ── */}

@@ -412,10 +412,11 @@ export default function ClipEngine({ onJobCreated }) {
         const e = await res.json()
         throw new Error(e.detail || 'Error submitting job')
       }
+      const created = await res.json()
       setProgress(20)
       setStatusMsg('Job queued! Redirecting to dashboard…')
       setTimeout(() => {
-        if (onJobCreated) onJobCreated()
+        if (onJobCreated) onJobCreated(created.job_id)
         if (window.location.pathname !== '/youtube-shorts/dashboard') navigate('/youtube-shorts/dashboard')
         else { setMode('input'); setUrl(''); setProcessing(false); setProgress(0) }
       }, 1800)

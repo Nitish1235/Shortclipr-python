@@ -191,7 +191,8 @@ async def admin_list_all_jobs(admin: AdminUser):
     try:
         rows = await db._fetch(
             """
-            SELECT j.*, u.email as user_email, u.full_name as user_name
+            SELECT j.*, u.email as user_email, u.full_name as user_name,
+                   (SELECT COUNT(*) FROM job_feedback f WHERE f.job_id = j.job_id) AS feedback_count
             FROM jobs j
             LEFT JOIN users u ON j.user_id = u.id
             ORDER BY j.created_at DESC
@@ -209,6 +210,13 @@ async def admin_get_job_clips(job_id: str, admin: AdminUser):
     """Admin: get all clips for any job."""
     clips = await db.get_clips_for_job(job_id)
     return {"clips": clips}
+
+
+@router.get("/admin/jobs/{job_id}/feedback")
+async def admin_get_job_feedback(job_id: str, admin: AdminUser):
+    """Admin: get the feedback survey response for a job, if any."""
+    feedback = await db.get_feedback_for_job(job_id)
+    return {"feedback": feedback}
 
 
 # ── ADMIN: Showcase management ────────────────────────────────
