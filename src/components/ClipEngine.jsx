@@ -187,7 +187,7 @@ const CLIP_COUNT_OPTIONS = [
 function LockableButton({ active, locked, label, sub, onClick }) {
   return (
     <button
-      onClick={locked ? () => alert('🔒 This option needs a paid plan. Free accounts get 3 clips per job, up to 60s each — upgrade to unlock more.') : onClick}
+      onClick={locked ? () => alert('🔒 This option needs a paid plan. Free accounts get 2 clips per job, up to 60s each — upgrade to unlock more.') : onClick}
       title={locked ? '🔒 Upgrade to a paid plan to unlock' : undefined}
       style={{
         flex:1, minWidth:'70px', padding:'8px 6px', borderRadius:'8px', textAlign:'center',
@@ -281,12 +281,16 @@ function MinutesGatewaySlider({ durationSeconds, value, onChange }) {
 
 export default function ClipEngine({ onJobCreated }) {
   const [url, setUrl]               = useState('')
-  const [mode, setMode]             = useState('input') // input | login | config | processing
+  const [mode, setMode]             = useState('input') // input | login | config | processing | paywall_library
   const [videoData, setVideoData]   = useState(null)
   const [processing, setProcessing] = useState(false)
   const [progress, setProgress]     = useState(0)
   const [statusMsg, setStatusMsg]   = useState('Analyzing video...')
   const [urlFocused, setUrlFocused] = useState(false)
+  
+  // Library Paywall State
+  const [libraryVideos, setLibraryVideos] = useState([])
+  const [loadingLibrary, setLoadingLibrary] = useState(false)
 
   // Config options
   const [lang,          setLang]          = useState('Auto / No translation')
@@ -367,6 +371,23 @@ export default function ClipEngine({ onJobCreated }) {
       setMode('login')
       return
     }
+
+    if (!isPaid) {
+        setMode('paywall_library')
+        setLoadingLibrary(true)
+        try {
+            const res = await fetch(`${API_BASE}/library`)
+            if (res.ok) {
+                const data = await res.json()
+                setLibraryVideos(data.videos || [])
+            }
+        } catch (e) {
+            console.error('Failed to fetch library', e)
+        }
+        setLoadingLibrary(false)
+        return
+    }
+
     setMode('processing')
     setProcessing(true)
     setProgress(5)
@@ -614,7 +635,7 @@ export default function ClipEngine({ onJobCreated }) {
               </div>
               {!isPaid && (
                 <p style={{ fontSize:'0.7rem', color:'#bbb', margin:'-2px 0 8px' }}>
-                  🔒 Free plan: 3 clips per job. <strong style={{ color:'#cf1322' }}>Upgrade</strong> for up to 10.
+                  🔒 Free plan: 2 clips per job. <strong style={{ color:'#cf1322' }}>Upgrade</strong> for up to 10.
                 </p>
               )}
 
@@ -998,6 +1019,137 @@ export default function ClipEngine({ onJobCreated }) {
         Keep this tab open. You'll be redirected automatically.
       </p>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  )
+
+  /* ── Paywall Library phase ── */
+  if (mode === 'paywall_library') return (
+    <div>
+      <div style={{
+        background:'#fff', border:'1.5px solid #e5e5e5',
+        borderRadius:'12px', padding:'40px 20px', textAlign:'center',
+        marginBottom: '32px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+      }}>
+        <div style={{ fontSize:'2.5rem', marginBottom:'16px' }}>🚀</div>
+        <h2 style={{ fontSize:'1.4rem', fontWeight:800, color:'#111', marginBottom:'12px', letterSpacing:'-0.02em' }}>
+          Upgrade to Generate Captivating Shorts
+        </h2>
+        <p style={{ fontSize:'0.9rem', color:'#666', marginBottom:'24px', maxWidth:'500px', margin:'0 auto 24px', lineHeight: 1.6 }}>
+          You've configured the perfect clip! <strong>Unlock our premium plans</strong> to generate your videos, apply trending captions, and grow your audience effortlessly.
+        </p>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '32px' }}>
+          <div style={{ border: '1.5px solid #e5e5e5', borderRadius: '12px', padding: '16px', textAlign: 'left' }}>
+             <div style={{ fontWeight: 800, fontSize: '1rem', color: '#111', marginBottom: '4px' }}>Starter</div>
+             <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#111', marginBottom: '12px' }}>$10<span style={{ fontSize: '0.8rem', color: '#666', fontWeight: 500}}>/mo</span></div>
+             <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.75rem', color: '#555', lineHeight: 1.8 }}>
+               <li>✓ 75 shorts/mo</li>
+               <li>✓ HD vertical exports</li>
+               <li>✓ MP4 download</li>
+             </ul>
+             <button onClick={() => navigate('/billing')} style={{ width: '100%', padding: '10px', background: '#111', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, marginTop: '16px', cursor: 'pointer', fontSize: '0.8rem' }}>Get Starter</button>
+          </div>
+          
+          <div style={{ border: '1.5px solid #e5e5e5', borderRadius: '12px', padding: '16px', textAlign: 'left' }}>
+             <div style={{ fontWeight: 800, fontSize: '1rem', color: '#111', marginBottom: '4px' }}>Starter+</div>
+             <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#111', marginBottom: '12px' }}>$25<span style={{ fontSize: '0.8rem', color: '#666', fontWeight: 500}}>/mo</span></div>
+             <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.75rem', color: '#555', lineHeight: 1.8 }}>
+               <li>✓ 200 shorts/mo</li>
+               <li>✓ Faster processing</li>
+               <li>✓ Clip editor</li>
+             </ul>
+             <button onClick={() => navigate('/billing')} style={{ width: '100%', padding: '10px', background: '#111', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, marginTop: '16px', cursor: 'pointer', fontSize: '0.8rem' }}>Get Starter+</button>
+          </div>
+
+           <div style={{ border: '2px solid #cf1322', borderRadius: '12px', padding: '16px', textAlign: 'left', position: 'relative', boxShadow: '0 4px 12px rgba(207,19,34,0.1)' }}>
+             <div style={{ position: 'absolute', top: '-10px', left: '50%', transform: 'translateX(-50%)', background: '#cf1322', color: '#fff', padding: '2px 10px', borderRadius: '100px', fontSize: '0.65rem', fontWeight: 700, whiteSpace: 'nowrap' }}>MOST POPULAR</div>
+             <div style={{ fontWeight: 800, fontSize: '1rem', color: '#111', marginBottom: '4px' }}>Pro</div>
+             <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#cf1322', marginBottom: '12px' }}>$45<span style={{ fontSize: '0.8rem', color: '#666', fontWeight: 500}}>/mo</span></div>
+             <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.75rem', color: '#555', lineHeight: 1.8 }}>
+               <li>✓ 400 shorts/mo</li>
+               <li>✓ Priority queue</li>
+               <li>✓ Batch download</li>
+             </ul>
+             <button onClick={() => navigate('/billing')} style={{ width: '100%', padding: '10px', background: '#cf1322', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, marginTop: '16px', cursor: 'pointer', fontSize: '0.8rem' }}>Get Pro</button>
+          </div>
+
+          <div style={{ border: '1.5px solid #e5e5e5', borderRadius: '12px', padding: '16px', textAlign: 'left' }}>
+             <div style={{ fontWeight: 800, fontSize: '1rem', color: '#111', marginBottom: '4px' }}>Pro+</div>
+             <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#111', marginBottom: '12px' }}>$79<span style={{ fontSize: '0.8rem', color: '#666', fontWeight: 500}}>/mo</span></div>
+             <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.75rem', color: '#555', lineHeight: 1.8 }}>
+               <li>✓ 800 shorts/mo</li>
+               <li>✓ Everything in Pro</li>
+               <li>✓ API access</li>
+             </ul>
+             <button onClick={() => navigate('/billing')} style={{ width: '100%', padding: '10px', background: '#111', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, marginTop: '16px', cursor: 'pointer', fontSize: '0.8rem' }}>Get Pro+</button>
+          </div>
+        </div>
+        
+        <button onClick={() => setMode('config')} style={{
+          background:'none', border:'none', cursor:'pointer',
+          fontSize:'0.85rem', color:'#aaa', textDecoration:'underline', fontWeight: 600
+        }}>← Back to Editor</button>
+      </div>
+
+      <div style={{ marginBottom: '24px' }}>
+        <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#111', marginBottom: '8px' }}>Latest Generated Clips</h3>
+        <p style={{ fontSize: '0.85rem', color: '#666' }}>See what's possible. These clips were generated by our users recently.</p>
+      </div>
+
+      {loadingLibrary ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#aaa', fontSize: '0.9rem' }}>
+           Loading library videos...
+        </div>
+      ) : libraryVideos.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#aaa', fontSize: '0.9rem', background: '#f9f9f9', borderRadius: '12px', border: '1px solid #e5e5e5' }}>
+           No clips to show yet. Be the first to generate!
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '20px' }}>
+            {libraryVideos.map((v) => (
+                <div key={v.id} style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                   <div style={{ position: 'relative', background: '#000', paddingTop: '177.77%' }}>
+                      <video 
+                        src={v.video_url} autoPlay loop muted playsInline poster={v.thumbnail_url}
+                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      <div style={{ position: 'absolute', bottom: '12px', left: '12px', background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                         👁 {v.views}
+                      </div>
+                      <div style={{ position: 'absolute', bottom: '12px', right: '12px', background: '#cf1322', color: '#fff', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                         💰 {v.earnings}
+                      </div>
+                   </div>
+                   <div style={{ padding: '16px' }}>
+                     <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {v.title}
+                     </div>
+                   </div>
+                </div>
+            ))}
+            
+            <div 
+              onClick={() => navigate('/billing')}
+              style={{ 
+                background: '#fafafa', border: '2px dashed #e5e5e5', borderRadius: '12px', 
+                overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                flexDirection: 'column', cursor: 'pointer', padding: '20px', textAlign: 'center', 
+                minHeight: '250px', transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#cf1322'; e.currentTarget.style.background = '#fef2f2' }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e5e5e5'; e.currentTarget.style.background = '#fafafa' }}
+            >
+                <div style={{ fontSize: '2rem', marginBottom: '12px' }}>✨</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#111', marginBottom: '8px' }}>+1,000s more clips</div>
+                <div style={{ fontSize: '0.85rem', color: '#666', lineHeight: 1.5 }}>
+                   Upgrade your plan right now to start generating unlimited viral shorts
+                </div>
+                <button style={{ background: '#cf1322', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700, marginTop: '20px', cursor: 'pointer' }}>
+                  View Plans
+                </button>
+            </div>
+        </div>
+      )}
     </div>
   )
 

@@ -170,6 +170,91 @@ def _delete_showcase_sync(blob_name: str) -> None:
     blob.delete()
 
 
+def _copy_to_library_sync(
+    source_blob_name: str,
+    title: str,
+    views: str,
+    earnings: str,
+    thumbnail_url: str,
+    source_video_url: str,
+    source_clip_id: str,
+    source_job_id: str,
+) -> dict:
+    client = _get_gcs_client()
+    bucket = client.bucket(settings.GCS_BUCKET_NAME)
+
+    library_id = str(uuid.uuid4())
+    dest_blob_name = f"library/{library_id}.mp4"
+
+    source_blob = bucket.blob(source_blob_name)
+    dest_blob = bucket.copy_blob(source_blob, bucket, dest_blob_name)
+
+    dest_blob.metadata = {
+        "library_id":     library_id,
+        "title":          title[:200],
+        "views":          views[:50],
+        "earnings":       earnings[:50],
+        "thumbnail_url":  thumbnail_url,
+        "added_at":       datetime.now(timezone.utc).isoformat(),
+        "source_clip_id": source_clip_id,
+        "source_job_id":  source_job_id,
+    }
+    dest_blob.patch()
+
+    return {
+        "id": library_id,
+        "video_url": dest_blob.public_url,
+        "thumbnail_url": thumbnail_url,
+        "title": title,
+        "views": views,
+        "earnings": earnings,
+        "added_at": dest_blob.metadata["added_at"],
+    }
+
+
+def _list_library_sync() -> list[dict]:
+    try:
+        client = _get_gcs_client()
+        bucket = client.bucket(settings.GCS_BUCKET_NAME)
+        blobs = list(bucket.list_blobs(prefix="library/"))
+        items = []
+        for blob in blobs:
+            if not blob.name.endswith(".mp4"):
+                continue
+            blob.reload()
+            meta = blob.metadata or {}
+            items.append({
+                "id":              meta.get("library_id", blob.name.split("/")[-1].replace(".mp4", "")),
+                "video_url":       blob.public_url,
+                "thumbnail_url":   meta.get("thumbnail_url", ""),
+                "title":           meta.get("title", "Generated Clip"),
+                "views":           meta.get("views", "89.3k views"),
+                "earnings":        meta.get("earnings", "$98"),
+                "added_at":        meta.get("added_at", ""),
+                "blob_name":       blob.name,
+                "source_clip_id":  meta.get("source_clip_id", ""),
+                "source_job_id":   meta.get("source_job_id",  ""),
+            })
+        items.sort(key=lambda x: x["added_at"], reverse=True)
+        return items
+    except Exception as e:
+        logger.error(f"Failed to list library from GCS: {e}")
+        return []
+
+def _delete_library_sync_and_get_source(blob_name: str) -> str:
+    client = _get_gcs_client()
+    bucket = client.bucket(settings.GCS_BUCKET_NAME)
+    blob = bucket.blob(blob_name)
+    try:
+        blob.reload()
+        source_clip_id = (blob.metadata or {}).get("source_clip_id", "") if blob.metadata else ""
+    except Exception:
+        source_clip_id = ""
+    blob.delete()
+    return source_clip_id
+
+
+
 # ── PUBLIC: Showcase for landing page ─────────────────────────
 
 @router.get("/showcase", tags=["public"])
@@ -180,6 +265,17 @@ async def get_showcase():
     """
     loop = asyncio.get_running_loop()
     items = await loop.run_in_executor(None, _list_showcase_sync)
+    return {"videos": items, "count": len(items)}
+
+
+@router.get("/library", tags=["public"])
+async def get_library():
+    """
+    PUBLIC endpoint — returns all library videos for the paywall page.
+    No auth required.
+    """
+    loop = asyncio.get_running_loop()
+    items = await loop.run_in_executor(None, _list_library_sync)
     return {"videos": items, "count": len(items)}
 
 
@@ -359,6 +455,78 @@ async def admin_delete_showcase(showcase_id: str, blob_name: str, admin: AdminUs
     logger.info(f"Admin {admin.email} deleted showcase: {blob_name} (source clip {source_clip_id or '?'})")
     return {"success": True}
 
+
+# ── ADMIN: Library management ────────────────────────────────
+
+class AddToLibraryRequest(BaseModel):
+    job_id: str
+    clip_id: str
+    title: str = "Generated Clip"
+    views: str = "89.3k views"
+    earnings: str = "$98"
+    video_url: str       # GCS URL of source clip
+    thumbnail_url: str = ""
+
+@router.post("/admin/library/add")
+async def admin_add_to_library(body: AddToLibraryRequest, admin: AdminUser):
+    prefix = f"https://storage.googleapis.com/{settings.GCS_BUCKET_NAME}/"
+    if not body.video_url.startswith(prefix):
+        raise HTTPException(status_code=400, detail="Video URL is not from our GCS bucket")
+
+    source_blob_name = body.video_url[len(prefix):]
+
+    loop = asyncio.get_running_loop()
+    try:
+        entry = await loop.run_in_executor(
+            None,
+            _copy_to_library_sync,
+            source_blob_name,
+            body.title,
+            body.views,
+            body.earnings,
+            body.thumbnail_url,
+            body.video_url,
+            body.clip_id,
+            body.job_id,
+        )
+    except Exception as e:
+        logger.error(f"Failed to add to library: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    try:
+        await db.mark_clip_showcased(body.clip_id)
+    except Exception as e:
+        logger.error(f"Marked library in GCS but failed to flag clip {body.clip_id}: {e}")
+
+    return {"success": True, "library_entry": entry}
+
+
+@router.get("/admin/library")
+async def admin_list_library(admin: AdminUser):
+    loop = asyncio.get_running_loop()
+    items = await loop.run_in_executor(None, _list_library_sync)
+    return {"videos": items, "count": len(items)}
+
+
+@router.delete("/admin/library/{library_id}")
+async def admin_delete_library(library_id: str, blob_name: str, admin: AdminUser):
+    if not blob_name.startswith("library/"):
+        raise HTTPException(status_code=400, detail="Invalid blob name")
+    loop = asyncio.get_running_loop()
+    try:
+        source_clip_id = await loop.run_in_executor(
+            None, _delete_library_sync_and_get_source, blob_name,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if source_clip_id:
+        try:
+            await db.unmark_clip_showcased(source_clip_id)
+        except Exception as e:
+            logger.error(f"Deleted library blob but failed to unflag clip {source_clip_id}: {e}")
+
+    return {"success": True}
 
 # ── ADMIN: Test Lab — GCS clip browser ─────────────────────────
 

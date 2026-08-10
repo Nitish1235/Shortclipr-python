@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Logo from '../components/Logo'
+import BrainrotAdminPanel from './brainrot/BrainrotAdminPanel'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
@@ -132,10 +133,69 @@ function ShowcaseManager({ showcaseVideos, onDelete, onRefresh }) {
   )
 }
 
-function JobClips({ jobId, onAddToShowcase }) {
+function LibraryManager({ libraryVideos, onDelete, onRefresh }) {
+  const [deleting, setDeleting] = useState(null)
+  const [editId,   setEditId]   = useState(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editViews, setEditViews] = useState('')
+  const [editEarnings, setEditEarnings] = useState('')
+
+  const handleDelete = async (v) => {
+    setDeleting(v.id)
+    const r = await authFetch(`/admin/library/${v.id}?blob_name=${encodeURIComponent(v.blob_name)}`, { method: 'DELETE' })
+    setDeleting(null)
+    if (r.ok) onRefresh()
+  }
+
+  // we are not adding an update endpoint for library metadata for now, to keep it simple, but we could. For now it's mostly static adding.
+
+  if (!libraryVideos.length) return (
+    <div style={{ textAlign: 'center', padding: '32px', color: '#aaa' }}>
+      <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📭</div>
+      <p>No library videos yet. Add clips from the job list below.</p>
+    </div>
+  )
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '14px' }}>
+      {libraryVideos.map(v => (
+        <div key={v.id} style={{ ...card, padding: '0', overflow: 'hidden', position: 'relative' }}>
+          <div style={{ position: 'relative', background: '#111' }}>
+            <video
+              src={v.video_url} muted autoPlay loop playsInline
+              poster={v.thumbnail_url}
+              style={{ width: '100%', aspectRatio: '9/16', objectFit: 'cover', display: 'block' }}
+            />
+            <div style={{ position: 'absolute', top: '8px', left: '8px', ...badge('#16a34a', '#f0fdf4') }}>
+              👁 {v.views}
+            </div>
+            <div style={{ position: 'absolute', top: '8px', right: '8px', ...badge('#cf1322', '#fef2f2') }}>
+              💰 {v.earnings}
+            </div>
+          </div>
+          <div style={{ padding: '10px 12px' }}>
+            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#111', marginBottom: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {v.title || 'Untitled clip'}
+            </div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button onClick={() => handleDelete(v)} disabled={deleting === v.id}
+                style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '5px 10px', fontSize: '0.72rem', fontWeight: 600, color: '#cf1322', cursor: 'pointer', flex: 1 }}>
+                {deleting === v.id ? '…' : '🗑 Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+
+function JobClips({ jobId, onAddToShowcase, onAddToLibrary }) {
   const [clips, setClips] = useState([])
   const [loading, setLoading] = useState(false)
-  const [added, setAdded] = useState(new Set())
+  const [addedShowcase, setAddedShowcase] = useState(new Set())
+  const [addedLibrary, setAddedLibrary] = useState(new Set())
 
   useEffect(() => {
     setLoading(true)
@@ -157,11 +217,11 @@ function JobClips({ jobId, onAddToShowcase }) {
               🔥 {c.viral_score}/100
             </div>
           </div>
-          <div style={{ padding: '8px 10px' }}>
+          <div style={{ padding: '8px 10px', display: 'flex', gap: '6px', flexDirection: 'column' }}>
             <button
-              disabled={added.has(c.id || c.clip_id)}
+              disabled={addedShowcase.has(c.id || c.clip_id)}
               onClick={() => {
-                setAdded(s => new Set([...s, c.id || c.clip_id]))
+                setAddedShowcase(s => new Set([...s, c.id || c.clip_id]))
                 onAddToShowcase({
                   job_id: jobId,
                   clip_id: c.clip_id || c.id,
@@ -173,15 +233,41 @@ function JobClips({ jobId, onAddToShowcase }) {
               }}
               style={{
                 width: '100%',
-                background: added.has(c.id || c.clip_id) ? '#f0fdf4' : '#cf1322',
-                color: added.has(c.id || c.clip_id) ? '#16a34a' : '#fff',
-                border: added.has(c.id || c.clip_id) ? '1px solid #bbf7d0' : '2px solid #111',
+                background: addedShowcase.has(c.id || c.clip_id) ? '#f0fdf4' : '#cf1322',
+                color: addedShowcase.has(c.id || c.clip_id) ? '#16a34a' : '#fff',
+                border: addedShowcase.has(c.id || c.clip_id) ? '1px solid #bbf7d0' : '2px solid #111',
                 borderRadius: '7px', padding: '7px', fontWeight: 700, fontSize: '0.75rem',
-                cursor: added.has(c.id || c.clip_id) ? 'default' : 'pointer',
-                boxShadow: added.has(c.id || c.clip_id) ? 'none' : '1px 1px 0 #111',
+                cursor: addedShowcase.has(c.id || c.clip_id) ? 'default' : 'pointer',
+                boxShadow: addedShowcase.has(c.id || c.clip_id) ? 'none' : '1px 1px 0 #111',
               }}
             >
-              {added.has(c.id || c.clip_id) ? '✓ Added to Showcase' : '+ Add to Showcase'}
+              {addedShowcase.has(c.id || c.clip_id) ? '✓ Added to Showcase' : '+ Add to Showcase'}
+            </button>
+            <button
+              disabled={addedLibrary.has(c.id || c.clip_id)}
+              onClick={() => {
+                setAddedLibrary(s => new Set([...s, c.id || c.clip_id]))
+                onAddToLibrary({
+                  job_id: jobId,
+                  clip_id: c.clip_id || c.id,
+                  title: c.title || 'ShortClipr Clip',
+                  views: (Math.random() * 90 + 10).toFixed(1) + 'k views',
+                  earnings: '$' + Math.floor(Math.random() * 900 + 100),
+                  video_url: c.video_url,
+                  thumbnail_url: c.thumbnail_url || '',
+                })
+              }}
+              style={{
+                width: '100%',
+                background: addedLibrary.has(c.id || c.clip_id) ? '#f0fdf4' : '#111',
+                color: addedLibrary.has(c.id || c.clip_id) ? '#16a34a' : '#fff',
+                border: addedLibrary.has(c.id || c.clip_id) ? '1px solid #bbf7d0' : '2px solid #333',
+                borderRadius: '7px', padding: '7px', fontWeight: 700, fontSize: '0.75rem',
+                cursor: addedLibrary.has(c.id || c.clip_id) ? 'default' : 'pointer',
+                boxShadow: addedLibrary.has(c.id || c.clip_id) ? 'none' : '1px 1px 0 #cf1322',
+              }}
+            >
+              {addedLibrary.has(c.id || c.clip_id) ? '✓ Added to Library' : '+ Add to Library'}
             </button>
           </div>
         </div>
@@ -716,9 +802,11 @@ export default function Admin() {
   const [tab, setTab]         = useState('showcase') // showcase | jobs | generate
   const [jobs, setJobs]       = useState([])
   const [showcase, setShowcase] = useState([])
+  const [library, setLibrary] = useState([])
   const [expandedJob, setExpandedJob] = useState(null)
   const [loadingJobs, setLoadingJobs] = useState(false)
   const [loadingShowcase, setLoadingShowcase] = useState(false)
+  const [loadingLibrary, setLoadingLibrary] = useState(false)
   const [toast, setToast]     = useState({ msg: '', type: 'success' })
 
   // Generate clip state
@@ -738,6 +826,14 @@ export default function Admin() {
     setLoadingShowcase(false)
   }
 
+  const fetchLibrary = async () => {
+    setLoadingLibrary(true)
+    const r = await authFetch('/admin/library')
+    const d = await r.json()
+    setLibrary(d.videos || [])
+    setLoadingLibrary(false)
+  }
+
   const fetchJobs = async () => {
     setLoadingJobs(true)
     try {
@@ -748,7 +844,7 @@ export default function Admin() {
     setLoadingJobs(false)
   }
 
-  useEffect(() => { fetchShowcase() }, [])
+  useEffect(() => { fetchShowcase(); fetchLibrary(); }, [])
   useEffect(() => { if (tab === 'jobs') fetchJobs() }, [tab])
 
   const handleAddToShowcase = async (payload) => {
@@ -756,6 +852,17 @@ export default function Admin() {
     if (r.ok) {
       showToast('Clip added to showcase!')
       fetchShowcase()
+    } else {
+      const e = await r.json().catch(() => ({}))
+      showToast(e.detail || 'Failed to add clip', 'error')
+    }
+  }
+
+  const handleAddToLibrary = async (payload) => {
+    const r = await authFetch('/admin/library/add', { method: 'POST', body: JSON.stringify(payload) })
+    if (r.ok) {
+      showToast('Clip added to library!')
+      fetchLibrary()
     } else {
       const e = await r.json().catch(() => ({}))
       showToast(e.detail || 'Failed to add clip', 'error')
@@ -833,9 +940,11 @@ export default function Admin() {
         }}>
           {[
             { key: 'showcase', label: '🎬 Showcase'  },
+            { key: 'library',  label: '📚 Library'   },
             { key: 'jobs',     label: '📋 All Jobs'  },
             { key: 'generate', label: '⚡ Generate'  },
             { key: 'testlab',  label: '🧪 Test Lab'  },
+            { key: 'brainrot', label: '🧠 Brainrot'  },
             { key: 'email',    label: '📧 Email'     },
           ].map(t => (
             <button key={t.key} onClick={() => setTab(t.key)} style={tabStyle(tab === t.key)}>
@@ -878,6 +987,42 @@ export default function Admin() {
                 showcaseVideos={showcase}
                 onDelete={fetchShowcase}
                 onRefresh={fetchShowcase}
+              />
+            )}
+          </div>
+        )}
+
+        {/* ── Library tab ── */}
+        {tab === 'library' && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div>
+                <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111' }}>Paywall Library</h2>
+                <p style={{ fontSize: '0.78rem', color: '#999', marginTop: '2px' }}>
+                  These clips appear to free users when they attempt to generate clips, showing what's possible with a paid plan.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ ...badge('#16a34a', '#f0fdf4') }}>{library.length} videos</span>
+                <button onClick={fetchLibrary} style={{ ...btnOutline, fontSize: '0.75rem', padding: '6px 12px' }}>
+                  🔄 Refresh
+                </button>
+                <button onClick={() => setTab('jobs')} style={{ ...btnRed, padding: '8px 16px', fontSize: '0.78rem', boxShadow: '2px 2px 0 #111' }}>
+                  + Add from Jobs →
+                </button>
+              </div>
+            </div>
+
+            {loadingLibrary ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#aaa', padding: '20px' }}>
+                <div style={{ width: '18px', height: '18px', border: '2px solid #fecaca', borderTopColor: '#cf1322', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}/>
+                Loading library…
+              </div>
+            ) : (
+              <LibraryManager
+                libraryVideos={library}
+                onDelete={fetchLibrary}
+                onRefresh={fetchLibrary}
               />
             )}
           </div>
@@ -944,6 +1089,9 @@ export default function Admin() {
                             jobId={job.job_id}
                             onAddToShowcase={(payload) => {
                               handleAddToShowcase(payload)
+                            }}
+                            onAddToLibrary={(payload) => {
+                              handleAddToLibrary(payload)
                             }}
                           />
                         )}
@@ -1012,6 +1160,11 @@ export default function Admin() {
         {/* ── Email tab ── */}
         {tab === 'email' && (
           <EmailBroadcast showToast={showToast} />
+        )}
+
+        {/* ── Brainrot tab ── */}
+        {tab === 'brainrot' && (
+          <BrainrotAdminPanel showToast={showToast} />
         )}
 
         {/* ── Test Lab tab ── */}
