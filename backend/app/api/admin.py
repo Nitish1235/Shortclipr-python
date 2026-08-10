@@ -276,6 +276,9 @@ async def get_library():
     """
     loop = asyncio.get_running_loop()
     items = await loop.run_in_executor(None, _list_library_sync)
+    # Remove direct video URLs to prevent free users from downloading via inspect.
+    for i in items:
+        i.pop('video_url', None)
     return {"videos": items, "count": len(items)}
 
 
