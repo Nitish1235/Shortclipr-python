@@ -2,7 +2,19 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Logo from '../components/Logo'
-import BrainrotAdminPanel from './brainrot/BrainrotAdminPanel'
+// TODO: replace with real import once brainrot is deployed:
+//   import BrainrotAdminPanel from './brainrot/BrainrotAdminPanel'
+function BrainrotAdminPanel() {
+  return (
+    <div style={{ textAlign: 'center', padding: '60px 20px', color: '#aaa' }}>
+      <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🧠</div>
+      <div style={{ fontWeight: 700, fontSize: '1rem', color: '#111', marginBottom: '8px' }}>Brainrot — Not Yet Deployed</div>
+      <p style={{ fontSize: '0.85rem', maxWidth: '400px', margin: '0 auto' }}>
+        The Brainrot feature is under active development. Deploy the brainrot module and swap this stub with the real import to enable it.
+      </p>
+    </div>
+  )
+}
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
