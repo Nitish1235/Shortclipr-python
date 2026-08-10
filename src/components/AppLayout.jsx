@@ -217,11 +217,47 @@ export default function AppLayout({ children }) {
     } catch {}
   }
 
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Close sidebar when navigating on mobile
+  useEffect(() => {
+    setSidebarOpen(false)
+  }, [location.pathname])
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <div className="app-layout" style={{ display: 'flex', minHeight: '100vh', width: '100vw', overflowX: 'hidden' }}>
+
+      {/* ══ Mobile Header (Hamburger) ════════════════════════════ */}
+      <div className="mobile-header" style={{
+        display: 'none', // Default hidden, shown via CSS on mobile
+        alignItems: 'center', justifyContent: 'space-between',
+        padding: '12px 20px', background: '#0c0c0c', color: '#fff',
+        position: 'sticky', top: 0, zIndex: 400
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Logo size={24} />
+          <div style={{ fontSize: '.9rem', fontWeight: 700, letterSpacing: '-.01em' }}>ShortClipr</div>
+        </div>
+        <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{
+          background: 'transparent', border: 'none', color: '#fff', fontSize: '1.5rem', cursor: 'pointer', padding: 0
+        }}>
+          {sidebarOpen ? '✕' : '☰'}
+        </button>
+      </div>
+
+      {/* ══ Sidebar Overlay ══════════════════════════════════════ */}
+      {sidebarOpen && (
+        <div 
+          className="sidebar-overlay"
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 299
+          }} 
+        />
+      )}
 
       {/* ══ Sidebar ══════════════════════════════════════════════ */}
-      <aside style={{
+      <aside className={`app-sidebar ${sidebarOpen ? 'open' : ''}`} style={{
         width: SIDEBAR_W, flexShrink: 0,
         background: '#0c0c0c',
         display: 'flex', flexDirection: 'column',
@@ -229,10 +265,12 @@ export default function AppLayout({ children }) {
         zIndex: 300,
         borderRight: '1px solid rgba(255,255,255,.07)',
         overflow: 'hidden',
+        height: '100vh',
+        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
       }}>
 
         {/* Brand */}
-        <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid rgba(255,255,255,.06)' }}>
+        <div className="sidebar-brand" style={{ padding: '18px 16px 14px', borderBottom: '1px solid rgba(255,255,255,.06)' }}>
           <Link to="/youtube-shorts" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
             <span style={{ flexShrink: 0, display: 'flex' }}><Logo size={28} /></span>
             <div>
@@ -367,13 +405,14 @@ export default function AppLayout({ children }) {
       </aside>
 
       {/* ══ Main content ══════════════════════════════════════════ */}
-      <div style={{
+      <div className="main-content" style={{
         flex: 1,
-        marginLeft: SIDEBAR_W,
         minHeight: '100vh',
         background: '#f7f8fa',
         display: 'flex',
         flexDirection: 'column',
+        width: '100%',
+        transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
       }}>
         {children}
       </div>

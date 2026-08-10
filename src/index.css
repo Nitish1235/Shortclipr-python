@@ -49,15 +49,32 @@ h1,h2,h3,h4,h5 { line-height: 1.2; letter-spacing: -0.04em; font-weight: 700; co
 .fade-in { animation: fadeIn 0.5s ease-out forwards; }
 
 /* Global helper classes for JS components */
+@media (min-width: 769px) {
+  .main-content { margin-left: 228px !important; }
+}
+
 @media (max-width: 768px) {
-  /* Fix layout structures that might exist inline. */
   .app-layout { flex-direction: column !important; }
-  .app-sidebar { 
-    width: 100% !important; 
-    height: auto !important; 
-    position: relative !important; 
-    border-right: none !important; 
-    border-bottom: 1px solid var(--border); 
+  .mobile-header { display: flex !important; }
+  
+  /* Sliding off-canvas drawer for mobile */
+  .app-sidebar {
+    width: 260px !important;
+    height: 100vh !important;
+    position: fixed !important;
+    top: 0; left: 0;
+    transform: translateX(-100%);
+    z-index: 1000 !important;
+    border-right: 1px solid rgba(255,255,255,0.1) !important;
+    background: #0c0c0c !important;
+  }
+  
+  .app-sidebar.open {
+    transform: translateX(0) !important;
+  }
+  
+  .main-content {
+    margin-left: 0 !important;
   }
 }
 
