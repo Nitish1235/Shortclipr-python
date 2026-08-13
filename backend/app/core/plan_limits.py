@@ -25,7 +25,11 @@ cap beyond the global default already enforced by JobOptions validators":
 #
 #  Plan           $/mo   Shorts  Monthly hrs  Per-video max
 #  ─────────────────────────────────────────────────────────
-#  free             $0      3      30 min        30 min
+#  free             $0      2      30 min        30 min
+#  starter_30      $19     30    10 hrs (600)   2 hrs (120)
+#  growth_100      $39    100    30 hrs (1800)  3 hrs (180)
+#  unlimited       $99   ∞/999K 100 hrs (6000)  6 hrs (360)
+#  ── legacy slider tiers (kept for existing subscribers) ──
 #  starter_100     $10     75    5 hrs (300)    2 hrs (120)
 #  starter_250     $25    200   10 hrs (600)    2 hrs (120)
 #  pro_500         $45    400   18 hrs (1080)   3 hrs (180)
@@ -35,19 +39,43 @@ cap beyond the global default already enforced by JobOptions validators":
 #  pro     (leg.)   —   ∞/999K 60 hrs (3600)   6 hrs (360)
 # ─────────────────────────────────────────────────────────────────
 
+# Sentinel used for "unlimited" clip/credit plans. Not truly infinite — a large
+# int keeps every downstream `credits_limit - credits_used` comparison working
+# without special-casing None everywhere.
+UNLIMITED_CREDITS = 999999
+
 PLAN_LIMITS: dict[str, dict] = {
     "free": {
-        # credits_limit = 3, matching max_clip_count = 3: a free user gets
-        # exactly one 3-clip job per month (credits are reserved per clip
+        # credits_limit = 2, matching max_clip_count = 2: a free user gets
+        # exactly one 2-clip job per month (credits are reserved per clip
         # requested and refunded for any that fail — see reserve_credits /
         # release_credits in db/supabase.py), then blocked until reset.
-        "credits_limit":       3,
+        "credits_limit":       2,
         "video_minutes_limit": 30,    # 30 min/month total
         "max_video_minutes":   30,    # 30 min max single video
-        "max_clip_count":               3,    # only 3 clips per job
+        "max_clip_count":               2,    # only 2 clips per job
         "max_clip_duration_seconds":    60,   # no clip longer than 60s
         "max_transcript_minutes_for_ai": 10,  # GPT only sees first 10 min
     },
+
+    # ── Current pricing (3 tiers) ─────────────────────────────
+    "starter_30": {
+        "credits_limit":       30,
+        "video_minutes_limit": 600,   # 10 hrs/month
+        "max_video_minutes":   120,   # 2 hrs max single video
+    },
+    "growth_100": {
+        "credits_limit":       100,
+        "video_minutes_limit": 1800,  # 30 hrs/month
+        "max_video_minutes":   180,   # 3 hrs max single video
+    },
+    "unlimited": {
+        "credits_limit":       UNLIMITED_CREDITS,   # effectively unlimited clips
+        "video_minutes_limit": 6000,  # 100 hrs/month
+        "max_video_minutes":   360,   # 6 hrs max single video
+    },
+
+    # ── Legacy slider tiers (kept for existing subscribers) ───
     "starter_100": {
         "credits_limit":       75,
         "video_minutes_limit": 300,   # 5 hrs/month

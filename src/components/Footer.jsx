@@ -26,6 +26,18 @@ const COLS = [
     ],
   },
   {
+    title: 'Guides',
+    links: [
+      { label: 'Long Videos → Shorts',   href: '/youtube-shorts/guides/how-to-turn-long-videos-into-shorts' },
+      { label: 'Make Shorts Go Viral',   href: '/youtube-shorts/guides/how-to-make-youtube-shorts-go-viral' },
+      { label: 'Best Caption Styles',    href: '/youtube-shorts/guides/best-caption-styles-for-short-form-video' },
+      { label: 'Repurpose a Podcast',    href: '/youtube-shorts/guides/how-to-repurpose-a-podcast-into-clips' },
+      { label: 'Shorts vs TikTok vs Reels', href: '/youtube-shorts/guides/youtube-shorts-vs-tiktok-vs-reels' },
+      { label: 'AI Clipping Explained',  href: '/youtube-shorts/guides/ai-video-clipping-explained' },
+      { label: 'All guides →',           href: '/youtube-shorts/guides' },
+    ],
+  },
+  {
     title: 'Compare',
     links: [
       { label: 'vs Opus Clip',      href: '/youtube-shorts/alternatives/opus-clip'    },

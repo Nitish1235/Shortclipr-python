@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Logo from '../components/Logo'
 // TODO: replace with real import once brainrot is deployed:
-//   import BrainrotAdminPanel from './brainrot/BrainrotAdminPanel'
+import BrainrotAdminPanel from './brainrot/BrainrotAdminPanel'
 function BrainrotAdminPanel() {
   return (
     <div style={{ textAlign: 'center', padding: '60px 20px', color: '#aaa' }}>
@@ -28,7 +28,7 @@ const authFetch = (url, opts = {}) =>
   })
 
 // ── Styles ─────────────────────────────────────────────────────
-const card  = { background: '#fff', border: '1px solid #e5e5e5', borderRadius: '12px', padding: '20px' }
+const card = { background: '#fff', border: '1px solid #e5e5e5', borderRadius: '12px', padding: '20px' }
 const badge = (color = '#cf1322', bg = '#fef2f2') => ({
   display: 'inline-flex', alignItems: 'center', gap: '5px',
   background: bg, border: `1px solid ${color}40`, borderRadius: '100px',
@@ -67,7 +67,7 @@ function Toast({ msg, type }) {
 
 function ShowcaseManager({ showcaseVideos, onDelete, onRefresh }) {
   const [deleting, setDeleting] = useState(null)
-  const [editId,   setEditId]   = useState(null)
+  const [editId, setEditId] = useState(null)
   const [editTitle, setEditTitle] = useState('')
   const [editScore, setEditScore] = useState(0)
 
@@ -116,7 +116,7 @@ function ShowcaseManager({ showcaseVideos, onDelete, onRefresh }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
                   style={{ border: '1px solid #e5e5e5', borderRadius: '6px', padding: '6px 8px', fontSize: '0.78rem', outline: 'none' }}
-                  onFocus={e => e.target.style.borderColor='#cf1322'} onBlur={e => e.target.style.borderColor='#e5e5e5'}
+                  onFocus={e => e.target.style.borderColor = '#cf1322'} onBlur={e => e.target.style.borderColor = '#e5e5e5'}
                 />
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button onClick={() => handleSaveMeta(v)} style={{ ...btnRed, padding: '5px 10px', fontSize: '0.72rem', flex: 1, boxShadow: '1px 1px 0 #111' }}>Save</button>
@@ -147,7 +147,7 @@ function ShowcaseManager({ showcaseVideos, onDelete, onRefresh }) {
 
 function LibraryManager({ libraryVideos, onDelete, onRefresh }) {
   const [deleting, setDeleting] = useState(null)
-  const [editId,   setEditId]   = useState(null)
+  const [editId, setEditId] = useState(null)
   const [editTitle, setEditTitle] = useState('')
   const [editViews, setEditViews] = useState('')
   const [editEarnings, setEditEarnings] = useState('')
@@ -224,7 +224,7 @@ function JobClips({ jobId, onAddToShowcase, onAddToLibrary }) {
         <div key={c.id || c.clip_id} style={{ ...card, padding: '0', overflow: 'hidden' }}>
           <div style={{ position: 'relative' }}>
             <video src={c.video_url} muted controls poster={c.thumbnail_url}
-              style={{ width: '100%', aspectRatio: '9/16', objectFit: 'cover', display: 'block' }}/>
+              style={{ width: '100%', aspectRatio: '9/16', objectFit: 'cover', display: 'block' }} />
             <div style={{ position: 'absolute', top: '6px', left: '6px', ...badge('#f59e0b', 'rgba(0,0,0,0.7)'), color: '#fff' }}>
               🔥 {c.viral_score}/100
             </div>
@@ -289,9 +289,9 @@ function JobClips({ jobId, onAddToShowcase, onAddToLibrary }) {
 }
 
 const FEEDBACK_LABELS = {
-  source:       'Where they found us',
+  source: 'Where they found us',
   visit_reason: 'Why they\'re here',
-  blocker:      'What\'s stopping them from buying',
+  blocker: 'What\'s stopping them from buying',
 }
 
 function JobFeedback({ jobId }) {
@@ -351,9 +351,9 @@ function JobFeedback({ jobId }) {
 }
 
 function GcsClipBrowser() {
-  const [data, setData]       = useState(null)
+  const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
+  const [error, setError] = useState('')
 
   const check = async () => {
     setLoading(true)
@@ -424,9 +424,9 @@ function GcsClipBrowser() {
 }
 
 function TestLabGenerator({ showToast }) {
-  const [url, setUrl]         = useState('')
-  const [jobId, setJobId]     = useState(null)
-  const [job, setJob]         = useState(null)
+  const [url, setUrl] = useState('')
+  const [jobId, setJobId] = useState(null)
+  const [job, setJob] = useState(null)
   const [starting, setStarting] = useState(false)
 
   useEffect(() => {
@@ -530,13 +530,13 @@ function TestLabGenerator({ showToast }) {
 }
 
 function EmailBroadcast({ showToast }) {
-  const [mode, setMode]           = useState('subscribers')
-  const [query, setQuery]         = useState("SELECT email FROM users WHERE plan != 'free'")
+  const [mode, setMode] = useState('subscribers')
+  const [query, setQuery] = useState("SELECT email FROM users WHERE plan != 'free'")
   const [recipients, setRecipients] = useState(null)
   const [loadingRecipients, setLoadingRecipients] = useState(false)
-  const [subject, setSubject]     = useState('')
-  const [htmlBody, setHtmlBody]   = useState('')
-  const [sending, setSending]     = useState(false)
+  const [subject, setSubject] = useState('')
+  const [htmlBody, setHtmlBody] = useState('')
+  const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState(null)
   const [previewMode, setPreviewMode] = useState(false)
 
@@ -794,7 +794,7 @@ function ShortCard({ clip, label }) {
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#666', fontSize: '0.78rem' }}>
-            <div style={{ width: '18px', height: '18px', border: '2px solid #333', borderTopColor: '#cf1322', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}/>
+            <div style={{ width: '18px', height: '18px', border: '2px solid #333', borderTopColor: '#cf1322', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
           </div>
         )}
       </div>
@@ -811,18 +811,18 @@ export default function Admin() {
   const { user } = useAuth()
   const navigate = useNavigate()
 
-  const [tab, setTab]         = useState('showcase') // showcase | jobs | generate
-  const [jobs, setJobs]       = useState([])
+  const [tab, setTab] = useState('showcase') // showcase | jobs | generate
+  const [jobs, setJobs] = useState([])
   const [showcase, setShowcase] = useState([])
   const [library, setLibrary] = useState([])
   const [expandedJob, setExpandedJob] = useState(null)
   const [loadingJobs, setLoadingJobs] = useState(false)
   const [loadingShowcase, setLoadingShowcase] = useState(false)
   const [loadingLibrary, setLoadingLibrary] = useState(false)
-  const [toast, setToast]     = useState({ msg: '', type: 'success' })
+  const [toast, setToast] = useState({ msg: '', type: 'success' })
 
   // Generate clip state
-  const [genUrl, setGenUrl]   = useState('')
+  const [genUrl, setGenUrl] = useState('')
   const [genLoading, setGenLoading] = useState(false)
 
   const showToast = (msg, type = 'success') => {
@@ -892,10 +892,10 @@ export default function Admin() {
   // Status badge helper
   const statusBadge = (status) => {
     const map = {
-      completed:  ['#16a34a', '#f0fdf4'],
+      completed: ['#16a34a', '#f0fdf4'],
       processing: ['#cf1322', '#fef2f2'],
-      queued:     ['#ca8a04', '#fefce8'],
-      failed:     ['#dc2626', '#fef2f2'],
+      queued: ['#ca8a04', '#fefce8'],
+      failed: ['#dc2626', '#fef2f2'],
     }
     const [color, bg] = map[status] || ['#666', '#f4f4f4']
     return <span style={{ ...badge(color, bg), textTransform: 'capitalize' }}>{status}</span>
@@ -920,7 +920,7 @@ export default function Admin() {
         position: 'sticky', top: 0, zIndex: 100,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Logo size={28}/>
+          <Logo size={28} />
           <span style={{ fontWeight: 800, fontSize: '0.9rem', color: '#111' }}>ShortClipr</span>
           <span style={{ ...badge('#cf1322'), marginLeft: '4px' }}>⚡ Admin</span>
         </div>
@@ -951,13 +951,13 @@ export default function Admin() {
           marginBottom: '24px',
         }}>
           {[
-            { key: 'showcase', label: '🎬 Showcase'  },
-            { key: 'library',  label: '📚 Library'   },
-            { key: 'jobs',     label: '📋 All Jobs'  },
-            { key: 'generate', label: '⚡ Generate'  },
-            { key: 'testlab',  label: '🧪 Test Lab'  },
-            { key: 'brainrot', label: '🧠 Brainrot'  },
-            { key: 'email',    label: '📧 Email'     },
+            { key: 'showcase', label: '🎬 Showcase' },
+            { key: 'library', label: '📚 Library' },
+            { key: 'jobs', label: '📋 All Jobs' },
+            { key: 'generate', label: '⚡ Generate' },
+            { key: 'testlab', label: '🧪 Test Lab' },
+            { key: 'brainrot', label: '🧠 Brainrot' },
+            { key: 'email', label: '📧 Email' },
           ].map(t => (
             <button key={t.key} onClick={() => setTab(t.key)} style={tabStyle(tab === t.key)}>
               {t.label}
@@ -991,7 +991,7 @@ export default function Admin() {
 
             {loadingShowcase ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#aaa', padding: '20px' }}>
-                <div style={{ width: '18px', height: '18px', border: '2px solid #fecaca', borderTopColor: '#cf1322', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}/>
+                <div style={{ width: '18px', height: '18px', border: '2px solid #fecaca', borderTopColor: '#cf1322', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                 Loading showcase…
               </div>
             ) : (
@@ -1027,7 +1027,7 @@ export default function Admin() {
 
             {loadingLibrary ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#aaa', padding: '20px' }}>
-                <div style={{ width: '18px', height: '18px', border: '2px solid #fecaca', borderTopColor: '#cf1322', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}/>
+                <div style={{ width: '18px', height: '18px', border: '2px solid #fecaca', borderTopColor: '#cf1322', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                 Loading library…
               </div>
             ) : (
@@ -1057,7 +1057,7 @@ export default function Admin() {
 
             {loadingJobs ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#aaa', padding: '20px' }}>
-                <div style={{ width: '18px', height: '18px', border: '2px solid #fecaca', borderTopColor: '#cf1322', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}/>
+                <div style={{ width: '18px', height: '18px', border: '2px solid #fecaca', borderTopColor: '#cf1322', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                 Loading jobs…
               </div>
             ) : !jobs.length ? (
@@ -1156,8 +1156,8 @@ export default function Admin() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginTop: '20px' }}>
               {[
                 { label: 'Showcase videos', val: showcase.length, icon: '🎬' },
-                { label: 'Total jobs',       val: jobs.length,   icon: '📋' },
-                { label: 'Avg viral score',  val: showcase.length ? Math.round(showcase.reduce((s, v) => s + v.viral_score, 0) / showcase.length) : '—', icon: '🔥' },
+                { label: 'Total jobs', val: jobs.length, icon: '📋' },
+                { label: 'Avg viral score', val: showcase.length ? Math.round(showcase.reduce((s, v) => s + v.viral_score, 0) / showcase.length) : '—', icon: '🔥' },
               ].map(s => (
                 <div key={s.label} style={{ ...card, textAlign: 'center', padding: '16px' }}>
                   <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>{s.icon}</div>

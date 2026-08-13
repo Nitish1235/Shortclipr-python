@@ -58,8 +58,16 @@ DB_URL: str = _required("SUPABASE_DB_URL")
 API_WORKERS:    list[dict] = _parse_workers("API_WORKER_URLS",    "API_WORKER_REGIONS")
 FFMPEG_WORKERS: list[dict] = _parse_workers("FFMPEG_WORKER_URLS", "FFMPEG_WORKER_REGIONS")
 
-API_REGION_SOFT_CAP:    int = _int("API_REGION_SOFT_CAP",    12)
-FFMPEG_REGION_SOFT_CAP: int = _int("FFMPEG_REGION_SOFT_CAP", 1)
+# Dedicated brainrot FFmpeg pool — compositing runs here, isolated from
+# the main FFMPEG_WORKERS so a heavy YouTube Shorts encode never blocks
+# a brainrot render (and vice versa). If BRAINROT_WORKER_URLS is not set,
+# brainrot FFmpeg jobs fall back to the main FFMPEG_WORKERS pool.
+_BRAINROT_WORKERS_RAW: list[dict] = _parse_workers("BRAINROT_WORKER_URLS", "BRAINROT_WORKER_REGIONS")
+BRAINROT_WORKERS: list[dict] = _BRAINROT_WORKERS_RAW or FFMPEG_WORKERS
+
+API_REGION_SOFT_CAP:      int = _int("API_REGION_SOFT_CAP",      12)
+FFMPEG_REGION_SOFT_CAP:   int = _int("FFMPEG_REGION_SOFT_CAP",   1)
+BRAINROT_REGION_SOFT_CAP: int = _int("BRAINROT_REGION_SOFT_CAP", 4)
 
 # ── Legacy unified pool (WORKER_SERVICE_URLS) ──────────────────
 LEGACY_WORKERS: list[dict] = _parse_workers("WORKER_SERVICE_URLS", "WORKER_SERVICE_REGIONS")

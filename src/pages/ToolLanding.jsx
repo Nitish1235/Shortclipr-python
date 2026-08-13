@@ -22,7 +22,7 @@ export default function ToolLanding() {
       operatingSystem: 'Web',
       url: `${SITE}${path}`,
       description: data.metaDescription,
-      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD', description: 'Free plan — 3 clips, no credit card' },
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD', description: 'Free plan — 2 clips, no credit card' },
     },
     {
       '@context': 'https://schema.org',

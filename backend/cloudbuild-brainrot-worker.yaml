@@ -1,0 +1,73 @@
+substitutions:
+  # Cloud Run deploy region — pass via --substitutions _REGION=us-east1 on
+  # the trigger for each additional region. Image is always built/pushed to
+  # the SAME us-central1 Artifact Registry repo regardless of deploy region.
+  _REGION: 'us-central1'
+  _CPU: '4'
+  _MAX_INSTANCES: '5'
+
+steps:
+  # ── 1. Build image ──────────────────────────────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:latest'
+      - './backend'
+
+  # ── 2. Push both tags to Artifact Registry ─────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker'
+
+  # ── 3. Deploy Brainrot worker to Cloud Run ─────────────────────────────────
+  # shortclipr-brainrot-worker-$_REGION handles the Brainrot pipeline stage:
+  #   /internal/brainrot-stage/run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'shortclipr-brainrot-worker-$_REGION'
+      - '--image'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA'
+      - '--region'
+      - '$_REGION'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--port'
+      - '8080'
+
+      # ── Resources ────────────────────────────────────────────────────────
+      - '--memory'
+      - '8Gi'
+      - '--cpu'
+      - '$_CPU'
+      - '--cpu-boost'
+      - '--no-cpu-throttling'
+
+      # ── Timeout ──────────────────────────────────────────────────────────
+      - '--timeout'
+      - '1500'
+
+      # ── Concurrency ──────────────────────────────────────────────────────
+      - '--concurrency'
+      - '1'
+
+      # ── Scaling ──────────────────────────────────────────────────────────
+      - '--min-instances'
+      - '0'
+      - '--max-instances'
+      - '$_MAX_INSTANCES'
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-worker:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

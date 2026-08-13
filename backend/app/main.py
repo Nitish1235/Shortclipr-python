@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from app.api import admin_email, admin_marketing, auth, editor, admin, feedback, internal, jobs, payments, social, webhooks, youtube
+from app.api import admin_email, admin_marketing, auth, brainrot, editor, admin, feedback, internal, jobs, payments, social, webhooks, youtube
 from app.core.config import get_settings
 
 
@@ -115,6 +115,7 @@ app.add_middleware(
 # ── Routers ────────────────────────────────────────────────────
 app.include_router(auth.router)
 app.include_router(jobs.router)
+app.include_router(brainrot.router)
 app.include_router(payments.router)
 app.include_router(youtube.router)
 app.include_router(webhooks.router)

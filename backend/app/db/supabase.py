@@ -263,6 +263,196 @@ async def update_job_metadata(job_id: str, video_title: str, video_duration: int
     )
 
 
+# ── Brainrot job operations ─────────────────────────────────────
+# Parallel to the `jobs` functions above but scoped to `brainrot_jobs` — kept
+# separate rather than parameterizing the existing functions by table name,
+# since the two tables' columns diverge (payload/scene_plan vs.
+# queue_payload/ffmpeg_payload) and mixing them would make both harder to read.
+
+async def insert_brainrot_job(user_id: str, payload: dict) -> dict:
+    row = await _fetchrow(
+        """
+        INSERT INTO brainrot_jobs (user_id, payload)
+        VALUES ($1, $2::jsonb)
+        RETURNING job_id, user_id, status, progress, created_at
+        """,
+        user_id, payload,
+    )
+    return row
+
+
+async def get_brainrot_job(job_id: str) -> dict | None:
+    return await _fetchrow("SELECT * FROM brainrot_jobs WHERE job_id=$1", job_id)
+
+
+async def list_brainrot_jobs(user_id: str, limit: int = 50) -> list[dict]:
+    return await _fetch(
+        "SELECT * FROM brainrot_jobs WHERE user_id=$1 ORDER BY created_at DESC LIMIT $2",
+        user_id, limit,
+    )
+
+
+async def update_brainrot_job_progress(
+    job_id: str, progress: int, current_step: str, status: str = "processing",
+) -> None:
+    await _execute(
+        """
+        UPDATE brainrot_jobs
+        SET status=$1, progress=$2, current_step=$3, updated_at=$4
+        WHERE job_id=$5
+        """,
+        status, progress, current_step, _now(), job_id,
+    )
+    logger.info(f"Brainrot job {job_id} → {progress}% [{current_step}]")
+
+
+async def set_brainrot_scene_plan(job_id: str, scene_plan: list[dict]) -> None:
+    await _execute(
+        "UPDATE brainrot_jobs SET scene_plan=$1::jsonb, updated_at=$2 WHERE job_id=$3",
+        scene_plan, _now(), job_id,
+    )
+
+
+async def set_job_api_done_brainrot(job_id: str) -> None:
+    """API stage finished for a brainrot job. Sets status to api_done to trigger FFmpeg dispatch."""
+    await _execute(
+        """
+        UPDATE brainrot_jobs
+        SET status = 'api_done',
+            updated_at = NOW()
+        WHERE job_id = $1
+        """,
+        job_id,
+    )
+
+
+async def complete_brainrot_job(job_id: str, output_url: str) -> None:
+    await _execute(
+        """
+        UPDATE brainrot_jobs
+        SET status='complete', progress=100, current_step='Done',
+            output_url=$1, updated_at=$2
+        WHERE job_id=$3
+        """,
+        output_url, _now(), job_id,
+    )
+
+
+async def fail_brainrot_job(job_id: str, error_message: str) -> None:
+    await _execute(
+        """
+        UPDATE brainrot_jobs
+        SET status='failed', error_message=$1, updated_at=$2
+        WHERE job_id=$3
+        """,
+        error_message[:1000], _now(), job_id,
+    )
+
+
+# ── Brainrot gameplay + audio library ───────────────────────────
+# Read-mostly lookup tables managed by the Phase 3 admin upload UI —
+# Phase 1 only needs the read side (job creation resolves ids to gcs_path).
+
+async def get_gameplay_clip(clip_id: str) -> dict | None:
+    return await _fetchrow(
+        "SELECT * FROM brainrot_gameplay_clips WHERE id=$1", clip_id,
+    )
+
+
+async def list_gameplay_clips(category: str | None = None) -> list[dict]:
+    if category:
+        return await _fetch(
+            "SELECT * FROM brainrot_gameplay_clips WHERE category=$1 ORDER BY created_at DESC",
+            category,
+        )
+    return await _fetch("SELECT * FROM brainrot_gameplay_clips ORDER BY category, created_at DESC")
+
+
+async def get_audio_asset(asset_id: str) -> dict | None:
+    return await _fetchrow(
+        "SELECT * FROM brainrot_audio_assets WHERE id=$1", asset_id,
+    )
+
+
+async def list_audio_assets(asset_type: str | None = None) -> list[dict]:
+    if asset_type:
+        return await _fetch(
+            "SELECT * FROM brainrot_audio_assets WHERE asset_type=$1 ORDER BY created_at DESC",
+            asset_type,
+        )
+    return await _fetch("SELECT * FROM brainrot_audio_assets ORDER BY asset_type, created_at DESC")
+
+
+# ── Brainrot admin: gameplay + audio library writes (Phase 3) ───
+
+async def insert_gameplay_source(category: str, title: str | None, gcs_path: str, uploaded_by: str | None) -> dict:
+    return await _fetchrow(
+        """INSERT INTO brainrot_gameplay_sources (category, title, gcs_path, uploaded_by)
+           VALUES ($1, $2, $3, $4) RETURNING *""",
+        category, title, gcs_path, uploaded_by,
+    )
+
+
+async def set_gameplay_source_status(source_id: str, status: str, error_message: str | None = None) -> None:
+    await _execute(
+        "UPDATE brainrot_gameplay_sources SET status=$1, error_message=$2 WHERE id=$3",
+        status, (error_message or None), source_id,
+    )
+
+
+async def insert_gameplay_clip(
+    source_id: str, category: str, gcs_path: str, thumbnail_url: str | None, duration_seconds: float,
+) -> dict:
+    return await _fetchrow(
+        """INSERT INTO brainrot_gameplay_clips (source_id, category, gcs_path, thumbnail_url, duration_seconds)
+           VALUES ($1, $2, $3, $4, $5) RETURNING *""",
+        source_id, category, gcs_path, thumbnail_url, duration_seconds,
+    )
+
+
+async def list_gameplay_sources() -> list[dict]:
+    return await _fetch(
+        """SELECT s.*, (SELECT COUNT(*) FROM brainrot_gameplay_clips c WHERE c.source_id = s.id) AS clip_count
+           FROM brainrot_gameplay_sources s ORDER BY s.created_at DESC""",
+    )
+
+
+async def insert_audio_asset(
+    asset_type: str, category: str | None, name: str, gcs_path: str,
+    duration_seconds: float | None, uploaded_by: str | None,
+) -> dict:
+    return await _fetchrow(
+        """INSERT INTO brainrot_audio_assets (asset_type, category, name, gcs_path, duration_seconds, uploaded_by)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING *""",
+        asset_type, category, name, gcs_path, duration_seconds, uploaded_by,
+    )
+
+
+async def delete_audio_asset(asset_id: str) -> None:
+    await _execute("DELETE FROM brainrot_audio_assets WHERE id=$1", asset_id)
+
+
+# ── Voice samples ────────────────────────────────────────────
+
+async def upsert_voice_sample(
+    provider: str, voice_id: str, locale: str, gcs_url: str, duration_seconds: float | None,
+) -> dict:
+    return await _fetchrow(
+        """INSERT INTO brainrot_voice_samples (provider, voice_id, locale, gcs_url, duration_seconds)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (provider, voice_id)
+           DO UPDATE SET gcs_url=$4, duration_seconds=$5, locale=$3, created_at=now()
+           RETURNING *""",
+        provider, voice_id, locale, gcs_url, duration_seconds,
+    )
+
+
+async def list_voice_samples() -> list[dict]:
+    return await _fetch(
+        "SELECT * FROM brainrot_voice_samples ORDER BY provider, voice_id",
+    )
+
+
 # ── Clip operations ───────────────────────────────────────────
 
 async def insert_clip(clip_data: dict) -> dict:
@@ -471,6 +661,19 @@ async def count_active_jobs(user_id: str) -> int:
                'created', 'dispatched', 'processing',
                'api_processing', 'api_done', 'ffmpeg_processing'
              )""",
+        user_id,
+    )
+    return int(row["cnt"]) if row else 0
+
+
+async def count_active_brainrot_jobs(user_id: str) -> int:
+    """Brainrot equivalent of count_active_jobs — gates
+    MAX_CONCURRENT_BRAINROT_JOBS_PER_USER in app/api/brainrot.py. Terminal
+    states are 'complete', 'failed'; anything else counts as active."""
+    row = await _fetchrow(
+        """SELECT COUNT(*) AS cnt FROM brainrot_jobs
+           WHERE user_id=$1
+             AND status NOT IN ('complete', 'failed')""",
         user_id,
     )
     return int(row["cnt"]) if row else 0

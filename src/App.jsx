@@ -39,12 +39,15 @@ import Editor         from './pages/Editor'
 import Lab            from './pages/Lab'
 import Admin          from './pages/Admin'
 import AdminMarketingEditor from './pages/AdminMarketingEditor'
+import BrainrotStudio  from './pages/brainrot/BrainrotStudio'
 
 // SEO landing pages
 import ToolsIndex        from './pages/ToolsIndex'
 import ToolLanding       from './pages/ToolLanding'
 import AlternativesIndex from './pages/AlternativesIndex'
 import AlternativeLanding from './pages/AlternativeLanding'
+import GuidesIndex       from './pages/GuidesIndex'
+import GuideArticle      from './pages/GuideArticle'
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'dummy-client-id.apps.googleusercontent.com'
 
@@ -182,12 +185,18 @@ export default function App() {
             <Route path="/youtube-shorts/tools/:slug"           element={<ToolLanding />} />
             <Route path="/youtube-shorts/alternatives"          element={<AlternativesIndex />} />
             <Route path="/youtube-shorts/alternatives/:slug"    element={<AlternativeLanding />} />
+            <Route path="/youtube-shorts/guides"                element={<GuidesIndex />} />
+            <Route path="/youtube-shorts/guides/:slug"          element={<GuideArticle />} />
 
             {/* Protected — user must be logged in */}
             <Route path="/youtube-shorts/dashboard"             element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/youtube-shorts/clips"                 element={<ProtectedRoute><ClipsHistory /></ProtectedRoute>} />
             <Route path="/youtube-shorts/editor/:jobId/:clipId" element={<ProtectedRoute><Editor /></ProtectedRoute>} />
             <Route path="/youtube-shorts/lab"                   element={<ProtectedRoute><Lab /></ProtectedRoute>} />
+
+            {/* ── Brainrot Clips Maker product ──────────────────── */}
+            <Route path="/brainrot"          element={<Navigate to="/brainrot/studio" replace />} />
+            <Route path="/brainrot/studio"   element={<ProtectedRoute><BrainrotStudio /></ProtectedRoute>} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

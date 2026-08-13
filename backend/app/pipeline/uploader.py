@@ -30,8 +30,8 @@ def _get_gcs_client() -> storage.Client:
     return _gcs_client
 
 
-def _public_url(blob_name: str) -> str:
-    return f"{settings.GCS_PUBLIC_BASE_URL}/{settings.GCS_BUCKET_NAME}/{blob_name}"
+def _public_url(blob_name: str, bucket_name: str | None = None) -> str:
+    return f"{settings.GCS_PUBLIC_BASE_URL}/{bucket_name or settings.GCS_BUCKET_NAME}/{blob_name}"
 
 
 # ── Thumbnail generation ────────────────────────────────────────
@@ -104,6 +104,79 @@ async def upload_raw_clip(
 
 
 
+async def upload_tts_audio(
+    local_path: Path,
+    job_id: str,
+    line_id: str,
+) -> str:
+    """Upload one dialogue line's synthesized TTS audio to GCS. Returns public URL.
+    Blob lives under tts/{job_id}/ on the main bucket — included in
+    delete_job_from_gcs's cleanup prefixes so it doesn't leak storage."""
+    blob_name = f"tts/{job_id}/{line_id}.mp3"
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _upload_to_gcs, local_path, blob_name, "audio/mpeg")
+
+
+async def upload_gameplay_clip(
+    local_path: Path,
+    source_id: str,
+    clip_id: str,
+) -> str:
+    """Upload a processed (<=120s, full-screen-reframed) gameplay background
+    clip to the brainrot bucket. Returns public URL."""
+    blob_name = f"gameplay/{source_id}/{clip_id}.mp4"
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, _upload_to_gcs, local_path, blob_name, "video/mp4", settings.BRAINROT_GCS_BUCKET_NAME,
+    )
+
+
+async def upload_character_asset(
+    local_path: Path,
+    character_id: str,
+    filename: str = "canon.png",
+) -> str:
+    """Upload a character canon image (or variant) to the brainrot bucket.
+    Returns public URL. Used by the one-time character migration script."""
+    blob_name = f"characters/{character_id}/{filename}"
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, _upload_to_gcs, local_path, blob_name, "image/png", settings.BRAINROT_GCS_BUCKET_NAME,
+    )
+
+
+async def upload_voice_sample(
+    local_path: Path,
+    provider: str,
+    voice_id: str,
+) -> str:
+    """Upload a TTS voice preview sample to the brainrot bucket. Returns public URL."""
+    blob_name = f"voice-samples/{provider}/{voice_id}.mp3"
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, _upload_to_gcs, local_path, blob_name, "audio/mpeg", settings.BRAINROT_GCS_BUCKET_NAME,
+    )
+
+
+async def upload_audio_asset(local_path: Path, asset_type: str, asset_id: str, ext: str, content_type: str) -> str:
+    """Upload an admin-provided music/SFX track to the brainrot bucket.
+    Layout: audio/{music|sfx}/{asset_id}.{ext}. Returns public URL."""
+    blob_name = f"audio/{asset_type}/{asset_id}{ext}"
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, _upload_to_gcs, local_path, blob_name, content_type, settings.BRAINROT_GCS_BUCKET_NAME,
+    )
+
+
+async def upload_gameplay_thumbnail(local_path: Path, source_id: str, clip_id: str) -> str:
+    """Upload a gameplay clip's poster thumbnail to the brainrot bucket."""
+    blob_name = f"gameplay/{source_id}/{clip_id}.jpg"
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, _upload_to_gcs, local_path, blob_name, "image/jpeg", settings.BRAINROT_GCS_BUCKET_NAME,
+    )
+
+
 async def download_to_file(url: str, dest: Path) -> Path:
     """Stream-download a (public GCS) URL to a local file. Used by the
     editor's re-render endpoint to fetch the raw clip back down."""
@@ -139,7 +212,7 @@ def _delete_job_blobs_sync(job_id: str, keep_clip_ids: set[str]) -> None:
     try:
         client = _get_gcs_client()
         bucket = client.bucket(settings.GCS_BUCKET_NAME)
-        prefixes = [f"clips/{job_id}/", f"thumbnails/{job_id}/", f"raw/{job_id}/", f"previews/{job_id}/"]
+        prefixes = [f"clips/{job_id}/", f"thumbnails/{job_id}/", f"raw/{job_id}/", f"previews/{job_id}/", f"tts/{job_id}/"]
         deleted = 0
         kept    = 0
         for prefix in prefixes:
@@ -163,10 +236,16 @@ def _delete_job_blobs_sync(job_id: str, keep_clip_ids: set[str]) -> None:
         logger.error(f"GCS cleanup failed for job {job_id}: {e}")
 
 
-def _upload_to_gcs(local_path: Path, blob_name: str, content_type: str) -> str:
-    """Synchronous GCS upload — called in executor."""
+def _upload_to_gcs(local_path: Path, blob_name: str, content_type: str, bucket_name: str | None = None) -> str:
+    """Synchronous GCS upload — called in executor.
+
+    bucket_name defaults to the main clips bucket; brainrot gameplay/character
+    assets pass settings.BRAINROT_GCS_BUCKET_NAME instead (shared library
+    content with its own lifecycle rules, kept out of the per-user bucket).
+    """
+    bucket_name = bucket_name or settings.GCS_BUCKET_NAME
     client = _get_gcs_client()
-    bucket = client.bucket(settings.GCS_BUCKET_NAME)
+    bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
     blob.upload_from_filename(
         str(local_path),
@@ -175,7 +254,7 @@ def _upload_to_gcs(local_path: Path, blob_name: str, content_type: str) -> str:
     # Do NOT call blob.make_public() — bucket has Uniform Bucket-Level Access
     # enabled which disables legacy per-object ACLs. Public access is controlled
     # via IAM (allUsers:Storage Object Viewer) at the bucket level.
-    return f"{settings.GCS_PUBLIC_BASE_URL}/{settings.GCS_BUCKET_NAME}/{blob_name}"
+    return f"{settings.GCS_PUBLIC_BASE_URL}/{bucket_name}/{blob_name}"
 
 
 # ── Full clip processing: upload + thumbnail ───────────────────

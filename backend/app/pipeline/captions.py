@@ -330,6 +330,31 @@ _BASE_STYLES: dict[str, dict] = {
         border_style=1, outline=4, shadow=1,
         scale_x=100, scale_y=100, spacing=0,
     ),
+
+    # ── Brainrot Clips Maker presets ────────────────────────────
+    # Reuse the same ASS mechanics as the styles above (word_pop's scale
+    # bounce, shake's rotation wiggle, karaoke's sweep) at higher amplitude —
+    # brainrot content reads as more frantic/loud than a standard short.
+    "brainrot": dict(
+        font="Liberation Sans", size=90, bold=1,
+        border_style=1, outline=6, shadow=0,
+        scale_x=100, scale_y=100, spacing=1,
+    ),
+    "loud": dict(
+        font="Liberation Sans", size=94, bold=1,
+        border_style=1, outline=7, shadow=0,
+        scale_x=100, scale_y=100, spacing=1,
+    ),
+    "chaotic": dict(
+        font="Liberation Sans", size=86, bold=1,
+        border_style=1, outline=5, shadow=0,
+        scale_x=100, scale_y=100, spacing=0,
+    ),
+    "meme": dict(
+        font="Liberation Sans", size=82, bold=1,
+        border_style=1, outline=8, shadow=2,
+        scale_x=100, scale_y=100, spacing=0,
+    ),
 }
 
 
@@ -745,6 +770,91 @@ def _lines_none(captions: list[Caption], x: int, y: int, wpl: int = 3) -> list[s
     return []
 
 
+# ── Brainrot Clips Maker presets ─────────────────────────────────
+# Same building blocks as the styles above (word_pop's \fscx/\fscy bounce,
+# shake's \frz wiggle, karaoke's \kf sweep) recombined at higher amplitude —
+# no new ASS techniques, just louder parameters to match brainrot's energy.
+
+def _lines_brainrot(captions: list[Caption], x: int, y: int, wpl: int = 1) -> list[str]:
+    """Per-word bounce like word_pop but a bigger punch-in (70% -> 130% -> 100%)
+    plus a quick rotation snap — the "default" brainrot look."""
+    pos   = _pos_tag(x, y)
+    lines = []
+    for c in captions:
+        for chunk in _split_words(c, wpl):
+            dur_ms = max(1, int((chunk.end - chunk.start) * 1000))
+            t1 = min(120, int(dur_ms * 0.45))
+            t2 = min(260, dur_ms)
+            tag = (
+                f"{pos}"
+                f"{{\\fscx70\\fscy70\\frz-3"
+                f"\\t(0,{t1},1,\\fscx130\\fscy130\\frz3)"
+                f"\\t({t1},{t2},1,\\fscx100\\fscy100\\frz0)}}"
+            )
+            lines.append(_dlg(chunk.start, chunk.end, f"{tag}{_esc(_safe_upper(chunk.text))}"))
+    return lines
+
+
+def _lines_loud(captions: list[Caption], x: int, y: int, wpl: int = 2) -> list[str]:
+    """ALL CAPS, thick outline (see _BASE_STYLES), fast hard pop-in with no
+    ease — reads as shouting. Chunk-level (2 words), not per-word, so it
+    doesn't flicker as fast as `brainrot`."""
+    pos   = _pos_tag(x, y)
+    lines = []
+    for c in captions:
+        for chunk in _split_words(c, wpl):
+            dur_ms = max(1, int((chunk.end - chunk.start) * 1000))
+            t1 = min(90, int(dur_ms * 0.35))
+            tag = (
+                f"{pos}"
+                f"{{\\fscx120\\fscy120"
+                f"\\t(0,{t1},1,\\fscx100\\fscy100)}}"
+            )
+            lines.append(_dlg(chunk.start, chunk.end, f"{tag}{_esc(_safe_upper(chunk.text))}"))
+    return lines
+
+
+def _lines_chaotic(captions: list[Caption], x: int, y: int, wpl: int = 1) -> list[str]:
+    """Per-word wiggle where the rotation direction/amount varies by word
+    index (deterministic, not truly random — same clip renders identically
+    every time) so consecutive words don't all snap the same way."""
+    pos   = _pos_tag(x, y)
+    lines = []
+    # Small fixed cycle of rotation/scale pairs — index into it by absolute
+    # word position for variety without nondeterminism.
+    variants = [(-6, 108), (5, 96), (-4, 112), (7, 100), (-8, 104), (3, 118)]
+    i = 0
+    for c in captions:
+        for chunk in _split_words(c, wpl):
+            rot, scale = variants[i % len(variants)]
+            i += 1
+            tag = (
+                f"{pos}"
+                f"{{\\fscx{scale}\\fscy{scale}\\frz{rot}"
+                f"\\t(0,80,1,\\frz0\\fscx100\\fscy100)}}"
+            )
+            lines.append(_dlg(chunk.start, chunk.end, f"{tag}{_esc(_safe_upper(chunk.text))}"))
+    return lines
+
+
+def _lines_meme(captions: list[Caption], x: int, y: int, wpl: int = 3) -> list[str]:
+    """Classic meme-text look: heavy outline (see _BASE_STYLES outline=8),
+    ALL CAPS, phrase-level (not word-by-word) with a single soft pop-in —
+    static and readable rather than frantic, closer to a caption than a
+    reaction effect."""
+    pos   = _pos_tag(x, y)
+    lines = []
+    for c in captions:
+        for p in _split_phrases(c, wpl):
+            tag = (
+                f"{pos}"
+                f"{{\\fscx92\\fscy92"
+                f"\\t(0,150,1,\\fscx100\\fscy100)}}"
+            )
+            lines.append(_dlg(p.start, p.end, f"{tag}{_esc(_safe_upper(p.text))}"))
+    return lines
+
+
 # ── hook title card ────────────────────────────────────────────
 
 def _lines_hook_title(
@@ -787,6 +897,10 @@ _BUILDERS = {
     "mrbeast":    _lines_mrbeast,
     "neon":       _lines_neon,
     "none":       _lines_none,
+    "brainrot":   _lines_brainrot,
+    "loud":       _lines_loud,
+    "chaotic":    _lines_chaotic,
+    "meme":       _lines_meme,
 }
 
 

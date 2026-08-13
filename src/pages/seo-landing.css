@@ -120,6 +120,67 @@
 .seo-cta-band p { font-size: 0.95rem; color: rgba(255,255,255,0.85); margin-bottom: 26px; }
 .seo-cta-band .seo-btn-primary { background: #fff; color: #cf1322; border-color: #111; }
 
+/* ── Guides: article meta, prose body, how-to, takeaways ── */
+.seo-guide-meta {
+  display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
+  margin-top: 18px; font-size: 0.8rem; color: #999; font-weight: 600;
+}
+.seo-guide-tag {
+  font-size: 0.72rem; font-weight: 700; color: #cf1322;
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+
+.seo-prose { max-width: 760px; }
+.seo-prose-lead { font-size: 1.06rem; line-height: 1.8; color: #333; margin-bottom: 40px; font-weight: 500; }
+.seo-prose h2 {
+  font-size: clamp(1.3rem, 2.6vw, 1.7rem); font-weight: 800; letter-spacing: -0.03em;
+  color: #0f0f0f; margin: 40px 0 16px;
+}
+.seo-prose p { font-size: 0.98rem; line-height: 1.85; color: #444; margin-bottom: 18px; }
+.seo-prose ul { margin: 0 0 22px; padding-left: 0; list-style: none; }
+.seo-prose ul li {
+  position: relative; font-size: 0.96rem; line-height: 1.75; color: #444;
+  padding-left: 26px; margin-bottom: 12px;
+}
+.seo-prose ul li::before {
+  content: ''; position: absolute; left: 4px; top: 10px;
+  width: 8px; height: 8px; border-radius: 2px; background: #cf1322;
+}
+
+/* How-to numbered block */
+.seo-howto {
+  background: #fff; border: 1px solid #e5e5e5; border-radius: 16px;
+  padding: 32px 34px; margin: 44px 0;
+}
+.seo-howto h2 { margin-top: 0; }
+.seo-howto-list { list-style: none; margin: 0; padding: 0; counter-reset: none; }
+.seo-howto-list li { display: flex; gap: 18px; align-items: flex-start; padding: 16px 0; border-bottom: 1px solid #f2f2f2; }
+.seo-howto-list li:last-child { border-bottom: none; padding-bottom: 0; }
+.seo-howto-num {
+  flex-shrink: 0; width: 30px; height: 30px; border-radius: 8px;
+  background: #cf1322; color: #fff; font-weight: 800; font-size: 0.9rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.seo-howto-list h3 { font-size: 0.98rem; font-weight: 700; color: #111; margin: 3px 0 5px; }
+.seo-howto-list p { font-size: 0.9rem; line-height: 1.7; color: #666; margin: 0; }
+
+/* Key takeaways callout */
+.seo-takeaways {
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 16px;
+  padding: 28px 32px; margin: 44px 0 8px;
+}
+.seo-takeaways h2 { margin-top: 0; font-size: 1.15rem; }
+.seo-takeaways ul { list-style: none; margin: 0; padding: 0; }
+.seo-takeaways ul li {
+  position: relative; font-size: 0.94rem; line-height: 1.7; color: #333;
+  padding-left: 28px; margin-bottom: 12px;
+}
+.seo-takeaways ul li:last-child { margin-bottom: 0; }
+.seo-takeaways ul li::before {
+  content: '✓'; position: absolute; left: 2px; top: 0;
+  color: #cf1322; font-weight: 800;
+}
+
 /* Cross-links */
 .seo-crosslinks { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 18px; }
 .seo-crosslink {

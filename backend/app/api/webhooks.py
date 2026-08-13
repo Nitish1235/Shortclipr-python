@@ -17,7 +17,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request, status
 
 from app.core.config import get_settings
-from app.core.plan_limits import get_credits_limit, get_video_minutes_limit
+from app.core.plan_limits import PLAN_LIMITS, get_credits_limit, get_video_minutes_limit
 from app.db import supabase as db
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -27,7 +27,11 @@ settings = get_settings()
 # Maps the product_id field Dodo sends in webhooks → our internal plan name.
 # Dodo sends the dodoId string (set when creating checkout in payments.py).
 DODO_PLAN_MAP = {
-    # Current slider tiers
+    # Current pricing tiers
+    "starter_30":   "starter_30",
+    "growth_100":   "growth_100",
+    "unlimited":    "unlimited",
+    # Legacy slider tiers
     "starter_100":  "starter_100",
     "starter_250":  "starter_250",
     "pro_500":      "pro_500",
@@ -39,6 +43,11 @@ DODO_PLAN_MAP = {
     "pro_monthly":     "pro",
     "pro_annual":      "pro",
 }
+
+# Successful payment with an unresolvable plan → grant the lowest paid tier
+# rather than free (they DID pay). Only hit if both metadata.plan and the
+# product_id map miss.
+_FALLBACK_PAID_PLAN = "starter_30"
 
 
 @router.post("/dodo")
@@ -119,7 +128,14 @@ def _verify_signature(
 async def _handle_payment_succeeded(payload: dict) -> None:
     email      = payload.get("customer", {}).get("email", "")
     product_id = payload.get("product_id", "")
-    plan_name  = DODO_PLAN_MAP.get(product_id, "starter_100")
+
+    # Prefer the plan we stamped into checkout metadata — the raw product_id
+    # Dodo echoes is the prd_… id, which the friendly-name map won't match.
+    meta_plan = (payload.get("metadata") or {}).get("plan")
+    if meta_plan in PLAN_LIMITS:
+        plan_name = meta_plan
+    else:
+        plan_name = DODO_PLAN_MAP.get(product_id, _FALLBACK_PAID_PLAN)
 
     if not email:
         logger.error("Payment succeeded but no email in payload")

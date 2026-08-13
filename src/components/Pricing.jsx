@@ -12,17 +12,16 @@ DodoPayments.Initialize({
   },
 })
 
-// videoHours / maxVideoHours mirror backend/app/core/plan_limits.py — keep in sync
+// clips / videoHours / maxVideoHours mirror backend/app/core/plan_limits.py — keep in sync.
+// unlimited:true renders "Unlimited" instead of the raw credit count.
 const TIERS = [
-  { clips: 75,       price: 10,  label: '75 Shorts',   dodoId: 'starter_100', videoHours: 5,  maxVideoHours: 2 },
-  { clips: 200,      price: 25,  label: '200 Shorts',  dodoId: 'starter_250', videoHours: 10, maxVideoHours: 2 },
-  { clips: 400,      price: 45,  label: '400 Shorts',  dodoId: 'pro_500',     videoHours: 18, maxVideoHours: 3 },
-  { clips: 800,      price: 79,  label: '800 Shorts',  dodoId: 'pro_1000',    videoHours: 35, maxVideoHours: 3 },
-  { clips: 1500,     price: 145, label: '1500 Shorts', dodoId: 'pro_2000',    videoHours: 60, maxVideoHours: 3 },
+  { clips: 30,   price: 19, label: '30 Shorts',  dodoId: 'starter_30', videoHours: 10,  maxVideoHours: 2 },
+  { clips: 100,  price: 39, label: '100 Shorts', dodoId: 'growth_100', videoHours: 30,  maxVideoHours: 3 },
+  { clips: null, price: 99, label: 'Unlimited',  dodoId: 'unlimited',  videoHours: 100, maxVideoHours: 6, unlimited: true },
 ]
 
 const FREE_FEATURES = [
-  '3 free clips (no card needed)',
+  '2 free clips (no card needed)',
   '30 min of video per month (30 min max per single video)',
   '30s & 60s short formats',
   '720p output quality',
@@ -33,7 +32,7 @@ const FREE_FEATURES = [
 
 function getFeatures(tier) {
   return [
-    `${tier.clips} shorts/month`,
+    tier.unlimited ? 'Unlimited shorts/month' : `${tier.clips} shorts/month`,
     `${tier.videoHours} hrs of video per month (${tier.maxVideoHours} hrs max per single video)`,
     'All formats: 30s / 60s / 90s',
     '1080p — Zero Watermark',
@@ -67,7 +66,7 @@ export default function Pricing() {
       const res = await fetch(`${API_BASE}/payments/checkout-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ plan: tier.dodoId, period: 'monthly' }), // pro_2000 | pro_1000 | pro_500 | starter_250 | starter_100
+        body: JSON.stringify({ plan: tier.dodoId, period: 'monthly' }), // starter_30 | growth_100 | unlimited
       })
       if (!res.ok) {
         const e = await res.json().catch(() => ({}))
@@ -175,7 +174,7 @@ export default function Pricing() {
                 ${tier.price}<span style={{ fontSize:'1rem', color:'#aaa', fontWeight:400 }}>/mo</span>
               </div>
               <div style={{ fontSize:'0.8rem', color:'#cf1322', fontWeight:600, marginTop:'4px' }}>
-                {tier.label} · ${(tier.price / tier.clips).toFixed(3)}/short
+                {tier.unlimited ? `${tier.label} · unlimited shorts` : `${tier.label} · $${(tier.price / tier.clips).toFixed(3)}/short`}
               </div>
             </div>
 

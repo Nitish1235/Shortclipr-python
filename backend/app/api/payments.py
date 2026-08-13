@@ -32,17 +32,21 @@ DODO_CHECKOUT_ENDPOINT = f"{DODO_API_BASE}/checkouts"
 # Each key maps to a Product ID set in your Dodo dashboard.
 # Add these IDs to .env after creating the products.
 PRODUCT_IDS: dict[str, str] = {
-    # Slider tier plan IDs (monthly, no annual for simplicity)
+    # Current pricing (3 tiers, monthly)
+    "starter_30":   settings.DODO_PRODUCT_STARTER_30,     # $19 — 30 shorts
+    "growth_100":   settings.DODO_PRODUCT_GROWTH_100,     # $39 — 100 shorts
+    "unlimited":    settings.DODO_PRODUCT_UNLIMITED,      # $99 — unlimited shorts
+    # Legacy slider tiers (kept so existing subscribers can still be billed)
     "starter_100":  settings.DODO_PRODUCT_STARTER_100,
     "starter_250":  settings.DODO_PRODUCT_STARTER_250,
     "pro_500":      settings.DODO_PRODUCT_PRO_500,
     "pro_1000":     settings.DODO_PRODUCT_PRO_1000,
-    "pro_2000":     settings.DODO_PRODUCT_PRO_2000,    # $145 — 2000 shorts
+    "pro_2000":     settings.DODO_PRODUCT_PRO_2000,
 }
 
 
 class CheckoutRequest(BaseModel):
-    plan: str    # starter_100 | starter_250 | pro_500 | pro_1000 | pro_2000
+    plan: str    # starter_30 | growth_100 | unlimited  (+ legacy tier ids)
     period: str = "monthly"  # kept for webhook compatibility
 
 

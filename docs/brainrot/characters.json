@@ -20,7 +20,8 @@
         "kip-blunt",
         "marla-blunt"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "male"
     },
     {
       "id": "marla-blunt",
@@ -39,7 +40,8 @@
         "dougie-blunt",
         "nana-ratchet"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "female"
     },
     {
       "id": "kip-blunt",
@@ -58,7 +60,8 @@
         "dougie-blunt",
         "bitsy-quark"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "male"
     },
     {
       "id": "tanner-blunt",
@@ -77,7 +80,8 @@
         "marla-blunt",
         "doomscroll"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "male"
     },
     {
       "id": "nana-ratchet",
@@ -96,7 +100,8 @@
         "marla-blunt",
         "auntie-fern"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "female"
     },
     {
       "id": "uncle-sherm",
@@ -115,7 +120,8 @@
         "dougie-blunt",
         "lore-guy"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "bev-nettles",
@@ -134,7 +140,8 @@
         "marla-blunt",
         "sharon-quill"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "female"
     },
     {
       "id": "chad-pemberton",
@@ -153,7 +160,8 @@
         "dougie-blunt",
         "brent-callahan"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "male"
     },
     {
       "id": "grill-hutch",
@@ -172,7 +180,8 @@
         "dougie-blunt",
         "cowboy-jed"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "male"
     },
     {
       "id": "trisha-vane",
@@ -191,7 +200,8 @@
         "marla-blunt",
         "streamer-jax"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "female"
     },
     {
       "id": "nibs",
@@ -199,7 +209,7 @@
       "family": "Gremlins",
       "archetype": "Screaming Tiny Gremlin",
       "voice": "Very high, fast, shrieky. 80% of lines are a single word repeated.",
-      "look": "BODY SHAPE: a tiny fist-sized green gremlin whose bat-like ears are each bigger than his entire body, spindly little arms. FACE: a mouth that splits his whole head open crammed with far too many sharp teeth, two enormous bloodshot yellow eyes. PROP: none \u2014 the ears and teeth are the design.",
+      "look": "BODY SHAPE: a tiny fist-sized green gremlin whose bat-like ears are each bigger than his entire body, spindly little arms. FACE: a mouth that splits his whole head open crammed with far too many sharp teeth, two enormous bloodshot yellow eyes. PROP: none — the ears and teeth are the design.",
       "palette": [
         "#7cbf3f",
         "#ffe74c",
@@ -210,7 +220,8 @@
         "gnawl",
         "bloop"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "neutral"
     },
     {
       "id": "mop",
@@ -229,7 +240,8 @@
         "doreen-sludge",
         "nibs"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "neutral"
     },
     {
       "id": "snacc",
@@ -237,7 +249,7 @@
       "family": "Gremlins",
       "archetype": "Food-Obsessed Blob",
       "voice": "Deep, slow, wet chewing between every word. Contented moaning.",
-      "look": "BODY SHAPE: NOT humanoid \u2014 a soft beige gelatinous mound like a melting blob of dough, wider at the base, with two tiny useless arms poking out the sides. FACE: a single enormous open mouth taking up the whole front of the blob, mid-chew, two tiny dot eyes squeezed shut in bliss. PROP: crumbs scattered all over him.",
+      "look": "BODY SHAPE: NOT humanoid — a soft beige gelatinous mound like a melting blob of dough, wider at the base, with two tiny useless arms poking out the sides. FACE: a single enormous open mouth taking up the whole front of the blob, mid-chew, two tiny dot eyes squeezed shut in bliss. PROP: crumbs scattered all over him.",
       "palette": [
         "#e3c9a0",
         "#d4a373",
@@ -248,7 +260,8 @@
         "chonkers",
         "gnawl"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "neutral"
     },
     {
       "id": "gnawl",
@@ -267,7 +280,8 @@
         "nibs",
         "snacc"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "male"
     },
     {
       "id": "wizzo",
@@ -286,7 +300,8 @@
         "zathrix",
         "pixel-imp"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "bloop",
@@ -294,7 +309,7 @@
       "family": "Gremlins",
       "archetype": "Innocent Chaos",
       "voice": "Soft, high, gentle, slow. Says devastating things kindly.",
-      "look": "BODY SHAPE: a perfectly round pale blue sphere with two tiny stubby legs and no arms at all. FACE: two enormous watery innocent eyes taking up most of the sphere, no mouth visible at all. PROP: none \u2014 pure round innocence is the design.",
+      "look": "BODY SHAPE: a perfectly round pale blue sphere with two tiny stubby legs and no arms at all. FACE: two enormous watery innocent eyes taking up most of the sphere, no mouth visible at all. PROP: none — pure round innocence is the design.",
       "palette": [
         "#a8d8ea",
         "#ffffff",
@@ -305,7 +320,8 @@
         "nibs",
         "bleep"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "neutral"
     },
     {
       "id": "ratticus",
@@ -324,7 +340,8 @@
         "slick-dime",
         "gnash"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "skitter",
@@ -343,7 +360,8 @@
         "nibs",
         "bitsy-quark"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "male"
     },
     {
       "id": "lugg",
@@ -351,7 +369,7 @@
       "family": "Gremlins",
       "archetype": "Dumb Strong Lump",
       "voice": "Very deep, very slow, three-word sentences. Long thinking pauses.",
-      "look": "BODY SHAPE: NOT humanoid \u2014 a giant grey boulder with two stubby legs underneath and no visible neck or arms. FACE: one eye noticeably bigger than the other, both blank and dim, a tiny flat line mouth. PROP: none \u2014 he is a rock with legs.",
+      "look": "BODY SHAPE: NOT humanoid — a giant grey boulder with two stubby legs underneath and no visible neck or arms. FACE: one eye noticeably bigger than the other, both blank and dim, a tiny flat line mouth. PROP: none — he is a rock with legs.",
       "palette": [
         "#8a8a7a",
         "#5a5a4a",
@@ -362,7 +380,8 @@
         "big-marv",
         "gonk-adjacent"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "male"
     },
     {
       "id": "pixel-imp",
@@ -370,7 +389,7 @@
       "family": "Gremlins",
       "archetype": "Glitch Gremlin",
       "voice": "Digitally stuttered, pitch-shifting mid-word, bitcrushed edges.",
-      "look": "BODY SHAPE: a simple blocky pixelated silhouette made of chunky cubes, one side of the body dissolving into scattered floating pixel fragments. FACE: one eye a solid glowing pixel square, the other a normal round cartoon eye \u2014 deliberately mismatched. PROP: none, the glitch fragments are the design.",
+      "look": "BODY SHAPE: a simple blocky pixelated silhouette made of chunky cubes, one side of the body dissolving into scattered floating pixel fragments. FACE: one eye a solid glowing pixel square, the other a normal round cartoon eye — deliberately mismatched. PROP: none, the glitch fragments are the design.",
       "palette": [
         "#ff00ff",
         "#00ffff",
@@ -381,7 +400,8 @@
         "wizzo",
         "buffer"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "neutral"
     },
     {
       "id": "vex-corliss",
@@ -389,7 +409,7 @@
       "family": "Science",
       "archetype": "Burnt-Out Mad Scientist",
       "voice": "Gravel-dry, tired, sardonic. Bursts into shouting, returns to flat.",
-      "look": "BODY SHAPE: tiny hunched body with a head twice the size of his torso. FACE (most important, must be visible and asymmetric): his LEFT eye is comically huge, round, and unblinking; his RIGHT eye is squeezed completely shut in a tight line \u2014 this asymmetry is the character's single most important trait and must always be clearly rendered. Plain white lab coat, no other clothing detail. PROP: holding one bubbling test tube.",
+      "look": "BODY SHAPE: tiny hunched body with a head twice the size of his torso. FACE (most important, must be visible and asymmetric): his LEFT eye is comically huge, round, and unblinking; his RIGHT eye is squeezed completely shut in a tight line — this asymmetry is the character's single most important trait and must always be clearly rendered. Plain white lab coat, no other clothing detail. PROP: holding one bubbling test tube.",
       "palette": [
         "#5f6a7d",
         "#e8e8e8",
@@ -400,7 +420,8 @@
         "bitsy-quark",
         "norm-plimm"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "male"
     },
     {
       "id": "prof-umbra",
@@ -419,7 +440,8 @@
         "ada-vole",
         "lore-guy"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "bitsy-quark",
@@ -438,7 +460,8 @@
         "vex-corliss",
         "kip-blunt"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "female"
     },
     {
       "id": "norm-plimm",
@@ -457,7 +480,8 @@
         "vex-corliss",
         "beige"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "male"
     },
     {
       "id": "ada-vole",
@@ -476,7 +500,8 @@
         "prof-umbra",
         "oracle-9"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "female"
     },
     {
       "id": "grigori-slyme",
@@ -495,7 +520,8 @@
         "vex-corliss",
         "zathrix"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "nell-fathom",
@@ -514,7 +540,8 @@
         "gulp",
         "the-cube"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "female"
     },
     {
       "id": "dr-fizzwick",
@@ -533,7 +560,8 @@
         "bitsy-quark",
         "bleep"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "brent-callahan",
@@ -552,7 +580,8 @@
         "todd-synergy",
         "grindset-gary"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "male"
     },
     {
       "id": "deb-from-hr",
@@ -571,7 +600,8 @@
         "marcy-mulch",
         "intern-greg"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "female"
     },
     {
       "id": "todd-synergy",
@@ -590,7 +620,8 @@
         "brent-callahan",
         "beige"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "marcy-mulch",
@@ -609,7 +640,8 @@
         "deb-from-hr",
         "doreen-sludge"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "female"
     },
     {
       "id": "intern-greg",
@@ -628,7 +660,8 @@
         "deb-from-hr",
         "brent-callahan"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "sharon-quill",
@@ -647,7 +680,8 @@
         "bev-nettles",
         "deb-from-hr"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "female"
     },
     {
       "id": "reginald-cost",
@@ -666,7 +700,8 @@
         "brent-callahan",
         "ada-vole"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "male"
     },
     {
       "id": "chip-vandergraff",
@@ -685,7 +720,8 @@
         "intern-greg",
         "duke-pomp"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "male"
     },
     {
       "id": "doreen-sludge",
@@ -704,7 +740,8 @@
         "mop",
         "snacc"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "female"
     },
     {
       "id": "beige",
@@ -712,7 +749,7 @@
       "family": "Corporate",
       "archetype": "The Forgettable Man",
       "voice": "Utterly average, mid everything. Instantly unmemorable.",
-      "look": "BODY SHAPE: perfectly average, symmetrical, deliberately unremarkable proportions, wearing a plain beige button-up shirt and beige trousers the exact same shade as his skin so his silhouette nearly melts into one flat beige blob with only faint outlines separating shirt from skin. FACE: bland, forgettable, slightly blurred at the edges as if fading from view. PROP: none \u2014 his blandness dissolving into invisibility is the entire joke.",
+      "look": "BODY SHAPE: perfectly average, symmetrical, deliberately unremarkable proportions, wearing a plain beige button-up shirt and beige trousers the exact same shade as his skin so his silhouette nearly melts into one flat beige blob with only faint outlines separating shirt from skin. FACE: bland, forgettable, slightly blurred at the edges as if fading from view. PROP: none — his blandness dissolving into invisibility is the entire joke.",
       "palette": [
         "#d8cfc0",
         "#c0b8a8",
@@ -723,7 +760,8 @@
         "norm-plimm",
         "npc-dave"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "krungar",
@@ -742,7 +780,8 @@
         "elowen-mistvale",
         "borin-copperfist"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "male"
     },
     {
       "id": "elowen-mistvale",
@@ -750,7 +789,7 @@
       "family": "Fantasy",
       "archetype": "Haughty Elf",
       "voice": "Cool, melodic, over-precise. Every line drips with disdain.",
-      "look": "BODY SHAPE: her neck alone is as long as her entire torso, body reed-thin like a single drawn line, pointed ears so long they extend past the top of her head. FACE (critical, must be visible, NOT conventionally pretty): eyes at a permanent sleepy half-mast looking down over an exaggeratedly long thin pointed nose that juts far past her chin, mouth a single flat unimpressed line, not smiling. PROP: none \u2014 the posture alone sells her.",
+      "look": "BODY SHAPE: her neck alone is as long as her entire torso, body reed-thin like a single drawn line, pointed ears so long they extend past the top of her head. FACE (critical, must be visible, NOT conventionally pretty): eyes at a permanent sleepy half-mast looking down over an exaggeratedly long thin pointed nose that juts far past her chin, mouth a single flat unimpressed line, not smiling. PROP: none — the posture alone sells her.",
       "palette": [
         "#a8c8d8",
         "#f0f4f8",
@@ -761,7 +800,8 @@
         "krungar",
         "seraphine-dawnhollow"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "female"
     },
     {
       "id": "borin-copperfist",
@@ -780,7 +820,8 @@
         "krungar",
         "gnash"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "zathrix",
@@ -799,7 +840,8 @@
         "seraphine-dawnhollow",
         "wizzo"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "male"
     },
     {
       "id": "puddle",
@@ -818,7 +860,8 @@
         "madame-vespertine",
         "gulp"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "female"
     },
     {
       "id": "ambrose-dunn",
@@ -837,7 +880,8 @@
         "krungar",
         "seraphine-dawnhollow"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "thistle",
@@ -856,7 +900,8 @@
         "nibs",
         "elowen-mistvale"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "female"
     },
     {
       "id": "old-man-runes",
@@ -864,7 +909,7 @@
       "family": "Fantasy",
       "archetype": "Cryptic Wizard",
       "voice": "Ancient, papery, unbearably slow. Meaningful pauses everywhere.",
-      "look": "BODY SHAPE: a beard so long it reaches the floor and becomes indistinguishable from his robe \u2014 no visible body beneath the beard and hood at all. FACE: only two tiny glowing dot-eyes visible deep within the beard and hood shadow, nothing else of the face shown. PROP: a staff taller than he is.",
+      "look": "BODY SHAPE: a beard so long it reaches the floor and becomes indistinguishable from his robe — no visible body beneath the beard and hood at all. FACE: only two tiny glowing dot-eyes visible deep within the beard and hood shadow, nothing else of the face shown. PROP: a staff taller than he is.",
       "palette": [
         "#6a5acd",
         "#e8e0f0",
@@ -875,7 +920,8 @@
         "prof-umbra",
         "madame-vespertine"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "gnash",
@@ -894,7 +940,8 @@
         "ratticus",
         "slick-dime"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "male"
     },
     {
       "id": "seraphine-dawnhollow",
@@ -913,7 +960,8 @@
         "zathrix",
         "elowen-mistvale"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "female"
     },
     {
       "id": "tito-ramirez",
@@ -932,7 +980,8 @@
         "big-marv",
         "ms-yolanda"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "male"
     },
     {
       "id": "big-marv",
@@ -951,7 +1000,8 @@
         "tito-ramirez",
         "lugg"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "male"
     },
     {
       "id": "slick-dime",
@@ -970,7 +1020,8 @@
         "ratticus",
         "two-phone-tommy"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "ms-yolanda",
@@ -989,7 +1040,8 @@
         "tito-ramirez",
         "auntie-fern"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "female"
     },
     {
       "id": "two-phone-tommy",
@@ -1008,7 +1060,8 @@
         "slick-dime",
         "brent-callahan"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "male"
     },
     {
       "id": "reseller-ray",
@@ -1027,7 +1080,8 @@
         "slick-dime",
         "curb"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "male"
     },
     {
       "id": "dj-kettle",
@@ -1046,7 +1100,8 @@
         "rico-static",
         "streamer-jax"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "male"
     },
     {
       "id": "curb",
@@ -1065,7 +1120,8 @@
         "tanner-blunt",
         "reseller-ray"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "male"
     },
     {
       "id": "auntie-fern",
@@ -1084,7 +1140,8 @@
         "ms-yolanda",
         "nana-ratchet"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "female"
     },
     {
       "id": "rico-static",
@@ -1103,7 +1160,8 @@
         "dj-kettle",
         "curb"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "sgt-waffles",
@@ -1122,7 +1180,8 @@
         "miso",
         "big-marv"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "neutral"
     },
     {
       "id": "miso",
@@ -1130,7 +1189,7 @@
       "family": "Animals",
       "archetype": "Contemptuous Cat",
       "voice": "Silky, bored, slow. Devastating one-liners at half volume.",
-      "look": "BODY SHAPE: a sleek, elongated, horizontal silhouette \u2014 longer than a cat should be, stretched low to the ground. FACE: half-lidded, deeply unimpressed eyes, one ear folded down. PROP: none needed.",
+      "look": "BODY SHAPE: a sleek, elongated, horizontal silhouette — longer than a cat should be, stretched low to the ground. FACE: half-lidded, deeply unimpressed eyes, one ear folded down. PROP: none needed.",
       "palette": [
         "#2a2a2a",
         "#c9a227",
@@ -1141,7 +1200,8 @@
         "sgt-waffles",
         "kip-blunt"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "neutral"
     },
     {
       "id": "chonkers",
@@ -1160,7 +1220,8 @@
         "snacc",
         "beaks"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "neutral"
     },
     {
       "id": "beaks",
@@ -1179,7 +1240,8 @@
         "ratticus",
         "chonkers"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "neutral"
     },
     {
       "id": "prof-scales",
@@ -1198,7 +1260,8 @@
         "prof-umbra",
         "miso"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "neutral"
     },
     {
       "id": "moobert",
@@ -1217,7 +1280,8 @@
         "lugg",
         "bloop"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "neutral"
     },
     {
       "id": "gulp",
@@ -1236,7 +1300,8 @@
         "puddle",
         "nell-fathom"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "neutral"
     },
     {
       "id": "capt-gilfin",
@@ -1244,7 +1309,7 @@
       "family": "Animals",
       "archetype": "Weathered Sea Captain",
       "voice": "Salty, weathered, bellowing nautical drawl. Bubbling undertone.",
-      "look": "BODY: a stocky humanoid with faintly fish-like features \u2014 gill slits on his neck, webbed hands, greenish scaled skin patches, wide flat feet. FACE: enormous bulging round fish-eyes on the sides of his head, wide flat lipless mouth, no visible nose. CLOTHING: a plain sea captain's coat and hat.",
+      "look": "BODY: a stocky humanoid with faintly fish-like features — gill slits on his neck, webbed hands, greenish scaled skin patches, wide flat feet. FACE: enormous bulging round fish-eyes on the sides of his head, wide flat lipless mouth, no visible nose. CLOTHING: a plain sea captain's coat and hat.",
       "palette": [
         "#3a6a7a",
         "#c0a870",
@@ -1255,7 +1320,8 @@
         "nell-fathom",
         "mordecai-blackrot"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "male"
     },
     {
       "id": "hoot",
@@ -1274,7 +1340,8 @@
         "norm-plimm",
         "old-man-runes"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "neutral"
     },
     {
       "id": "bark-twain",
@@ -1293,7 +1360,8 @@
         "tito-ramirez",
         "cowboy-jed"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "neutral"
     },
     {
       "id": "glorp",
@@ -1312,14 +1380,15 @@
         "zorbo",
         "bloop"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "neutral"
     },
     {
       "id": "xanthar",
       "name": "Xanthar the Conqueror",
       "family": "SciFi",
       "archetype": "Failing Invader",
-      "voice": "Grand, imperious, echoing \u2014 undercut by petty frustration.",
+      "voice": "Grand, imperious, echoing — undercut by petty frustration.",
       "look": "BODY: a spindly humanoid alien with an oversized swollen cranium on narrow sloping shoulders, thin brittle limbs, standing at rigid attention. FACE: enormous solid-black almond eyes, no nose at all, a tiny pinched mouth set in permanent thwarted frustration. CLOTHING: a plain fitted commander's uniform.",
       "palette": [
         "#6a3a8a",
@@ -1331,7 +1400,8 @@
         "zathrix",
         "glorp"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "bleep",
@@ -1350,7 +1420,8 @@
         "unit-7-delta",
         "dr-fizzwick"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "neutral"
     },
     {
       "id": "vance-steele",
@@ -1369,7 +1440,8 @@
         "nova-kade",
         "xanthar"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "the-cube",
@@ -1377,7 +1449,7 @@
       "family": "SciFi",
       "archetype": "Ominous Monolith",
       "voice": "Layered, sub-bass, multiple voices in unison. Speaks rarely.",
-      "look": "BODY SHAPE: a perfect featureless black cube with no limbs at all, floating slightly above the ground. FACE: none \u2014 a total blank black surface; the total absence of a face is the design. PROP: none.",
+      "look": "BODY SHAPE: a perfect featureless black cube with no limbs at all, floating slightly above the ground. FACE: none — a total blank black surface; the total absence of a face is the design. PROP: none.",
       "palette": [
         "#0a0a0a",
         "#6a3a8a",
@@ -1388,7 +1460,8 @@
         "nell-fathom",
         "the-algorithm"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "neutral"
     },
     {
       "id": "zorbo",
@@ -1407,7 +1480,8 @@
         "glorp",
         "zorbo-adjacent"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "neutral"
     },
     {
       "id": "oxide",
@@ -1426,7 +1500,8 @@
         "unit-7-delta",
         "krungar"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "neutral"
     },
     {
       "id": "nova-kade",
@@ -1445,7 +1520,8 @@
         "vance-steele",
         "miso"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "bartholomew-crumb",
@@ -1453,7 +1529,7 @@
       "family": "Period",
       "archetype": "Victorian Gentleman",
       "voice": "Clipped, plummy, aghast. Gasps at modern life.",
-      "look": "BODY SHAPE: as thin and rigid as a single fence post, shoulders no wider than his own head, standing perfectly straight with zero curve. FACE (critical, must show the asymmetry): an absurdly oversized handlebar moustache extending past both shoulders, and one single round monocle with a visible glass lens over his RIGHT eye only \u2014 his LEFT eye is completely bare with no glass at all, this left/right asymmetry must be clearly rendered. PROP: the moustache and monocle together are the character.",
+      "look": "BODY SHAPE: as thin and rigid as a single fence post, shoulders no wider than his own head, standing perfectly straight with zero curve. FACE (critical, must show the asymmetry): an absurdly oversized handlebar moustache extending past both shoulders, and one single round monocle with a visible glass lens over his RIGHT eye only — his LEFT eye is completely bare with no glass at all, this left/right asymmetry must be clearly rendered. PROP: the moustache and monocle together are the character.",
       "palette": [
         "#3a2a35",
         "#c0a870",
@@ -1464,7 +1540,8 @@
         "duke-pomp",
         "agnes-grim"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "male"
     },
     {
       "id": "agnes-grim",
@@ -1483,7 +1560,8 @@
         "brother-cassian",
         "deb-from-hr"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "female"
     },
     {
       "id": "duke-pomp",
@@ -1502,7 +1580,8 @@
         "bartholomew-crumb",
         "chip-vandergraff"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "clyde-barrelhouse",
@@ -1521,7 +1600,8 @@
         "slick-dime",
         "ratticus"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "wilhelmina-frost",
@@ -1540,7 +1620,8 @@
         "seraphine-dawnhollow",
         "marcy-mulch"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "female"
     },
     {
       "id": "cowboy-jed",
@@ -1548,7 +1629,7 @@
       "family": "Period",
       "archetype": "Laconic Cowboy",
       "voice": "Slow, dusty drawl. Four words max. Enormous pauses.",
-      "look": "BODY SHAPE: a thin, simple, upright silhouette entirely defined by an enormous wide-brimmed hat. FACE: only a single squinted eye-line visible in the deep shadow under the hat brim \u2014 the rest of the face stays hidden. PROP: the hat brim itself, nearly as wide as he is tall.",
+      "look": "BODY SHAPE: a thin, simple, upright silhouette entirely defined by an enormous wide-brimmed hat. FACE: only a single squinted eye-line visible in the deep shadow under the hat brim — the rest of the face stays hidden. PROP: the hat brim itself, nearly as wide as he is tall.",
       "palette": [
         "#b5722f",
         "#e0d0b0",
@@ -1559,7 +1640,8 @@
         "bark-twain",
         "grill-hutch"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "male"
     },
     {
       "id": "pharaoh-ozy",
@@ -1578,7 +1660,8 @@
         "duke-pomp",
         "the-cube"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "brother-cassian",
@@ -1597,7 +1680,8 @@
         "agnes-grim",
         "old-man-runes"
       ],
-      "tier": 3
+      "tier": 3,
+      "gender": "male"
     },
     {
       "id": "mordecai-blackrot",
@@ -1616,14 +1700,15 @@
         "capt-gilfin",
         "borin-copperfist"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "madame-vespertine",
       "name": "Madame Vespertine",
       "family": "Period",
       "archetype": "Fortune Teller",
-      "voice": "Smoky, theatrical, mysterious \u2014 then abruptly transactional.",
+      "voice": "Smoky, theatrical, mysterious — then abruptly transactional.",
       "look": "BODY: heavyset and low to the ground, draped in layers that pool around her, permanently leaning forward across an unseen table. FACE: enormous heavily kohl-rimmed eyes, a knowing crooked half-smile, deep laugh lines carved around her mouth. CLOTHING: simple draped shawls and a headwrap.",
       "palette": [
         "#6a2a5a",
@@ -1635,7 +1720,8 @@
         "puddle",
         "old-man-runes"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "female"
     },
     {
       "id": "lore-guy",
@@ -1654,7 +1740,8 @@
         "uncle-sherm",
         "prof-umbra"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "male"
     },
     {
       "id": "doomscroll",
@@ -1673,7 +1760,8 @@
         "tanner-blunt",
         "mainframe"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "npc-dave",
@@ -1681,7 +1769,7 @@
       "family": "Internet",
       "archetype": "Self-Aware Background Character",
       "voice": "Pleasant, looping, slightly robotic. Repeats his one line.",
-      "look": "BODY SHAPE: deliberately plain average proportions, except one arm frozen mid-swing at a stiff unnatural angle like a repeating animation loop. FACE: a flat, slightly-too-wide smile that never changes, painted-on looking. PROP: none \u2014 his repetitive blankness is the whole joke.",
+      "look": "BODY SHAPE: deliberately plain average proportions, except one arm frozen mid-swing at a stiff unnatural angle like a repeating animation loop. FACE: a flat, slightly-too-wide smile that never changes, painted-on looking. PROP: none — his repetitive blankness is the whole joke.",
       "palette": [
         "#8a9a7a",
         "#e0d8c0",
@@ -1692,7 +1780,8 @@
         "beige",
         "buffer"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "neutral"
     },
     {
       "id": "grindset-gary",
@@ -1711,7 +1800,8 @@
         "brent-callahan",
         "ad-break"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "buffer",
@@ -1719,7 +1809,7 @@
       "family": "Internet",
       "archetype": "Perpetually Lagging",
       "voice": "Stutters, freezes mid-word, catches up in a rush. Pitch warps.",
-      "look": "BODY SHAPE: NOT a human at all \u2014 a simple flat circular ring shape, like a donut standing on its edge, frozen mid-roll with no arms or legs, with 2-3 faded semi-transparent duplicate rings trailing behind it like a motion-blur afterimage. FACE: a single frozen half-formed expression painted on the front of the ring, mouth stuck open mid-word. PROP: none \u2014 the freeze-frame afterimages are the design.",
+      "look": "BODY SHAPE: NOT a human at all — a simple flat circular ring shape, like a donut standing on its edge, frozen mid-roll with no arms or legs, with 2-3 faded semi-transparent duplicate rings trailing behind it like a motion-blur afterimage. FACE: a single frozen half-formed expression painted on the front of the ring, mouth stuck open mid-word. PROP: none — the freeze-frame afterimages are the design.",
       "palette": [
         "#8a8a95",
         "#4ac0d0",
@@ -1730,7 +1820,8 @@
         "pixel-imp",
         "npc-dave"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "neutral"
     },
     {
       "id": "megamod",
@@ -1749,7 +1840,8 @@
         "deb-from-hr",
         "captcha"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "the-algorithm",
@@ -1757,7 +1849,7 @@
       "family": "Internet",
       "archetype": "Omniscient Narrator",
       "voice": "Calm, smooth, omnipresent. Slight reverb. Knows what you did.",
-      "look": "BODY SHAPE: a tall stack of shifting rectangular screen-frames forming a loose humanoid silhouette, no fixed limbs. FACE: no real face \u2014 a single brighter glowing rectangle near the top functions as an eye. PROP: none needed.",
+      "look": "BODY SHAPE: a tall stack of shifting rectangular screen-frames forming a loose humanoid silhouette, no fixed limbs. FACE: no real face — a single brighter glowing rectangle near the top functions as an eye. PROP: none needed.",
       "palette": [
         "#e8402a",
         "#1a1a2a",
@@ -1768,7 +1860,8 @@
         "oracle-9",
         "the-cube"
       ],
-      "tier": 1
+      "tier": 1,
+      "gender": "neutral"
     },
     {
       "id": "boris-hoggard",
@@ -1786,7 +1879,8 @@
       "pairs": [
         "big-marv"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "vinnie-tuscato",
@@ -1804,7 +1898,8 @@
       "pairs": [
         "slick-dime"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "marco-ramline",
@@ -1822,7 +1917,8 @@
       "pairs": [
         "big-marv"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "gary-strand",
@@ -1840,7 +1936,8 @@
       "pairs": [
         "norm-plimm"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "karla-krest",
@@ -1858,7 +1955,8 @@
       "pairs": [
         "marcy-mulch"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "female"
     },
     {
       "id": "reggie-kessler",
@@ -1876,7 +1974,8 @@
       "pairs": [
         "chad-pemberton"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "mira-vosk",
@@ -1894,7 +1993,8 @@
       "pairs": [
         "ada-vole"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "female"
     },
     {
       "id": "felix-noire",
@@ -1912,7 +2012,8 @@
       "pairs": [
         "slick-dime"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "benji-ford",
@@ -1930,7 +2031,8 @@
       "pairs": [
         "intern-greg"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "olga-brandt",
@@ -1948,7 +2050,8 @@
       "pairs": [
         "gnawl"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "female"
     },
     {
       "id": "cornelius-blatt",
@@ -1966,7 +2069,8 @@
       "pairs": [
         "ratticus"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     },
     {
       "id": "riley-carve",
@@ -1984,7 +2088,8 @@
       "pairs": [
         "vance-steele"
       ],
-      "tier": 2
+      "tier": 2,
+      "gender": "male"
     }
   ]
 }

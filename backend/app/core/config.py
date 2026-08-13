@@ -42,6 +42,19 @@ class Settings(BaseSettings):
     # Note: No GOOGLE_APPLICATION_CREDENTIALS needed on Cloud Run
     # — the attached Service Account is used automatically.
 
+    # ── Brainrot Clips Maker — GCS bucket ─────────────────────
+    # Gameplay background clips + character assets live in their own
+    # bucket (separate from shortclipr-clips) so they can have their
+    # own lifecycle/retention rules — this content is shared library
+    # material, not per-user output.
+    BRAINROT_GCS_BUCKET_NAME: str = ""
+
+    # ── UnrealSpeech (TTS) ─────────────────────────────────────
+    UNREALSPEECH_API_KEY: str = ""
+
+    # ── Lemonfox (TTS) ─────────────────────────────────────────
+    LEMONFOX_API_KEY: str = ""
+
     # ── Google OAuth + JWT ────────────────────────────────────
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""   # Required for YouTube publishing swap
@@ -65,7 +78,11 @@ class Settings(BaseSettings):
     DODO_PAYMENTS_API_KEY: str = ""
     DODO_PAYMENTS_WEBHOOK_SECRET: str = ""
     # Product IDs from your Dodo dashboard (Products → copy ID)
-    # 5 tiers matching the pricing slider
+    # ── Current pricing (3 tiers) ─────────────────────────────
+    DODO_PRODUCT_STARTER_30: str = ""    # $19 — 30 shorts
+    DODO_PRODUCT_GROWTH_100: str = ""    # $39 — 100 shorts
+    DODO_PRODUCT_UNLIMITED: str = ""     # $99 — unlimited shorts
+    # ── Legacy slider tiers (kept for existing subscribers) ───
     DODO_PRODUCT_STARTER_100: str = ""   # $10  — 100 shorts
     DODO_PRODUCT_STARTER_250: str = ""   # $25  — 250 shorts
     DODO_PRODUCT_PRO_500: str = ""       # $45  — 500 shorts
@@ -86,6 +103,11 @@ class Settings(BaseSettings):
     SOURCE_DOWNLOAD_CHUNKS: int = 8         # parallel ranged-download chunk count
     MAX_CONCURRENT_JOBS_PER_USER: int = 1   # one job at a time — pins the user's IP + prevents Proxy-Seller IP collisions
     # Note: per-video duration limits are now plan-based — see app/core/plan_limits.py
+
+    # Brainrot jobs don't touch YouTube/proxies, so the IP-pinning constraint
+    # above doesn't apply — cap is purely about not overloading the shared
+    # ffmpeg-worker pool with one user's concurrent renders.
+    MAX_CONCURRENT_BRAINROT_JOBS_PER_USER: int = 2
 
     # ── Worker dispatch (optional second Cloud Run services) ───
     # Two operating modes:

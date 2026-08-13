@@ -21,6 +21,7 @@ export default function Navigation() {
     { label: 'How it works', href: '/youtube-shorts#how-it-works' },
     { label: 'Features',     href: '/youtube-shorts#features'     },
     { label: 'Tools',        href: '/youtube-shorts/tools'          },
+    { label: 'Guides',       href: '/youtube-shorts/guides'         },
     { label: 'Compare',      href: '/youtube-shorts/alternatives'   },
     { label: 'Pricing',      href: '/youtube-shorts#pricing'      },
     { label: 'About',        href: '/about'          },

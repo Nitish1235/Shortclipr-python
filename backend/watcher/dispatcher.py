@@ -285,6 +285,150 @@ async def process_one_ffmpeg_job(pool: asyncpg.Pool) -> bool:
 
 
 # ═══════════════════════════════════════════════════════════════
+# BRAINROT QUEUE — dialogue-driven character videos
+#
+# Mirrors the main pipeline's split-worker pattern exactly:
+#
+#   Stage 1 — API worker (shortclipr-api-worker):
+#     'created' → claim → POST /internal/brainrot-api-stage/run
+#     Worker: GPT script generation + TTS synthesis + GCS audio upload
+#     On completion: worker updates status to 'api_done'
+#
+#   Stage 2 — Brainrot FFmpeg worker (shortclipr-brainrot-worker):
+#     'api_done' → claim → POST /internal/brainrot-ffmpeg-stage/run
+#     Worker: Download assets + composite render + upload final clip
+#     On completion: worker updates status to 'complete'
+#
+# Uses a dedicated BRAINROT_WORKERS pool (separate from FFMPEG_WORKERS)
+# so brainrot rendering never competes with YouTube Shorts encoding.
+# Region-aware load balancing via _pick_region() with BRAINROT_REGION_SOFT_CAP.
+# ═══════════════════════════════════════════════════════════════
+
+async def get_brainrot_api_region_load(pool: asyncpg.Pool) -> dict[str, int]:
+    """Count active brainrot jobs in the API stage per region."""
+    rows = await pool.fetch("""
+        SELECT target_api_region, count(*) AS active
+        FROM brainrot_jobs
+        WHERE status IN ('generating_script', 'synthesizing_voice')
+          AND target_api_region IS NOT NULL
+        GROUP BY target_api_region
+    """)
+    return {r["target_api_region"]: r["active"] for r in rows}
+
+
+async def get_brainrot_ffmpeg_region_load(pool: asyncpg.Pool) -> dict[str, int]:
+    """Count active brainrot jobs in FFmpeg rendering per region."""
+    rows = await pool.fetch("""
+        SELECT target_brainrot_region, count(*) AS active
+        FROM brainrot_jobs
+        WHERE status = 'rendering'
+          AND target_brainrot_region IS NOT NULL
+        GROUP BY target_brainrot_region
+    """)
+    return {r["target_brainrot_region"]: r["active"] for r in rows}
+
+
+async def claim_brainrot_api_job(pool: asyncpg.Pool, region: str) -> dict | None:
+    """Atomically claim the next 'created' brainrot job for the API stage."""
+    row = await pool.fetchrow("""
+        UPDATE brainrot_jobs
+        SET status             = 'generating_script',
+            target_api_region  = $1,
+            updated_at         = NOW()
+        WHERE job_id = (
+            SELECT job_id FROM brainrot_jobs
+            WHERE status = 'created'
+            ORDER BY created_at
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+        ) RETURNING job_id
+    """, region)
+    return dict(row) if row else None
+
+
+async def claim_brainrot_ffmpeg_job(pool: asyncpg.Pool, region: str) -> dict | None:
+    """Atomically claim the next 'api_done' brainrot job for FFmpeg rendering."""
+    row = await pool.fetchrow("""
+        UPDATE brainrot_jobs
+        SET status                  = 'rendering',
+            target_brainrot_region  = $1,
+            updated_at              = NOW()
+        WHERE job_id = (
+            SELECT job_id FROM brainrot_jobs
+            WHERE status = 'api_done'
+            ORDER BY updated_at
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+        ) RETURNING job_id
+    """, region)
+    return dict(row) if row else None
+
+
+async def release_brainrot_api_for_retry(pool: asyncpg.Pool, job_id: str) -> None:
+    """Bounce a failed brainrot API dispatch back to 'created' for retry."""
+    await pool.execute(
+        "UPDATE brainrot_jobs SET status = 'created', target_api_region = NULL, updated_at = NOW() WHERE job_id = $1",
+        job_id,
+    )
+
+
+async def release_brainrot_ffmpeg_for_retry(pool: asyncpg.Pool, job_id: str) -> None:
+    """Bounce a failed brainrot FFmpeg dispatch back to 'api_done' for retry."""
+    await pool.execute(
+        "UPDATE brainrot_jobs SET status = 'api_done', target_brainrot_region = NULL, updated_at = NOW() WHERE job_id = $1",
+        job_id,
+    )
+
+
+async def process_one_brainrot_api_job(pool: asyncpg.Pool) -> bool:
+    """Claim a 'created' brainrot job and dispatch it to the API worker (GPT + TTS)."""
+    load   = await get_brainrot_api_region_load(pool)
+    worker = _pick_region(load, config.API_WORKERS, config.API_REGION_SOFT_CAP)
+    if not worker:
+        return False
+
+    job = await claim_brainrot_api_job(pool, worker["region"])
+    if not job:
+        return False
+
+    job_id = str(job["job_id"])
+    try:
+        await _dispatch_to_worker(
+            worker["url"], "/internal/brainrot-api-stage/run",
+            config.INTERNAL_SECRET, {"job_id": job_id},
+        )
+        logger.info(f"[{job_id}] Dispatched brainrot API stage → {worker['region']}")
+    except Exception as exc:
+        logger.warning(f"[{job_id}] Brainrot API dispatch to {worker['region']} failed: {exc}")
+        await release_brainrot_api_for_retry(pool, job_id)
+    return True
+
+
+async def process_one_brainrot_ffmpeg_job(pool: asyncpg.Pool) -> bool:
+    """Claim an 'api_done' brainrot job and dispatch it to the brainrot FFmpeg worker (render)."""
+    load   = await get_brainrot_ffmpeg_region_load(pool)
+    worker = _pick_region(load, config.BRAINROT_WORKERS, config.BRAINROT_REGION_SOFT_CAP)
+    if not worker:
+        return False
+
+    job = await claim_brainrot_ffmpeg_job(pool, worker["region"])
+    if not job:
+        return False
+
+    job_id = str(job["job_id"])
+    try:
+        await _dispatch_to_worker(
+            worker["url"], "/internal/brainrot-ffmpeg-stage/run",
+            config.INTERNAL_SECRET, {"job_id": job_id},
+        )
+        logger.info(f"[{job_id}] Dispatched brainrot FFmpeg stage → {worker['region']}")
+    except Exception as exc:
+        logger.warning(f"[{job_id}] Brainrot FFmpeg dispatch to {worker['region']} failed: {exc}")
+        await release_brainrot_ffmpeg_for_retry(pool, job_id)
+    return True
+
+
+# ═══════════════════════════════════════════════════════════════
 # LEGACY MODE — single unified pool
 # ═══════════════════════════════════════════════════════════════
 
@@ -383,13 +527,17 @@ async def process_one_legacy_job(pool: asyncpg.Pool) -> bool:
 
 async def process_all_unclaimed(pool: asyncpg.Pool) -> int:
     """
-    Drain both queues (or the legacy queue). Returns total dispatched count.
+    Drain all queues. Returns total dispatched count.
     Called by the poll fallback in main.py.
+
+    Drain order:
+      1. Main API queue  — feeds the main FFmpeg queue
+      2. Main FFmpeg queue
+      3. Brainrot API queue  — GPT + TTS, feeds brainrot FFmpeg queue
+      4. Brainrot FFmpeg queue  — compositing on dedicated brainrot worker pool
     """
     dispatched = 0
     if config.SPLIT_MODE:
-        # Drain API queue first — FFmpeg queue is fed by API completions,
-        # so hitting API first minimises time-to-completion when both are hot.
         while await process_one_api_job(pool):
             dispatched += 1
         while await process_one_ffmpeg_job(pool):
@@ -397,6 +545,13 @@ async def process_all_unclaimed(pool: asyncpg.Pool) -> int:
     else:
         while await process_one_legacy_job(pool):
             dispatched += 1
+
+    # Brainrot: Stage 1 (API worker — GPT + TTS)
+    while await process_one_brainrot_api_job(pool):
+        dispatched += 1
+    # Brainrot: Stage 2 (Brainrot FFmpeg worker — render)
+    while await process_one_brainrot_ffmpeg_job(pool):
+        dispatched += 1
     return dispatched
 
 
@@ -404,8 +559,10 @@ async def process_one_notification(pool: asyncpg.Pool, channel: str) -> bool:
     """
     Handle a single LISTEN notification. Channel tells us which queue to
     dispatch from:
-      - 'new_job'   → API queue (or legacy queue)
-      - 'api_done'  → FFmpeg queue
+      - 'new_job'            → Main API queue (or legacy queue)
+      - 'api_done'           → Main FFmpeg queue
+      - 'brainrot_new'       → Brainrot API queue (GPT + TTS)
+      - 'brainrot_api_done'  → Brainrot FFmpeg queue (render)
     """
     if channel == "new_job":
         if config.SPLIT_MODE:
@@ -413,6 +570,10 @@ async def process_one_notification(pool: asyncpg.Pool, channel: str) -> bool:
         return await process_one_legacy_job(pool)
     if channel == "api_done":
         return await process_one_ffmpeg_job(pool)
+    if channel == "brainrot_new":
+        return await process_one_brainrot_api_job(pool)
+    if channel == "brainrot_api_done":
+        return await process_one_brainrot_ffmpeg_job(pool)
     logger.warning(f"Unknown LISTEN channel: {channel}")
     return False
 
@@ -423,17 +584,13 @@ async def process_one_notification(pool: asyncpg.Pool, channel: str) -> bool:
 
 async def reconcile_stuck(pool: asyncpg.Pool) -> int:
     """
-    Sweep for jobs stuck past the timeout in any pre-terminal state:
-      - 'created'          — API queue never claimed (watcher down / missed notify)
-      - 'api_processing'   — API worker crashed / never returned
-      - 'api_done'         — FFmpeg queue never claimed
-      - 'ffmpeg_processing' — FFmpeg worker crashed (3× timeout since it's slow)
-      - 'dispatched'       — legacy unified dispatch stalled
-
-    For each: if retry budget remains → release for retry with backoff;
-              else → fail + refund.
+    Sweep for jobs stuck past the timeout in any pre-terminal state.
+    Handles both main pipeline jobs and brainrot jobs independently.
     """
     minutes = config.RECONCILE_MINUTES
+    reconciled = 0
+
+    # ── Main pipeline jobs ────────────────────────────────────────
     stuck = await pool.fetch("""
         SELECT job_id, status, retry_count
         FROM jobs
@@ -444,7 +601,6 @@ async def reconcile_stuck(pool: asyncpg.Pool) -> int:
            OR (status = 'ffmpeg_processing' AND ffmpeg_dispatched_at < NOW() - ($1::int * 3 || ' minutes')::interval)
     """, str(minutes))
 
-    reconciled = 0
     for job in stuck:
         job_id = str(job["job_id"])
         status = job["status"]
@@ -459,7 +615,6 @@ async def reconcile_stuck(pool: asyncpg.Pool) -> int:
             await _refund_job(pool, job_id)
         else:
             logger.warning(f"[{job_id}] Stuck in '{status}' — retrying")
-            # Route to the correct retry path based on which stage got stuck.
             if status in ("api_processing", "created", "dispatched"):
                 if config.SPLIT_MODE and status != "dispatched":
                     await release_api_for_retry(pool, job_id)
@@ -469,6 +624,26 @@ async def reconcile_stuck(pool: asyncpg.Pool) -> int:
                 await release_ffmpeg_for_retry(pool, job_id)
         reconciled += 1
 
+    # ── Brainrot jobs ─────────────────────────────────────────────
+    stuck_brainrot = await pool.fetch("""
+        SELECT job_id, status
+        FROM brainrot_jobs
+        WHERE (status IN ('created', 'generating_script', 'synthesizing_voice')
+               AND updated_at < NOW() - ($1 || ' minutes')::interval)
+           OR (status IN ('api_done', 'rendering')
+               AND updated_at < NOW() - ($1::int * 3 || ' minutes')::interval)
+    """, str(minutes))
+
+    for job in stuck_brainrot:
+        job_id = str(job["job_id"])
+        status = job["status"]
+        logger.warning(f"[brainrot:{job_id}] Stuck in '{status}' — releasing for retry")
+        if status in ("created", "generating_script", "synthesizing_voice"):
+            await release_brainrot_api_for_retry(pool, job_id)
+        elif status in ("api_done", "rendering"):
+            await release_brainrot_ffmpeg_for_retry(pool, job_id)
+        reconciled += 1
+
     if reconciled:
-        logger.info(f"Reconciled {reconciled} stuck job(s)")
+        logger.info(f"Reconciled {reconciled} stuck job(s) (main + brainrot)")
     return reconciled

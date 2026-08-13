@@ -181,7 +181,7 @@ export default function Hero() {
                 <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#111', marginBottom: '2px' }}>
                   Sign in to start — your URL is saved 🔒
                 </div>
-                <div style={{ fontSize: '0.75rem', color: '#999' }}>Free • No credit card • 3 free clips</div>
+                <div style={{ fontSize: '0.75rem', color: '#999' }}>Free • No credit card • 2 free clips</div>
               </div>
               <GoogleLogin
                 onSuccess={async cr => {
@@ -198,7 +198,7 @@ export default function Hero() {
           )}
 
           <div style={{ fontSize: '0.75rem', color: '#bbb', marginTop: '10px' }}>
-            ✓ Free forever plan &nbsp;·&nbsp; ✓ No credit card &nbsp;·&nbsp; ✓ 3 free clips included
+            ✓ Free forever plan &nbsp;·&nbsp; ✓ No credit card &nbsp;·&nbsp; ✓ 2 free clips included
           </div>
         </div>
 

@@ -27,6 +27,7 @@ from app.api.editor import _burn_and_upload_from_url
 from app.core.config import get_settings
 from app.db import supabase as db
 from app.pipeline.api_stage import run_api_stage
+from app.pipeline.brainrot_stage import run_brainrot_stage
 from app.pipeline.captions import Caption
 from app.pipeline.ffmpeg_stage import run_ffmpeg_stage
 from app.pipeline.orchestrator import run_pipeline
@@ -98,6 +99,41 @@ async def internal_run_ffmpeg_stage(body: InternalFfmpegStageRequest, x_internal
     asyncio.create_task(
         run_ffmpeg_stage(body.job_id),
         name=f"ffmpeg-{body.job_id[:8]}",
+    )
+    return {"status": "accepted"}
+
+
+class InternalBrainrotApiStageRequest(BaseModel):
+    job_id: str
+
+
+@router.post("/brainrot-api-stage/run", status_code=202)
+async def internal_run_brainrot_api_stage(body: InternalBrainrotApiStageRequest, x_internal_secret: str = Header(default="")):
+    """Brainrot API stage: script generation → TTS → upload audio to GCS → update scene_plan → status='api_done'.
+    Dispatched by watcher.
+    """
+    _require_internal_secret(x_internal_secret)
+    from app.pipeline.brainrot_stage import run_brainrot_api_stage
+    asyncio.create_task(
+        run_brainrot_api_stage(body.job_id),
+        name=f"br-api-{body.job_id[:8]}",
+    )
+    return {"status": "accepted"}
+
+
+class InternalBrainrotFfmpegStageRequest(BaseModel):
+    job_id: str
+
+
+@router.post("/brainrot-ffmpeg-stage/run", status_code=202)
+async def internal_run_brainrot_ffmpeg_stage(body: InternalBrainrotFfmpegStageRequest, x_internal_secret: str = Header(default="")):
+    """Brainrot FFmpeg stage: Download assets → composite render → upload → status='complete'.
+    """
+    _require_internal_secret(x_internal_secret)
+    from app.pipeline.brainrot_stage import run_brainrot_ffmpeg_stage
+    asyncio.create_task(
+        run_brainrot_ffmpeg_stage(body.job_id),
+        name=f"br-ff-{body.job_id[:8]}",
     )
     return {"status": "accepted"}
 
