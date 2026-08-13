@@ -202,9 +202,17 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
         # We explicitly discard audio_url — brainrot background clips are silent.
         # DataImpulse resolves here; the download below re-resolves through
         # Proxy-Seller to avoid IP-mismatch 403s (same pattern as ffmpeg_stage).
-        init_video_url, _audio_ignored, init_user_agent = await get_stream_urls(
-            video_id, quality="1080p", session_id=source_id
-        )
+        try:
+            init_video_url, _audio_ignored, init_user_agent = await get_stream_urls(
+                video_id, quality="1080p", session_id=source_id
+            )
+        except Exception as init_exc:
+            logger.warning(
+                f"[gameplay-yt {source_id}] Initial DataImpulse stream resolve failed: {init_exc}. "
+                "Will skip Attempt 1 and rely on Proxy-Seller resolve fallbacks."
+            )
+            init_video_url = None
+            init_user_agent = None
 
         made = 0
         for idx, (start, dur) in enumerate(chunks):
@@ -235,25 +243,26 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
             clip_raw_done = False
 
             # Attempt 1: cached URL + Proxy-Seller ISP pool #0
-            ps_proxy_0 = get_proxyseller_proxy(session_id=source_id, attempt=0)
-            if ps_proxy_0:
-                try:
-                    await get_clip_via_dash(
-                        init_video_url, start, start + dur, clip_raw,
-                        audio_url=None,   # video-only — no audio needed for gameplay bg
-                        user_agent=init_user_agent,
-                        session_id=source_id,
-                        proxy_url=ps_proxy_0,
-                    )
-                    clip_raw_done = True
-                    logger.info(
-                        f"[gameplay-yt {source_id}] clip {clip_id} ← DASH Proxy-Seller #0"
-                    )
-                except Exception as exc1:
-                    logger.warning(
-                        f"[gameplay-yt {source_id}] DASH attempt 1 (cached+PS#0) failed: {exc1}"
-                    )
-                    clip_raw.unlink(missing_ok=True)
+            if init_video_url:
+                ps_proxy_0 = get_proxyseller_proxy(session_id=source_id, attempt=0)
+                if ps_proxy_0:
+                    try:
+                        await get_clip_via_dash(
+                            init_video_url, start, start + dur, clip_raw,
+                            audio_url=None,   # video-only — no audio needed for gameplay bg
+                            user_agent=init_user_agent,
+                            session_id=source_id,
+                            proxy_url=ps_proxy_0,
+                        )
+                        clip_raw_done = True
+                        logger.info(
+                            f"[gameplay-yt {source_id}] clip {clip_id} ← DASH Proxy-Seller #0"
+                        )
+                    except Exception as exc1:
+                        logger.warning(
+                            f"[gameplay-yt {source_id}] DASH attempt 1 (cached+PS#0) failed: {exc1}"
+                        )
+                        clip_raw.unlink(missing_ok=True)
 
             # Attempt 2: re-resolve + download through Proxy-Seller pool #1
             if not clip_raw_done:
