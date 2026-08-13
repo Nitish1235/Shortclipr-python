@@ -138,6 +138,24 @@ async def internal_run_brainrot_ffmpeg_stage(body: InternalBrainrotFfmpegStageRe
     return {"status": "accepted"}
 
 
+class InternalGameplayProcessRequest(BaseModel):
+    source_id: str
+    video_id: str
+    category: str
+
+
+@router.post("/gameplay-process/run", status_code=202)
+async def internal_run_gameplay_process(body: InternalGameplayProcessRequest, x_internal_secret: str = Header(default="")):
+    """Gameplay processing stage: download DASH segments → skip 30s → clip → reframe 9:16 → upload."""
+    _require_internal_secret(x_internal_secret)
+    from app.pipeline.brainrot_gameplay import run_gameplay_on_worker
+    asyncio.create_task(
+        run_gameplay_on_worker(body.source_id, body.video_id, body.category),
+        name=f"br-game-{body.source_id[:8]}",
+    )
+    return {"status": "accepted"}
+
+
 class InternalTestRequest(BaseModel):
     job_id: str
     youtube_url: str

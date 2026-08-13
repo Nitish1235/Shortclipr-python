@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     # bucket (separate from shortclipr-clips) so they can have their
     # own lifecycle/retention rules — this content is shared library
     # material, not per-user output.
-    BRAINROT_GCS_BUCKET_NAME: str = ""
+    BRAINROT_GCS_BUCKET_NAME: str = "shortclipr-brainrot-assets"
 
     # ── UnrealSpeech (TTS) ─────────────────────────────────────
     UNREALSPEECH_API_KEY: str = ""

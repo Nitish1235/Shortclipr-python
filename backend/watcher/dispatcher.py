@@ -429,6 +429,95 @@ async def process_one_brainrot_ffmpeg_job(pool: asyncpg.Pool) -> bool:
 
 
 # ═══════════════════════════════════════════════════════════════
+# BRAINROT GAMEPLAY QUEUE
+# ═══════════════════════════════════════════════════════════════
+
+async def get_gameplay_region_load(pool: asyncpg.Pool) -> dict[str, int]:
+    """Count active gameplay sources in processing state per region."""
+    rows = await pool.fetch("""
+        SELECT target_ffmpeg_region, count(*) AS active
+        FROM brainrot_gameplay_sources
+        WHERE status = 'processing'
+          AND target_ffmpeg_region IS NOT NULL
+        GROUP BY target_ffmpeg_region
+    """)
+    return {r["target_ffmpeg_region"]: r["active"] for r in rows}
+
+
+async def claim_gameplay_job(pool: asyncpg.Pool, region: str) -> dict | None:
+    """Atomically claim the next 'created' gameplay source."""
+    row = await pool.fetchrow("""
+        UPDATE brainrot_gameplay_sources
+        SET status                = 'processing',
+            target_ffmpeg_region  = $1,
+            dispatched_at         = NOW()
+        WHERE id = (
+            SELECT id FROM brainrot_gameplay_sources
+            WHERE status = 'created'
+              AND start_after <= NOW()
+            ORDER BY created_at
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+        ) RETURNING id, video_id, category_cached
+    """, region)
+    return dict(row) if row else None
+
+
+async def release_gameplay_for_retry(pool: asyncpg.Pool, source_id: str) -> None:
+    """Bounce a failed gameplay dispatch back to 'created' with exponential backoff,
+    or mark it failed if MAX_RETRIES exceeded."""
+    await pool.execute("""
+        UPDATE brainrot_gameplay_sources
+        SET status = CASE
+                WHEN retry_count >= $2 THEN 'failed'
+                ELSE 'created'
+            END,
+            error_message = CASE
+                WHEN retry_count >= $2 THEN 'Gameplay dispatch failed after max retries'
+                ELSE NULL
+            END,
+            retry_count = retry_count + 1,
+            start_after = NOW() + make_interval(secs => power(2, LEAST(retry_count, 5)) * 3),
+            target_ffmpeg_region = NULL,
+            dispatched_at = NULL
+        WHERE id = $1
+    """, source_id, config.MAX_RETRIES)
+
+
+async def process_one_gameplay_job(pool: asyncpg.Pool) -> bool:
+    """Claim a 'created' gameplay source and dispatch it to the FFmpeg worker."""
+    load   = await get_gameplay_region_load(pool)
+    workers = config.FFMPEG_WORKERS if config.SPLIT_MODE else config.LEGACY_WORKERS
+    soft_cap = config.FFMPEG_REGION_SOFT_CAP if config.SPLIT_MODE else config.LEGACY_REGION_SOFT_CAP
+    worker = _pick_region(load, workers, soft_cap)
+    if not worker:
+        return False
+
+    job = await claim_gameplay_job(pool, worker["region"])
+    if not job:
+        return False
+
+    source_id = str(job["id"])
+    video_id  = job["video_id"]
+    category  = job["category_cached"]
+
+    try:
+        await _dispatch_to_worker(
+            worker["url"], "/internal/gameplay-process/run",
+            config.INTERNAL_SECRET, {
+                "source_id": source_id,
+                "video_id": video_id,
+                "category": category,
+            },
+        )
+        logger.info(f"[gameplay:{source_id}] Dispatched gameplay → {worker['region']}")
+    except Exception as exc:
+        logger.warning(f"[gameplay:{source_id}] Gameplay dispatch to {worker['region']} failed: {exc}")
+        await release_gameplay_for_retry(pool, source_id)
+    return True
+
+
+# ═══════════════════════════════════════════════════════════════
 # LEGACY MODE — single unified pool
 # ═══════════════════════════════════════════════════════════════
 
@@ -552,6 +641,11 @@ async def process_all_unclaimed(pool: asyncpg.Pool) -> int:
     # Brainrot: Stage 2 (Brainrot FFmpeg worker — render)
     while await process_one_brainrot_ffmpeg_job(pool):
         dispatched += 1
+    
+    # Gameplay sources (Main FFmpeg worker)
+    while await process_one_gameplay_job(pool):
+        dispatched += 1
+
     return dispatched
 
 
@@ -563,6 +657,7 @@ async def process_one_notification(pool: asyncpg.Pool, channel: str) -> bool:
       - 'api_done'           → Main FFmpeg queue
       - 'brainrot_new'       → Brainrot API queue (GPT + TTS)
       - 'brainrot_api_done'  → Brainrot FFmpeg queue (render)
+      - 'gameplay_new'       → Gameplay FFmpeg queue
     """
     if channel == "new_job":
         if config.SPLIT_MODE:
@@ -574,6 +669,8 @@ async def process_one_notification(pool: asyncpg.Pool, channel: str) -> bool:
         return await process_one_brainrot_api_job(pool)
     if channel == "brainrot_api_done":
         return await process_one_brainrot_ffmpeg_job(pool)
+    if channel == "gameplay_new":
+        return await process_one_gameplay_job(pool)
     logger.warning(f"Unknown LISTEN channel: {channel}")
     return False
 
@@ -644,6 +741,30 @@ async def reconcile_stuck(pool: asyncpg.Pool) -> int:
             await release_brainrot_ffmpeg_for_retry(pool, job_id)
         reconciled += 1
 
+    # ── Gameplay sources ──────────────────────────────────────────
+    stuck_gameplay = await pool.fetch("""
+        SELECT id, status, retry_count
+        FROM brainrot_gameplay_sources
+        WHERE (status = 'created'    AND start_after   < NOW() - ($1 || ' minutes')::interval)
+           OR (status = 'processing' AND dispatched_at < NOW() - ($1::int * 3 || ' minutes')::interval)
+    """, str(minutes))
+
+    for source in stuck_gameplay:
+        source_id = str(source["id"])
+        status = source["status"]
+        retries = source["retry_count"] or 0
+
+        if retries >= config.MAX_RETRIES:
+            logger.error(f"[gameplay:{source_id}] Stuck in '{status}' with max retries — failing")
+            await pool.execute(
+                "UPDATE brainrot_gameplay_sources SET status='failed', error_message='Gameplay dispatch stuck beyond timeout' WHERE id=$1",
+                source_id,
+            )
+        else:
+            logger.warning(f"[gameplay:{source_id}] Stuck in '{status}' — retrying")
+            await release_gameplay_for_retry(pool, source_id)
+        reconciled += 1
+
     if reconciled:
-        logger.info(f"Reconciled {reconciled} stuck job(s) (main + brainrot)")
+        logger.info(f"Reconciled {reconciled} stuck job(s) (main + brainrot + gameplay)")
     return reconciled

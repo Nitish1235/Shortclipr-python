@@ -86,6 +86,12 @@ def _on_api_done_notification(conn, pid, channel, payload):
     asyncio.ensure_future(_handle_notification("api_done"))
 
 
+def _on_gameplay_new_notification(conn, pid, channel, payload):
+    """LISTEN callback for 'gameplay_new' — admin submitted a gameplay source."""
+    logger.debug(f"LISTEN gameplay_new payload={payload}")
+    asyncio.ensure_future(_handle_notification("gameplay_new"))
+
+
 async def _handle_notification(channel: str) -> None:
     """Dispatch one job in response to a notification on the given channel."""
     pool = await _ensure_pool()
@@ -119,9 +125,10 @@ async def _run() -> None:
     # 2. Subscribe to LISTEN channels
     listen_conn = await pool.acquire()
     await listen_conn.add_listener("new_job", _on_new_job_notification)
+    await listen_conn.add_listener("gameplay_new", _on_gameplay_new_notification)
     if config.SPLIT_MODE:
         await listen_conn.add_listener("api_done", _on_api_done_notification)
-        logger.info("LISTEN 'new_job' + 'api_done' active (split-worker mode)")
+        logger.info("LISTEN 'new_job' + 'api_done' + 'gameplay_new' active (split-worker mode)")
     else:
         logger.info("LISTEN 'new_job' active (legacy single-pool mode)")
 

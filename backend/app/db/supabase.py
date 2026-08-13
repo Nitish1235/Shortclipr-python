@@ -385,11 +385,11 @@ async def list_audio_assets(asset_type: str | None = None) -> list[dict]:
 
 # ── Brainrot admin: gameplay + audio library writes (Phase 3) ───
 
-async def insert_gameplay_source(category: str, title: str | None, gcs_path: str, uploaded_by: str | None) -> dict:
+async def insert_gameplay_source(category: str, title: str | None, gcs_path: str, uploaded_by: str | None, video_id: str | None = None) -> dict:
     return await _fetchrow(
-        """INSERT INTO brainrot_gameplay_sources (category, title, gcs_path, uploaded_by)
-           VALUES ($1, $2, $3, $4) RETURNING *""",
-        category, title, gcs_path, uploaded_by,
+        """INSERT INTO brainrot_gameplay_sources (category, title, gcs_path, uploaded_by, video_id, category_cached, status)
+           VALUES ($1, $2, $3, $4, $5, $6, 'created') RETURNING *""",
+        category, title, gcs_path, uploaded_by, video_id, category,
     )
 
 

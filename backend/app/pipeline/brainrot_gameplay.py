@@ -23,6 +23,7 @@ does — the processing function is already self-contained.
 import asyncio
 import logging
 import math
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -389,6 +390,24 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
             "status": "failed",
             "error": str(e)[:300],
         }
+        try:
+            await db.set_gameplay_source_status(source_id, "failed", str(e)[:500])
+        except Exception:
+            pass
+
+
+async def run_gameplay_on_worker(source_id: str, video_id: str, category: str) -> None:
+    """Wrapper for running the gameplay processing on the FFmpeg worker.
+    Creates a temporary directory, runs the process, and cleans it up.
+    This replaces running process_gameplay_source_youtube in-process via create_task.
+    """
+    logger.info(f"[gameplay {source_id}] starting on worker, video_id={video_id}, category={category}")
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            tmp_dir = Path(td)
+            await process_gameplay_source_youtube(source_id, video_id, category, tmp_dir)
+    except Exception as e:
+        logger.exception(f"[gameplay {source_id}] worker wrapper failed")
         try:
             await db.set_gameplay_source_status(source_id, "failed", str(e)[:500])
         except Exception:

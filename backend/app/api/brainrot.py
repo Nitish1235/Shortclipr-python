@@ -534,22 +534,48 @@ async def admin_upload_gameplay(
     if not video_id:
         raise HTTPException(status_code=400, detail="Invalid YouTube URL")
 
-    # We just store the youtube URL in the DB instead of a GCS source blob
-    row = await db.insert_gameplay_source(category.strip(), (title or "").strip() or None, f"youtube:{video_id}", current_user.user_id)
+    from app.core.worker_routing import has_multi_region_workers
+    from app.core.config import get_settings
+    
+    settings = get_settings()
+    split_worker_mode = bool(settings.API_WORKER_URLS.strip() or settings.FFMPEG_WORKER_URLS.strip())
+    multi_region = split_worker_mode or has_multi_region_workers()
+
+    # We just store the youtube URL and video_id in the DB.
+    # If in multi_region mode, the DB trigger will pg_notify the watcher,
+    # which will dispatch it to the FFmpeg worker.
+    # Otherwise, we run it in-process.
+    row = await db.insert_gameplay_source(
+        category=category.strip(),
+        title=(title or "").strip() or None,
+        gcs_path=f"youtube:{video_id}",
+        uploaded_by=str(current_user.user_id),
+        video_id=video_id,
+    )
     source_id = str(row["id"])
 
-    tmp_dir = Path(tempfile.mkdtemp(prefix="gameplay_src_"))
+    if multi_region:
+        logger.info(f"Admin {current_user.email} submitted gameplay youtube {video_id} ({category}) — dispatched to watcher")
+    else:
+        from app.pipeline.brainrot_gameplay import process_gameplay_source_youtube
+        import tempfile
+        from pathlib import Path
+        import shutil
 
-    async def _task():
-        try:
-            await process_gameplay_source_youtube(source_id, video_id, category.strip(), tmp_dir)
-        finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+        # Need to change status from 'created' to 'processing' since the watcher won't do it
+        await db.set_gameplay_source_status(source_id, "processing")
+        
+        tmp_dir = Path(tempfile.mkdtemp(prefix="gameplay_src_"))
+        async def _task():
+            try:
+                await process_gameplay_source_youtube(source_id, video_id, category.strip(), tmp_dir)
+            finally:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    asyncio.create_task(_task(), name=f"gameplay-{source_id[:8]}")
-    logger.info(f"Admin {current_user.email} submitted gameplay youtube {video_id} ({category})")
-    return {"source_id": source_id, "status": "processing"}
+        asyncio.create_task(_task(), name=f"gameplay-{source_id[:8]}")
+        logger.info(f"Admin {current_user.email} submitted gameplay youtube {video_id} ({category}) — started in-process")
+
+    return {"source_id": source_id, "status": "created" if multi_region else "processing"}
 
 
 @router.get("/admin/gameplay/sources")
