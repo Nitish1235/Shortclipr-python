@@ -57,8 +57,10 @@ Go to **Cloud Run → shortclipr-ffmpeg-worker-{region} → Edit & Deploy New Re
 ### (Optional) Deploy a Dedicated Brainrot Worker
 To prevent Brainrot renders from competing with normal YouTube Shorts encodes, you can deploy a dedicated worker pool:
 1. Create a new Cloud Build trigger using the newly provided `backend/cloudbuild-brainrot-worker.yaml`.
-2. This creates `shortclipr-brainrot-worker-{region}`.
-3. Configure it with the exact same environment variables as the FFmpeg worker listed above.
+2. **Important:** Add a substitution variable `_REGION` to your Cloud Build trigger (e.g., `us-east1`, `europe-west1`) to deploy the worker wherever you'd like. It defaults to `us-central1` if omitted.
+3. This creates a service named `shortclipr-brainrot-worker-{region}`.
+4. Configure it with the exact same environment variables as the FFmpeg worker listed above.
+*(To deploy in additional regions via CLI, run: `gcloud builds submit --config=backend/cloudbuild-brainrot-worker.yaml --substitutions=_REGION=your-region`)*
 
 ### Update `shortclipr-watcher`
 To tell the system to use your dedicated Brainrot workers (and to prevent overload), go to **Cloud Run → shortclipr-watcher → Edit & Deploy New Revision → Variables & Secrets**:
