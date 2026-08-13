@@ -196,9 +196,8 @@ function GameplaySection({ notify }) {
   const [sources, setSources] = useState([])
   const [category, setCategory] = useState('')
   const [title, setTitle] = useState('')
-  const [file, setFile] = useState(null)
+  const [youtubeUrl, setYoutubeUrl] = useState('')
   const [busy, setBusy] = useState(false)
-  const fileRef = useRef(null)
   const timer = useRef(null)
 
   const load = useCallback(async () => {
@@ -216,16 +215,16 @@ function GameplaySection({ notify }) {
 
   const upload = async (e) => {
     e.preventDefault()
-    if (!file) return notify('Choose a gameplay video', 'error')
+    if (!youtubeUrl.trim()) return notify('Enter a YouTube URL', 'error')
     if (!category.trim()) return notify('Category is required', 'error')
     setBusy(true)
     const form = new FormData()
-    form.append('file', file); form.append('category', category.trim())
+    form.append('youtube_url', youtubeUrl.trim()); form.append('category', category.trim())
     if (title.trim()) form.append('title', title.trim())
     try {
       await send('/brainrot/admin/gameplay', { form })
-      notify('Upload received — processing in background', 'success')
-      setTitle(''); setFile(null); if (fileRef.current) fileRef.current.value = ''
+      notify('YouTube video received — processing in background', 'success')
+      setTitle(''); setYoutubeUrl('')
       setTimeout(load, 800)
     } catch (e) { notify(e.message, 'error') } finally { setBusy(false) }
   }
@@ -245,8 +244,8 @@ function GameplaySection({ notify }) {
           <input style={inputS} value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Parkour pack #1" />
         </div>
         <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 10, alignItems: 'center' }}>
-          <input ref={fileRef} type="file" accept="video/*" onChange={e => setFile(e.target.files?.[0] || null)} style={{ fontSize: '.8rem' }} />
-          <button type="submit" style={{ ...btnRed, opacity: busy ? .6 : 1 }} disabled={busy}>{busy ? 'Uploading…' : 'Upload & process'}</button>
+          <input type="url" placeholder="https://youtube.com/watch?v=..." value={youtubeUrl} onChange={e => setYoutubeUrl(e.target.value)} style={{ ...inputS, flex: 1 }} />
+          <button type="submit" style={{ ...btnRed, opacity: busy ? .6 : 1 }} disabled={busy}>{busy ? 'Processing…' : 'Process YouTube Video'}</button>
           <button type="button" style={btnGhost} onClick={load}>🔄 Refresh</button>
         </div>
       </form>

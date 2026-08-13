@@ -137,3 +137,82 @@ async def process_gameplay_source(source_id: str, local_path: Path, category: st
             await db.set_gameplay_source_status(source_id, "failed", str(e)[:500])
         except Exception:
             pass
+
+
+async def process_gameplay_source_youtube(source_id: str, video_id: str, category: str, tmp_dir: Path) -> None:
+    """Full processing pipeline for one YouTube source via DASH.
+    Skips downloading the full video by using DASH segment extraction."""
+    from app.pipeline.stream import get_stream_urls
+    from app.pipeline.extractor import get_clip_via_dash
+
+    try:
+        # Get duration
+        import yt_dlp
+        loop = asyncio.get_running_loop()
+        def _get_duration():
+            opts = {'quiet': True, 'noplaylist': True}
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+                return float(info.get('duration', 0))
+                
+        duration = await loop.run_in_executor(None, _get_duration)
+        
+        chunks = _plan_chunks(duration)
+        _status[source_id] = {"status": "processing", "total": len(chunks), "done": 0, "error": None}
+        logger.info(f"[gameplay-yt {source_id}] {duration:.1f}s → {len(chunks)} clip(s)")
+        
+        # We only want video, but get_stream_urls might try audio.
+        stream_url, _, user_agent = await get_stream_urls(video_id, quality="1080p")
+        
+        made = 0
+        for start, dur in chunks:
+            clip_id = uuid.uuid4().hex[:12]
+            clip_raw = tmp_dir / f"{clip_id}_raw.mp4"
+            clip_path = tmp_dir / f"{clip_id}.mp4"
+            thumb_path = tmp_dir / f"{clip_id}.jpg"
+            
+            # Fetch clip snippet via DASH securely directly from youtube
+            await get_clip_via_dash(stream_url, start, start + dur, clip_raw, audio_url=None, user_agent=user_agent)
+            
+            # Reframe properly
+            await _run([
+                "ffmpeg", "-y", "-i", str(clip_raw),
+                "-vf", f"{_REFRAME},fps=30", "-an",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
+                "-threads", "1", str(clip_path),
+            ], "gameplay reframe")
+            
+            # Generate thumbnail
+            await _run([
+                "ffmpeg", "-y", "-ss", f"{dur / 2:.2f}", "-i", str(clip_raw),
+                "-vf", _REFRAME, "-frames:v", "1", str(thumb_path),
+            ], "gameplay thumbnail")
+
+            clip_url = await upload_gameplay_clip(clip_path, source_id, clip_id)
+            thumb_url = None
+            try:
+                thumb_url = await upload_gameplay_thumbnail(thumb_path, source_id, clip_id)
+            except Exception as e:
+                logger.warning(f"[gameplay-yt {source_id}] thumbnail upload failed: {e}")
+
+            await db.insert_gameplay_clip(source_id, category, clip_url, thumb_url, dur)
+            made += 1
+            _status[source_id]["done"] = made
+            clip_raw.unlink(missing_ok=True)
+            clip_path.unlink(missing_ok=True)
+            thumb_path.unlink(missing_ok=True)
+
+        if made == 0:
+            raise RuntimeError("No usable clips produced from YouTube source")
+
+        await db.set_gameplay_source_status(source_id, "ready")
+        _status[source_id]["status"] = "ready"
+        logger.info(f"[gameplay-yt {source_id}] ready — {made} clip(s)")
+            
+    except Exception as e:
+        logger.exception(f"[gameplay-yt {source_id}] processing failed")
+        _status[source_id] = {**_status.get(source_id, {"total": 0, "done": 0}), "status": "failed", "error": str(e)[:300]}
+        try:
+            await db.set_gameplay_source_status(source_id, "failed", str(e)[:500])
+        except Exception:
+            pass

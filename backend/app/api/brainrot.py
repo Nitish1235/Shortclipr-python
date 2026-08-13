@@ -510,48 +510,45 @@ async def admin_delete_audio_asset(asset_id: str, current_user: CurrentUser):
 @router.post("/admin/gameplay", status_code=202)
 async def admin_upload_gameplay(
     current_user: CurrentUser,
-    file: UploadFile = File(...),
+    youtube_url: str = Form(...),
     category: str = Form(...),
     title: str | None = Form(default=None),
 ):
-    """Admin: upload a raw gameplay recording. It's trimmed (first 30s dropped),
-    split into ≤120s clips, reframed to 9:16, and thumbnailed in the background."""
+    """Admin: submit a YouTube gameplay recording. It's trimmed (first 30s dropped),
+    split into ≤120s clips, reframed to 9:16, and thumbnailed in the background using DASH."""
     _require_admin(current_user)
     if not category.strip():
         raise HTTPException(status_code=400, detail="category is required")
-    ext = Path(file.filename or "").suffix.lower()
-    if ext not in _VIDEO_CONTENT_TYPES:
-        raise HTTPException(status_code=400, detail=f"Unsupported video type: {ext or '(none)'}")
+    url = youtube_url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="youtube_url is required")
 
-    from app.pipeline.brainrot_gameplay import process_gameplay_source
-    from app.pipeline.uploader import _upload_to_gcs
+    from app.pipeline.brainrot_gameplay import process_gameplay_source_youtube
+    import re
+    
+    # Extract video ID
+    video_id = None
+    match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", url)
+    if match:
+        video_id = match.group(1)
+    if not video_id:
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL")
 
-    # Persist the upload to a temp dir that OUTLIVES this request — the
-    # background task owns it and cleans it up when done.
-    tmp_dir = Path(tempfile.mkdtemp(prefix="gameplay_src_"))
-    src_path = tmp_dir / f"source{ext}"
-    src_path.write_bytes(await file.read())
-
-    # Keep a copy of the raw source in the bucket for re-processing later.
-    src_id = uuid.uuid4().hex[:12]
-    loop = asyncio.get_running_loop()
-    src_blob = f"gameplay-sources/{src_id}{ext}"
-    src_url = await loop.run_in_executor(
-        None, _upload_to_gcs, src_path, src_blob, _VIDEO_CONTENT_TYPES[ext], settings.BRAINROT_GCS_BUCKET_NAME,
-    )
-
-    row = await db.insert_gameplay_source(category.strip(), (title or "").strip() or None, src_url, current_user.user_id)
+    # We just store the youtube URL in the DB instead of a GCS source blob
+    row = await db.insert_gameplay_source(category.strip(), (title or "").strip() or None, f"youtube:{video_id}", current_user.user_id)
     source_id = str(row["id"])
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="gameplay_src_"))
 
     async def _task():
         try:
-            await process_gameplay_source(source_id, src_path, category.strip(), tmp_dir)
+            await process_gameplay_source_youtube(source_id, video_id, category.strip(), tmp_dir)
         finally:
             import shutil
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
     asyncio.create_task(_task(), name=f"gameplay-{source_id[:8]}")
-    logger.info(f"Admin {current_user.email} uploaded gameplay source {source_id} ({category})")
+    logger.info(f"Admin {current_user.email} submitted gameplay youtube {video_id} ({category})")
     return {"source_id": source_id, "status": "processing"}
 
 
