@@ -322,7 +322,9 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
                     f"[gameplay-yt {source_id}] all DASH attempts failed for chunk {idx+1}; "
                     "falling back to full-source download"
                 )
-                fallback_proxy = get_dataimpulse_proxy(purpose=f"gameplay-fullsrc-{source_id[:8]}")
+                fallback_proxy = get_proxyseller_proxy(session_id=source_id, attempt=2)
+                if not fallback_proxy:
+                    fallback_proxy = get_dataimpulse_proxy(purpose=f"gameplay-fullsrc-{source_id[:8]}")
                 fv, _, fua = await get_stream_urls(
                     video_id, quality="1080p", session_id=source_id,
                     proxy_override=fallback_proxy,
