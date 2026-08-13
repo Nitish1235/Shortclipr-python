@@ -76,6 +76,19 @@ async def run_brainrot_ffmpeg_stage(job_id: str) -> None:
         await db.fail_brainrot_job(job_id, _friendly_error(str(exc)))
 
 
+async def run_brainrot_stage(job_id: str) -> None:
+    """
+    Single-service pipeline: run API stage → check outcome → run FFmpeg stage.
+    """
+    await run_brainrot_api_stage(job_id)
+
+    job = await db.get_brainrot_job(job_id)
+    if not job or job.get("status") != "api_done":
+        return
+
+    await run_brainrot_ffmpeg_stage(job_id)
+
+
 def _friendly_error(raw: str) -> str:
     r = (raw or "").lower()
     if "tts" in r or "unrealspeech" in r or "lemonfox" in r:
