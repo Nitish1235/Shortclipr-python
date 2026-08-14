@@ -196,9 +196,15 @@ async def download_source(
     return output_path
 
 
-def _ytdlp_download_sync(video_id: str, output_path: Path, proxy_url: str | None) -> None:
+def _ytdlp_download_sync(video_id: str, output_path: Path, proxy_url: str | None, format_str: str | None = None) -> None:
     """Blocking yt-dlp download — runs inside a thread pool executor."""
     import yt_dlp
+
+    default_format = (
+        "bestvideo[height<=1080][ext=mp4][vcodec!=av01]+bestaudio[ext=m4a]"
+        "/bestvideo[height<=1080][vcodec!=av01]+bestaudio"
+        "/best[height<=1080][vcodec!=av01]/best"
+    )
 
     opts: dict = {
         "quiet": True,
@@ -206,11 +212,7 @@ def _ytdlp_download_sync(video_id: str, output_path: Path, proxy_url: str | None
         "noplaylist": True,
         "socket_timeout": 30,
         "outtmpl": str(output_path),
-        "format": (
-            "bestvideo[height<=1080][ext=mp4][vcodec!=av01]+bestaudio[ext=m4a]"
-            "/bestvideo[height<=1080][vcodec!=av01]+bestaudio"
-            "/best[height<=1080][vcodec!=av01]/best"
-        ),
+        "format": format_str or default_format,
         "merge_output_format": "mp4",
         "extractor_args": {"youtube": {"player_client": ["android"]}},
         "concurrent_fragment_downloads": 4,
@@ -226,6 +228,7 @@ async def download_source_ytdlp(
     video_id: str,
     output_path: Path,
     proxy_url: str | None = None,
+    format_str: str | None = None,
 ) -> Path:
     """
     Last-resort source download: let yt-dlp resolve AND download in one
@@ -241,7 +244,7 @@ async def download_source_ytdlp(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     loop = asyncio.get_running_loop()
     await asyncio.wait_for(
-        loop.run_in_executor(None, _ytdlp_download_sync, video_id, output_path, proxy_url),
+        loop.run_in_executor(None, _ytdlp_download_sync, video_id, output_path, proxy_url, format_str),
         timeout=900,
     )
     if not output_path.exists() or output_path.stat().st_size < 1024:

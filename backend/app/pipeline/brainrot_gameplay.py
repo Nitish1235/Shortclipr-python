@@ -181,7 +181,13 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
         await download_source_ytdlp(
             video_id=video_id,
             output_path=source_mp4,
-            proxy_url=ps_info_proxy
+            proxy_url=ps_info_proxy,
+            format_str=(
+                "bestvideo[height>=1080][ext=mp4][vcodec!=av01]+bestaudio[ext=m4a]"
+                "/bestvideo[height>=1080][vcodec!=av01]+bestaudio"
+                "/bestvideo[ext=mp4][vcodec!=av01]+bestaudio[ext=m4a]"
+                "/bestvideo+bestaudio/best"
+            )
         )
 
         made = 0
@@ -202,7 +208,7 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
                 "-i", str(source_mp4),
                 "-vf", f"{_REFRAME},fps=30",
                 "-an",
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
                 "-threads", "4",
                 str(clip_path),
             ], "gameplay extract and reframe")
