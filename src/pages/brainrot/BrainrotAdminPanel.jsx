@@ -368,20 +368,26 @@ function ClipsSection({ notify }) {
         <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: 14 }}>
           {visible.map(clip => (
             <div key={clip.id} style={{ border: `2px solid ${statusColor(clip.status)}`, borderRadius: 12, overflow: 'hidden', background: '#fff', display: 'flex', flexDirection: 'column' }}>
-              {/* Thumbnail / video preview */}
+              {/* Video preview — plays inline on hover, opens modal on click */}
               <div style={{ position: 'relative', width: '100%', aspectRatio: '9/16', background: '#000', cursor: 'pointer' }}
-                onClick={() => setPreview(clip)}>
-                {clip.thumbnail_url
-                  ? <img src={clip.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                onClick={() => setPreview(clip)}
+                onMouseEnter={e => { const v = e.currentTarget.querySelector('video'); if (v) v.play().catch(() => {}) }}
+                onMouseLeave={e => { const v = e.currentTarget.querySelector('video'); if (v) { v.pause(); v.currentTime = 0 } }}>
+                {clip.gcs_path
+                  ? <video
+                      src={clip.gcs_path}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
                   : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: '.7rem', fontWeight: 700 }}>
                       🎮 {clip.category}
                     </div>}
-                {/* Play overlay */}
+                {/* Expand-to-modal overlay (shows on non-hover state) */}
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'rgba(0,0,0,.25)', opacity: 0, transition: 'opacity .15s' }}
-                  onMouseEnter={e => e.currentTarget.style.opacity = 1}
-                  onMouseLeave={e => e.currentTarget.style.opacity = 0}>
-                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>▶</div>
+                  background: 'rgba(0,0,0,.18)', opacity: 1, transition: 'opacity .15s', pointerEvents: 'none' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '.9rem' }}>⛶</div>
                 </div>
                 {/* Status badge */}
                 <div style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,.65)', borderRadius: 6, padding: '2px 7px', fontSize: '.6rem', fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '.04em' }}>
