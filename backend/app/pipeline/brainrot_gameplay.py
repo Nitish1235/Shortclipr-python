@@ -59,7 +59,11 @@ async def _ffprobe_duration(path: Path) -> float:
         "-of", "default=noprint_wrappers=1:nokey=1", str(path),
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
-    out, err = await proc.communicate()
+    try:
+        out, err = await asyncio.wait_for(proc.communicate(), timeout=60)
+    except asyncio.TimeoutError:
+        proc.kill()
+        raise RuntimeError("ffprobe timed out after 60s")
     if proc.returncode != 0:
         raise RuntimeError(f"ffprobe failed: {err.decode()[-200:]}")
     return float(out.decode().strip())
@@ -82,11 +86,24 @@ def _plan_chunks(duration: float) -> list[tuple[float, float]]:
     return chunks
 
 
-async def _run(cmd: list[str], what: str) -> None:
+async def _run(cmd: list[str], what: str, timeout: int = 1200) -> None:
+    """
+    Run a subprocess and wait for it to finish.
+
+    timeout: seconds to wait before killing the process (default 1200 = 20 min).
+    This is intentionally generous — a `slow`-preset libx264 encode of a 120s
+    1080p clip on a 4-vCPU machine takes ~2–5 min; 20 min is a safe ceiling
+    that will still catch truly hung processes (stalled FFmpeg, broken pipe, etc.).
+    """
     proc = await asyncio.create_subprocess_exec(
         *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
-    _, err = await proc.communicate()
+    try:
+        _, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.communicate()  # drain buffers
+        raise RuntimeError(f"{what} timed out after {timeout}s")
     if proc.returncode != 0:
         raise RuntimeError(f"{what} failed: {err.decode()[-400:]}")
 
@@ -106,6 +123,7 @@ async def process_gameplay_source(source_id: str, local_path: Path, category: st
             clip_path = tmp_dir / f"{clip_id}.mp4"
             thumb_path = tmp_dir / f"{clip_id}.jpg"
 
+            # slow preset: worst-case ~10 min for a 120s clip, 20 min hard limit
             await _run([
                 "ffmpeg", "-y", "-ss", f"{start:.2f}", "-i", str(local_path), "-t", f"{dur:.2f}",
                 "-vf", f"{_REFRAME},fps=30", "-an",
@@ -113,12 +131,12 @@ async def process_gameplay_source(source_id: str, local_path: Path, category: st
                 "-profile:v", "high", "-level", "4.0",
                 "-movflags", "+faststart",
                 "-threads", "1", str(clip_path),
-            ], "gameplay reframe")
+            ], "gameplay reframe", timeout=1200)
 
             await _run([
                 "ffmpeg", "-y", "-ss", f"{start + dur / 2:.2f}", "-i", str(local_path),
                 "-vf", _REFRAME, "-frames:v", "1", str(thumb_path),
-            ], "gameplay thumbnail")
+            ], "gameplay thumbnail", timeout=120)
 
             clip_url = await upload_gameplay_clip(clip_path, source_id, clip_id)
             thumb_url = None
@@ -169,7 +187,9 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
                 "no_warnings": True,
                 "noplaylist": True,
                 "skip_download": True,
-                "socket_timeout": 30,
+                "socket_timeout": 60,   # generous — proxy round-trips can be slow
+                "retries": 3,
+                "fragment_retries": 3,
             }
             if cheap_proxy:
                 opts["proxy"] = cheap_proxy
@@ -289,12 +309,12 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
                         "-movflags", "+faststart",
                         "-threads", "4",
                         str(clip_raw),
-                    ], "gameplay full-source extract")
+                    ], "gameplay full-source extract", timeout=300)
                     source_path.unlink(missing_ok=True)
                     clip_raw_done = True
                     logger.info(f"[gameplay-yt {source_id}] clip {clip_id} ← full-source fallback (Proxy-Seller)")
 
-                # ── Reframe ──
+                # ── Reframe — slow preset, 20 min ceiling —────────────────
                 await _run([
                     "ffmpeg", "-y", "-i", str(clip_raw),
                     "-vf", f"{_REFRAME},fps=30",
@@ -304,16 +324,16 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
                     "-movflags", "+faststart",
                     "-threads", "4",
                     str(clip_path),
-                ], "gameplay reframe")
+                ], "gameplay reframe", timeout=1200)
 
-                # ── Thumbnail ──────────────
+                # ── Thumbnail — single frame, fast ──────────────────────
                 await _run([
                     "ffmpeg", "-y",
                     "-ss", f"{dur / 2:.2f}", "-i", str(clip_raw),
                     "-vf", _REFRAME, "-frames:v", "1",
                     "-threads", "4",
                     str(thumb_path),
-                ], "gameplay thumbnail")
+                ], "gameplay thumbnail", timeout=120)
 
                 # ── Upload ───────────────
                 clip_url = await upload_gameplay_clip(clip_path, source_id, clip_id)
