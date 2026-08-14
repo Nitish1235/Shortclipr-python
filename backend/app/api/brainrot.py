@@ -511,29 +511,30 @@ async def admin_delete_audio_asset(asset_id: str, current_user: CurrentUser):
 @router.post("/admin/gameplay", status_code=202)
 async def admin_upload_gameplay(
     current_user: CurrentUser,
-    youtube_url: str = Form(...),
+    youtube_url: str | None = Form(default=None),
+    file: UploadFile | None = File(default=None),
     category: str = Form(...),
     title: str | None = Form(default=None),
 ):
-    """Admin: submit a YouTube gameplay recording. It's trimmed (first 30s dropped),
-    split into ≤120s clips, reframed to 9:16, and thumbnailed in the background using DASH."""
+    """Admin: submit a gameplay recording. Can be a YouTube URL or direct file upload.
+    It's trimmed (first 30s dropped), split into ≤120s clips, reframed to 9:16,
+    and thumbnailed in the background."""
     _require_admin(current_user)
     if not category.strip():
         raise HTTPException(status_code=400, detail="category is required")
-    url = youtube_url.strip()
-    if not url:
-        raise HTTPException(status_code=400, detail="youtube_url is required")
+        
+    if bool(youtube_url) == bool(file):
+        raise HTTPException(status_code=400, detail="Provide exactly one of youtube_url or file")
 
-    from app.pipeline.brainrot_gameplay import process_gameplay_source_youtube
-    import re
-    
-    # Extract video ID
+    url = (youtube_url or "").strip()
     video_id = None
-    match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", url)
-    if match:
-        video_id = match.group(1)
-    if not video_id:
-        raise HTTPException(status_code=400, detail="Invalid YouTube URL")
+    if url:
+        import re
+        match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", url)
+        if match:
+            video_id = match.group(1)
+        if not video_id:
+            raise HTTPException(status_code=400, detail="Invalid YouTube URL")
 
     from app.core.worker_routing import has_multi_region_workers
     from app.core.config import get_settings
@@ -549,16 +550,19 @@ async def admin_upload_gameplay(
     row = await db.insert_gameplay_source(
         category=category.strip(),
         title=(title or "").strip() or None,
-        gcs_path=f"youtube:{video_id}",
+        gcs_path=f"youtube:{video_id}" if video_id else "file:direct_upload",
         uploaded_by=str(current_user.user_id),
         video_id=video_id,
     )
     source_id = str(row["id"])
 
-    if multi_region:
+    # If it's a YouTube URL and we have multi-region workers, dispatch to worker.
+    # If it's a direct file upload, process it in-process since the file is already here
+    # (and the gameplay worker doesn't currently support GCS source downloads).
+    if multi_region and video_id:
         logger.info(f"Admin {current_user.email} submitted gameplay youtube {video_id} ({category}) — dispatched to watcher")
     else:
-        from app.pipeline.brainrot_gameplay import process_gameplay_source_youtube
+        from app.pipeline.brainrot_gameplay import process_gameplay_source_youtube, process_gameplay_source
         import tempfile
         from pathlib import Path
         import shutil
@@ -567,16 +571,26 @@ async def admin_upload_gameplay(
         await db.set_gameplay_source_status(source_id, "processing")
         
         tmp_dir = Path(tempfile.mkdtemp(prefix="gameplay_src_"))
+        
         async def _task():
             try:
-                await process_gameplay_source_youtube(source_id, video_id, category.strip(), tmp_dir)
+                if video_id:
+                    await process_gameplay_source_youtube(source_id, video_id, category.strip(), tmp_dir)
+                else:
+                    # Save uploaded file
+                    ext = Path(file.filename or "").suffix or ".mp4"
+                    local_path = tmp_dir / f"source_{source_id}{ext}"
+                    with open(local_path, "wb") as f:
+                        shutil.copyfileobj(file.file, f)
+                    await process_gameplay_source(source_id, local_path, category.strip(), tmp_dir)
             finally:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 
         asyncio.create_task(_task(), name=f"gameplay-{source_id[:8]}")
-        logger.info(f"Admin {current_user.email} submitted gameplay youtube {video_id} ({category}) — started in-process")
+        log_type = f"youtube {video_id}" if video_id else "file upload"
+        logger.info(f"Admin {current_user.email} submitted gameplay {log_type} ({category}) — started in-process")
 
-    return {"source_id": source_id, "status": "created" if multi_region else "processing"}
+    return {"source_id": source_id, "status": "created" if (multi_region and video_id) else "processing"}
 
 
 @router.get("/admin/gameplay/sources")

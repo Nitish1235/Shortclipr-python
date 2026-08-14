@@ -198,8 +198,11 @@ function GameplaySection({ notify }) {
   const [category, setCategory] = useState('')
   const [title, setTitle] = useState('')
   const [youtubeUrl, setYoutubeUrl] = useState('')
+  const [file, setFile] = useState(null)
+  const [tab, setTab] = useState('youtube') // 'youtube' | 'file'
   const [busy, setBusy] = useState(false)
   const timer = useRef(null)
+  const fileRef = useRef(null)
 
   const load = useCallback(async () => {
     try { setSources((await getJSON('/brainrot/admin/gameplay/sources')).sources || []) } catch { /* */ }
@@ -216,16 +219,26 @@ function GameplaySection({ notify }) {
 
   const upload = async (e) => {
     e.preventDefault()
-    if (!youtubeUrl.trim()) return notify('Enter a YouTube URL', 'error')
     if (!category.trim()) return notify('Category is required', 'error')
-    setBusy(true)
+    
     const form = new FormData()
-    form.append('youtube_url', youtubeUrl.trim()); form.append('category', category.trim())
+    form.append('category', category.trim())
     if (title.trim()) form.append('title', title.trim())
+    
+    if (tab === 'youtube') {
+      if (!youtubeUrl.trim()) return notify('Enter a YouTube URL', 'error')
+      form.append('youtube_url', youtubeUrl.trim())
+    } else {
+      if (!file) return notify('Choose a video file', 'error')
+      form.append('file', file)
+    }
+
+    setBusy(true)
     try {
       await send('/brainrot/admin/gameplay', { form })
-      notify('YouTube video received — processing in background', 'success')
-      setTitle(''); setYoutubeUrl('')
+      notify(tab === 'youtube' ? 'YouTube video received — processing in background' : 'File uploaded — processing in background', 'success')
+      setTitle(''); setYoutubeUrl(''); setFile(null)
+      if (fileRef.current) fileRef.current.value = ''
       setTimeout(load, 800)
     } catch (e) { notify(e.message, 'error') } finally { setBusy(false) }
   }
@@ -235,18 +248,30 @@ function GameplaySection({ notify }) {
   return (
     <div style={cardS}>
       <SectionHead icon="🎮" title="Gameplay backgrounds" sub="Upload a raw recording — the first 30s is dropped, then it's split into ≤120s clips and reframed to 9:16." />
-      <form onSubmit={upload} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12, alignItems: 'end' }}>
-        <div>
-          <label style={labelS}>Category</label>
-          <input style={inputS} value={category} onChange={e => setCategory(e.target.value)} placeholder="minecraft, subway_surfers, gta…" />
+      <form onSubmit={upload} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelS}>Category</label>
+            <input style={inputS} value={category} onChange={e => setCategory(e.target.value)} placeholder="minecraft, subway_surfers, gta…" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={labelS}>Title (optional)</label>
+            <input style={inputS} value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Parkour pack #1" />
+          </div>
         </div>
-        <div>
-          <label style={labelS}>Title (optional)</label>
-          <input style={inputS} value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Parkour pack #1" />
+        
+        <div style={{ display: 'flex', gap: 10, marginTop: 6, marginBottom: -4 }}>
+          <button type="button" onClick={() => setTab('youtube')} style={{ ...btnGhost, fontWeight: tab === 'youtube' ? 800 : 500, color: tab === 'youtube' ? C.text : C.mute }}>YouTube URL</button>
+          <button type="button" onClick={() => setTab('file')} style={{ ...btnGhost, fontWeight: tab === 'file' ? 800 : 500, color: tab === 'file' ? C.text : C.mute }}>Upload File</button>
         </div>
-        <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 10, alignItems: 'center' }}>
-          <input type="url" placeholder="https://youtube.com/watch?v=..." value={youtubeUrl} onChange={e => setYoutubeUrl(e.target.value)} style={{ ...inputS, flex: 1 }} />
-          <button type="submit" style={{ ...btnRed, opacity: busy ? .6 : 1 }} disabled={busy}>{busy ? 'Processing…' : 'Process YouTube Video'}</button>
+
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {tab === 'youtube' ? (
+             <input type="url" placeholder="https://youtube.com/watch?v=..." value={youtubeUrl} onChange={e => setYoutubeUrl(e.target.value)} style={{ ...inputS, flex: 1 }} />
+          ) : (
+             <input ref={fileRef} type="file" accept="video/mp4,video/quicktime,video/*" onChange={e => setFile(e.target.files?.[0] || null)} style={{ flex: 1, fontSize: '.8rem', color: C.text }} />
+          )}
+          <button type="submit" style={{ ...btnRed, opacity: busy ? .6 : 1 }} disabled={busy}>{busy ? 'Processing…' : (tab === 'youtube' ? 'Process YouTube' : 'Upload & Process')}</button>
           <button type="button" style={btnGhost} onClick={load}>🔄 Refresh</button>
         </div>
       </form>
