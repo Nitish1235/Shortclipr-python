@@ -141,32 +141,8 @@ async def process_gameplay_source(source_id: str, local_path: Path, category: st
 
 
 async def process_gameplay_source_youtube(source_id: str, video_id: str, category: str, tmp_dir: Path) -> None:
-    """Full processing pipeline for one YouTube source via DASH using Proxy-Seller ISP.
-    Skips downloading the full video by using DASH segment extraction.
-
-    All operations — duration fetch, stream URL resolution, and DASH segment
-    download — are routed exclusively through the Proxy-Seller ISP static IP
-    pool that is already configured on the ffmpeg-worker service.
-
-    This ensures the CDN HMAC signature IP (set at URL resolve time) always
-    matches the IP that downloads the segments — no 403 mismatch errors.
-
-    Cascade:
-      1. ProxySeller #0: resolve stream URL via PS, download DASH segments via PS#0
-      2. ProxySeller #1: re-resolve + download via a different PS pool IP
-      3. Full-source fallback: download entire video via PS, clip locally
-
-    DataImpulse is intentionally not used here — the ffmpeg-worker's ProxySeller
-    ISP proxies are the stable, quota-independent path for all gameplay operations.
-
-    Audio is intentionally excluded — brainrot gameplay background clips are
-    silent (TTS + music are added during composite rendering).
-
-    Uploads each reframed clip and thumbnail to the BRAINROT_GCS_BUCKET_NAME
-    (shortclipr-brainrot-asset) via upload_gameplay_clip/upload_gameplay_thumbnail.
-    """
-    from app.pipeline.stream import get_stream_urls
-    from app.pipeline.extractor import get_clip_via_dash, _get_source
+    """Full processing pipeline for one YouTube source via full download using Proxy-Seller ISP."""
+    from app.pipeline.extractor import download_source_ytdlp
     from app.core.proxy import get_proxyseller_proxy
 
     try:
@@ -174,9 +150,6 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
         loop = asyncio.get_running_loop()
 
         # ── Step 1: Get video duration via Proxy-Seller ISP ───────────
-        # Route the yt-dlp metadata call through ProxySeller (static ISP IP)
-        # instead of DataImpulse — the ffmpeg-worker has ProxySeller configured
-        # and DataImpulse is exhausted (407 TRAFFIC_EXHAUSTED).
         ps_info_proxy = get_proxyseller_proxy(session_id=source_id, attempt=0)
 
         def _get_duration_sync() -> float:
@@ -203,29 +176,17 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
         _status[source_id] = {"status": "processing", "total": len(chunks), "done": 0, "error": None}
         logger.info(f"[gameplay-yt {source_id}] {duration:.1f}s → {len(chunks)} clip(s) (video_id={video_id})")
 
-        # ── Step 2: Resolve initial DASH stream URL via Proxy-Seller ───
-        # Pass proxy_override so get_stream_urls() uses the same ProxySeller IP
-        # for resolution that we'll use for DASH download — this is the key to
-        # avoiding IP-bound 403s (resolve-IP must equal download-IP in sparams).
-        # Audio URL is discarded — brainrot background clips are always silent.
-        ps_resolve_proxy = get_proxyseller_proxy(session_id=source_id, attempt=0)
-        try:
-            init_video_url, _audio_ignored, init_user_agent = await get_stream_urls(
-                video_id, quality="1080p", session_id=source_id,
-                proxy_override=ps_resolve_proxy,
-            )
-        except Exception as init_exc:
-            logger.warning(
-                f"[gameplay-yt {source_id}] Initial Proxy-Seller stream resolve (attempt 0) failed: {init_exc}. "
-                "Will fall through to per-chunk re-resolve attempts."
-            )
-            init_video_url = None
-            init_user_agent = None
+        # ── Step 2: Download Full Source ──────────────────────────────
+        source_mp4 = tmp_dir / "source.mp4"
+        await download_source_ytdlp(
+            video_id=video_id,
+            output_path=source_mp4,
+            proxy_url=ps_info_proxy
+        )
 
         made = 0
         for idx, (start, dur) in enumerate(chunks):
             clip_id = uuid.uuid4().hex[:12]
-            clip_raw = tmp_dir / f"{clip_id}_raw.mp4"
             clip_path = tmp_dir / f"{clip_id}.mp4"
             thumb_path = tmp_dir / f"{clip_id}.jpg"
 
@@ -234,116 +195,23 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
                 f"{start:.0f}s–{start+dur:.0f}s → clip {clip_id}"
             )
 
-            # ── DASH download cascade (all via Proxy-Seller) ──────────────────
-            #
-            # YouTube CDN URLs are IP-bound: the HMAC `sparams` field encodes
-            # the exit IP of whichever proxy RESOLVED the URL. Any download
-            # from a DIFFERENT IP gets HTTP 403. Keeping resolve-IP == download-IP
-            # is the entire reason we use ProxySeller static IPs here.
-            #
-            # Cascade (ProxySeller only — no DataImpulse):
-            #   1. Cached URL (resolved via PS#0 above) + PS#0 download
-            #      → fast path; works when IP is stable between resolve and download.
-            #   2. Re-resolve + download via Proxy-Seller pool IP #1 (rotated)
-            #      → handles degraded/rate-limited first IP.
-            #   3. Full-source fallback via Proxy-Seller pool IP #2
-            #      → downloads entire video, extracts chunk locally with -c copy.
-            #
-            clip_raw_done = False
-
-            # Attempt 1: cached URL (PS#0 resolve) + PS#0 download — fast path
-            if init_video_url:
-                ps_proxy_0 = get_proxyseller_proxy(session_id=source_id, attempt=0)
-                if ps_proxy_0:
-                    try:
-                        await get_clip_via_dash(
-                            init_video_url, start, start + dur, clip_raw,
-                            audio_url=None,   # video-only — no audio for gameplay bg
-                            user_agent=init_user_agent,
-                            session_id=source_id,
-                            proxy_url=ps_proxy_0,
-                        )
-                        clip_raw_done = True
-                        logger.info(
-                            f"[gameplay-yt {source_id}] clip {clip_id} ← DASH Proxy-Seller #0"
-                        )
-                    except Exception as exc1:
-                        logger.warning(
-                            f"[gameplay-yt {source_id}] DASH attempt 1 (cached+PS#0) failed: {exc1}"
-                        )
-                        clip_raw.unlink(missing_ok=True)
-
-            # Attempt 2: re-resolve + download via Proxy-Seller pool IP #1 (rotated)
-            if not clip_raw_done:
-                ps_proxy_1 = get_proxyseller_proxy(session_id=source_id, attempt=1)
-                if ps_proxy_1:
-                    try:
-                        v2, _, ua2 = await get_stream_urls(
-                            video_id, quality="1080p", session_id=source_id,
-                            proxy_override=ps_proxy_1,
-                        )
-                        await get_clip_via_dash(
-                            v2, start, start + dur, clip_raw,
-                            audio_url=None,
-                            user_agent=ua2,
-                            session_id=source_id,
-                            proxy_url=ps_proxy_1,
-                        )
-                        clip_raw_done = True
-                        logger.info(
-                            f"[gameplay-yt {source_id}] clip {clip_id} ← DASH Proxy-Seller #1 re-resolve"
-                        )
-                    except Exception as exc2:
-                        logger.warning(
-                            f"[gameplay-yt {source_id}] DASH attempt 2 (PS#1 resolve+download) failed: {exc2}"
-                        )
-                        clip_raw.unlink(missing_ok=True)
-
-            # Attempt 3: full-source fallback — download entire video, clip locally
-            if not clip_raw_done:
-                logger.warning(
-                    f"[gameplay-yt {source_id}] all DASH attempts failed for chunk {idx+1}; "
-                    "falling back to full-source download via Proxy-Seller"
-                )
-                fallback_proxy = get_proxyseller_proxy(session_id=source_id, attempt=2)
-                fv, _, fua = await get_stream_urls(
-                    video_id, quality="1080p", session_id=source_id,
-                    proxy_override=fallback_proxy,
-                )
-                # _get_source handles parallel → sequential → yt-dlp download chain
-                source_path = await _get_source(
-                    fv, None, fua, video_id, tmp_dir, proxy_url=fallback_proxy
-                )
-                # Extract this chunk from the local full-source file
-                await _run([
-                    "ffmpeg", "-y",
-                    "-ss", f"{start:.2f}", "-i", str(source_path),
-                    "-t", f"{dur:.2f}",
-                    "-c", "copy",
-                    "-avoid_negative_ts", "make_zero",
-                    "-movflags", "+faststart",
-                    str(clip_raw),
-                ], "gameplay full-source extract")
-                source_path.unlink(missing_ok=True)
-                clip_raw_done = True
-                logger.info(
-                    f"[gameplay-yt {source_id}] clip {clip_id} ← full-source fallback (Proxy-Seller)"
-                )
-
-            # ── Reframe: scale-cover + center-crop → 1080×1920, 30fps, no audio ──
-            await _run([
-                "ffmpeg", "-y", "-i", str(clip_raw),
-                "-vf", f"{_REFRAME},fps=30",
-                "-an",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
-                "-threads", "1",
-                str(clip_path),
-            ], "gameplay reframe")
-
-            # ── Thumbnail: grab mid-clip frame from the raw clip ──────────────
+            # ── Extract & Reframe ──
             await _run([
                 "ffmpeg", "-y",
-                "-ss", f"{dur / 2:.2f}", "-i", str(clip_raw),
+                "-ss", f"{start:.2f}", "-t", f"{dur:.2f}",
+                "-i", str(source_mp4),
+                "-vf", f"{_REFRAME},fps=30",
+                "-an",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22",
+                "-threads", "4",
+                str(clip_path),
+            ], "gameplay extract and reframe")
+
+            # ── Thumbnail ──────────────
+            await _run([
+                "ffmpeg", "-y",
+                "-ss", f"{start + dur / 2:.2f}", 
+                "-i", str(source_mp4),
                 "-vf", _REFRAME, "-frames:v", "1",
                 str(thumb_path),
             ], "gameplay thumbnail")
@@ -364,9 +232,11 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
             logger.info(f"[gameplay-yt {source_id}] clip {made}/{len(chunks)} done → {clip_url}")
 
             # Clean up local files immediately to keep disk usage low on Cloud Run
-            clip_raw.unlink(missing_ok=True)
             clip_path.unlink(missing_ok=True)
             thumb_path.unlink(missing_ok=True)
+
+        # ── Step 3: Clean up source.mp4 ──────────────────────────────
+        source_mp4.unlink(missing_ok=True)
 
         if made == 0:
             raise RuntimeError("No usable clips produced from YouTube source")
