@@ -623,28 +623,37 @@ def _fmt_relaxed(height: int) -> str:
     )
 
 
-def _fmt_high_quality(min_height: int = 1080) -> str:
+def _fmt_high_quality(min_height: int = 1080, max_height: int | None = None) -> str:
     """
     High-quality format selector for gameplay downloads.
-    Tries to get the BEST possible resolution (≥min_height) first,
-    then falls back to the best available non-AV1 stream.
 
-    Priority: 4K H.264 → 4K VP9 → 1440p H.264 → 1440p VP9 → 1080p H.264 → ...
+    When max_height is set (e.g. max_height=1080), pins to an exact resolution
+    tier — useful when the output canvas is fixed (e.g. 1080×1920) and downloading
+    a higher-res stream (1440p/4K) would just waste bandwidth with no quality gain.
+
+    When max_height is None, grabs the BEST possible resolution ≥ min_height.
     AV1 is excluded at every tier (Cloud Run has no HW AV1 decoder).
-    Falls through to _fmt(min_height) as the final safety net.
     """
+    if max_height is not None:
+        # Exact-tier selector: height must be >= min AND <= max
+        h_filter = f"[height>={min_height}][height<={max_height}]"
+        h_filter_best = f"[height<={max_height}]"
+    else:
+        h_filter = f"[height>={min_height}]"
+        h_filter_best = ""
+
     return (
-        # Tier 1: best at or above min_height, strict mp4+m4a
-        f"bestvideo[height>={min_height}][ext=mp4][vcodec!^=av01]+bestaudio[ext=m4a]"
+        # Tier 1: exact tier, strict mp4+m4a (best for DASH byte-range slicing)
+        f"bestvideo{h_filter}[ext=mp4][vcodec!^=av01]+bestaudio[ext=m4a]"
         # Tier 2: same but any container
-        f"/bestvideo[height>={min_height}][vcodec!^=av01]+bestaudio[ext=m4a]"
+        f"/bestvideo{h_filter}[vcodec!^=av01]+bestaudio[ext=m4a]"
         # Tier 3: any audio container
-        f"/bestvideo[height>={min_height}][vcodec!^=av01]+bestaudio"
-        # Tier 4: single-stream progressive (rare at high res but possible)
-        f"/best[height>={min_height}][vcodec!^=av01]"
-        # Tier 5: fall back to best available non-AV1 (may be below min_height)
-        f"/bestvideo[vcodec!^=av01]+bestaudio[ext=m4a]"
-        f"/bestvideo[vcodec!^=av01]+bestaudio"
+        f"/bestvideo{h_filter}[vcodec!^=av01]+bestaudio"
+        # Tier 4: single-stream progressive
+        f"/best{h_filter}[vcodec!^=av01]"
+        # Tier 5: best available non-AV1 within max cap (or uncapped)
+        f"/bestvideo{h_filter_best}[vcodec!^=av01]+bestaudio[ext=m4a]"
+        f"/bestvideo{h_filter_best}[vcodec!^=av01]+bestaudio"
         f"/best[vcodec!^=av01]"
     )
 
@@ -851,24 +860,27 @@ async def get_stream_urls(
 async def get_stream_urls_high_quality(
     video_id: str,
     min_height: int = 1080,
+    max_height: int | None = None,
     session_id: str | None = None,
     proxy_override: str | None = None,
 ) -> tuple[str, str | None, str]:
     """
-    Like get_stream_urls but targets the HIGHEST available quality >= min_height.
+    Like get_stream_urls but targets the best quality in [min_height, max_height].
 
-    Used for gameplay background downloads where we want 4K/1440p/1080p —
-    the best the video offers — rather than capping at a specific resolution.
-    Falls back gracefully: 4K → 1440p → 1080p → best available.
+    When max_height is None: grabs the highest available >= min_height (4K/1440p/1080p).
+    When max_height == min_height: pins to an exact tier (e.g. exactly 1080p).
+    Used for gameplay downloads — output canvas is 1080x1920 so pinning to 1080p
+    avoids wasting bandwidth downloading a 1440p stream that gets downscaled anyway.
 
     AV1 is excluded at every tier (Cloud Run has no HW AV1 decoder).
     """
-    logger.info(f"[{video_id}] resolving high-quality stream (min={min_height}p)")
+    cap = max_height or min_height
+    logger.info(f"[{video_id}] resolving HQ stream (min={min_height}p, max={max_height or 'uncapped'}p)")
 
     # ── 1. yt-dlp + tv_embedded with _fmt_high_quality selector ─────────
     proxy = proxy_override or get_dataimpulse_proxy(purpose="stream-ytdlp-hq")
     opts = _ytdlp_base_opts(proxy)
-    opts["format"] = _fmt_high_quality(min_height)
+    opts["format"] = _fmt_high_quality(min_height, max_height)
     opts["extractor_args"] = {"youtube": {"player_client": ["tv_embedded"]}}
     loop = asyncio.get_running_loop()
     try:
@@ -898,7 +910,7 @@ async def get_stream_urls_high_quality(
     # ── 2. yt-dlp + android client (different player, same HQ selector) ─
     proxy = proxy_override or get_dataimpulse_proxy(purpose="stream-ytdlp-hq-android")
     opts2 = _ytdlp_base_opts(proxy)
-    opts2["format"] = _fmt_high_quality(min_height)
+    opts2["format"] = _fmt_high_quality(min_height, max_height)
     opts2["extractor_args"] = {"youtube": {"player_client": ["android"]}}
     try:
         info2 = await loop.run_in_executor(
@@ -931,7 +943,11 @@ async def get_stream_urls_high_quality(
             if blocked:
                 raise RuntimeError(f"InnerTube {client_name} blocked — {reason}")
 
-            video_url = _pick_best_stream_high(data, min_height)
+            # If max_height is pinned (e.g. =1080), use capped picker; otherwise grab highest
+            if max_height is not None:
+                video_url = _pick_best_stream(data, max_height)
+            else:
+                video_url = _pick_best_stream_high(data, min_height)
             if not video_url:
                 raise RuntimeError(f"InnerTube {client_name}: no video stream URL in response")
 

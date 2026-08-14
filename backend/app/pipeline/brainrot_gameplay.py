@@ -37,7 +37,13 @@ SKIP_HEAD_SECONDS = 30.0      # reject unstable intro footage when we can spare 
 CHUNK_SECONDS = 120.0         # creator's max clip length
 MIN_TRAILING_SECONDS = 5.0    # drop a final sliver shorter than this
 MAX_CLIPS_PER_SOURCE = 30     # runaway guard
-_REFRAME = f"scale={CANVAS_W}:{CANVAS_H}:force_original_aspect_ratio=increase:flags=bicubic,crop={CANVAS_W}:{CANVAS_H}"
+# 9:16 canvas for TikTok/Reels — lanczos for sharp downscale, unsharp to recover
+# edge detail after the crop, especially important when source is 1080p → 1080x1920
+_REFRAME = (
+    f"scale={CANVAS_W}:{CANVAS_H}:force_original_aspect_ratio=increase:flags=lanczos,"
+    f"crop={CANVAS_W}:{CANVAS_H},"
+    f"unsharp=lx=3:ly=3:la=0.4:cx=3:cy=3:ca=0.0"
+)
 
 # source_id -> {status, total, done, error}
 _status: dict[str, dict] = {}
@@ -103,7 +109,9 @@ async def process_gameplay_source(source_id: str, local_path: Path, category: st
             await _run([
                 "ffmpeg", "-y", "-ss", f"{start:.2f}", "-i", str(local_path), "-t", f"{dur:.2f}",
                 "-vf", f"{_REFRAME},fps=30", "-an",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
+                "-c:v", "libx264", "-preset", "slow", "-crf", "16",
+                "-profile:v", "high", "-level", "4.0",
+                "-movflags", "+faststart",
                 "-threads", "1", str(clip_path),
             ], "gameplay reframe")
 
@@ -180,11 +188,11 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
         logger.info(f"[gameplay-yt {source_id}] {duration:.1f}s → {len(chunks)} clip(s) (video_id={video_id})")
 
         # ── Step 2: Resolve initial DASH stream URL via Proxy-Cheap ───
-        # Use high-quality selector: tries ≥1080p (4K/1440p/1080p) first,
-        # falls back to standard 1080p cap if unavailable.
+        # Cap at exactly 1080p — output canvas is 1080×1920, so going higher
+        # (1440p) just wastes bandwidth and decode time for no visible gain.
         try:
             init_video_url, _audio_ignored, init_user_agent = await get_stream_urls_high_quality(
-                video_id, min_height=1080, session_id=source_id,
+                video_id, min_height=1080, max_height=1080, session_id=source_id,
                 proxy_override=cheap_proxy,
             )
         except Exception as init_exc:
@@ -242,7 +250,7 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
                     if ps_proxy_1:
                         try:
                             v2, _, ua2 = await get_stream_urls_high_quality(
-                                video_id, min_height=1080, session_id=source_id,
+                                video_id, min_height=1080, max_height=1080, session_id=source_id,
                                 proxy_override=cheap_proxy,
                             )
                             await get_clip_via_dash(
@@ -266,7 +274,7 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
                     )
                     fallback_proxy = get_proxyseller_proxy(session_id=source_id, attempt=2)
                     fv, _, fua = await get_stream_urls_high_quality(
-                        video_id, min_height=1080, session_id=source_id,
+                        video_id, min_height=1080, max_height=1080, session_id=source_id,
                         proxy_override=cheap_proxy,
                     )
                     source_path = await _get_source(
@@ -291,7 +299,9 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
                     "ffmpeg", "-y", "-i", str(clip_raw),
                     "-vf", f"{_REFRAME},fps=30",
                     "-an",
-                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
+                    "-c:v", "libx264", "-preset", "slow", "-crf", "16",
+                    "-profile:v", "high", "-level", "4.0",
+                    "-movflags", "+faststart",
                     "-threads", "4",
                     str(clip_path),
                 ], "gameplay reframe")
