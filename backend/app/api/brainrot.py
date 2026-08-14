@@ -572,17 +572,25 @@ async def admin_upload_gameplay(
         
         tmp_dir = Path(tempfile.mkdtemp(prefix="gameplay_src_"))
         
+        local_path = None
+        if not video_id:
+            ext = Path(file.filename or "").suffix or ".mp4"
+            local_path = tmp_dir / f"source_{source_id}{ext}"
+            with open(local_path, "wb") as f:
+                shutil.copyfileobj(file.file, f)
+
         async def _task():
             try:
                 if video_id:
                     await process_gameplay_source_youtube(source_id, video_id, category.strip(), tmp_dir)
                 else:
-                    # Save uploaded file
-                    ext = Path(file.filename or "").suffix or ".mp4"
-                    local_path = tmp_dir / f"source_{source_id}{ext}"
-                    with open(local_path, "wb") as f:
-                        shutil.copyfileobj(file.file, f)
                     await process_gameplay_source(source_id, local_path, category.strip(), tmp_dir)
+            except Exception as e:
+                logger.exception(f"Gameplay task failed for {source_id}")
+                try:
+                    await db.set_gameplay_source_status(source_id, "failed", str(e)[:500])
+                except Exception:
+                    pass
             finally:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 
