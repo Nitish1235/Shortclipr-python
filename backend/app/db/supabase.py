@@ -359,13 +359,36 @@ async def get_gameplay_clip(clip_id: str) -> dict | None:
     )
 
 
-async def list_gameplay_clips(category: str | None = None) -> list[dict]:
+async def list_gameplay_clips(category: str | None = None, status: str | None = None) -> list[dict]:
+    query = """SELECT c.*, s.title as source_title 
+               FROM brainrot_gameplay_clips c
+               LEFT JOIN brainrot_gameplay_sources s ON c.source_id = s.id
+               WHERE 1=1"""
+    args = []
+    
     if category:
-        return await _fetch(
-            "SELECT * FROM brainrot_gameplay_clips WHERE category=$1 ORDER BY created_at DESC",
-            category,
-        )
-    return await _fetch("SELECT * FROM brainrot_gameplay_clips ORDER BY category, created_at DESC")
+        args.append(category)
+        query += f" AND c.category=${len(args)}"
+    if status:
+        args.append(status)
+        query += f" AND c.status=${len(args)}"
+        
+    query += " ORDER BY c.category, c.created_at DESC"
+    return await _fetch(query, *args)
+
+async def admin_list_gameplay_clips() -> list[dict]:
+    return await _fetch(
+        """SELECT c.*, s.title as source_title 
+           FROM brainrot_gameplay_clips c
+           LEFT JOIN brainrot_gameplay_sources s ON c.source_id = s.id
+           ORDER BY c.created_at DESC"""
+    )
+
+async def update_gameplay_clip_status(clip_id: str, status: str) -> None:
+    await _execute(
+        "UPDATE brainrot_gameplay_clips SET status=$1 WHERE id=$2",
+        status, clip_id,
+    )
 
 
 async def get_audio_asset(asset_id: str) -> dict | None:

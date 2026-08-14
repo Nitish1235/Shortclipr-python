@@ -52,6 +52,7 @@ export default function BrainrotAdminPanel({ showToast }) {
       <VoicesSection notify={notify} />
       <AudioSection notify={notify} />
       <GameplaySection notify={notify} />
+      <ClipsSection notify={notify} />
     </div>
   )
 }
@@ -267,6 +268,197 @@ function GameplaySection({ notify }) {
               )}
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Brainrot Clips Curation ───────────────────────────────────────
+function ClipsSection({ notify }) {
+  const [clips, setClips] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [filter, setFilter] = useState('all') // all | pending | selected | rejected
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [busy, setBusy] = useState({})
+  const [preview, setPreview] = useState(null) // clip being previewed in modal
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try { setClips((await getJSON('/brainrot/admin/gameplay-clips')).clips || []) }
+    catch { /* */ }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const setStatus = async (clipId, status) => {
+    setBusy(prev => ({ ...prev, [clipId]: true }))
+    try {
+      await send(`/brainrot/admin/gameplay-clips/${clipId}`, { method: 'PATCH', json: { status } })
+      setClips(prev => prev.map(c => c.id === clipId ? { ...c, status } : c))
+      notify(`Clip marked as ${status}`, 'success')
+    } catch (e) { notify(e.message, 'error') }
+    finally { setBusy(prev => ({ ...prev, [clipId]: false })) }
+  }
+
+  // Derive categories from loaded clips
+  const categories = ['all', ...Array.from(new Set(clips.map(c => c.category).filter(Boolean))).sort()]
+
+  const visible = clips.filter(c => {
+    if (filter !== 'all' && c.status !== filter) return false
+    if (categoryFilter !== 'all' && c.category !== categoryFilter) return false
+    return true
+  })
+
+  const counts = {
+    total: clips.length,
+    selected: clips.filter(c => c.status === 'selected').length,
+    pending: clips.filter(c => c.status === 'pending').length,
+    rejected: clips.filter(c => c.status === 'rejected').length,
+  }
+
+  const statusColor = (s) => s === 'selected' ? C.green : s === 'rejected' ? C.red : C.amber
+  const statusIcon  = (s) => s === 'selected' ? '✅' : s === 'rejected' ? '❌' : '⏳'
+
+  return (
+    <div style={cardS}>
+      <SectionHead icon="🎬" title="Brainrot Clips" sub="Review all generated clips and select the ones that should appear in the studio for users." />
+
+      {/* Stats row */}
+      <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+        {[['Total', counts.total, C.mute], ['Selected', counts.selected, C.green], ['Pending', counts.pending, C.amber], ['Rejected', counts.rejected, C.red]].map(([label, count, color]) => (
+          <div key={label} style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${C.line}`, background: '#fafafa', minWidth: 70, textAlign: 'center' }}>
+            <div style={{ fontSize: '1.1rem', fontWeight: 800, color }}>{count}</div>
+            <div style={{ fontSize: '.62rem', fontWeight: 700, color: C.mute, textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
+          </div>
+        ))}
+        <button style={{ ...btnGhost, marginLeft: 'auto' }} onClick={load}>🔄 {loading ? 'Loading…' : 'Refresh'}</button>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span style={{ fontSize: '.68rem', fontWeight: 700, color: C.mute, textTransform: 'uppercase' }}>Status:</span>
+        {['all', 'pending', 'selected', 'rejected'].map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            style={{ ...btnGhost, background: filter === f ? C.ink : '#fff', color: filter === f ? '#fff' : C.ink,
+              padding: '5px 12px', fontSize: '.76rem', textTransform: 'capitalize' }}>
+            {f}
+          </button>
+        ))}
+        {categories.length > 1 && (
+          <>
+            <span style={{ fontSize: '.68rem', fontWeight: 700, color: C.mute, textTransform: 'uppercase', marginLeft: 8 }}>Category:</span>
+            <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
+              style={{ ...inputS, width: 'auto', padding: '5px 10px', fontSize: '.78rem' }}>
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat === 'all' ? 'All categories' : cat.replace(/_/g, ' ')}</option>
+              ))}
+            </select>
+          </>
+        )}
+      </div>
+
+      {/* Clips grid */}
+      {visible.length === 0 ? (
+        <div style={{ marginTop: 20, textAlign: 'center', padding: '32px 0', color: C.mute, fontSize: '.82rem', fontWeight: 600 }}>
+          {loading ? 'Loading clips…' : 'No clips match this filter.'}
+        </div>
+      ) : (
+        <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: 14 }}>
+          {visible.map(clip => (
+            <div key={clip.id} style={{ border: `2px solid ${statusColor(clip.status)}`, borderRadius: 12, overflow: 'hidden', background: '#fff', display: 'flex', flexDirection: 'column' }}>
+              {/* Thumbnail / video preview */}
+              <div style={{ position: 'relative', width: '100%', aspectRatio: '9/16', background: '#000', cursor: 'pointer' }}
+                onClick={() => setPreview(clip)}>
+                {clip.thumbnail_url
+                  ? <img src={clip.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: '.7rem', fontWeight: 700 }}>
+                      🎮 {clip.category}
+                    </div>}
+                {/* Play overlay */}
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'rgba(0,0,0,.25)', opacity: 0, transition: 'opacity .15s' }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                  onMouseLeave={e => e.currentTarget.style.opacity = 0}>
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>▶</div>
+                </div>
+                {/* Status badge */}
+                <div style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,.65)', borderRadius: 6, padding: '2px 7px', fontSize: '.6rem', fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                  {statusIcon(clip.status)} {clip.status}
+                </div>
+              </div>
+
+              {/* Info */}
+              <div style={{ padding: '8px 10px', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '.6rem', fontWeight: 800, background: '#f0f4ff', color: '#3b5bdb', borderRadius: 4, padding: '1px 6px', textTransform: 'capitalize' }}>
+                    {clip.category.replace(/_/g, ' ')}
+                  </span>
+                  {clip.duration_seconds && (
+                    <span style={{ fontSize: '.6rem', fontWeight: 700, background: C.line, color: C.mute, borderRadius: 4, padding: '1px 6px' }}>
+                      {clip.duration_seconds.toFixed(0)}s
+                    </span>
+                  )}
+                </div>
+                {clip.source_title && (
+                  <div style={{ fontSize: '.68rem', fontWeight: 700, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {clip.source_title}
+                  </div>
+                )}
+              </div>
+
+              {/* Action buttons */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderTop: `1px solid ${C.line}` }}>
+                <button
+                  disabled={busy[clip.id] || clip.status === 'selected'}
+                  onClick={() => setStatus(clip.id, 'selected')}
+                  style={{ padding: '8px 4px', border: 'none', borderRight: `1px solid ${C.line}`, cursor: clip.status === 'selected' ? 'default' : 'pointer',
+                    background: clip.status === 'selected' ? '#f0fff4' : '#fff', color: C.green,
+                    fontSize: '.72rem', fontWeight: 800, opacity: busy[clip.id] ? .5 : 1 }}>
+                  ✅ Select
+                </button>
+                <button
+                  disabled={busy[clip.id] || clip.status === 'rejected'}
+                  onClick={() => setStatus(clip.id, 'rejected')}
+                  style={{ padding: '8px 4px', border: 'none', cursor: clip.status === 'rejected' ? 'default' : 'pointer',
+                    background: clip.status === 'rejected' ? '#fff4f4' : '#fff', color: C.red,
+                    fontSize: '.72rem', fontWeight: 800, opacity: busy[clip.id] ? .5 : 1 }}>
+                  ❌ Reject
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Video preview modal */}
+      {preview && (
+        <div onClick={() => setPreview(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.75)', zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', maxWidth: 360, width: '100%', boxShadow: '0 24px 80px rgba(0,0,0,.4)' }}>
+            <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid ${C.line}` }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '.9rem' }}>{preview.source_title || preview.category}</div>
+                <div style={{ fontSize: '.68rem', color: C.mute }}>{preview.category.replace(/_/g, ' ')} · {(preview.duration_seconds || 0).toFixed(0)}s</div>
+              </div>
+              <button onClick={() => setPreview(null)} style={{ ...btnGhost, padding: '4px 10px' }}>✕</button>
+            </div>
+            <video src={preview.gcs_path} controls autoPlay playsInline
+              style={{ width: '100%', aspectRatio: '9/16', display: 'block', background: '#000' }} />
+            <div style={{ padding: '10px 16px', display: 'flex', gap: 8 }}>
+              <button disabled={busy[preview.id] || preview.status === 'selected'} onClick={() => { setStatus(preview.id, 'selected'); setPreview(p => ({ ...p, status: 'selected' })) }}
+                style={{ flex: 1, ...btnGhost, color: C.green, fontWeight: 800, opacity: preview.status === 'selected' ? .5 : 1 }}>✅ Select</button>
+              <button disabled={busy[preview.id] || preview.status === 'rejected'} onClick={() => { setStatus(preview.id, 'rejected'); setPreview(p => ({ ...p, status: 'rejected' })) }}
+                style={{ flex: 1, ...btnGhost, color: C.red, fontWeight: 800, opacity: preview.status === 'rejected' ? .5 : 1 }}>❌ Reject</button>
+              {preview.status !== 'pending' && (
+                <button onClick={() => { setStatus(preview.id, 'pending'); setPreview(p => ({ ...p, status: 'pending' })) }}
+                  style={{ ...btnGhost, color: C.amber, fontWeight: 800 }}>↩ Reset</button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -364,6 +364,49 @@ def _pick_best_stream(data: dict, target_height: int) -> str | None:
     return video_streams[-1]["url"]
 
 
+def _pick_best_stream_high(data: dict, min_height: int = 1080) -> str | None:
+    """
+    Pick the HIGHEST quality non-AV1 stream from InnerTube response,
+    targeting at least min_height. Codec preference: H.264 → VP9 → any non-AV1.
+
+    Used for gameplay downloads where we want the best possible quality
+    (4K or 1440p or 1080p) rather than capping at a target.
+    Tries streams >= min_height first, falls back to the best available.
+    """
+    sd = data.get("streamingData", {})
+    formats = sd.get("formats", []) + sd.get("adaptiveFormats", [])
+    video_streams = sorted(
+        [f for f in formats if f.get("mimeType", "").startswith("video/") and "url" in f],
+        key=lambda f: (f.get("height", 0), "avc1" in f.get("mimeType", ""), "vp9" in f.get("mimeType", "")),
+        reverse=True,
+    )
+    if not video_streams:
+        return None
+
+    def _not_av1(f: dict) -> bool:
+        return "av01" not in f.get("mimeType", "")
+
+    def _is_h264(f: dict) -> bool:
+        return "avc1" in f.get("mimeType", "")
+
+    def _is_vp9(f: dict) -> bool:
+        return "vp9" in f.get("mimeType", "")
+
+    # First: try at or above min_height, prefer H.264 → VP9 → any non-AV1
+    high_res = [s for s in video_streams if s.get("height", 0) >= min_height and _not_av1(s)]
+    for pred in (_is_h264, _is_vp9, _not_av1):
+        candidates = [s for s in high_res if pred(s)]
+        if candidates:
+            return candidates[0]["url"]
+
+    # Fallback: best available non-AV1 regardless of height
+    non_av1 = [s for s in video_streams if _not_av1(s)]
+    if non_av1:
+        return non_av1[0]["url"]
+
+    return video_streams[0]["url"] if video_streams else None
+
+
 def _pick_best_audio_stream(data: dict) -> str | None:
     """
     Pick best audio-only stream URL from InnerTube response (legacy helper).
@@ -580,6 +623,32 @@ def _fmt_relaxed(height: int) -> str:
     )
 
 
+def _fmt_high_quality(min_height: int = 1080) -> str:
+    """
+    High-quality format selector for gameplay downloads.
+    Tries to get the BEST possible resolution (≥min_height) first,
+    then falls back to the best available non-AV1 stream.
+
+    Priority: 4K H.264 → 4K VP9 → 1440p H.264 → 1440p VP9 → 1080p H.264 → ...
+    AV1 is excluded at every tier (Cloud Run has no HW AV1 decoder).
+    Falls through to _fmt(min_height) as the final safety net.
+    """
+    return (
+        # Tier 1: best at or above min_height, strict mp4+m4a
+        f"bestvideo[height>={min_height}][ext=mp4][vcodec!^=av01]+bestaudio[ext=m4a]"
+        # Tier 2: same but any container
+        f"/bestvideo[height>={min_height}][vcodec!^=av01]+bestaudio[ext=m4a]"
+        # Tier 3: any audio container
+        f"/bestvideo[height>={min_height}][vcodec!^=av01]+bestaudio"
+        # Tier 4: single-stream progressive (rare at high res but possible)
+        f"/best[height>={min_height}][vcodec!^=av01]"
+        # Tier 5: fall back to best available non-AV1 (may be below min_height)
+        f"/bestvideo[vcodec!^=av01]+bestaudio[ext=m4a]"
+        f"/bestvideo[vcodec!^=av01]+bestaudio"
+        f"/best[vcodec!^=av01]"
+    )
+
+
 # ── Fallback chain ─────────────────────────────────────────────
 
 async def _resolve_stream_url(video_id: str, quality: str, session_id: str | None = None) -> tuple[str, str]:
@@ -777,6 +846,111 @@ async def get_stream_urls(
         logger.warning(f"[{video_id}] Could not resolve audio for video-only fallback ({audio_exc}) — proceeding video-only")
 
     return video_url, audio_url, user_agent
+
+
+async def get_stream_urls_high_quality(
+    video_id: str,
+    min_height: int = 1080,
+    session_id: str | None = None,
+    proxy_override: str | None = None,
+) -> tuple[str, str | None, str]:
+    """
+    Like get_stream_urls but targets the HIGHEST available quality >= min_height.
+
+    Used for gameplay background downloads where we want 4K/1440p/1080p —
+    the best the video offers — rather than capping at a specific resolution.
+    Falls back gracefully: 4K → 1440p → 1080p → best available.
+
+    AV1 is excluded at every tier (Cloud Run has no HW AV1 decoder).
+    """
+    logger.info(f"[{video_id}] resolving high-quality stream (min={min_height}p)")
+
+    # ── 1. yt-dlp + tv_embedded with _fmt_high_quality selector ─────────
+    proxy = proxy_override or get_dataimpulse_proxy(purpose="stream-ytdlp-hq")
+    opts = _ytdlp_base_opts(proxy)
+    opts["format"] = _fmt_high_quality(min_height)
+    opts["extractor_args"] = {"youtube": {"player_client": ["tv_embedded"]}}
+    loop = asyncio.get_running_loop()
+    try:
+        info = await loop.run_in_executor(
+            _YTDLP_POOL,
+            _ytdlp_run_sync,
+            opts,
+            f"https://www.youtube.com/watch?v={video_id}",
+        )
+        video_url = _pick_stream_ytdlp(info)
+        if video_url:
+            audio_url = _pick_audio_ytdlp(info)
+            # Log the actual selected height for visibility
+            sel_h = next(
+                (f.get("height") for f in (info.get("requested_formats") or []) if f.get("vcodec", "none") != "none"),
+                "?"
+            )
+            logger.info(
+                f"[{video_id}] HQ stream ← yt-dlp tv_embedded height={sel_h} "
+                f"(audio={'separate' if audio_url else 'embedded/none'})"
+            )
+            return video_url, audio_url, _WEB_USER_AGENT
+        logger.warning(f"[{video_id}] HQ yt-dlp tv_embedded returned no video URL; trying InnerTube")
+    except Exception as ytdlp_exc:
+        logger.warning(f"[{video_id}] HQ yt-dlp tv_embedded failed ({ytdlp_exc}); trying InnerTube")
+
+    # ── 2. yt-dlp + android client (different player, same HQ selector) ─
+    proxy = proxy_override or get_dataimpulse_proxy(purpose="stream-ytdlp-hq-android")
+    opts2 = _ytdlp_base_opts(proxy)
+    opts2["format"] = _fmt_high_quality(min_height)
+    opts2["extractor_args"] = {"youtube": {"player_client": ["android"]}}
+    try:
+        info2 = await loop.run_in_executor(
+            _YTDLP_POOL,
+            _ytdlp_run_sync,
+            opts2,
+            f"https://www.youtube.com/watch?v={video_id}",
+        )
+        video_url = _pick_stream_ytdlp(info2)
+        if video_url:
+            audio_url = _pick_audio_ytdlp(info2)
+            logger.info(f"[{video_id}] HQ stream ← yt-dlp android (audio={'separate' if audio_url else 'embedded/none'})")
+            return video_url, audio_url, _ANDROID_HEADERS["User-Agent"]
+    except Exception as ytdlp2_exc:
+        logger.warning(f"[{video_id}] HQ yt-dlp android failed ({ytdlp2_exc}); trying InnerTube ANDROID")
+
+    # ── 3. InnerTube ANDROID → TV → IOS with _pick_best_stream_high ─────
+    _clients = [
+        ("ANDROID", True,  _ANDROID_HEADERS["User-Agent"]),
+        ("TV",      False, CLIENTS["TV"]["headers"]["User-Agent"]),
+        ("IOS",     False, CLIENTS["IOS"]["headers"]["User-Agent"]),
+    ]
+    last_exc: Exception | None = None
+    for client_name, send_params, user_agent in _clients:
+        try:
+            proxy = proxy_override or get_dataimpulse_proxy(purpose=f"stream-innertube-hq-{client_name}")
+            data = await call_player_api(video_id, client_name=client_name, send_params=send_params, proxy_url=proxy)
+
+            blocked, reason = _innertube_is_blocked(data)
+            if blocked:
+                raise RuntimeError(f"InnerTube {client_name} blocked — {reason}")
+
+            video_url = _pick_best_stream_high(data, min_height)
+            if not video_url:
+                raise RuntimeError(f"InnerTube {client_name}: no video stream URL in response")
+
+            video_fmt = _find_format_by_url(data, video_url)
+            audio_url = None if (video_fmt and _format_has_audio(video_fmt)) else _pick_best_audio_stream(data)
+
+            logger.info(
+                f"[{video_id}] HQ stream ← InnerTube {client_name} (proxy={bool(proxy)}, "
+                f"audio={'separate' if audio_url else 'embedded/none'})"
+            )
+            return video_url, audio_url, user_agent
+        except Exception as exc:
+            logger.warning(f"[{video_id}] HQ InnerTube {client_name} failed ({exc}); trying next")
+            last_exc = exc
+
+    # ── 4. Final fallback: standard get_stream_urls at min_height cap ────
+    logger.warning(f"[{video_id}] All HQ methods failed ({last_exc}); falling back to standard {min_height}p stream")
+    return await get_stream_urls(video_id, f"{min_height}p", session_id, proxy_override)
+
 
 
 async def get_audio_stream_url(

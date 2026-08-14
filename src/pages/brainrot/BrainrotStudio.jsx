@@ -356,6 +356,12 @@ export default function BrainrotStudio() {
                             ? <img src={clip.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: '.6rem', fontWeight: 700, textTransform: 'capitalize' }}>{clip.category}</div>}
                         </div>
+                        {clip.source_title && (
+                          <div style={{ fontSize: '.54rem', fontWeight: 700, color: T.mute, marginTop: 3,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {clip.source_title}
+                          </div>
+                        )}
                       </button>
                     )
                   })}

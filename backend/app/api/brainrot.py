@@ -303,11 +303,12 @@ async def list_characters():
 
 @router.get("/gameplay-clips")
 async def list_gameplay_clips(category: str | None = Query(default=None)):
-    clips = await db.list_gameplay_clips(category)
+    clips = await db.list_gameplay_clips(category, status='selected')
     return {"clips": [
         {
-            "id": str(c["id"]), "category": c["category"], "gcs_path": c["gcs_path"],
-            "thumbnail_url": c.get("thumbnail_url"), "duration_seconds": c["duration_seconds"],
+            "id": str(c["id"]), "category": c["category"], "source_title": c.get("source_title"),
+            "gcs_path": c["gcs_path"], "thumbnail_url": c.get("thumbnail_url"), 
+            "duration_seconds": c["duration_seconds"],
         }
         for c in clips
     ]}
@@ -594,3 +595,44 @@ async def admin_list_gameplay_sources(current_user: CurrentUser):
         }
         for s in sources
     ]}
+
+
+@router.get("/admin/gameplay-clips")
+async def admin_list_gameplay_clips(current_user: CurrentUser):
+    """Admin: list all generated gameplay clips to curate (selected/rejected)."""
+    _require_admin(current_user)
+    clips = await db.admin_list_gameplay_clips()
+    return {"clips": [
+        {
+            "id": str(c["id"]),
+            "source_id": str(c["source_id"]),
+            "category": c["category"],
+            "source_title": c.get("source_title"),
+            "gcs_path": c["gcs_path"],
+            "thumbnail_url": c.get("thumbnail_url"),
+            "duration_seconds": c["duration_seconds"],
+            "status": c.get("status", "pending"),
+            "created_at": c["created_at"].isoformat() if c.get("created_at") else None,
+        }
+        for c in clips
+    ]}
+
+class UpdateClipStatusRequest(BaseModel):
+    status: str
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        if v not in ("selected", "rejected", "pending"):
+            raise ValueError("status must be selected, rejected, or pending")
+        return v
+
+@router.patch("/admin/gameplay-clips/{clip_id}")
+async def admin_update_gameplay_clip_status(clip_id: str, body: UpdateClipStatusRequest, current_user: CurrentUser):
+    """Admin: mark a clip as selected, rejected, or pending."""
+    _require_admin(current_user)
+    clip = await db.get_gameplay_clip(clip_id)
+    if not clip:
+        raise HTTPException(status_code=404, detail="Clip not found")
+    await db.update_gameplay_clip_status(clip_id, body.status)
+    return {"success": True, "status": body.status}
