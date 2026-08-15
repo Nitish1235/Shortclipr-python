@@ -577,14 +577,40 @@ async def admin_upload_gameplay(
     # For YouTube: insert as 'created' so the watcher trigger can dispatch it to the ffmpeg worker.
     # For file uploads / GCS paths: insert straight as 'processing' — the watcher must never see this row
     # because it would try to dispatch it as a YouTube job (needs video_id) and fail silently.
-    initial_status = "created" if video_id else "processing"
-    
-    stored_gcs_path = "file:direct_upload"
-    if video_id:
-        stored_gcs_path = f"youtube:{video_id}"
+    # Determine initial status and upload raw file if needed
+    # For YouTube URLs we keep the existing logic (status 'created' so watcher will handle)
+    # For file uploads and direct GCS paths we now store the raw file in GCS and let the watcher process it.
+    if file:
+        # Upload the raw file to GCS directly
+        ext = Path(file.filename or "").suffix or ".mp4"
+        object_name = f"raw_uploads/{uuid.uuid4().hex}{ext}"
+        bucket_name = settings.BRAINROT_GCS_BUCKET_NAME
+        from app.pipeline.uploader import _get_gcs_client
+        client = _get_gcs_client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(object_name)
+        # Stream upload to avoid loading whole file into memory
+        await file.seek(0)
+        # Use a temporary file to stream upload (GCS Python lib expects file-like object)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp_file:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                tmp_file.write(chunk)
+            tmp_file_path = Path(tmp_file.name)
+        blob.upload_from_filename(str(tmp_file_path))
+        tmp_file_path.unlink(missing_ok=True)
+        stored_gcs_path = f"gs://{bucket_name}/{object_name}"
+        initial_status = "created"
     elif direct_gcs_path:
         stored_gcs_path = direct_gcs_path
-        
+        initial_status = "created"
+    else:
+        # YouTube case – already handled above
+        stored_gcs_path = f"youtube:{video_id}"
+        initial_status = "created"
+
     row = await db.insert_gameplay_source(
         category=category.strip(),
         title=(title or "").strip() or None,
@@ -595,94 +621,14 @@ async def admin_upload_gameplay(
     )
     source_id = str(row["id"])
 
-    # If it's a YouTube URL and we have multi-region workers, dispatch to worker (watcher handles it).
-    # If it's a direct file upload or GCS path, always process in-process — file is here, watcher can't access it.
-    if multi_region and video_id:
+    # Decide how to process the source.
+    # For YouTube URLs we rely on the watcher (multi‑region workers) to pick up the row.
+    # For direct file uploads or GCS paths we have already stored the raw file in GCS and
+    # set the status to "created". The watcher will process it, so no in‑process work here.
+    if video_id and multi_region:
         logger.info(f"Admin {current_user.email} submitted gameplay youtube {video_id} ({category}) — dispatched to watcher")
     else:
-        from app.pipeline.brainrot_gameplay import process_gameplay_source_youtube, process_gameplay_source
-        import tempfile
-        from pathlib import Path
-        import shutil
-
-        # For non-multiregion YouTube, we need to manually flip status to 'processing'.
-        # For file uploads it was already inserted as 'processing' above, so skip.
-        if video_id:
-            await db.set_gameplay_source_status(source_id, "processing")
-
-        tmp_dir = Path(tempfile.mkdtemp(prefix="gameplay_src_"))
-
-        local_path = None
-        if not video_id:
-            if direct_gcs_path:
-                ext = Path(direct_gcs_path).suffix or ".mp4"
-                local_path = tmp_dir / f"source_{source_id}{ext}"
-                logger.info(f"[gameplay {source_id}] Downloading raw file from GCS {direct_gcs_path} to {local_path}...")
-                
-                # Download from GCS
-                loop = asyncio.get_running_loop()
-                def _download():
-                    from google.cloud import storage
-                    client = storage.Client()
-                    # Parse gs://bucket/path
-                    bucket_name = direct_gcs_path.replace("gs://", "").split("/")[0]
-                    object_name = "/".join(direct_gcs_path.replace("gs://", "").split("/")[1:])
-                    bucket = client.bucket(bucket_name)
-                    blob = bucket.blob(object_name)
-                    blob.download_to_filename(local_path)
-                
-                await loop.run_in_executor(None, _download)
-                size_mb = local_path.stat().st_size / 1_048_576
-                logger.info(f"[gameplay {source_id}] GCS Download complete: {size_mb:.1f} MB — launching background task")
-                
-            elif file:
-                ext = Path(file.filename or "").suffix or ".mp4"
-                local_path = tmp_dir / f"source_{source_id}{ext}"
-                logger.info(f"[gameplay {source_id}] Copying uploaded file ({file.filename}) to {local_path}...")
-                await file.seek(0)
-                with open(local_path, "wb") as dest:
-                    while True:
-                        chunk = await file.read(1024 * 1024)  # 1MB chunks
-                        if not chunk:
-                            break
-                        dest.write(chunk)
-                size_mb = local_path.stat().st_size / 1_048_576
-                logger.info(f"[gameplay {source_id}] File saved: {size_mb:.1f} MB — launching background task")
-
-        async def _task():
-            try:
-                if video_id:
-                    await process_gameplay_source_youtube(source_id, video_id, category.strip(), tmp_dir)
-                else:
-                    await process_gameplay_source(source_id, local_path, category.strip(), tmp_dir)
-            except Exception as e:
-                logger.exception(f"[gameplay {source_id}] Background task failed")
-                try:
-                    await db.set_gameplay_source_status(source_id, "failed", str(e)[:500])
-                except Exception:
-                    pass
-            finally:
-                shutil.rmtree(tmp_dir, ignore_errors=True)
-                # Cleanup the raw file from GCS if we used direct_gcs_path
-                if direct_gcs_path:
-                    try:
-                        loop = asyncio.get_running_loop()
-                        def _delete():
-                            from google.cloud import storage
-                            client = storage.Client()
-                            bucket_name = direct_gcs_path.replace("gs://", "").split("/")[0]
-                            object_name = "/".join(direct_gcs_path.replace("gs://", "").split("/")[1:])
-                            bucket = client.bucket(bucket_name)
-                            blob = bucket.blob(object_name)
-                            blob.delete()
-                        await loop.run_in_executor(None, _delete)
-                        logger.info(f"[gameplay {source_id}] Deleted raw source from GCS {direct_gcs_path}")
-                    except Exception as e:
-                        logger.warning(f"[gameplay {source_id}] Failed to delete raw source from GCS: {e}")
-
-        asyncio.create_task(_task(), name=f"gameplay-{source_id[:8]}")
-        log_type = f"youtube {video_id}" if video_id else f"file upload ({'GCS' if direct_gcs_path else file.filename})"
-        logger.info(f"Admin {current_user.email} submitted gameplay {log_type} ({category}) — background task started")
+        logger.info(f"Admin {current_user.email} submitted gameplay {'file upload' if file else 'GCS path'} ({category}) — queued for worker processing")
 
 
 
