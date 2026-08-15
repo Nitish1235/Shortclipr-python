@@ -123,11 +123,11 @@ async def process_gameplay_source(source_id: str, local_path: Path, category: st
             clip_path = tmp_dir / f"{clip_id}.mp4"
             thumb_path = tmp_dir / f"{clip_id}.jpg"
 
-            # slow preset: worst-case ~10 min for a 120s clip, 20 min hard limit
+            # fast preset: much quicker than slow, acceptable quality for backgrounds
             await _run([
                 "ffmpeg", "-y", "-ss", f"{start:.2f}", "-i", str(local_path), "-t", f"{dur:.2f}",
                 "-vf", f"{_REFRAME},fps=30", "-an",
-                "-c:v", "libx264", "-preset", "slow", "-crf", "16",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
                 "-profile:v", "high", "-level", "4.0",
                 "-movflags", "+faststart",
                 "-threads", "1", str(clip_path),
@@ -314,12 +314,11 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
                     clip_raw_done = True
                     logger.info(f"[gameplay-yt {source_id}] clip {clip_id} ← full-source fallback (Proxy-Seller)")
 
-                # ── Reframe — slow preset, 20 min ceiling —────────────────
+                # ── Reframe — fast preset, 20 min ceiling —────────────────
                 await _run([
                     "ffmpeg", "-y", "-i", str(clip_raw),
-                    "-vf", f"{_REFRAME},fps=30",
-                    "-an",
-                    "-c:v", "libx264", "-preset", "slow", "-crf", "16",
+                    "-vf", f"{_REFRAME},fps=30", "-an",
+                    "-c:v", "libx264", "-preset", "fast", "-crf", "18",
                     "-profile:v", "high", "-level", "4.0",
                     "-movflags", "+faststart",
                     "-threads", "4",

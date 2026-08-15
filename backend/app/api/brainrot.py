@@ -508,25 +508,50 @@ async def admin_delete_audio_asset(asset_id: str, current_user: CurrentUser):
 
 # ── Gameplay library (upload → auto trim/split/reframe) ─────────
 
+class UploadUrlRequest(BaseModel):
+    filename: str
+    content_type: str
+
+@router.post("/admin/gameplay/upload-url")
+def get_gameplay_upload_url(
+    current_user: CurrentUser,
+    req: UploadUrlRequest,
+):
+    _require_admin(current_user)
+    from app.pipeline.uploader import generate_upload_signed_url
+    
+    # Generate a unique path in the brainrot bucket for the raw upload
+    ext = Path(req.filename).suffix or ".mp4"
+    object_name = f"raw_uploads/{uuid.uuid4().hex}{ext}"
+    bucket_name = settings.BRAINROT_GCS_BUCKET_NAME
+    
+    url = generate_upload_signed_url(bucket_name, object_name, req.content_type)
+    
+    return {
+        "url": url,
+        "gcs_path": f"gs://{bucket_name}/{object_name}"
+    }
+
+
 @router.post("/admin/gameplay", status_code=202)
 async def admin_upload_gameplay(
     current_user: CurrentUser,
     youtube_url: str | None = Form(default=None),
     file: UploadFile | None = File(default=None),
+    direct_gcs_path: str | None = Form(default=None),
     category: str = Form(...),
     title: str | None = Form(default=None),
 ):
-    """Admin: submit a gameplay recording. Can be a YouTube URL or direct file upload.
-    It's trimmed (first 30s dropped), split into ≤120s clips, reframed to 9:16,
-    and thumbnailed in the background."""
-    logger.info(f"Admin upload gameplay request received. YouTube URL: {bool(youtube_url)}, File: {bool(file)}")
+    """Admin: submit a gameplay recording. Can be a YouTube URL, direct file upload, or a GCS path to a file uploaded via signed URL."""
+    logger.info(f"Admin upload gameplay request received. YouTube: {bool(youtube_url)}, File: {bool(file)}, GCS Path: {bool(direct_gcs_path)}")
     
     _require_admin(current_user)
     if not category.strip():
         raise HTTPException(status_code=400, detail="category is required")
         
-    if bool(youtube_url) == bool(file):
-        raise HTTPException(status_code=400, detail="Provide exactly one of youtube_url or file")
+    inputs = sum(bool(x) for x in [youtube_url, file, direct_gcs_path])
+    if inputs != 1:
+        raise HTTPException(status_code=400, detail="Provide exactly one of youtube_url, file, or direct_gcs_path")
 
     url = (youtube_url or "").strip()
     video_id = None
@@ -546,13 +571,20 @@ async def admin_upload_gameplay(
     multi_region = split_worker_mode or has_multi_region_workers()
 
     # For YouTube: insert as 'created' so the watcher trigger can dispatch it to the ffmpeg worker.
-    # For file uploads: insert straight as 'processing' — the watcher must never see this row
+    # For file uploads / GCS paths: insert straight as 'processing' — the watcher must never see this row
     # because it would try to dispatch it as a YouTube job (needs video_id) and fail silently.
     initial_status = "created" if video_id else "processing"
+    
+    stored_gcs_path = "file:direct_upload"
+    if video_id:
+        stored_gcs_path = f"youtube:{video_id}"
+    elif direct_gcs_path:
+        stored_gcs_path = direct_gcs_path
+        
     row = await db.insert_gameplay_source(
         category=category.strip(),
         title=(title or "").strip() or None,
-        gcs_path=f"youtube:{video_id}" if video_id else "file:direct_upload",
+        gcs_path=stored_gcs_path,
         uploaded_by=str(current_user.user_id),
         video_id=video_id,
         initial_status=initial_status,
@@ -560,7 +592,7 @@ async def admin_upload_gameplay(
     source_id = str(row["id"])
 
     # If it's a YouTube URL and we have multi-region workers, dispatch to worker (watcher handles it).
-    # If it's a direct file upload, always process in-process — file is here, watcher can't access it.
+    # If it's a direct file upload or GCS path, always process in-process — file is here, watcher can't access it.
     if multi_region and video_id:
         logger.info(f"Admin {current_user.email} submitted gameplay youtube {video_id} ({category}) — dispatched to watcher")
     else:
@@ -578,14 +610,40 @@ async def admin_upload_gameplay(
 
         local_path = None
         if not video_id:
-            ext = Path(file.filename or "").suffix or ".mp4"
-            local_path = tmp_dir / f"source_{source_id}{ext}"
-            logger.info(f"[gameplay {source_id}] Copying uploaded file ({file.filename}) to {local_path}...")
-            file.file.seek(0)
-            with open(local_path, "wb") as dest:
-                shutil.copyfileobj(file.file, dest)
-            size_mb = local_path.stat().st_size / 1_048_576
-            logger.info(f"[gameplay {source_id}] File saved: {size_mb:.1f} MB — launching background task")
+            if direct_gcs_path:
+                ext = Path(direct_gcs_path).suffix or ".mp4"
+                local_path = tmp_dir / f"source_{source_id}{ext}"
+                logger.info(f"[gameplay {source_id}] Downloading raw file from GCS {direct_gcs_path} to {local_path}...")
+                
+                # Download from GCS
+                loop = asyncio.get_running_loop()
+                def _download():
+                    from google.cloud import storage
+                    client = storage.Client()
+                    # Parse gs://bucket/path
+                    bucket_name = direct_gcs_path.replace("gs://", "").split("/")[0]
+                    object_name = "/".join(direct_gcs_path.replace("gs://", "").split("/")[1:])
+                    bucket = client.bucket(bucket_name)
+                    blob = bucket.blob(object_name)
+                    blob.download_to_filename(local_path)
+                
+                await loop.run_in_executor(None, _download)
+                size_mb = local_path.stat().st_size / 1_048_576
+                logger.info(f"[gameplay {source_id}] GCS Download complete: {size_mb:.1f} MB — launching background task")
+                
+            elif file:
+                ext = Path(file.filename or "").suffix or ".mp4"
+                local_path = tmp_dir / f"source_{source_id}{ext}"
+                logger.info(f"[gameplay {source_id}] Copying uploaded file ({file.filename}) to {local_path}...")
+                await file.seek(0)
+                with open(local_path, "wb") as dest:
+                    while True:
+                        chunk = await file.read(1024 * 1024)  # 1MB chunks
+                        if not chunk:
+                            break
+                        dest.write(chunk)
+                size_mb = local_path.stat().st_size / 1_048_576
+                logger.info(f"[gameplay {source_id}] File saved: {size_mb:.1f} MB — launching background task")
 
         async def _task():
             try:
@@ -601,10 +659,28 @@ async def admin_upload_gameplay(
                     pass
             finally:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
+                # Cleanup the raw file from GCS if we used direct_gcs_path
+                if direct_gcs_path:
+                    try:
+                        loop = asyncio.get_running_loop()
+                        def _delete():
+                            from google.cloud import storage
+                            client = storage.Client()
+                            bucket_name = direct_gcs_path.replace("gs://", "").split("/")[0]
+                            object_name = "/".join(direct_gcs_path.replace("gs://", "").split("/")[1:])
+                            bucket = client.bucket(bucket_name)
+                            blob = bucket.blob(object_name)
+                            blob.delete()
+                        await loop.run_in_executor(None, _delete)
+                        logger.info(f"[gameplay {source_id}] Deleted raw source from GCS {direct_gcs_path}")
+                    except Exception as e:
+                        logger.warning(f"[gameplay {source_id}] Failed to delete raw source from GCS: {e}")
 
         asyncio.create_task(_task(), name=f"gameplay-{source_id[:8]}")
-        log_type = f"youtube {video_id}" if video_id else f"file upload ({file.filename})"
+        log_type = f"youtube {video_id}" if video_id else f"file upload ({'GCS' if direct_gcs_path else file.filename})"
         logger.info(f"Admin {current_user.email} submitted gameplay {log_type} ({category}) — background task started")
+
+
 
     return {"source_id": source_id, "status": "created" if (multi_region and video_id) else "processing"}
 

@@ -33,6 +33,18 @@ def _get_gcs_client() -> storage.Client:
 def _public_url(blob_name: str, bucket_name: str | None = None) -> str:
     return f"{settings.GCS_PUBLIC_BASE_URL}/{bucket_name or settings.GCS_BUCKET_NAME}/{blob_name}"
 
+def generate_upload_signed_url(bucket_name: str, object_name: str, content_type: str, expiration_minutes: int = 60) -> str:
+    from datetime import timedelta
+    client = _get_gcs_client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(object_name)
+    return blob.generate_signed_url(
+        version="v4",
+        expiration=timedelta(minutes=expiration_minutes),
+        method="PUT",
+        content_type=content_type,
+    )
+
 
 # ── Thumbnail generation ────────────────────────────────────────
 

@@ -217,30 +217,61 @@ function GameplaySection({ notify }) {
     return () => { if (timer.current && !active) { clearInterval(timer.current); timer.current = null } }
   }, [sources, load])
 
+  const [uploadState, setUploadState] = useState('') // '' | 'Requesting URL...' | 'Uploading to Cloud...' | 'Finalizing...'
+
   const upload = async (e) => {
     e.preventDefault()
     if (!category.trim()) return notify('Category is required', 'error')
     
-    const form = new FormData()
-    form.append('category', category.trim())
-    if (title.trim()) form.append('title', title.trim())
-    
-    if (tab === 'youtube') {
-      if (!youtubeUrl.trim()) return notify('Enter a YouTube URL', 'error')
-      form.append('youtube_url', youtubeUrl.trim())
-    } else {
-      if (!file) return notify('Choose a video file', 'error')
-      form.append('file', file)
-    }
-
     setBusy(true)
     try {
-      await send('/brainrot/admin/gameplay', { form })
-      notify(tab === 'youtube' ? 'YouTube video received — processing in background' : 'File uploaded — processing in background', 'success')
+      if (tab === 'youtube') {
+        if (!youtubeUrl.trim()) return notify('Enter a YouTube URL', 'error')
+        const form = new FormData()
+        form.append('category', category.trim())
+        if (title.trim()) form.append('title', title.trim())
+        form.append('youtube_url', youtubeUrl.trim())
+        
+        await send('/brainrot/admin/gameplay', { form })
+        notify('YouTube video received — processing in background', 'success')
+      } else {
+        if (!file) return notify('Choose a video file', 'error')
+        
+        // 1. Get signed URL
+        setUploadState('Requesting URL...')
+        const { url, gcs_path } = await send('/brainrot/admin/gameplay/upload-url', { 
+          json: { filename: file.name, content_type: file.type } 
+        })
+        
+        // 2. Upload file to GCS
+        setUploadState('Uploading to Cloud...')
+        const uploadRes = await fetch(url, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': file.type }
+        })
+        if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.statusText}`)
+        
+        // 3. Tell backend
+        setUploadState('Finalizing...')
+        const form = new FormData()
+        form.append('category', category.trim())
+        if (title.trim()) form.append('title', title.trim())
+        form.append('direct_gcs_path', gcs_path)
+        
+        await send('/brainrot/admin/gameplay', { form })
+        notify('File uploaded directly to cloud — processing in background', 'success')
+      }
+      
       setTitle(''); setYoutubeUrl(''); setFile(null)
       if (fileRef.current) fileRef.current.value = ''
       setTimeout(load, 800)
-    } catch (e) { notify(e.message, 'error') } finally { setBusy(false) }
+    } catch (e) { 
+      notify(e.message, 'error') 
+    } finally { 
+      setBusy(false) 
+      setUploadState('')
+    }
   }
 
   const statusColor = (s) => s === 'ready' ? C.green : s === 'failed' ? C.red : C.amber
@@ -271,7 +302,9 @@ function GameplaySection({ notify }) {
           ) : (
              <input ref={fileRef} type="file" accept="video/mp4,video/quicktime,video/*" onChange={e => setFile(e.target.files?.[0] || null)} style={{ flex: 1, fontSize: '.8rem', color: C.text }} />
           )}
-          <button type="submit" style={{ ...btnRed, opacity: busy ? .6 : 1 }} disabled={busy}>{busy ? 'Processing…' : (tab === 'youtube' ? 'Process YouTube' : 'Upload & Process')}</button>
+          <button type="submit" style={{ ...btnRed, opacity: busy ? .6 : 1 }} disabled={busy}>
+            {uploadState || (busy ? 'Processing…' : (tab === 'youtube' ? 'Process YouTube' : 'Upload & Process'))}
+          </button>
           <button type="button" style={btnGhost} onClick={load}>🔄 Refresh</button>
         </div>
       </form>
