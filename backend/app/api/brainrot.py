@@ -525,7 +525,11 @@ def get_gameplay_upload_url(
     object_name = f"raw_uploads/{uuid.uuid4().hex}{ext}"
     bucket_name = settings.BRAINROT_GCS_BUCKET_NAME
     
-    url = generate_upload_signed_url(bucket_name, object_name, req.content_type)
+    try:
+        url = generate_upload_signed_url(bucket_name, object_name, req.content_type)
+    except Exception as e:
+        logger.exception("Failed to generate signed url")
+        raise HTTPException(status_code=500, detail=str(e))
     
     return {
         "url": url,
