@@ -35,15 +35,49 @@ def _public_url(blob_name: str, bucket_name: str | None = None) -> str:
 
 def generate_upload_signed_url(bucket_name: str, object_name: str, content_type: str, expiration_minutes: int = 60) -> str:
     from datetime import timedelta
+    import google.auth
+    from google.auth.transport.requests import Request
+    
     client = _get_gcs_client()
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(object_name)
-    return blob.generate_signed_url(
-        version="v4",
-        expiration=timedelta(minutes=expiration_minutes),
-        method="PUT",
-        content_type=content_type,
-    )
+    
+    kwargs = {
+        "version": "v4",
+        "expiration": timedelta(minutes=expiration_minutes),
+        "method": "PUT",
+        "content_type": content_type,
+    }
+    
+    try:
+        # Try local signing first (works locally if using a Service Account JSON key)
+        return blob.generate_signed_url(**kwargs)
+    except AttributeError:
+        # Fails on Cloud Run because ambient credentials lack a private key.
+        # Fall back to IAM SignBlob API.
+        creds, _ = google.auth.default()
+        
+        sa_email = getattr(creds, "service_account_email", None)
+        if not sa_email:
+            import urllib.request
+            req = urllib.request.Request(
+                "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email",
+                headers={"Metadata-Flavor": "Google"}
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=2) as resp:
+                    sa_email = resp.read().decode("utf-8").strip()
+            except Exception as e:
+                logger.error(f"Failed to fetch service account email from metadata server: {e}")
+                raise RuntimeError("Could not determine service account email for signed URL generation")
+                
+        if not creds.token:
+            creds.refresh(Request())
+            
+        kwargs["service_account_email"] = sa_email
+        kwargs["access_token"] = creds.token
+        
+        return blob.generate_signed_url(**kwargs)
 
 
 # ── Thumbnail generation ────────────────────────────────────────
