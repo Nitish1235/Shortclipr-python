@@ -519,6 +519,8 @@ async def admin_upload_gameplay(
     """Admin: submit a gameplay recording. Can be a YouTube URL or direct file upload.
     It's trimmed (first 30s dropped), split into ≤120s clips, reframed to 9:16,
     and thumbnailed in the background."""
+    logger.info(f"Admin upload gameplay request received. YouTube URL: {bool(youtube_url)}, File: {bool(file)}")
+    
     _require_admin(current_user)
     if not category.strip():
         raise HTTPException(status_code=400, detail="category is required")
@@ -576,8 +578,11 @@ async def admin_upload_gameplay(
         if not video_id:
             ext = Path(file.filename or "").suffix or ".mp4"
             local_path = tmp_dir / f"source_{source_id}{ext}"
+            logger.info(f"Copying uploaded file to {local_path}...")
+            file.file.seek(0)
             with open(local_path, "wb") as f:
                 shutil.copyfileobj(file.file, f)
+            logger.info(f"Copied uploaded file to {local_path}.")
 
         async def _task():
             try:
