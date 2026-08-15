@@ -33,47 +33,35 @@ def _get_gcs_client() -> storage.Client:
 def _public_url(blob_name: str, bucket_name: str | None = None) -> str:
     return f"{settings.GCS_PUBLIC_BASE_URL}/{bucket_name or settings.GCS_BUCKET_NAME}/{blob_name}"
 
-def generate_upload_signed_url(bucket_name: str, object_name: str, content_type: str, expiration_minutes: int = 60) -> str:
+def generate_upload_signed_url(
+    bucket_name: str,
+    object_name: str,
+    content_type: str,
+    expiration_minutes: int = 60,
+) -> str:
     from datetime import timedelta
-    
+
+    import google.auth
+    from google.auth.transport.requests import Request
+
     client = _get_gcs_client()
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(object_name)
-    
-    kwargs = {
-        "version": "v4",
-        "expiration": timedelta(minutes=expiration_minutes),
-        "method": "PUT",
-        "content_type": content_type,
-    }
-    
-    try:
-        # Try local signing first (works locally if using a Service Account JSON key)
-        return blob.generate_signed_url(**kwargs)
-    except Exception as local_err:
-        # Fails on Cloud Run because ambient credentials lack a private key.
-        # Fall back to IAM SignBlob API. google-cloud-storage does this automatically
-        # if we provide the `service_account_email`.
-        import urllib.request
-        req = urllib.request.Request(
-            "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email",
-            headers={"Metadata-Flavor": "Google"}
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=2) as resp:
-                sa_email = resp.read().decode("utf-8").strip()
-        except Exception as e:
-            logger.error(f"Failed to fetch service account email from metadata server: {e}")
-            raise RuntimeError(f"Could not sign URL locally ({local_err}) AND could not determine service account email for IAM fallback ({e})")
-            
-        kwargs["service_account_email"] = sa_email
-        
-        try:
-            return blob.generate_signed_url(**kwargs)
-        except Exception as e:
-            logger.error(f"IAM SignBlob API failed for {sa_email}: {e}")
-            raise RuntimeError(f"IAM SignBlob failed (Does the service account have 'Service Account Token Creator' role?): {e}")
 
+    credentials, _ = google.auth.default()
+
+    credentials.refresh(Request())
+
+    return blob.generate_signed_url(
+        version="v4",
+        expiration=timedelta(minutes=expiration_minutes),
+        method="PUT",
+        content_type=content_type,
+        service_account_email=(
+            "shortclipr-api@shortclipr-498718.iam.gserviceaccount.com"
+        ),
+        access_token=credentials.token,
+    )
 
 # ── Thumbnail generation ────────────────────────────────────────
 
