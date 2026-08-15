@@ -545,22 +545,22 @@ async def admin_upload_gameplay(
     split_worker_mode = bool(settings.API_WORKER_URLS.strip() or settings.FFMPEG_WORKER_URLS.strip())
     multi_region = split_worker_mode or has_multi_region_workers()
 
-    # We just store the youtube URL and video_id in the DB.
-    # If in multi_region mode, the DB trigger will pg_notify the watcher,
-    # which will dispatch it to the FFmpeg worker.
-    # Otherwise, we run it in-process.
+    # For YouTube: insert as 'created' so the watcher trigger can dispatch it to the ffmpeg worker.
+    # For file uploads: insert straight as 'processing' — the watcher must never see this row
+    # because it would try to dispatch it as a YouTube job (needs video_id) and fail silently.
+    initial_status = "created" if video_id else "processing"
     row = await db.insert_gameplay_source(
         category=category.strip(),
         title=(title or "").strip() or None,
         gcs_path=f"youtube:{video_id}" if video_id else "file:direct_upload",
         uploaded_by=str(current_user.user_id),
         video_id=video_id,
+        initial_status=initial_status,
     )
     source_id = str(row["id"])
 
-    # If it's a YouTube URL and we have multi-region workers, dispatch to worker.
-    # If it's a direct file upload, process it in-process since the file is already here
-    # (and the gameplay worker doesn't currently support GCS source downloads).
+    # If it's a YouTube URL and we have multi-region workers, dispatch to worker (watcher handles it).
+    # If it's a direct file upload, always process in-process — file is here, watcher can't access it.
     if multi_region and video_id:
         logger.info(f"Admin {current_user.email} submitted gameplay youtube {video_id} ({category}) — dispatched to watcher")
     else:
@@ -569,20 +569,23 @@ async def admin_upload_gameplay(
         from pathlib import Path
         import shutil
 
-        # Need to change status from 'created' to 'processing' since the watcher won't do it
-        await db.set_gameplay_source_status(source_id, "processing")
-        
+        # For non-multiregion YouTube, we need to manually flip status to 'processing'.
+        # For file uploads it was already inserted as 'processing' above, so skip.
+        if video_id:
+            await db.set_gameplay_source_status(source_id, "processing")
+
         tmp_dir = Path(tempfile.mkdtemp(prefix="gameplay_src_"))
-        
+
         local_path = None
         if not video_id:
             ext = Path(file.filename or "").suffix or ".mp4"
             local_path = tmp_dir / f"source_{source_id}{ext}"
-            logger.info(f"Copying uploaded file to {local_path}...")
+            logger.info(f"[gameplay {source_id}] Copying uploaded file ({file.filename}) to {local_path}...")
             file.file.seek(0)
-            with open(local_path, "wb") as f:
-                shutil.copyfileobj(file.file, f)
-            logger.info(f"Copied uploaded file to {local_path}.")
+            with open(local_path, "wb") as dest:
+                shutil.copyfileobj(file.file, dest)
+            size_mb = local_path.stat().st_size / 1_048_576
+            logger.info(f"[gameplay {source_id}] File saved: {size_mb:.1f} MB — launching background task")
 
         async def _task():
             try:
@@ -591,7 +594,7 @@ async def admin_upload_gameplay(
                 else:
                     await process_gameplay_source(source_id, local_path, category.strip(), tmp_dir)
             except Exception as e:
-                logger.exception(f"Gameplay task failed for {source_id}")
+                logger.exception(f"[gameplay {source_id}] Background task failed")
                 try:
                     await db.set_gameplay_source_status(source_id, "failed", str(e)[:500])
                 except Exception:
@@ -600,8 +603,8 @@ async def admin_upload_gameplay(
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 
         asyncio.create_task(_task(), name=f"gameplay-{source_id[:8]}")
-        log_type = f"youtube {video_id}" if video_id else "file upload"
-        logger.info(f"Admin {current_user.email} submitted gameplay {log_type} ({category}) — started in-process")
+        log_type = f"youtube {video_id}" if video_id else f"file upload ({file.filename})"
+        logger.info(f"Admin {current_user.email} submitted gameplay {log_type} ({category}) — background task started")
 
     return {"source_id": source_id, "status": "created" if (multi_region and video_id) else "processing"}
 
