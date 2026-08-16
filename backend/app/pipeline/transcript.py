@@ -43,7 +43,7 @@ def _clean(text: str) -> str:
 
 import httpx
 
-from app.core.proxy import get_dataimpulse_proxy
+from app.core.proxy import get_proxycheap_proxy
 from app.pipeline.stream import call_player_api
 
 logger = logging.getLogger(__name__)
@@ -320,7 +320,7 @@ def _ytta_fetch_sync(
 
 
 async def _ytta_proxy(video_id: str, lang_code: str | None, session_id: str | None = None) -> list[TranscriptEntry]:
-    proxy = get_dataimpulse_proxy(purpose="transcript-ytta")
+    proxy = get_proxycheap_proxy(purpose="transcript-ytta")
     loop = asyncio.get_running_loop()
     # _TranscriptsDisabledError and _VideoUnavailableError propagate naturally
     return await loop.run_in_executor(
@@ -337,9 +337,9 @@ async def _ytta_proxy(video_id: str, lang_code: str | None, session_id: str | No
 async def _innertube_android_proxy(video_id: str, lang_code: str | None, session_id: str | None = None) -> list[TranscriptEntry]:
     """
     Fetch caption track list via InnerTube ANDROID player call, then download
-    the timedtext URL — both via the SAME DataImpulse rotating residential proxy.
+    the timedtext URL — both via the SAME proxy-cheap rotating residential proxy.
     """
-    proxy = get_dataimpulse_proxy(purpose="transcript-innertube")
+    proxy = get_proxycheap_proxy(purpose="transcript-innertube")
     data = await call_player_api(video_id, client_name="ANDROID", proxy_url=proxy)
 
     ps = data.get("playabilityStatus", {})
@@ -568,7 +568,7 @@ def _ytdlp_subs_sync(
 
 
 async def _ytdlp_subs_proxy(video_id: str, lang_code: str | None, session_id: str | None = None) -> list[TranscriptEntry]:
-    proxy = get_dataimpulse_proxy(purpose="transcript-ytdlp")
+    proxy = get_proxycheap_proxy(purpose="transcript-ytdlp")
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
         _TRANSCRIPT_POOL,

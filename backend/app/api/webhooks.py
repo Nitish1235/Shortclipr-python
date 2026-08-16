@@ -9,6 +9,7 @@ Handles:
 Verifies webhook signature using HMAC-SHA256.
 """
 
+import base64
 import hashlib
 import hmac
 import json
@@ -101,8 +102,13 @@ def _verify_signature(
     body: bytes, webhook_id: str, webhook_timestamp: str, webhook_signature: str
 ) -> bool:
     """
-    Verify Dodo webhook using Standard Webhooks spec.
+    Verify Dodo webhook using the Standard Webhooks (Svix) spec.
     Signed message: "{webhook-id}.{webhook-timestamp}.{raw-body}"
+
+    Per spec: the secret is "whsec_<base64>" — strip the prefix and
+    base64-decode it before using as the HMAC key. The resulting signature
+    is base64 (NOT hex), and the webhook-signature header can carry several
+    space-separated "v1,<sig>" candidates — any match is valid.
     """
     if settings.APP_ENV == "development" and not settings.DODO_PAYMENTS_WEBHOOK_SECRET:
         logger.warning("DODO_PAYMENTS_WEBHOOK_SECRET not set — skipping verification (DEV ONLY)")
@@ -116,13 +122,21 @@ def _verify_signature(
         logger.error("Missing webhook headers (webhook-id / webhook-timestamp / webhook-signature)")
         return False
 
+    secret = settings.DODO_PAYMENTS_WEBHOOK_SECRET
+    if secret.startswith("whsec_"):
+        secret = secret[len("whsec_"):]
+    secret_bytes = base64.b64decode(secret)
+
     signed_content = f"{webhook_id}.{webhook_timestamp}.{body.decode()}"
-    expected = hmac.new(
-        settings.DODO_PAYMENTS_WEBHOOK_SECRET.encode(),
-        signed_content.encode(),
-        hashlib.sha256,
-    ).hexdigest()
-    return hmac.compare_digest(expected, webhook_signature)
+    expected = base64.b64encode(
+        hmac.new(secret_bytes, signed_content.encode(), hashlib.sha256).digest()
+    ).decode()
+
+    for candidate in webhook_signature.split():
+        _, _, sig = candidate.partition(",")
+        if sig and hmac.compare_digest(expected, sig):
+            return True
+    return False
 
 
 async def _handle_payment_succeeded(payload: dict) -> None:

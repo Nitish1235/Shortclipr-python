@@ -35,7 +35,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 
 from app.core.config import get_settings
-from app.core.proxy import get_dataimpulse_proxy, get_proxy_url, url_is_ip_bound
+from app.core.proxy import get_proxycheap_proxy, get_proxy_url, url_is_ip_bound
 from app.core.redis import cache_stream_url, get_cached_stream_url
 
 logger = logging.getLogger(__name__)
@@ -483,10 +483,10 @@ def _pick_audio_ytdlp(info: dict | None) -> str | None:
     return None
 
 
-# ── Method 1: InnerTube ANDROID + DataImpulse ─────────────────
+# ── Method 1: InnerTube ANDROID + proxy-cheap ─────────────────
 
 async def _innertube_android_stream(video_id: str, target_height: int, session_id: str | None = None) -> str:
-    proxy = get_dataimpulse_proxy(purpose="stream-innertube")
+    proxy = get_proxycheap_proxy(purpose="stream-innertube")
     data = await call_player_api(video_id, client_name="ANDROID", send_params=True, proxy_url=proxy)
 
     blocked, reason = _innertube_is_blocked(data)
@@ -501,7 +501,7 @@ async def _innertube_android_stream(video_id: str, target_height: int, session_i
     return url
 
 
-# ── Methods 2-5: yt-dlp variants via DataImpulse ─────────────
+# ── Methods 2-5: yt-dlp variants via proxy-cheap ─────────────
 
 def _ytdlp_run_sync(opts: dict, video_url: str) -> dict | None:
     import yt_dlp
@@ -535,7 +535,7 @@ async def _ytdlp_stream(
 ) -> str:
     import yt_dlp
 
-    proxy = get_dataimpulse_proxy(purpose=f"stream-ytdlp-{label}")
+    proxy = get_proxycheap_proxy(purpose=f"stream-ytdlp-{label}")
     opts = _ytdlp_base_opts(proxy)
     opts["format"] = format_str
     if client:
@@ -766,7 +766,7 @@ async def get_stream_urls(
     must be downloaded with (CDN URLs are bound to the requesting client's UA).
 
     proxy_override: when set, ALL resolution attempts use this proxy instead of
-    DataImpulse. Used by the FFmpeg stage to resolve URLs through the SAME IP
+    proxy-cheap. Used by the FFmpeg stage to resolve URLs through the SAME IP
     that will download them (Proxy-Seller ISP), avoiding IP-bound signature
     mismatches.
 
@@ -780,7 +780,7 @@ async def get_stream_urls(
     h = int(quality.rstrip("p"))
 
     # ── 1. yt-dlp + tv_embedded + audio (now first — see docstring) ────
-    proxy = proxy_override or get_dataimpulse_proxy(purpose="stream-ytdlp-tv_embedded")
+    proxy = proxy_override or get_proxycheap_proxy(purpose="stream-ytdlp-tv_embedded")
     opts = _ytdlp_base_opts(proxy)
     opts["format"] = _fmt(h)
     opts["extractor_args"] = {"youtube": {"player_client": ["tv_embedded"]}}
@@ -815,7 +815,7 @@ async def get_stream_urls(
     last_exc: Exception | None = None
     for client_name, send_params, user_agent in _clients:
         try:
-            proxy = proxy_override or get_dataimpulse_proxy(purpose=f"stream-innertube-{client_name}")
+            proxy = proxy_override or get_proxycheap_proxy(purpose=f"stream-innertube-{client_name}")
             data = await call_player_api(video_id, client_name=client_name, send_params=send_params, proxy_url=proxy)
 
             blocked, reason = _innertube_is_blocked(data)
@@ -878,7 +878,7 @@ async def get_stream_urls_high_quality(
     logger.info(f"[{video_id}] resolving HQ stream (min={min_height}p, max={max_height or 'uncapped'}p)")
 
     # ── 1. yt-dlp + tv_embedded with _fmt_high_quality selector ─────────
-    proxy = proxy_override or get_dataimpulse_proxy(purpose="stream-ytdlp-hq")
+    proxy = proxy_override or get_proxycheap_proxy(purpose="stream-ytdlp-hq")
     opts = _ytdlp_base_opts(proxy)
     opts["format"] = _fmt_high_quality(min_height, max_height)
     opts["extractor_args"] = {"youtube": {"player_client": ["tv_embedded"]}}
@@ -908,7 +908,7 @@ async def get_stream_urls_high_quality(
         logger.warning(f"[{video_id}] HQ yt-dlp tv_embedded failed ({ytdlp_exc}); trying InnerTube")
 
     # ── 2. yt-dlp + android client (different player, same HQ selector) ─
-    proxy = proxy_override or get_dataimpulse_proxy(purpose="stream-ytdlp-hq-android")
+    proxy = proxy_override or get_proxycheap_proxy(purpose="stream-ytdlp-hq-android")
     opts2 = _ytdlp_base_opts(proxy)
     opts2["format"] = _fmt_high_quality(min_height, max_height)
     opts2["extractor_args"] = {"youtube": {"player_client": ["android"]}}
@@ -936,7 +936,7 @@ async def get_stream_urls_high_quality(
     last_exc: Exception | None = None
     for client_name, send_params, user_agent in _clients:
         try:
-            proxy = proxy_override or get_dataimpulse_proxy(purpose=f"stream-innertube-hq-{client_name}")
+            proxy = proxy_override or get_proxycheap_proxy(purpose=f"stream-innertube-hq-{client_name}")
             data = await call_player_api(video_id, client_name=client_name, send_params=send_params, proxy_url=proxy)
 
             blocked, reason = _innertube_is_blocked(data)
@@ -979,7 +979,7 @@ async def get_audio_stream_url(
     fully exhausted (see step 3 above).
 
     proxy_override: when set, use this proxy for every attempt instead of a
-    fresh DataImpulse IP per client — keeps this call consistent with
+    fresh proxy-cheap IP per client — keeps this call consistent with
     whatever proxy resolved the paired video URL (see get_stream_urls'
     proxy_override docstring for why that matters for IP-bound CDN URLs).
     """
@@ -1004,7 +1004,7 @@ async def get_audio_stream_url(
     # 3. Resolve — fresh IP per client attempt (unless proxy_override pins one)
     for client_name in ["ANDROID", "TV", "IOS"]:
         try:
-            proxy = proxy_override or get_dataimpulse_proxy(purpose=f"stream-audio-{client_name}")
+            proxy = proxy_override or get_proxycheap_proxy(purpose=f"stream-audio-{client_name}")
             data = await call_player_api(video_id, client_name=client_name, send_params=True, proxy_url=proxy)
             url = _pick_best_audio_stream(data)
             if url:
@@ -1076,7 +1076,7 @@ async def get_video_metadata(video_id: str, session_id: str | None = None) -> di
         logger.warning(f"[{video_id}] oEmbed metadata failed: {e}")
 
     # ── 2 & 3. InnerTube ANDROID — WITH proxy first, no-proxy fallback ──
-    proxy_url = get_dataimpulse_proxy(purpose="stream-metadata")
+    proxy_url = get_proxycheap_proxy(purpose="stream-metadata")
     for attempt, use_proxy in ((2, proxy_url), (3, None)):
         if attempt == 3 and use_proxy is None:
             # #2 already ran with no proxy (none configured) — no point retrying identically

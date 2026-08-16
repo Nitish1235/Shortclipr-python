@@ -5,8 +5,11 @@ Three providers:
   • Proxy-Seller ISP  — 10 static ISP IPs, used for DASH segment downloads.
                         Chosen deterministically via MD5(session_id) % pool
                         so all byte-range requests within one job share an IP.
-  • DataImpulse       — rotating residential, used for transcript + stream URLs.
-  • proxy-cheap       — legacy, kept for fallback / admin test lab only.
+  • proxy-cheap       — rotating residential, used for transcript + stream URLs
+                        (get_proxycheap_proxy / get_proxy_url). Runs on
+                        shortclipr-worker-ai (the API/transcript worker pool).
+  • DataImpulse       — rotating residential, kept only as the FFmpeg worker's
+                        fallback (full-source download retry, DASH re-resolve).
 
 Returns None when the relevant provider is not configured (dev mode).
 """
@@ -98,26 +101,45 @@ def get_youtube_proxy(session_id: str | None = None, purpose: str = "req") -> st
     Return the best available proxy for YouTube requests (transcript + stream).
 
     Priority: Proxy-Seller ISP (static, stable, less likely to be blocked)
-    → DataImpulse rotating residential (fallback if Proxy-Seller not configured).
+    → proxy-cheap rotating residential (fallback if Proxy-Seller not configured).
 
     When session_id is provided and Proxy-Seller is available, the proxy is
     chosen deterministically via MD5(session_id) % pool_size — same IP for
     the entire job across API stage (transcript/stream) and FFmpeg stage
     (DASH downloads). This avoids IP-bound URL mismatches.
 
-    When falling back to DataImpulse, each call gets a fresh random sessid
-    (= fresh IP) since DataImpulse IPs are rotating residential.
+    When falling back to proxy-cheap, each call gets a fresh IP (rotating
+    gateway port, or a random pick from PROXY_PORTS — see get_proxy_url).
     """
     s = get_settings()
     proxies = _parse_proxyseller_list(s.PROXYSELLER_PROXIES)
     if s.PROXYSELLER_USER and s.PROXYSELLER_PASS and proxies:
         return get_proxyseller_proxy(session_id)
-    return get_dataimpulse_proxy(purpose=purpose)
+    return get_proxycheap_proxy(purpose=purpose)
+
+
+def get_proxycheap_proxy(purpose: str = "req") -> str | None:
+    """
+    Proxy-Cheap rotating residential — transcript + stream URL resolution
+    (shortclipr-worker-ai). Each call gets a fresh IP: either the rotating
+    gateway host:port (PROXY_PORT fixed, IP rotates server-side per
+    connection) or a random port drawn from PROXY_PORTS when PROXY_PORT=0.
+
+    Returns None if PROXY_HOST/USER/PASS are not configured.
+    """
+    url = get_proxy_url()
+    if url:
+        _logger.info(f"[proxy.py] Proxy-Cheap rotating — purpose={purpose}")
+    else:
+        _logger.warning(f"[proxy.py] Proxy-Cheap not configured — {purpose} running without residential proxy")
+    return url
 
 
 def get_dataimpulse_proxy(purpose: str = "req") -> str | None:
     """
-    DataImpulse rotating residential proxy — fallback for transcript + stream URL.
+    DataImpulse rotating residential proxy — FFmpeg worker fallback only
+    (full-source download retry, DASH re-resolve). Transcript + stream URL
+    resolution on shortclipr-worker-ai now uses get_proxycheap_proxy instead.
 
     Each call mints a fresh random sessid forcing an independent IP rotation.
     Returns None if DATAIMPULSE_USER is not configured.

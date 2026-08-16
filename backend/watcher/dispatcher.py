@@ -448,18 +448,21 @@ async def claim_gameplay_job(pool: asyncpg.Pool, region: str) -> dict | None:
     """Atomically claim the next 'created' gameplay source."""
     row = await pool.fetchrow("""
         UPDATE brainrot_gameplay_sources
-        SET status                = 'processing',
-            target_ffmpeg_region  = $1,
-            dispatched_at         = NOW()
+        SET status               = 'processing',
+            target_ffmpeg_region = $1,
+            dispatched_at        = NOW()
         WHERE id = (
-            SELECT id FROM brainrot_gameplay_sources
+            SELECT id
+            FROM brainrot_gameplay_sources
             WHERE status = 'created'
               AND start_after <= NOW()
             ORDER BY created_at
             FOR UPDATE SKIP LOCKED
             LIMIT 1
-        ) RETURNING id, video_id, category_cached
+        )
+        RETURNING id, video_id, gcs_path, category_cached
     """, region)
+
     return dict(row) if row else None
 
 
@@ -485,35 +488,95 @@ async def release_gameplay_for_retry(pool: asyncpg.Pool, source_id: str) -> None
 
 
 async def process_one_gameplay_job(pool: asyncpg.Pool) -> bool:
-    """Claim a 'created' gameplay source and dispatch it to the FFmpeg worker."""
-    load   = await get_gameplay_region_load(pool)
-    workers = config.FFMPEG_WORKERS if config.SPLIT_MODE else config.LEGACY_WORKERS
-    soft_cap = config.FFMPEG_REGION_SOFT_CAP if config.SPLIT_MODE else config.LEGACY_REGION_SOFT_CAP
+    """Claim a gameplay source and dispatch it to the FFmpeg worker."""
+    load = await get_gameplay_region_load(pool)
+
+    workers = (
+        config.FFMPEG_WORKERS
+        if config.SPLIT_MODE
+        else config.LEGACY_WORKERS
+    )
+
+    soft_cap = (
+        config.FFMPEG_REGION_SOFT_CAP
+        if config.SPLIT_MODE
+        else config.LEGACY_REGION_SOFT_CAP
+    )
+
     worker = _pick_region(load, workers, soft_cap)
+
     if not worker:
         return False
 
     job = await claim_gameplay_job(pool, worker["region"])
+
     if not job:
         return False
 
     source_id = str(job["id"])
-    video_id  = job["video_id"]
-    category  = job["category_cached"]
+    video_id = job["video_id"]
+    gcs_path = job["gcs_path"]
+    category = job["category_cached"]
+
+    # A gameplay source must have exactly one source type.
+    if not video_id and not gcs_path:
+        logger.error(
+            f"[gameplay:{source_id}] No video_id or gcs_path — cannot dispatch"
+        )
+
+        await pool.execute("""
+            UPDATE brainrot_gameplay_sources
+            SET status = 'failed',
+                error_message = 'Gameplay source has neither video_id nor gcs_path'
+            WHERE id = $1
+        """, source_id)
+
+        return True
+
+    if video_id and gcs_path:
+        logger.error(
+            f"[gameplay:{source_id}] Both video_id and gcs_path are set"
+        )
+
+        await pool.execute("""
+            UPDATE brainrot_gameplay_sources
+            SET status = 'failed',
+                error_message = 'Gameplay source has both video_id and gcs_path'
+            WHERE id = $1
+        """, source_id)
+
+        return True
+
+    payload = {
+        "source_id": source_id,
+        "category": category,
+    }
+
+    if video_id:
+        payload["video_id"] = str(video_id)
+    else:
+        payload["gcs_path"] = str(gcs_path)
 
     try:
         await _dispatch_to_worker(
-            worker["url"], "/internal/gameplay-process/run",
-            config.INTERNAL_SECRET, {
-                "source_id": source_id,
-                "video_id": video_id,
-                "category": category,
-            },
+            worker["url"],
+            "/internal/gameplay-process/run",
+            config.INTERNAL_SECRET,
+            payload,
         )
-        logger.info(f"[gameplay:{source_id}] Dispatched gameplay → {worker['region']}")
+
+        logger.info(
+            f"[gameplay:{source_id}] Dispatched gameplay "
+            f"({'youtube' if video_id else 'gcs'}) → {worker['region']}"
+        )
+
     except Exception as exc:
-        logger.warning(f"[gameplay:{source_id}] Gameplay dispatch to {worker['region']} failed: {exc}")
+        logger.warning(
+            f"[gameplay:{source_id}] Gameplay dispatch to "
+            f"{worker['region']} failed: {exc}"
+        )
         await release_gameplay_for_retry(pool, source_id)
+
     return True
 
 
