@@ -6,17 +6,18 @@ Step-by-step for deploying ShortClipr to production using the Google Cloud Conso
 
 ## Architecture overview (current)
 
-ShortClipr runs as **five** Cloud Run services now:
+ShortClipr runs as **six** Cloud Run services now:
 
 | Service | Purpose | Resources | Notes |
 |---------|---------|-----------|-------|
 | `shortclipr-frontend` | React/Vite bundle behind Nginx | 256Mi / 1 vCPU / concurrency 80 / max 5 | See `cloudbuild-frontend.yaml` |
 | `shortclipr-api` | Auth, job CRUD, payments, webhooks | 1Gi / 1 vCPU / concurrency 40 / max 10 | See `backend/cloudbuild-api.yaml` |
-| `shortclipr-api-worker-{region}` | **API pipeline stage** — metadata, transcript, GPT viral-clip detection | 2Gi / 4 vCPU / concurrency 12 / max 5 per region | See `backend/cloudbuild-api-worker.yaml` |
+| `shortclipr-api-worker-{region}` | **API pipeline stage** — metadata, transcript, GPT viral-clip detection; also handles brainrot GPT + TTS | 2Gi / 4 vCPU / concurrency 4 / max 5 per region | See `backend/cloudbuild-api-worker.yaml` |
 | `shortclipr-ffmpeg-worker-{region}` | **FFmpeg pipeline stage** — DASH download, reframe, caption encoding, upload | 8Gi / 4 vCPU / concurrency 2 / max 5 per region / `--no-cpu-throttling` | See `backend/cloudbuild-ffmpeg-worker.yaml` |
+| `shortclipr-brainrot-worker-{region}` | **Brainrot render stage** — composite FFmpeg (characters + audio + captions), upload final clip | 8Gi / 4 vCPU / concurrency 4 / max 5 per region / `--no-cpu-throttling` | See `backend/cloudbuild-brainrot-worker.yaml` |
 | `shortclipr-watcher` | Job dispatcher (LISTEN/NOTIFY on Postgres) | 512Mi / 1 vCPU / min=1 / max=1 / `--no-cpu-throttling` | See `backend/cloudbuild-watcher.yaml` |
 
-**How they connect:**
+**How they connect (YouTube Shorts pipeline):**
 ```
 POST /jobs  ──►  shortclipr-api  ──►  Postgres INSERT status='created', pipeline_stage='api'
                                       + pg_notify('new_job')
@@ -41,9 +42,38 @@ POST /jobs  ──►  shortclipr-api  ──►  Postgres INSERT status='create
                     └────────────────► watcher ───────────────────┘
 ```
 
-**Job status flow:**
+**Brainrot pipeline (separate job table `brainrot_jobs`):**
+```
+POST /brainrot/jobs  ──►  shortclipr-api  ──►  brainrot_jobs INSERT status='created'
+                                               + pg_notify('brainrot_new')
+                                                        │
+                                                        ▼
+                                              shortclipr-watcher (LISTEN)
+                                                        │
+                              ┌─────────────────────────┴──────────────────────────┐
+                              ▼                                                    ▼
+      POST /internal/brainrot-api-stage/run             POST /internal/brainrot-ffmpeg-stage/run
+      (to shortclipr-api-worker)                        (to shortclipr-brainrot-worker)
+                  │                                                   │
+                  ▼                                                   ▼
+       GPT script generation + TTS synthesis              Composite FFmpeg render
+       + GCS audio upload                                 (characters + audio + captions)
+                  │                                       + upload final clip
+                  ▼
+       brainrot_jobs: status='api_done'
+       Trigger fires pg_notify('brainrot_api_done')
+                  │
+                  └──────────────► watcher ──────────────────────────┘
+```
+
+**YouTube Shorts job status flow:**
 ```
 created  →  api_processing  →  api_done  →  ffmpeg_processing  →  completed / failed
+```
+
+**Brainrot job status flow:**
+```
+created  →  generating_script  →  synthesizing_voice  →  api_done  →  rendering  →  completed / failed
 ```
 
 **Backward compatibility:** if you don't set `API_WORKER_URLS` + `FFMPEG_WORKER_URLS`, the API service falls back to running BOTH stages in-process via `asyncio.create_task()` (unified single-service mode — good for local dev). The old `WORKER_SERVICE_URLS` env still works for legacy unified-worker deployments — the watcher auto-detects mode.
@@ -90,6 +120,12 @@ Auth is **not** Supabase Auth — the backend implements its own Google OAuth + 
    - `backend/migrations/004_pgboss_queue.sql` — Postgres-backed queue (replaced Cloud Tasks)
    - `backend/migrations/005_split_workers.sql` — split API + FFmpeg worker columns
    - `backend/migrations/006_clip_retention.sql` — showcase-protection flag for clips
+   - `backend/migrations/007_job_feedback.sql` — user feedback on clips (thumbs up/down)
+   - `backend/migrations/008_brainrot.sql` — `brainrot_jobs` table + character/gameplay schema
+   - `backend/migrations/009_voice_samples.sql` — voice preview sample blobs for the TTS picker
+   - `backend/migrations/010_brainrot_split_worker.sql` — triggers for `brainrot_new` / `brainrot_api_done` pg_notify channels
+   - `backend/migrations/011_gameplay_dispatch.sql` — `brainrot_gameplay_sources` dispatch queue
+   - `backend/migrations/012_gameplay_clip_status.sql` — curation status for gameplay clips
 
 3. Skip Supabase Row Level Security — not applicable to our JWT/direct-connection setup. Access is enforced at the FastAPI layer.
 
@@ -198,7 +234,7 @@ Deploy per additional region if needed:
 gcloud builds submit --config=backend/cloudbuild-api-worker.yaml --substitutions=_REGION=europe-west1
 ```
 
-**Capacity math**: 5 max-instances × 12 concurrency = 60 concurrent API jobs per region.
+**Capacity math**: 5 max-instances × 4 concurrency = 20 concurrent API jobs per region (soft cap default `API_REGION_SOFT_CAP=4` per watcher).
 
 ### 4.3 Deploy FFmpeg workers (heavy — DASH + encode + upload)
 
@@ -218,7 +254,29 @@ gcloud builds submit --config=backend/cloudbuild-api-worker.yaml --substitutions
 
 **Capacity math**: 5 max-instances × 2 concurrency = 10 concurrent FFmpeg jobs per region. 2 regions → **20 concurrent max**.
 
-### 4.4 Deploy `shortclipr-watcher` (job dispatcher)
+### 4.4 Deploy `shortclipr-brainrot-worker` (brainrot composite render)
+
+Handles the FFmpeg composite stage for brainrot clips: downloads assets from GCS, composites character sprites + gameplay background + TTS audio + captions, uploads the final clip. Deliberately isolated from `shortclipr-ffmpeg-worker` so a queue of brainrot renders can't starve YouTube Shorts encodes.
+
+Exposes `/internal/brainrot-ffmpeg-stage/run` (called by the watcher) and `/internal/gameplay-process/run` (called by the watcher for gameplay source ingestion).
+
+1. **Cloud Run → Create Service** → same GitHub repo, `main` branch.
+2. Build Configuration → **Cloud Build configuration file** → `backend/cloudbuild-brainrot-worker.yaml`.
+3. Service name `shortclipr-brainrot-worker-us-central1`, region `us-central1`.
+4. **Allow unauthenticated invocations** — `/internal/*` routes are gated by `X-Internal-Secret`.
+5. **Resources**: 8Gi RAM / 4 vCPU / concurrency 4 / max 5 / `--no-cpu-throttling`.
+6. **Environment variables** — same full set as `shortclipr-api` plus:
+   - `INTERNAL_TASK_SECRET` (Secret) — must match watcher + other workers
+   - `GCS_BUCKET_NAME` — main clips bucket (final brainrot clips go here)
+   - `BRAINROT_GCS_BUCKET_NAME` — brainrot assets bucket (gameplay clips, character PNGs, TTS audio)
+   - `UNREALSPEECH_API_KEY` (Secret) / `LEMONFOX_API_KEY` (Secret) — TTS providers
+   - **No YouTube proxy vars needed** — brainrot render doesn't touch YouTube
+7. Attach `shortclipr-sa` (or `shortclipr-workers-sa` if in Project B).
+8. Click **Create**. Copy the resulting URL — set it as `BRAINROT_WORKER_URLS` on the watcher.
+
+> **Capacity**: 5 max-instances × 4 concurrency = 20 concurrent brainrot renders per region. Each render takes ~30-120s (depending on clip count and TTS length); 4 vCPU gives comfortable headroom for FFmpeg composite.
+
+### 4.5 Deploy `shortclipr-watcher` (job dispatcher)
 
 Runs continuously (`min-instances=1`, `max-instances=1` — singleton), LISTENs on Postgres, dispatches jobs to workers. Uses a **separate small image** (512Mi — the minimum Cloud Run allows with `--no-cpu-throttling` — only asyncpg + httpx installed, no ffmpeg/opencv/openai/fastapi deps).
 
@@ -230,10 +288,12 @@ Runs continuously (`min-instances=1`, `max-instances=1` — singleton), LISTENs 
    - `INTERNAL_TASK_SECRET` (Secret) — same value used everywhere else
    - `API_WORKER_URLS`, `API_WORKER_REGIONS` — from step 4.2
    - `FFMPEG_WORKER_URLS`, `FFMPEG_WORKER_REGIONS` — from step 4.3
-   - `API_REGION_SOFT_CAP` — default 12
-   - `FFMPEG_REGION_SOFT_CAP` — default 2
-   - `RECONCILE_STUCK_MINUTES` — default 10
-   - `WATCHER_POLL_INTERVAL` — default 15 (seconds)
+   - `BRAINROT_WORKER_URLS`, `BRAINROT_WORKER_REGIONS` — from step 4.4 (falls back to `FFMPEG_WORKER_URLS` if unset)
+   - `API_REGION_SOFT_CAP` — default 4 (per-worker-URL concurrent jobs; API stage is I/O-bound)
+   - `FFMPEG_REGION_SOFT_CAP` — default 1 (CPU-bound; Cloud Run scales horizontally)
+   - `BRAINROT_REGION_SOFT_CAP` — default 4 (per-worker-URL concurrent renders)
+   - `RECONCILE_STUCK_MINUTES` — default 10 (API-stage timeout; FFmpeg/render use 3×)
+   - `WATCHER_POLL_INTERVAL` — default 15 (seconds between poll sweeps; LISTEN/NOTIFY is primary)
    - `LOG_LEVEL=INFO`
 5. Attach `shortclipr-sa` service account.
 6. Click **Create**.
@@ -350,7 +410,7 @@ gpt-5-nano request — 400 entries, 10 chunks, want 10 clips
 | Duration flex tolerance | `backend/app/pipeline/ai_clipper.py` (`END_SNAP_TOLERANCE`) |
 | Clip retention (frontend) | `src/pages/Dashboard.jsx` (`CLIP_RETENTION_MS`) + `src/pages/ClipsHistory.jsx` |
 | Worker soft caps | Watcher env vars: `API_REGION_SOFT_CAP` / `FFMPEG_REGION_SOFT_CAP` |
-| Stuck-job reconciliation window | `RECONCILE_STUCK_MINUTES` on watcher, `RECONCILE_STUCK_JOB_MINUTES` on API |
+| Stuck-job reconciliation window | `RECONCILE_STUCK_MINUTES` — shared env var name on both watcher and API |
 
 ### 8.2 Common ops tasks
 
