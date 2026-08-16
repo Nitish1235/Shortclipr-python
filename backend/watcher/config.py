@@ -65,7 +65,16 @@ FFMPEG_WORKERS: list[dict] = _parse_workers("FFMPEG_WORKER_URLS", "FFMPEG_WORKER
 _BRAINROT_WORKERS_RAW: list[dict] = _parse_workers("BRAINROT_WORKER_URLS", "BRAINROT_WORKER_REGIONS")
 BRAINROT_WORKERS: list[dict] = _BRAINROT_WORKERS_RAW or FFMPEG_WORKERS
 
-API_REGION_SOFT_CAP:      int = _int("API_REGION_SOFT_CAP",      12)
+# Soft caps are *per-worker-URL*, not per-GCP-region — each entry in the
+# *_WORKERS list gets its own load counter keyed by its region label.
+# Give each Cloud Run service URL a unique region string so caps apply
+# independently (e.g. FFMPEG_WORKER_REGIONS=us-east,eu-west, not both "us").
+#
+# API workers are I/O-bound (GPT + TTS), so 4 concurrent jobs per instance
+# is safe and leaves headroom. FFmpeg workers are CPU-bound: 1 job per
+# instance is the correct limit so encoding doesn't starve the CPU.
+# Brainrot FFmpeg is similarly CPU-bound but lighter: 4 concurrent is fine.
+API_REGION_SOFT_CAP:      int = _int("API_REGION_SOFT_CAP",      4)
 FFMPEG_REGION_SOFT_CAP:   int = _int("FFMPEG_REGION_SOFT_CAP",   1)
 BRAINROT_REGION_SOFT_CAP: int = _int("BRAINROT_REGION_SOFT_CAP", 4)
 

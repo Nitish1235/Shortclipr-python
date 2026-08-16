@@ -19,7 +19,7 @@ from fastapi.responses import StreamingResponse
 
 from app.api.deps import CurrentUser, decode_access_token
 from app.core.config import get_settings
-from app.core.worker_routing import has_multi_region_workers, pick_worker
+from app.core.worker_routing import has_ffmpeg_workers, pick_ffmpeg_worker
 from app.db import supabase as db
 from app.pipeline.captions import Caption, burn_captions
 from app.pipeline.uploader import download_to_file, upload_clip
@@ -103,6 +103,12 @@ async def save_editor_config(
     bad = set(config) - _ALLOWED_KEYS
     if bad:
         raise HTTPException(status_code=400, detail=f"Invalid config keys: {bad}")
+
+    rows = await db._fetch("SELECT user_id FROM clips WHERE clip_id=$1", clip_id)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Clip not found")
+    if str(rows[0]["user_id"]) != current_user.user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     await db._execute(
         "UPDATE clips SET editor_config=$1::jsonb WHERE clip_id=$2",
@@ -207,14 +213,14 @@ async def render_clip(
         captions_data = json.loads(captions_data)
     captions = [Caption(start=c["start"], end=c["end"], text=c["text"]) for c in captions_data]
 
-    if has_multi_region_workers():
+    if has_ffmpeg_workers():
         # Heavy ffmpeg work runs on the worker service — spread across
         # regions same as pipeline dispatch (app/core/worker_routing.py).
         # Synchronous call (not the job queue): the caller is waiting on the
         # response for the new video_url, so a queue would just add
         # latency without fixing anything — failures already propagate
         # straight back to the user via raise_for_status(), no zombie risk.
-        target = pick_worker()
+        target = pick_ffmpeg_worker()
         async with httpx.AsyncClient(timeout=180.0) as client:
             resp = await client.post(
                 f"{target.worker_url}/internal/editor/render",

@@ -457,9 +457,6 @@ async def job_progress_stream(job_id: str, token: str = Query(...)):
         raise HTTPException(status_code=404, detail="Job not found")
 
     async def event_generator():
-        # If the job is already done/failed when the client connects, close immediately
-        terminal = {"complete", "failed", "error"}
-
         while True:
             try:
                 row = await db.get_job(job_id)
@@ -474,7 +471,7 @@ async def job_progress_stream(job_id: str, token: str = Query(...)):
             progress   = row.get("progress", 0)
             step       = row.get("current_step", "") or ""
 
-            if job_status == "complete":
+            if job_status == "completed":
                 yield f"data: done\n\n"
                 break
             elif job_status in {"failed", "error"}:

@@ -534,6 +534,13 @@ async def update_clip_final_url(
     )
 
 
+async def delete_clip(clip_id: str) -> None:
+    """Remove a clip row that never finished encoding/uploading — called
+    when _process_one_clip fails after insert_clip() so a permanent
+    clip_ready=FALSE orphan row isn't left behind (see ffmpeg_stage.py)."""
+    await _execute("DELETE FROM clips WHERE clip_id=$1 AND clip_ready=FALSE", clip_id)
+
+
 async def get_clips_for_job(job_id: str) -> list[dict]:
     return await _fetch(
         "SELECT * FROM clips WHERE job_id=$1 ORDER BY viral_score DESC",

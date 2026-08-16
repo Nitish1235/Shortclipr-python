@@ -110,12 +110,13 @@ def _verify_signature(
     is base64 (NOT hex), and the webhook-signature header can carry several
     space-separated "v1,<sig>" candidates — any match is valid.
     """
-    if settings.APP_ENV == "development" and not settings.DODO_PAYMENTS_WEBHOOK_SECRET:
-        logger.warning("DODO_PAYMENTS_WEBHOOK_SECRET not set — skipping verification (DEV ONLY)")
-        return True
-
     if not settings.DODO_PAYMENTS_WEBHOOK_SECRET:
-        logger.error("DODO_PAYMENTS_WEBHOOK_SECRET missing in production!")
+        if settings.DODO_ALLOW_UNSIGNED_WEBHOOKS:
+            logger.warning("DODO_PAYMENTS_WEBHOOK_SECRET not set — skipping verification "
+                            "(DODO_ALLOW_UNSIGNED_WEBHOOKS=true, DEV ONLY)")
+            return True
+        logger.error("DODO_PAYMENTS_WEBHOOK_SECRET is not set — rejecting webhook. "
+                      "Set DODO_ALLOW_UNSIGNED_WEBHOOKS=true only for local dev.")
         return False
 
     if not webhook_id or not webhook_timestamp or not webhook_signature:

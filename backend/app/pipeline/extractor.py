@@ -332,7 +332,12 @@ async def probe_clip_start_offset(clip_path: Path, requested_duration: float) ->
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL,
     )
-    out, _ = await proc.communicate()
+    try:
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.communicate()
+        return 0.0
     try:
         actual = float(out.strip())
         return max(0.0, actual - requested_duration)

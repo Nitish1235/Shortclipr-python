@@ -29,7 +29,7 @@ from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, get_current_user
 from app.core.config import get_settings
-from app.core.worker_routing import has_multi_region_workers, pick_primary_worker
+from app.core.worker_routing import has_ffmpeg_workers, pick_primary_ffmpeg_worker
 from app.db import supabase as db
 from app.pipeline.test_pipeline import TOTAL_CLIPS, get_test_job, run_test_pipeline
 
@@ -49,11 +49,7 @@ _ADMIN_EMAILS: set[str] = {
 
 
 def is_admin(user) -> bool:
-    if _ADMIN_EMAILS and user.email.lower() in _ADMIN_EMAILS:
-        return True
-    if user.plan == "admin":
-        return True
-    return False
+    return bool(_ADMIN_EMAILS and user.email.lower() in _ADMIN_EMAILS)
 
 
 async def require_admin(current_user: CurrentUser) -> CurrentUser:
@@ -604,12 +600,12 @@ async def admin_test_generate(body: TestGenerateRequest, admin: AdminUser):
     """
     job_id = f"test_{uuid.uuid4().hex[:12]}"
 
-    if has_multi_region_workers():
+    if has_ffmpeg_workers():
         # Dispatch to a worker — always the SAME (primary) one, not
         # round-robin, since this admin test pipeline keeps its progress
         # state in-memory on whichever single instance handles it (see
         # admin_test_job_status below, which must poll that same instance).
-        target = pick_primary_worker()
+        target = pick_primary_ffmpeg_worker()
         async def _dispatch():
             try:
                 import httpx
@@ -637,8 +633,8 @@ async def admin_test_job_status(job_id: str, admin: AdminUser):
     When worker dispatch is configured, the job runs on the (primary)
     worker and its in-memory state lives there — proxy the request to it.
     """
-    if has_multi_region_workers():
-        target = pick_primary_worker()
+    if has_ffmpeg_workers():
+        target = pick_primary_ffmpeg_worker()
         import httpx
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(

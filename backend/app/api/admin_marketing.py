@@ -26,7 +26,7 @@ from fastapi import APIRouter, Body, File, HTTPException, UploadFile
 
 from app.api.admin import AdminUser
 from app.core.config import get_settings
-from app.core.worker_routing import has_multi_region_workers, pick_primary_worker
+from app.core.worker_routing import has_ffmpeg_workers, pick_primary_ffmpeg_worker
 from app.pipeline.marketing_editor import VALID_TRANSITIONS, render_marketing_video
 from app.pipeline.title_box import TITLE_BG_COLORS, TITLE_TEXT_COLORS
 from app.pipeline.uploader import _get_gcs_client, _upload_to_gcs, download_to_file
@@ -172,8 +172,8 @@ async def render_marketing(admin: AdminUser, body: dict = Body(...)):
     _validate_timeline(body)
     job_id = f"mktg_{uuid.uuid4().hex[:12]}"
 
-    if has_multi_region_workers():
-        target = pick_primary_worker()
+    if has_ffmpeg_workers():
+        target = pick_primary_ffmpeg_worker()
         async def _dispatch():
             try:
                 async with httpx.AsyncClient(timeout=30.0) as client:
@@ -195,8 +195,8 @@ async def render_marketing(admin: AdminUser, body: dict = Body(...)):
 
 @router.get("/admin/marketing/jobs/{job_id}")
 async def get_marketing_job(job_id: str, admin: AdminUser):
-    if has_multi_region_workers():
-        target = pick_primary_worker()
+    if has_ffmpeg_workers():
+        target = pick_primary_ffmpeg_worker()
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(
                 f"{target.worker_url}/internal/marketing/jobs/{job_id}",

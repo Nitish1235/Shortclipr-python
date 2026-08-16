@@ -44,7 +44,7 @@ _client = AsyncOpenAI(
     api_key=settings.OPENAI_API_KEY,
     max_retries=2,
     http_client=_httpx.AsyncClient(
-        proxies=None,
+        mounts={},
         timeout=_httpx.Timeout(connect=10, read=60, write=10, pool=10),
     ),
 )

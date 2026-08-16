@@ -9,6 +9,7 @@ GCS layout:
 
 import asyncio
 import logging
+import time
 import uuid
 from pathlib import Path
 
@@ -85,7 +86,13 @@ async def generate_thumbnail(clip_path: Path, output_path: Path) -> Path:
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.PIPE,
     )
-    _, stderr = await proc.communicate()
+    try:
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.communicate()
+        logger.warning("Thumbnail generation timed out — skipping")
+        return output_path
     if proc.returncode != 0:
         logger.warning(f"Thumbnail generation failed: {stderr.decode()[-200:]}")
         # Don't raise — thumbnail failure shouldn't block clip delivery
@@ -265,8 +272,11 @@ def _delete_job_blobs_sync(job_id: str, keep_clip_ids: set[str]) -> None:
         logger.error(f"GCS cleanup failed for job {job_id}: {e}")
 
 
+_GCS_UPLOAD_RETRIES = 3
+
+
 def _upload_to_gcs(local_path: Path, blob_name: str, content_type: str, bucket_name: str | None = None) -> str:
-    """Synchronous GCS upload — called in executor.
+    """Synchronous GCS upload — called in executor. Retries 3× with exponential backoff.
 
     bucket_name defaults to the main clips bucket; brainrot gameplay/character
     assets pass settings.BRAINROT_GCS_BUCKET_NAME instead (shared library
@@ -276,10 +286,21 @@ def _upload_to_gcs(local_path: Path, blob_name: str, content_type: str, bucket_n
     client = _get_gcs_client()
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
-    blob.upload_from_filename(
-        str(local_path),
-        content_type=content_type,
-    )
+
+    last_exc: Exception | None = None
+    for attempt in range(1, _GCS_UPLOAD_RETRIES + 1):
+        try:
+            blob.upload_from_filename(str(local_path), content_type=content_type)
+            break
+        except Exception as exc:
+            last_exc = exc
+            if attempt < _GCS_UPLOAD_RETRIES:
+                delay = 2 ** attempt  # 2s, 4s
+                logger.warning(f"GCS upload attempt {attempt} failed ({exc}); retrying in {delay}s")
+                time.sleep(delay)
+    else:
+        raise RuntimeError(f"GCS upload failed after {_GCS_UPLOAD_RETRIES} attempts") from last_exc
+
     # Do NOT call blob.make_public() — bucket has Uniform Bucket-Level Access
     # enabled which disables legacy per-object ACLs. Public access is controlled
     # via IAM (allUsers:Storage Object Viewer) at the bucket level.

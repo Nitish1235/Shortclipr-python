@@ -50,12 +50,15 @@ _SUBSCRIBERS_QUERY = """
 
 
 def _validate_read_only(sql: str) -> None:
-    """Reject anything that isn't a plain SELECT."""
-    normalized = sql.strip().rstrip(";").upper()
-    if not normalized.startswith("SELECT"):
+    """Reject anything that isn't a plain single-statement SELECT."""
+    normalized = sql.strip().rstrip(";")
+    if ";" in normalized:
+        raise HTTPException(status_code=400, detail="Multi-statement queries are not allowed")
+    upper = normalized.upper()
+    if not upper.lstrip().startswith("SELECT"):
         raise HTTPException(status_code=400, detail="Only SELECT queries are allowed")
     forbidden = {"INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE", "CREATE", "GRANT", "REVOKE"}
-    tokens = set(normalized.split())
+    tokens = set(upper.split())
     hit = tokens & forbidden
     if hit:
         raise HTTPException(status_code=400, detail=f"Forbidden SQL keyword(s): {', '.join(hit)}")

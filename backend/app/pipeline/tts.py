@@ -27,20 +27,21 @@ settings = get_settings()
 
 # Same "no proxy" rule as ai_clipper.py's OpenAI client — these are TTS
 # providers, not YouTube, and must not go through the Proxy-Seller ISP proxy.
+# mounts={} (rather than the removed proxies= kwarg) explicitly disables any
+# environment-variable-driven proxying for this client.
 _http_client = httpx.AsyncClient(
-    proxies=None,
+    mounts={},
     timeout=httpx.Timeout(connect=10, read=30, write=10, pool=10),
 )
 
 UNREALSPEECH_STREAM_URL = "https://api.v8.unrealspeech.com/stream"
 LEMONFOX_SPEECH_URL = "https://api.lemonfox.ai/v1/audio/speech"
 
-# Default voices per provider/locale. NOTE: confirm exact VoiceId/voice
-# strings against each provider's live docs before production use — these
-# are the documented defaults as of the last integration check.
+# Default voices per provider/locale. UnrealSpeech only ships US English
+# voices (see voice_catalog.py) — en-GB requests fall back to en-US there.
 DEFAULT_VOICES = {
-    "unrealspeech": {"en-US": "Scarlett", "en-GB": "Daniel"},
-    "lemonfox":     {"en-US": "sarah",    "en-GB": "sarah"},
+    "unrealspeech": {"en-US": "Scarlett", "en-GB": "Scarlett"},
+    "lemonfox":     {"en-US": "sarah",    "en-GB": "alice"},
 }
 
 

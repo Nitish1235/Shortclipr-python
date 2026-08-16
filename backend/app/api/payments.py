@@ -25,8 +25,7 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-DODO_API_BASE = "https://live.dodopayments.com"
-DODO_CHECKOUT_ENDPOINT = f"{DODO_API_BASE}/checkouts"
+DODO_CHECKOUT_ENDPOINT = f"{settings.DODO_API_BASE}/checkouts"
 
 # ── Plan → Dodo Product ID mapping ──────────────────────────────
 # Each key maps to a Product ID set in your Dodo dashboard.

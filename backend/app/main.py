@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI):
     if settings.OPENAI_API_KEY:
         try:
             import httpx
-            async with httpx.AsyncClient(proxies=None, timeout=8) as c:
+            async with httpx.AsyncClient(mounts={}, timeout=8) as c:
                 r = await c.get("https://api.openai.com/v1/models",
                                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"})
             if r.status_code in (200, 401):  # 401 = key issue but network OK

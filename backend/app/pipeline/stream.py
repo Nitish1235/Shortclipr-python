@@ -1075,26 +1075,22 @@ async def get_video_metadata(video_id: str, session_id: str | None = None) -> di
     except Exception as e:
         logger.warning(f"[{video_id}] oEmbed metadata failed: {e}")
 
-    # ── 2 & 3. InnerTube ANDROID — WITH proxy first, no-proxy fallback ──
+    # ── 2. InnerTube ANDROID — with proxy (Cloud Run IPs are blocked without one) ──
     proxy_url = get_proxycheap_proxy(purpose="stream-metadata")
-    for attempt, use_proxy in ((2, proxy_url), (3, None)):
-        if attempt == 3 and use_proxy is None:
-            # #2 already ran with no proxy (none configured) — no point retrying identically
-            break
-        try:
-            data = await call_player_api(video_id, client_name="ANDROID", proxy_url=use_proxy)
-            details = data.get("videoDetails", {})
-            if details:
-                logger.info(f"[{video_id}] Metadata duration resolved via InnerTube (attempt {attempt}, proxy={'yes' if use_proxy else 'no'})")
-                return {
-                    "title":     details.get("title", "")     or (oembed_meta or {}).get("title", ""),
-                    "channel":   details.get("author", "")    or (oembed_meta or {}).get("channel", ""),
-                    "thumbnail": _best_thumbnail(details, video_id),
-                    "duration":  int(details.get("lengthSeconds", 0)),
-                    "video_id":  video_id,
-                }
-        except Exception as e:
-            logger.warning(f"[{video_id}] InnerTube ANDROID metadata failed (attempt {attempt}, proxy={'yes' if use_proxy else 'no'}): {e}")
+    try:
+        data = await call_player_api(video_id, client_name="ANDROID", proxy_url=proxy_url)
+        details = data.get("videoDetails", {})
+        if details:
+            logger.info(f"[{video_id}] Metadata duration resolved via InnerTube (proxy={'yes' if proxy_url else 'no'})")
+            return {
+                "title":     details.get("title", "")     or (oembed_meta or {}).get("title", ""),
+                "channel":   details.get("author", "")    or (oembed_meta or {}).get("channel", ""),
+                "thumbnail": _best_thumbnail(details, video_id),
+                "duration":  int(details.get("lengthSeconds", 0)),
+                "video_id":  video_id,
+            }
+    except Exception as e:
+        logger.warning(f"[{video_id}] InnerTube ANDROID metadata failed (proxy={'yes' if proxy_url else 'no'}): {e}")
 
     # oEmbed succeeded but InnerTube didn't — return oEmbed data (duration=0)
     if oembed_meta:

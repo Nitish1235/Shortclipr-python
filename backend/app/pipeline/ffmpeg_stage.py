@@ -293,57 +293,64 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
             }
             await db.insert_clip(clip_data)
 
-            job_check = await db.get_job(job_id)
-            if job_check and job_check.get("status") == "cancelled":
-                raise RuntimeError(f"Job {job_id} cancelled")
+            try:
+                job_check = await db.get_job(job_id)
+                if job_check and job_check.get("status") == "cancelled":
+                    raise RuntimeError(f"Job {job_id} cancelled")
 
-            clip_actual_dur = ts.end - caption_base
-            captions        = get_clip_captions(transcript, caption_base, ts.end)
-            async with _step(job_id, f"clip {i} silence+face detection"):
-                silences, (src_w, src_h, face_track) = await asyncio.gather(
-                    detect_silences(raw_clip_path),
-                    compute_face_track(raw_clip_path, clip_actual_dur),
+                clip_actual_dur = ts.end - caption_base
+                captions        = get_clip_captions(transcript, caption_base, ts.end)
+                async with _step(job_id, f"clip {i} silence+face detection"):
+                    silences, (src_w, src_h, face_track) = await asyncio.gather(
+                        detect_silences(raw_clip_path),
+                        compute_face_track(raw_clip_path, clip_actual_dur),
+                    )
+                if silences:
+                    captions = clamp_captions_to_silence(captions, silences)
+                zoom_beats = _compute_zoom_beats(captions, clip_actual_dur)
+
+                async with _step(job_id, f"clip {i} reframe+caption encode"):
+                    reframed_path, captioned_path = await reframe_and_caption(
+                        raw_clip_path,
+                        job_dir / f"clip_{i:02d}_vertical.mp4",
+                        job_dir / f"clip_{i:02d}_captioned.mp4",
+                        template=short_template, bar_color=bar_color,
+                        zoom_beats=zoom_beats, aspect=aspect,
+                        captions=captions, style=clip_style, color=color_combo,
+                        h_align=h_align, v_align=v_align, words_per_line=words_per_line,
+                        hook_title=(ts.title_with_emoji if hook_title_enabled else None),
+                        face_track=face_track, src_w=src_w, src_h=src_h,
+                        title_permanent=title_permanent, clip_duration=clip_actual_dur,
+                        font=font, title_color=title_color, title_bg=title_bg,
+                        title_bg_opacity=title_bg_opacity,
+                        job_semaphore=job_encode_semaphore,
+                    )
+
+                thumb_path = job_dir / f"clip_{i:02d}_thumb.jpg"
+                await generate_thumbnail(captioned_path, thumb_path)
+
+                async with _step(job_id, f"clip {i} phase2 upload"):
+                    thumb_exists = thumb_path.exists() and thumb_path.stat().st_size > 0
+                    upload_tasks = [
+                        upload_clip(captioned_path, job_id, clip_id),
+                        upload_raw_clip(reframed_path, job_id, clip_id),
+                        upload_thumbnail(thumb_path, job_id, clip_id) if thumb_exists else _empty_str(),
+                    ]
+                    final_url, raw_vertical_url, thumb_url = await asyncio.gather(*upload_tasks)
+
+                await db.update_clip_final_url(
+                    clip_id=clip_id,
+                    video_url=final_url,
+                    raw_video_url=raw_vertical_url,
+                    thumbnail_url=thumb_url,
+                    captions_data=captions_to_dict(captions),
                 )
-            if silences:
-                captions = clamp_captions_to_silence(captions, silences)
-            zoom_beats = _compute_zoom_beats(captions, clip_actual_dur)
-
-            async with _step(job_id, f"clip {i} reframe+caption encode"):
-                reframed_path, captioned_path = await reframe_and_caption(
-                    raw_clip_path,
-                    job_dir / f"clip_{i:02d}_vertical.mp4",
-                    job_dir / f"clip_{i:02d}_captioned.mp4",
-                    template=short_template, bar_color=bar_color,
-                    zoom_beats=zoom_beats, aspect=aspect,
-                    captions=captions, style=clip_style, color=color_combo,
-                    h_align=h_align, v_align=v_align, words_per_line=words_per_line,
-                    hook_title=(ts.title_with_emoji if hook_title_enabled else None),
-                    face_track=face_track, src_w=src_w, src_h=src_h,
-                    title_permanent=title_permanent, clip_duration=clip_actual_dur,
-                    font=font, title_color=title_color, title_bg=title_bg,
-                    title_bg_opacity=title_bg_opacity,
-                    job_semaphore=job_encode_semaphore,
-                )
-
-            thumb_path = job_dir / f"clip_{i:02d}_thumb.jpg"
-            await generate_thumbnail(captioned_path, thumb_path)
-
-            async with _step(job_id, f"clip {i} phase2 upload"):
-                thumb_exists = thumb_path.exists() and thumb_path.stat().st_size > 0
-                upload_tasks = [
-                    upload_clip(captioned_path, job_id, clip_id),
-                    upload_raw_clip(reframed_path, job_id, clip_id),
-                    upload_thumbnail(thumb_path, job_id, clip_id) if thumb_exists else _empty_str(),
-                ]
-                final_url, raw_vertical_url, thumb_url = await asyncio.gather(*upload_tasks)
-
-            await db.update_clip_final_url(
-                clip_id=clip_id,
-                video_url=final_url,
-                raw_video_url=raw_vertical_url,
-                thumbnail_url=thumb_url,
-                captions_data=captions_to_dict(captions),
-            )
+            except BaseException:
+                # Row was inserted (clip_ready=FALSE) before this point —
+                # without cleanup it's a permanent orphan since nothing else
+                # ever marks it ready or removes it.
+                await db.delete_clip(clip_id)
+                raise
 
             clips_done += 1
             pct = 33 + int(57 * clips_done / total)
@@ -365,7 +372,24 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
                 logger.error(f"[{job_id}] Clip {i} failed: {r}")
 
         if not uploaded_count:
+            # The aggregate message never contains "cancelled" even when
+            # every clip failed because the job was cancelled mid-run (each
+            # clip's own "Job {id} cancelled" exception is swallowed by
+            # asyncio.gather(..., return_exceptions=True) above) — check
+            # explicitly so _friendly_ffmpeg_error reports the real cause.
+            job_check = await db.get_job(job_id)
+            if job_check and job_check.get("status") == "cancelled":
+                raise RuntimeError(f"Job {job_id} cancelled")
             raise RuntimeError("All clip extractions failed")
+
+        # Re-check cancellation immediately before marking complete — the
+        # per-clip check above only catches cancellation that happened
+        # before that clip started; a cancel that lands after all clips
+        # already passed their check must still stop this job from being
+        # marked completed (and the "clips ready" email from going out).
+        job_check = await db.get_job(job_id)
+        if job_check and job_check.get("status") == "cancelled":
+            raise RuntimeError(f"Job {job_id} cancelled")
 
         await db.update_job_progress(job_id, 90, "Finalizing...")
         await db.complete_job(job_id, uploaded_count)

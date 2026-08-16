@@ -48,7 +48,10 @@ class TimedLine:
     text: str
     start: float        # seconds, relative to clip start
     end: float
-    audio_path: Path    # local TTS audio file for this line
+    # local filesystem Path when used for composite.render() (the actual
+    # ffmpeg -i input); a GCS URL string when used transiently in the API
+    # stage to hand the line off to db.set_brainrot_scene_plan().
+    audio_path: Path | str
 
 
 @dataclass
@@ -326,13 +329,21 @@ async def render(
         str(output_path),
     ]
 
+    proc = await asyncio.create_subprocess_exec(
+        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-        )
         _, stderr = await proc.communicate()
         if proc.returncode != 0:
             raise RuntimeError(f"brainrot_composite ffmpeg failed: {stderr.decode()[-1500:]}")
+    except asyncio.CancelledError:
+        # Outer stage timeout (BRAINROT_STAGE_TIMEOUT_SECONDS) cancels this
+        # await — cancelling proc.communicate() does NOT kill the child
+        # process, so without this it keeps running/consuming CPU in the
+        # background until it exits on its own.
+        proc.kill()
+        await proc.communicate()
+        raise
     finally:
         Path(ass_path).unlink(missing_ok=True)
 

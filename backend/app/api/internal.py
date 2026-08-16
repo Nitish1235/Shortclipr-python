@@ -240,7 +240,7 @@ async def reconcile_stuck_jobs(x_internal_secret: str = Header(default="")):
     """
     _require_internal_secret(x_internal_secret)
 
-    stuck = await db.find_stuck_jobs(settings.RECONCILE_STUCK_JOB_MINUTES)
+    stuck = await db.find_stuck_jobs(settings.RECONCILE_STUCK_MINUTES)
     for job in stuck:
         job_id = job["job_id"]
         logger.warning(f"[{job_id}] Stuck in '{job.get('status', '?')}' beyond timeout — failing + refunding")

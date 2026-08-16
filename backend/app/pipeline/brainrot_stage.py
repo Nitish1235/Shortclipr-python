@@ -26,7 +26,7 @@ from pathlib import Path
 
 from app.db import supabase as db
 from app.pipeline import brainrot_composite as composite
-from app.pipeline import brainrot_script, tts
+from app.pipeline import brainrot_script, tts, voice_catalog
 from app.pipeline.uploader import download_to_file, upload_clip
 
 logger = logging.getLogger(__name__)
@@ -154,15 +154,21 @@ async def _execute_brainrot_ffmpeg_stage(job_id: str) -> None:
                 speaker=line["speaker"], text=line["text"], start=line["start"], end=line["end"], audio_path=local_audio,
             ))
 
-        clip_duration = payload.get("duration_seconds") or (timed_lines[-1].end if timed_lines else 0.0)
+        # Prefer the REAL synthesized-audio length (sum of actual TTS clip
+        # durations) over the nominal requested duration_seconds — the latter
+        # is only an estimate used to size the script (see _target_lines()),
+        # and is always truthy (clamped 5-120), so using it here would
+        # silently truncate dialogue/captions mid-line whenever the real
+        # audio runs longer than estimated.
+        clip_duration = (timed_lines[-1].end if timed_lines else 0.0) or payload.get("duration_seconds", 30)
 
         async with _step(job_id, "fetch_assets"):
             await db.update_brainrot_job_progress(job_id, 50, "Downloading assets...", status="rendering")
             characters = await _fetch_characters(payload, tmp_dir)
             gameplay_path = await _fetch_gameplay_clip(payload, tmp_dir)
-            music_path = await _fetch_optional_asset(payload.get("music_asset_id"), tmp_dir, "music")
-            intro_sfx_path = await _fetch_optional_asset(payload.get("intro_sfx_id"), tmp_dir, "intro_sfx")
-            outro_sfx_path = await _fetch_optional_asset(payload.get("outro_sfx_id"), tmp_dir, "outro_sfx")
+            music_path = await _fetch_optional_asset(payload.get("music_url"), tmp_dir, "music")
+            intro_sfx_path = await _fetch_optional_asset(payload.get("intro_sfx_url"), tmp_dir, "intro_sfx")
+            outro_sfx_path = await _fetch_optional_asset(payload.get("outro_sfx_url"), tmp_dir, "outro_sfx")
 
         async with _step(job_id, "composite_render"):
             await db.update_brainrot_job_progress(job_id, 60, "Rendering clip...", status="rendering")
@@ -220,8 +226,10 @@ async def _synthesize_timeline(
 
     async def _synth_one(i: int, line):
         voice = voice_right if line.speaker == "right" else voice_left
+        voice_entry = voice_catalog.get_voice(provider, voice) if voice else None
+        locale = voice_entry.locale if voice_entry else "en-US"
         async with sem:
-            audio_bytes, duration = await tts.synthesize(line.text, voice, provider)
+            audio_bytes, duration = await tts.synthesize(line.text, voice, provider, locale=locale)
         audio_path = tmp_dir / f"line_{i}.mp3"
         audio_path.write_bytes(audio_bytes)
         return duration, audio_path

@@ -37,17 +37,19 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
 
     # ── Google Cloud ──────────────────────────────────────────
-    GCS_BUCKET_NAME: str = "shortclipr-clips"
+    # Must be set explicitly — no default so a misconfigured deploy fails
+    # loudly rather than silently writing to a production bucket.
+    GCS_BUCKET_NAME: str = ""
     GCS_PUBLIC_BASE_URL: str = "https://storage.googleapis.com"
     # Note: No GOOGLE_APPLICATION_CREDENTIALS needed on Cloud Run
     # — the attached Service Account is used automatically.
 
     # ── Brainrot Clips Maker — GCS bucket ─────────────────────
     # Gameplay background clips + character assets live in their own
-    # bucket (separate from shortclipr-clips) so they can have their
+    # bucket (separate from GCS_BUCKET_NAME) so they can have their
     # own lifecycle/retention rules — this content is shared library
-    # material, not per-user output.
-    BRAINROT_GCS_BUCKET_NAME: str = "shortclipr-brainrot-assets"
+    # material, not per-user output.  Must be set explicitly (see above).
+    BRAINROT_GCS_BUCKET_NAME: str = ""
 
     # ── UnrealSpeech (TTS) ─────────────────────────────────────
     UNREALSPEECH_API_KEY: str = ""
@@ -77,6 +79,16 @@ class Settings(BaseSettings):
     # ── Dodo Payments ─────────────────────────────────────────
     DODO_PAYMENTS_API_KEY: str = ""
     DODO_PAYMENTS_WEBHOOK_SECRET: str = ""
+    # https://live.dodopayments.com (production) or
+    # https://test.dodopayments.com (sandbox) — defaults to test so a
+    # freshly-cloned deployment never talks to live payments infra by
+    # accident; production deployments must set this explicitly.
+    DODO_API_BASE: str = "https://test.dodopayments.com"
+    # Fail-closed by default: unsigned Dodo webhooks are rejected unless this
+    # is explicitly set true AND DODO_PAYMENTS_WEBHOOK_SECRET is empty. This
+    # is intentionally NOT derived from APP_ENV — a deployment that forgets
+    # to set APP_ENV=production must not silently accept unsigned webhooks.
+    DODO_ALLOW_UNSIGNED_WEBHOOKS: bool = False
     # Product IDs from your Dodo dashboard (Products → copy ID)
     # ── Current pricing (3 tiers) ─────────────────────────────
     DODO_PRODUCT_STARTER_30: str = ""    # $19 — 30 shorts
@@ -141,13 +153,14 @@ class Settings(BaseSettings):
     INTERNAL_TASK_SECRET: str = ""          # shared secret for /internal/* routes
 
     # ── Queue / watcher ────────────────────────────────────────
-    # Per-region soft cap: max in-flight jobs the watcher will send to a
-    # region before queueing further ones (jobs stay status='created'/'api_done'
-    # in Postgres until a slot opens). Sized to match each pool's per-instance
-    # capacity: an API instance handles ~12 concurrent jobs (I/O-bound), an
-    # FFmpeg instance handles 1 (CPU-bound — each job needs the full 4 vCPU;
-    # Cloud Run scales horizontally rather than piling encodes on one box).
-    API_REGION_SOFT_CAP:    int = 12
+    # Per-worker soft cap: max in-flight jobs the watcher will send to a
+    # given worker URL before queuing further ones. "Region" in the env var
+    # name refers to the watcher's region-label grouping (each worker URL
+    # gets a unique label), not a GCP region.
+    # API workers are I/O-bound → 4 concurrent jobs per instance is safe.
+    # FFmpeg workers are CPU-bound → 1 job per instance (Cloud Run scales
+    # horizontally rather than piling encodes on one box).
+    API_REGION_SOFT_CAP:    int = 4
     FFMPEG_REGION_SOFT_CAP: int = 1
 
     # Legacy soft cap (unified worker) — used only when neither API_WORKER_URLS
@@ -155,7 +168,7 @@ class Settings(BaseSettings):
     # WORKER_SERVICE_URLS pool.
     WATCHER_REGION_SOFT_CAP: int = 4
 
-    RECONCILE_STUCK_JOB_MINUTES: int = 10  # applies to API-stage timeouts; FFmpeg stage uses 3× this
+    RECONCILE_STUCK_MINUTES: int = 10  # applies to API-stage timeouts; FFmpeg stage uses 3× this
 
     # ── InnerTube ──────────────────────────────────────────────
     INNERTUBE_API_KEY: str = "AIzaSyA8eiZmM1FaSbwzBlGmbW3ILtKBNJI41zQ"
