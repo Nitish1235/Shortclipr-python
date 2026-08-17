@@ -219,7 +219,30 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
                 )
 
             async with _step(job_id, "full-source fallback download"):
-                source_path = await _get_source(stream_url, audio_url, user_agent, video_id, job_dir, proxy_url=fallback_proxy)
+                # Retry once when routed through proxy-cheap — its rotating
+                # gateway occasionally hands a connection to a dead upstream
+                # node (surfaces as "Tunnel connection failed: 500"; not a
+                # quota/concurrency issue, see _dash_download_with_refresh).
+                # A retry opens a fresh connection and likely lands on a
+                # healthy one. Skipped for Proxy-Seller's static IPs, where
+                # a retry would just hit the same (possibly blocked) IP again.
+                is_proxycheap = bool(
+                    fallback_proxy and settings.PROXY_HOST and settings.PROXY_HOST.strip() in fallback_proxy
+                )
+                source_attempts = 2 if is_proxycheap else 1
+                for source_try in range(source_attempts):
+                    try:
+                        source_path = await _get_source(
+                            stream_url, audio_url, user_agent, video_id, job_dir, proxy_url=fallback_proxy
+                        )
+                        break
+                    except Exception:
+                        if source_try + 1 >= source_attempts:
+                            raise
+                        logger.warning(
+                            f"[{job_id}] full-source fallback download (try {source_try + 1}/{source_attempts}) "
+                            f"failed via proxy-cheap; retrying with a fresh connection"
+                        )
 
         await db.update_job_progress(job_id, 33, f"Encoding {len(timestamps)} clips...")
 
@@ -525,23 +548,34 @@ async def _dash_download_with_refresh(
             logger.warning(f"[{job_id}] DASH attempt 2 failed (Proxy-Seller #1 resolve + DASH): {exc2}")
 
     # ── Attempt 3: resolve + download via proxy-cheap (matching, not mixed) ──
+    # proxy-cheap is a single rotating-residential gateway (one fixed
+    # host:port) — every new TCP connection through it lands on a
+    # different upstream residential IP transparently, and that pool
+    # occasionally hands out a dead/unreachable node, surfacing as
+    # "Tunnel connection failed: 500" from the gateway itself (not a
+    # YouTube-side block — the account has plenty of bandwidth/concurrency
+    # headroom, confirmed on the proxy-cheap dashboard). A retry opens a
+    # fresh connection and very likely lands on a healthy node, so this is
+    # the one tier worth retrying — Proxy-Seller (attempts 1-2) uses
+    # dedicated static IPs where a retry wouldn't change anything.
     pc_proxy = get_proxycheap_proxy(purpose=f"dash-resolve-{job_id[:8]}")
     if pc_proxy:
-        try:
-            logger.info(f"[{job_id}] Re-resolving stream URLs through proxy-cheap")
-            stream_url, audio_url, user_agent = await get_stream_urls(
-                video_id, quality=quality, session_id=job_id,
-                proxy_override=pc_proxy,
-            )
-            last = (stream_url, audio_url, user_agent, pc_proxy)
-            return await download_all_clips_parallel(
-                stream_url, clip_ranges, job_dir,
-                audio_url=audio_url, user_agent=user_agent,
-                proxy_url=pc_proxy,
-                max_concurrent=3,
-            )
-        except Exception as exc3:
-            logger.warning(f"[{job_id}] DASH attempt 3 failed (proxy-cheap resolve + DASH): {exc3}")
+        for pc_attempt in range(2):
+            try:
+                logger.info(f"[{job_id}] Re-resolving stream URLs through proxy-cheap (try {pc_attempt + 1}/2)")
+                stream_url, audio_url, user_agent = await get_stream_urls(
+                    video_id, quality=quality, session_id=job_id,
+                    proxy_override=pc_proxy,
+                )
+                last = (stream_url, audio_url, user_agent, pc_proxy)
+                return await download_all_clips_parallel(
+                    stream_url, clip_ranges, job_dir,
+                    audio_url=audio_url, user_agent=user_agent,
+                    proxy_url=pc_proxy,
+                    max_concurrent=3,
+                )
+            except Exception as exc3:
+                logger.warning(f"[{job_id}] DASH attempt 3 (try {pc_attempt + 1}/2) failed (proxy-cheap resolve + DASH): {exc3}")
 
     # All DASH attempts exhausted — hand the caller the last coherent
     # (proxy, URL) pairing so its full-source fallback doesn't repeat the
