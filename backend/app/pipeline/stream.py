@@ -497,8 +497,10 @@ def _ytdlp_result_has_embedded_audio(info: dict | None) -> bool:
 
 # ── Method 1: InnerTube ANDROID + proxy-cheap ─────────────────
 
-async def _innertube_android_stream(video_id: str, target_height: int, session_id: str | None = None) -> str:
-    proxy = get_proxycheap_proxy(purpose="stream-innertube")
+async def _innertube_android_stream(
+    video_id: str, target_height: int, session_id: str | None = None, proxy_override: str | None = None
+) -> str:
+    proxy = proxy_override or get_proxycheap_proxy(purpose="stream-innertube")
     data = await call_player_api(video_id, client_name="ANDROID", send_params=True, proxy_url=proxy)
 
     blocked, reason = _innertube_is_blocked(data)
@@ -544,10 +546,11 @@ async def _ytdlp_stream(
     client: str | None = None,
     label: str,
     session_id: str | None = None,
+    proxy_override: str | None = None,
 ) -> str:
     import yt_dlp
 
-    proxy = get_proxycheap_proxy(purpose=f"stream-ytdlp-{label}")
+    proxy = proxy_override or get_proxycheap_proxy(purpose=f"stream-ytdlp-{label}")
     opts = _ytdlp_base_opts(proxy)
     opts["format"] = format_str
     if client:
@@ -672,12 +675,14 @@ def _fmt_high_quality(min_height: int = 1080, max_height: int | None = None) -> 
 
 # ── Fallback chain ─────────────────────────────────────────────
 
-async def _resolve_stream_url(video_id: str, quality: str, session_id: str | None = None) -> tuple[str, str]:
+async def _resolve_stream_url(
+    video_id: str, quality: str, session_id: str | None = None, proxy_override: str | None = None
+) -> tuple[str, str]:
     h = int(quality.rstrip("p"))
 
     chain: list[tuple[str, object]] = [
         # 1. InnerTube ANDROID + proxy  (~2-10s, highest priority)
-        ("InnerTube ANDROID+proxy", lambda: _innertube_android_stream(video_id, h, session_id)),
+        ("InnerTube ANDROID+proxy", lambda: _innertube_android_stream(video_id, h, session_id, proxy_override)),
         # 2-4. yt-dlp + tv_embedded/android/ios client + proxy — all using
         # _fmt(h) (AV1-excluded), NOT a bare "best" selector. "best" has no
         # codec filter at all, so for any video where the chosen client's
@@ -687,13 +692,16 @@ async def _resolve_stream_url(video_id: str, quality: str, session_id: str | Non
         # chance to find a clean one. AV1-permissive selectors stay
         # reserved for the explicit last-resort tiers below (6).
         ("yt-dlp+tv_embedded+proxy", lambda: _ytdlp_stream(
-            video_id, _fmt(h), client="tv_embedded", label="yt-dlp+tv_embedded", session_id=session_id
+            video_id, _fmt(h), client="tv_embedded", label="yt-dlp+tv_embedded", session_id=session_id,
+            proxy_override=proxy_override,
         )),
         ("yt-dlp+android+proxy", lambda: _ytdlp_stream(
-            video_id, _fmt(h), client="android", label="yt-dlp+android", session_id=session_id
+            video_id, _fmt(h), client="android", label="yt-dlp+android", session_id=session_id,
+            proxy_override=proxy_override,
         )),
         ("yt-dlp+ios+proxy", lambda: _ytdlp_stream(
-            video_id, _fmt(h), client="ios", label="yt-dlp+ios", session_id=session_id
+            video_id, _fmt(h), client="ios", label="yt-dlp+ios", session_id=session_id,
+            proxy_override=proxy_override,
         )),
         # 5. yt-dlp + android client + relaxed format (no ext=mp4 constraint).
         # Tries non-AV1 variants first, same as tiers 2-4, but its own
@@ -702,12 +710,14 @@ async def _resolve_stream_url(video_id: str, quality: str, session_id: str | Non
         # earlier than the universal last-resort below, not a regression
         # of the original bug (4 strict, AV1-free attempts already ran first).
         ("yt-dlp+android-constrained+proxy", lambda: _ytdlp_stream(
-            video_id, _fmt_relaxed(h), client="android", label="yt-dlp+android-constrained", session_id=session_id
+            video_id, _fmt_relaxed(h), client="android", label="yt-dlp+android-constrained", session_id=session_id,
+            proxy_override=proxy_override,
         )),
         # 6. yt-dlp unconstrained (any client, any format) — explicit final
         # last resort, AV1 permitted here ONLY (see _fmt_unconstrained docstring).
         ("yt-dlp+unconstrained+proxy", lambda: _ytdlp_stream(
-            video_id, _fmt_unconstrained(), label="yt-dlp+unconstrained", session_id=session_id
+            video_id, _fmt_unconstrained(), label="yt-dlp+unconstrained", session_id=session_id,
+            proxy_override=proxy_override,
         )),
     ]
 
@@ -727,28 +737,37 @@ async def _resolve_stream_url(video_id: str, quality: str, session_id: str | Non
 
 # ── Public API ─────────────────────────────────────────────────
 
-async def get_stream_url(video_id: str, quality: str = "1080p", session_id: str | None = None) -> tuple[str, str]:
-    """Returns (video_url, user_agent). user_agent is the UA the URL must be downloaded with."""
-    # 1. Look up job-specific cache first
-    if session_id:
-        job_cache_key = f"{video_id}:{quality}:{session_id}"
-        cached = await _maybe_get_cached(job_cache_key)
-        if cached:
-            logger.info(f"[{video_id}] stream ← job-specific cache ({session_id})")
-            return cached, _ANDROID_HEADERS["User-Agent"]
+async def get_stream_url(
+    video_id: str, quality: str = "1080p", session_id: str | None = None, proxy_override: str | None = None
+) -> tuple[str, str]:
+    """Returns (video_url, user_agent). user_agent is the UA the URL must be downloaded with.
 
-    # 2. Look up global cache
-    global_cache_key = f"{video_id}:{quality}"
-    cached = await _maybe_get_cached(global_cache_key)
-    if cached:
-        if not url_is_ip_bound(cached):
-            logger.info(f"[{video_id}] stream ← global cache (non-IP-bound)")
-            return cached, _ANDROID_HEADERS["User-Agent"]
-        else:
-            logger.info(f"[{video_id}] ignoring global cache: URL is IP-bound")
+    proxy_override: when set, skip cache reads (a cached URL may be IP-bound
+    to a DIFFERENT proxy's exit IP than the one the caller needs — see
+    get_stream_urls' proxy_override docstring) and force every resolution
+    attempt through this exact proxy instead of proxy-cheap.
+    """
+    if not proxy_override:
+        # 1. Look up job-specific cache first
+        if session_id:
+            job_cache_key = f"{video_id}:{quality}:{session_id}"
+            cached = await _maybe_get_cached(job_cache_key)
+            if cached:
+                logger.info(f"[{video_id}] stream ← job-specific cache ({session_id})")
+                return cached, _ANDROID_HEADERS["User-Agent"]
+
+        # 2. Look up global cache
+        global_cache_key = f"{video_id}:{quality}"
+        cached = await _maybe_get_cached(global_cache_key)
+        if cached:
+            if not url_is_ip_bound(cached):
+                logger.info(f"[{video_id}] stream ← global cache (non-IP-bound)")
+                return cached, _ANDROID_HEADERS["User-Agent"]
+            else:
+                logger.info(f"[{video_id}] ignoring global cache: URL is IP-bound")
 
     # 3. Resolve the URL
-    url, user_agent = await _resolve_stream_url(video_id, quality, session_id)
+    url, user_agent = await _resolve_stream_url(video_id, quality, session_id, proxy_override)
 
     # 4. Cache appropriately
     if url_is_ip_bound(url):
@@ -756,7 +775,7 @@ async def get_stream_url(video_id: str, quality: str = "1080p", session_id: str 
             job_cache_key = f"{video_id}:{quality}:{session_id}"
             await _maybe_cache(job_cache_key, url)
     else:
-        await _maybe_cache(global_cache_key, url)
+        await _maybe_cache(f"{video_id}:{quality}", url)
 
     return url, user_agent
 
@@ -868,7 +887,7 @@ async def get_stream_urls(
     # make ONE more explicit attempt at a separate audio stream via the
     # dedicated audio resolver below before giving up on audio entirely.
     logger.warning(f"[{video_id}] yt-dlp + all InnerTube clients failed ({last_exc}); falling back to video-only chain")
-    video_url, user_agent = await get_stream_url(video_id, quality, session_id)
+    video_url, user_agent = await get_stream_url(video_id, quality, session_id, proxy_override)
 
     audio_url = await _backfill_missing_audio(video_id, session_id, proxy_override)
     if audio_url:
