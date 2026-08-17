@@ -710,6 +710,40 @@ def _even_round(x: float) -> int:
     return n if n % 2 == 0 else n + 1
 
 
+# Background blur is applied to the FULL canvas for the entire clip, single
+# threaded (-threads 1 pin), and boxblur's per-pixel cost scales with frame
+# area — at 1080x1920 with luma_power=2 (blur_bg/glass/zoom_blur all double-
+# pass it) this was a major share of an encode's real CPU time, pushing
+# heavy-caption clips past the 360s per-attempt timeout under 4-way
+# concurrency (see reframe+caption timeout investigation, prod job
+# 13cafde1). Downscaling before blur then scaling back up cuts the pixel
+# count (and so the blur cost) by _BG_BLUR_DOWNSCALE², with no visible
+# quality loss — the background ends up blurred into unrecognizability
+# either way. Radius is scaled down by the same factor so the apparent
+# blur strength on the final upscaled frame matches the original full-res
+# radius.
+_BG_BLUR_DOWNSCALE = 4
+
+
+def _fast_boxblur_bg(width: int, height: int, radius: int, power: int, extra: str = "") -> str:
+    """
+    Downscale -> boxblur -> upscale filter fragment for a full-canvas
+    background blur, e.g. `[0:v]scale=...,crop=...,{this}[bg]`.
+    `extra` is an optional filter (e.g. `eq=...`) inserted after the blur,
+    still at the cheap downscaled resolution.
+    """
+    down_w = _even_round(width / _BG_BLUR_DOWNSCALE)
+    down_h = _even_round(height / _BG_BLUR_DOWNSCALE)
+    down_r = max(1, round(radius / _BG_BLUR_DOWNSCALE))
+    tail = f",{extra}" if extra else ""
+    return (
+        f"scale={down_w}:{down_h}:flags=fast_bilinear,"
+        f"boxblur=luma_radius={down_r}:luma_power={power}:chroma_radius={down_r}:chroma_power={power}"
+        f"{tail},"
+        f"scale={width}:{height}:flags=fast_bilinear"
+    )
+
+
 # ══════════════════════════════════════════════════════════════
 #  TEMPLATE FILTER BUILDERS — pure string construction, no I/O
 # ══════════════════════════════════════════════════════════════
@@ -781,7 +815,7 @@ def _fc_crop_fill(
     return (
         f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=fast_bilinear,"
         f"crop={width}:{height},"
-        f"boxblur=luma_radius=25:luma_power=1:chroma_radius=25:chroma_power=1[_cf_bg];"
+        f"{_fast_boxblur_bg(width, height, 25, 1)}[_cf_bg];"
         f"[0:v]crop={crop_w_native}:{crop_h_native}:'{cx}':'{cy}',"
         f"scale={width}:{vid_h}:flags=bicubic[_cf_fg];"
         f"[_cf_bg][_cf_fg]overlay=(W-w)/2:(H-h)/2[{out_label}]"
@@ -831,8 +865,7 @@ def _fc_blur_bg(
     fc = (
         f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=fast_bilinear,"
         f"crop={width}:{height},"
-        f"boxblur=luma_radius={blur_radius}:luma_power=1:"
-        f"chroma_radius={blur_radius}:chroma_power=1[bg];"
+        f"{_fast_boxblur_bg(width, height, blur_radius, 1)}[bg];"
         f"[0:v]scale={width}:-2:force_original_aspect_ratio=decrease[fg];"
         f"[bg][fg]overlay=(W-w)/2:(H-h)/2[pre]"
     )
@@ -856,8 +889,7 @@ def _fc_zoom_blur(
     fc = (
         f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=fast_bilinear,"
         f"crop={width}:{height},"
-        "boxblur=luma_radius=40:luma_power=2:"
-        "chroma_radius=40:chroma_power=2[bg];"
+        f"{_fast_boxblur_bg(width, height, 40, 2)}[bg];"
         f"[0:v]scale={zoom_w}:-2:force_original_aspect_ratio=decrease[fg];"
         "[bg][fg]overlay=(W-w)/2:(H-h)/2[pre]"
     )
@@ -883,9 +915,7 @@ def _fc_glass(
     fc = (
         f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=fast_bilinear,"
         f"crop={width}:{height},"
-        "boxblur=luma_radius=28:luma_power=2:"
-        "chroma_radius=28:chroma_power=2,"
-        "eq=brightness=0.18:saturation=0.35:contrast=0.85[bg];"
+        f"{_fast_boxblur_bg(width, height, 28, 2, extra='eq=brightness=0.18:saturation=0.35:contrast=0.85')}[bg];"
         f"[0:v]scale={width}:-2:force_original_aspect_ratio=decrease[fg];"
         "[bg][fg]overlay=(W-w)/2:(H-h)/2[pre]"
     )

@@ -36,7 +36,6 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.proxy import get_proxycheap_proxy, get_proxy_url, url_is_ip_bound
-from app.core.redis import cache_stream_url, get_cached_stream_url
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -1022,14 +1021,14 @@ async def get_audio_stream_url(
     # 1. Look up job-specific cache first
     if session_id:
         job_cache_key = f"{video_id}:audio:{session_id}"
-        cached = await get_cached_stream_url(job_cache_key)
+        cached = await _maybe_get_cached(job_cache_key)
         if cached:
             logger.info(f"[{video_id}] audio stream ← job-specific cache ({session_id})")
             return cached
 
     # 2. Look up global cache
     global_cache_key = f"{video_id}:audio"
-    cached = await get_cached_stream_url(global_cache_key)
+    cached = await _maybe_get_cached(global_cache_key)
     if cached:
         if not url_is_ip_bound(cached):
             logger.info(f"[{video_id}] audio stream ← global cache (non-IP-bound)")
@@ -1048,9 +1047,9 @@ async def get_audio_stream_url(
                 if url_is_ip_bound(url):
                     if session_id:
                         job_cache_key = f"{video_id}:audio:{session_id}"
-                        await cache_stream_url(job_cache_key, url)
+                        await _maybe_cache(job_cache_key, url)
                 else:
-                    await cache_stream_url(global_cache_key, url)
+                    await _maybe_cache(global_cache_key, url)
                 return url
         except Exception:
             continue
