@@ -245,8 +245,17 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
                 )
 
                 clip_raw_done = False
+                # Last coherent (url, user_agent, proxy) triple actually attempted —
+                # the full-source fallback reuses this instead of re-resolving via
+                # one proxy and downloading via another, which reproduces the same
+                # IP-mismatch 403 a 4th time. Mirrors ffmpeg_stage.py's
+                # _dash_download_with_refresh: resolve-cheap + download-Seller#0 is
+                # the intentional fast path (only fails when the URL IS IP-bound);
+                # every fallback tier after that keeps resolve-proxy and
+                # download-proxy IDENTICAL.
+                last_url, last_ua, last_proxy = init_video_url, init_user_agent, cheap_proxy
 
-                # Attempt 1: cached URL (Proxy-Cheap resolve) + Proxy-Seller download
+                # Attempt 1: cached URL (Proxy-Cheap resolve) + Proxy-Seller pool IP #0
                 if init_video_url:
                     ps_proxy_0 = get_proxyseller_proxy(session_id=source_id, attempt=0)
                     if ps_proxy_0:
@@ -264,15 +273,16 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
                             logger.warning(f"[gameplay-yt {source_id}] DASH attempt 1 failed: {exc1}")
                             clip_raw.unlink(missing_ok=True)
 
-                # Attempt 2: re-resolve (Proxy-Cheap HQ) + download (Proxy-Seller #1)
+                # Attempt 2: re-resolve + download, both via Proxy-Seller pool IP #1 (matched)
                 if not clip_raw_done:
                     ps_proxy_1 = get_proxyseller_proxy(session_id=source_id, attempt=1)
                     if ps_proxy_1:
                         try:
                             v2, _, ua2 = await get_stream_urls_high_quality(
                                 video_id, min_height=1080, max_height=1080, session_id=source_id,
-                                proxy_override=cheap_proxy,
+                                proxy_override=ps_proxy_1,
                             )
+                            last_url, last_ua, last_proxy = v2, ua2, ps_proxy_1
                             await get_clip_via_dash(
                                 v2, start, start + dur, clip_raw,
                                 audio_url=None,
@@ -286,19 +296,50 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
                             logger.warning(f"[gameplay-yt {source_id}] DASH attempt 2 failed: {exc2}")
                             clip_raw.unlink(missing_ok=True)
 
-                # Attempt 3: full-source fallback — download entire video via Proxy-Seller
+                # Attempt 3: re-resolve + download, both via Proxy-Cheap (matched) —
+                # Proxy-Seller uses dedicated static IPs (a retry there wouldn't
+                # change anything if both are blocklisted); proxy-cheap is a
+                # rotating gateway, so this tier is worth trying as a last resort.
+                if not clip_raw_done:
+                    pc_proxy = get_proxy_url(session_id=f"{source_id}-retry")
+                    if pc_proxy:
+                        try:
+                            v3, _, ua3 = await get_stream_urls_high_quality(
+                                video_id, min_height=1080, max_height=1080, session_id=source_id,
+                                proxy_override=pc_proxy,
+                            )
+                            last_url, last_ua, last_proxy = v3, ua3, pc_proxy
+                            await get_clip_via_dash(
+                                v3, start, start + dur, clip_raw,
+                                audio_url=None,
+                                user_agent=ua3,
+                                session_id=source_id,
+                                proxy_url=pc_proxy,
+                            )
+                            clip_raw_done = True
+                            logger.info(f"[gameplay-yt {source_id}] clip {clip_id} ← DASH Proxy-Cheap re-resolve")
+                        except Exception as exc3:
+                            logger.warning(f"[gameplay-yt {source_id}] DASH attempt 3 failed: {exc3}")
+                            clip_raw.unlink(missing_ok=True)
+
+                # Attempt 4: full-source fallback — reuse the last coherent
+                # (url, proxy) pairing rather than re-resolving via a mismatched proxy
                 if not clip_raw_done:
                     logger.warning(
                         f"[gameplay-yt {source_id}] all DASH attempts failed for chunk {idx+1}; "
-                        "falling back to full-source download via Proxy-Seller"
+                        "falling back to full-source download"
                     )
-                    fallback_proxy = get_proxyseller_proxy(session_id=source_id, attempt=2)
-                    fv, _, fua = await get_stream_urls_high_quality(
-                        video_id, min_height=1080, max_height=1080, session_id=source_id,
-                        proxy_override=cheap_proxy,
-                    )
+                    if last_url is None:
+                        # Every resolve above failed too (e.g. Proxy-Seller pool
+                        # exhausted) — last resort: resolve+download both via
+                        # Proxy-Cheap so the pairing still matches.
+                        last_url, _, last_ua = await get_stream_urls_high_quality(
+                            video_id, min_height=1080, max_height=1080, session_id=source_id,
+                            proxy_override=cheap_proxy,
+                        )
+                        last_proxy = cheap_proxy
                     source_path = await _get_source(
-                        fv, None, fua, video_id, clip_dir, proxy_url=fallback_proxy
+                        last_url, None, last_ua, video_id, clip_dir, proxy_url=last_proxy
                     )
                     await _run([
                         "ffmpeg", "-y",
