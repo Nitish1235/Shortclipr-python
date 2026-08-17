@@ -607,8 +607,8 @@ async def admin_upload_gameplay(
         stored_gcs_path = direct_gcs_path
         initial_status = "created"
     else:
-        # YouTube case – already handled above
-        stored_gcs_path = f"youtube:{video_id}"
+        # YouTube case — video_id column carries the ID; gcs_path is not used
+        stored_gcs_path = None
         initial_status = "created"
 
     row = await db.insert_gameplay_source(

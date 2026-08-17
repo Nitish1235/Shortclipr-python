@@ -411,7 +411,7 @@ async def list_audio_assets(asset_type: str | None = None) -> list[dict]:
 async def insert_gameplay_source(
     category: str,
     title: str | None,
-    gcs_path: str,
+    gcs_path: str | None,
     uploaded_by: str | None,
     video_id: str | None = None,
     initial_status: str = "created",
