@@ -33,7 +33,7 @@ from pathlib import Path
 from app.core.config import get_settings
 from app.core.email import send_email
 from app.core.email_templates import clips_ready_email_html
-from app.core.proxy import get_dataimpulse_proxy, get_proxyseller_proxy
+from app.core.proxy import get_proxycheap_proxy, get_proxyseller_proxy
 from app.db import supabase as db
 from app.pipeline.ai_clipper import ClipTimestamp
 from app.pipeline.captions import (
@@ -200,7 +200,7 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
                 # _dash_download_with_refresh actually verified was
                 # resolved-and-downloaded-through the same exit IP — no
                 # re-resolution needed, and critically, no proxy mismatch
-                # (previously this branch re-resolved via DataImpulse but
+                # (previously this branch re-resolved via one proxy but
                 # always downloaded via Proxy-Seller regardless, which just
                 # reproduced the same 403 a 4th time).
                 stream_url, audio_url, user_agent = dash_exc.stream_url, dash_exc.audio_url, dash_exc.user_agent
@@ -208,11 +208,11 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
             else:
                 # Defensive path for anything that escaped
                 # _dash_download_with_refresh's own try/except (shouldn't
-                # normally happen). DataImpulse is the empirically reliable
-                # resolver when Proxy-Seller gets bot-blocked on the
-                # page/InnerTube endpoints, so resolve+download coherently
-                # through it rather than guessing Proxy-Seller again.
-                fallback_proxy = get_dataimpulse_proxy(purpose=f"fullsource-fallback-{job_id[:8]}")
+                # normally happen). proxy-cheap is the resolver used when
+                # Proxy-Seller gets bot-blocked on the page/InnerTube
+                # endpoints, so resolve+download coherently through it
+                # rather than guessing Proxy-Seller again.
+                fallback_proxy = get_proxycheap_proxy(purpose=f"fullsource-fallback-{job_id[:8]}")
                 stream_url, audio_url, user_agent = await get_stream_urls(
                     video_id, quality=quality, session_id=job_id,
                     proxy_override=fallback_proxy,
@@ -445,7 +445,7 @@ class DashDownloadFailed(RuntimeError):
     it directly instead of re-resolving via one proxy and downloading via a
     different one — which just reproduces the same IP-mismatch 403 a 4th
     time (this used to happen: the caller's own fallback re-resolved via
-    DataImpulse but always downloaded via Proxy-Seller, regardless of which
+    one proxy but always downloaded via Proxy-Seller, regardless of which
     proxy the fresh URL was actually bound to).
     """
     def __init__(self, message: str, stream_url: str, audio_url: str | None, user_agent: str, proxy_url: str | None):
@@ -470,14 +470,14 @@ async def _dash_download_with_refresh(
     DASH download with IP-aware cascading fallbacks.
 
     The core problem: stream URLs are IP-bound — the CDN signature covers
-    the exit IP that resolved them. If we resolve via DataImpulse (IP-A)
-    but download via Proxy-Seller (IP-B), the CDN returns 403. Every attempt
+    the exit IP that resolved them. If we resolve via one proxy (IP-A)
+    but download via another (IP-B), the CDN returns 403. Every attempt
     below keeps its resolve-proxy and download-proxy IDENTICAL for exactly
     this reason.
 
     Fallback chain:
 
-      1. Cached URLs (from API stage, resolved via DataImpulse there) +
+      1. Cached URLs (from API stage, resolved via proxy-cheap there) +
          Proxy-Seller DASH, pool IP #0 — fast path, only succeeds when the
          URL isn't IP-bound at all.
       2. Proxy-Seller stream resolve (pool IP #1 — DIFFERENT from attempt 1,
@@ -485,9 +485,9 @@ async def _dash_download_with_refresh(
          page/InnerTube resolution endpoints, which YouTube bot-detects
          more aggressively than raw CDN byte-range requests) → download via
          that SAME pool IP #1.
-      3. DataImpulse stream resolve → DataImpulse DASH download (matching
-         proxy both ends — this is the one empirically reliable resolver
-         when Proxy-Seller gets bot-blocked on resolution).
+      3. proxy-cheap stream resolve → proxy-cheap DASH download (matching
+         proxy both ends — used when Proxy-Seller gets bot-blocked on
+         resolution).
       4. Caller's full-source fallback, using whichever pairing from above
          was the LAST one actually attempted (see DashDownloadFailed).
     """
@@ -524,24 +524,24 @@ async def _dash_download_with_refresh(
         except Exception as exc2:
             logger.warning(f"[{job_id}] DASH attempt 2 failed (Proxy-Seller #1 resolve + DASH): {exc2}")
 
-    # ── Attempt 3: resolve + download via DataImpulse (matching, not mixed) ──
-    di_proxy = get_dataimpulse_proxy(purpose=f"dash-resolve-{job_id[:8]}")
-    if di_proxy:
+    # ── Attempt 3: resolve + download via proxy-cheap (matching, not mixed) ──
+    pc_proxy = get_proxycheap_proxy(purpose=f"dash-resolve-{job_id[:8]}")
+    if pc_proxy:
         try:
-            logger.info(f"[{job_id}] Re-resolving stream URLs through DataImpulse")
+            logger.info(f"[{job_id}] Re-resolving stream URLs through proxy-cheap")
             stream_url, audio_url, user_agent = await get_stream_urls(
                 video_id, quality=quality, session_id=job_id,
-                proxy_override=di_proxy,
+                proxy_override=pc_proxy,
             )
-            last = (stream_url, audio_url, user_agent, di_proxy)
+            last = (stream_url, audio_url, user_agent, pc_proxy)
             return await download_all_clips_parallel(
                 stream_url, clip_ranges, job_dir,
                 audio_url=audio_url, user_agent=user_agent,
-                proxy_url=di_proxy,
+                proxy_url=pc_proxy,
                 max_concurrent=3,
             )
         except Exception as exc3:
-            logger.warning(f"[{job_id}] DASH attempt 3 failed (DataImpulse resolve + DASH): {exc3}")
+            logger.warning(f"[{job_id}] DASH attempt 3 failed (proxy-cheap resolve + DASH): {exc3}")
 
     # All DASH attempts exhausted — hand the caller the last coherent
     # (proxy, URL) pairing so its full-source fallback doesn't repeat the

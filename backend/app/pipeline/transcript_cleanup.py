@@ -39,7 +39,7 @@ CLEANUP_MODEL = "gpt-5-nano"
 # Separate AsyncOpenAI instance (not shared with ai_clipper.py) to keep
 # this module independently importable/testable — mirrors the exact same
 # proxy/timeout config: OpenAI must never route through the YouTube-only
-# Proxy-Seller/DataImpulse proxies.
+# Proxy-Seller/proxy-cheap proxies.
 _client = AsyncOpenAI(
     api_key=settings.OPENAI_API_KEY,
     max_retries=2,

@@ -1,15 +1,18 @@
 """
 proxy.py — Proxy URL helpers.
 
-Three providers:
+Two providers:
   • Proxy-Seller ISP  — 10 static ISP IPs, used for DASH segment downloads.
                         Chosen deterministically via MD5(session_id) % pool
                         so all byte-range requests within one job share an IP.
-  • proxy-cheap       — rotating residential, used for transcript + stream URLs
-                        (get_proxycheap_proxy / get_proxy_url). Runs on
-                        shortclipr-worker-ai (the API/transcript worker pool).
-  • DataImpulse       — rotating residential, kept only as the FFmpeg worker's
-                        fallback (full-source download retry, DASH re-resolve).
+  • proxy-cheap       — rotating residential (get_proxycheap_proxy /
+                        get_proxy_url). Used for transcript + stream URL
+                        resolution (shortclipr-worker-ai) and as the FFmpeg
+                        worker's fallback when Proxy-Seller is bot-blocked
+                        (full-source download retry, DASH re-resolve).
+
+DataImpulse was retired (its account ran out of traffic quota — 407
+TRAFFIC_EXHAUSTED — and proxy-cheap covers every role it used to fill).
 
 Returns None when the relevant provider is not configured (dev mode).
 """
@@ -18,7 +21,6 @@ import contextvars
 import hashlib
 import logging
 import random
-import uuid
 from urllib.parse import parse_qs, quote_plus, urlparse
 
 from app.core.config import get_settings
@@ -133,29 +135,6 @@ def get_proxycheap_proxy(purpose: str = "req") -> str | None:
     else:
         _logger.warning(f"[proxy.py] Proxy-Cheap not configured — {purpose} running without residential proxy")
     return url
-
-
-def get_dataimpulse_proxy(purpose: str = "req") -> str | None:
-    """
-    DataImpulse rotating residential proxy — FFmpeg worker fallback only
-    (full-source download retry, DASH re-resolve). Transcript + stream URL
-    resolution on shortclipr-worker-ai now uses get_proxycheap_proxy instead.
-
-    Each call mints a fresh random sessid forcing an independent IP rotation.
-    Returns None if DATAIMPULSE_USER is not configured.
-    """
-    s = get_settings()
-    if not s.DATAIMPULSE_USER or not s.DATAIMPULSE_PASS:
-        _logger.warning("[proxy.py] DataImpulse not configured — transcript/stream running without residential proxy")
-        return None
-    sessid = f"{purpose}{uuid.uuid4().hex[:10]}"
-    user = quote_plus(f"{s.DATAIMPULSE_USER.strip()};sessid.{sessid}")
-    pw   = quote_plus(s.DATAIMPULSE_PASS.strip())
-    host = s.DATAIMPULSE_HOST.strip()
-    port = s.DATAIMPULSE_PORT
-    safe_pw = f"{pw[:3]}...{pw[-2:]} (len={len(pw)})" if len(pw) > 5 else f"len={len(pw)}"
-    _logger.info(f"[proxy.py] DataImpulse residential — {host}:{port} sessid={sessid} pass={safe_pw}")
-    return f"http://{user}:{pw}@{host}:{port}"
 
 
 def get_proxyseller_proxy(session_id: str | None = None, attempt: int = 0) -> str | None:

@@ -174,15 +174,6 @@ class Settings(BaseSettings):
     INNERTUBE_API_KEY: str = "AIzaSyA8eiZmM1FaSbwzBlGmbW3ILtKBNJI41zQ"
     INNERTUBE_API_BASE: str = "https://www.youtube.com/youtubei/v1"
 
-    # ── DataImpulse (rotating residential) — transcript + stream URL ─
-    # Rotating residential: each request gets a fresh IP automatically.
-    # Used ONLY for transcript fetching and stream URL resolution.
-    # Leave DATAIMPULSE_USER empty to skip (falls back to no residential proxy).
-    DATAIMPULSE_HOST: str = "gw.dataimpulse.com"
-    DATAIMPULSE_PORT: int = 823
-    DATAIMPULSE_USER: str = ""   # login from DataImpulse dashboard
-    DATAIMPULSE_PASS: str = ""   # password from DataImpulse dashboard
-
     # ── Proxy-Seller ISP dedicated — DASH segment downloads only ─
     # 10 static ISP proxies, each a distinct IP. Used for DASH downloads so
     # CDN byte-range requests share a stable IP within a job (chosen via
