@@ -112,6 +112,18 @@ PLAN_LIMITS: dict[str, dict] = {
         "video_minutes_limit": 3600,
         "max_video_minutes":   360,   # 6 hrs — legacy unlimited gets more headroom
     },
+
+    # ── Admin (internal accounts) ──────────────────────────────
+    # No free-tier feature caps (max_clip_count / max_clip_duration_seconds /
+    # max_transcript_minutes_for_ai all omitted → None, same as every paid
+    # plan). credits_limit/video_minutes_limit are nominal — the DB row's
+    # own columns are the real ceiling and are normally set very high
+    # (e.g. 9999) for admin accounts directly.
+    "admin": {
+        "credits_limit":       UNLIMITED_CREDITS,
+        "video_minutes_limit": 6000,
+        "max_video_minutes":   360,
+    },
 }
 
 _DEFAULT = PLAN_LIMITS["free"]
