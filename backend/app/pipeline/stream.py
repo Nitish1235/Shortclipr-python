@@ -483,6 +483,19 @@ def _pick_audio_ytdlp(info: dict | None) -> str | None:
     return None
 
 
+def _ytdlp_result_has_embedded_audio(info: dict | None) -> bool:
+    """
+    True when yt-dlp picked a SINGLE muxed format (no requested_formats
+    bestvideo+bestaudio combo) that already carries its own audio track —
+    e.g. _fmt()'s tier-4 `best[height<=h]` fallback landing on a genuinely
+    progressive format. False (not just "unknown") means the picked video
+    format is video-only and a separate audio URL still needs resolving.
+    """
+    if not info or info.get("requested_formats"):
+        return False
+    return info.get("acodec", "none") not in ("none", None)
+
+
 # ── Method 1: InnerTube ANDROID + proxy-cheap ─────────────────
 
 async def _innertube_android_stream(video_id: str, target_height: int, session_id: str | None = None) -> str:
@@ -795,9 +808,15 @@ async def get_stream_urls(
         video_url = _pick_stream_ytdlp(info)
         if video_url:
             audio_url = _pick_audio_ytdlp(info)
+            if not audio_url and not _ytdlp_result_has_embedded_audio(info):
+                # tv_embedded matched a video-only format (no bestaudio pair,
+                # no embedded audio either) — don't ship this clip silently
+                # muted just because THIS proxy IP's format list lacked a
+                # combo; make one explicit attempt via the audio resolver.
+                audio_url = await _backfill_missing_audio(video_id, session_id, proxy_override)
             logger.info(
                 f"[{video_id}] stream+audio ← yt-dlp tv_embedded "
-                f"(audio={'separate' if audio_url else 'embedded/none'})"
+                f"(audio={'separate' if audio_url else 'none'})"
             )
             return video_url, audio_url, _WEB_USER_AGENT
         logger.warning(f"[{video_id}] yt-dlp tv_embedded returned no video URL; trying InnerTube clients")
@@ -827,11 +846,16 @@ async def get_stream_urls(
                 raise RuntimeError(f"InnerTube {client_name}: no video stream URL in response")
 
             video_fmt = _find_format_by_url(data, video_url)
-            audio_url = None if (video_fmt and _format_has_audio(video_fmt)) else _pick_best_audio_stream(data)
+            has_embedded_audio = bool(video_fmt and _format_has_audio(video_fmt))
+            audio_url = None if has_embedded_audio else _pick_best_audio_stream(data)
+            if not has_embedded_audio and not audio_url:
+                # This client's response had no separate audio stream either
+                # — same fresh-IP-dependent gap as the yt-dlp path above.
+                audio_url = await _backfill_missing_audio(video_id, session_id, proxy_override)
 
             logger.info(
                 f"[{video_id}] stream+audio ← InnerTube {client_name} (proxy={bool(proxy)}, "
-                f"audio={'separate' if audio_url else 'embedded/none'})"
+                f"audio={'separate' if audio_url else 'embedded/none' if has_embedded_audio else 'none'})"
             )
             return video_url, audio_url, user_agent
         except Exception as exc:
@@ -847,14 +871,26 @@ async def get_stream_urls(
     logger.warning(f"[{video_id}] yt-dlp + all InnerTube clients failed ({last_exc}); falling back to video-only chain")
     video_url, user_agent = await get_stream_url(video_id, quality, session_id)
 
-    audio_url = None
-    try:
-        audio_url = await get_audio_stream_url(video_id, session_id, proxy_override=proxy_override)
+    audio_url = await _backfill_missing_audio(video_id, session_id, proxy_override)
+    if audio_url:
         logger.info(f"[{video_id}] Video-only fallback still recovered a separate audio stream")
-    except Exception as audio_exc:
-        logger.warning(f"[{video_id}] Could not resolve audio for video-only fallback ({audio_exc}) — proceeding video-only")
 
     return video_url, audio_url, user_agent
+
+
+async def _backfill_missing_audio(
+    video_id: str, session_id: str | None, proxy_override: str | None
+) -> str | None:
+    """
+    Last-chance explicit audio resolve for a step that found video but no
+    paired audio. Returns None (never raises) so callers can ship
+    video-only rather than fail the whole job over a missing audio track.
+    """
+    try:
+        return await get_audio_stream_url(video_id, session_id, proxy_override=proxy_override)
+    except Exception as audio_exc:
+        logger.warning(f"[{video_id}] Audio backfill failed ({audio_exc}) — proceeding video-only")
+        return None
 
 
 async def get_stream_urls_high_quality(
