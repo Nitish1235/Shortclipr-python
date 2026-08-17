@@ -518,6 +518,11 @@ async def process_one_gameplay_job(pool: asyncpg.Pool) -> bool:
     gcs_path = job["gcs_path"]
     category = job["category_cached"]
 
+    # "youtube:<id>" is a sentinel written to satisfy gcs_path NOT NULL for
+    # YouTube sources — it is not a real GCS path, so ignore it here.
+    if gcs_path and gcs_path.startswith("youtube:"):
+        gcs_path = None
+
     # A gameplay source must have exactly one source type.
     if not video_id and not gcs_path:
         logger.error(
