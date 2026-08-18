@@ -110,7 +110,14 @@ async def _run(cmd: list[str], what: str, timeout: int = 1200) -> None:
 
 async def process_gameplay_source(source_id: str, local_path: Path, category: str, tmp_dir: Path) -> None:
     """Full processing pipeline for one source. Updates _status as it goes and
-    the brainrot_gameplay_sources row at the end."""
+    the brainrot_gameplay_sources row at the end.
+
+    Chunks are processed concurrently (semaphore-capped), same as the YouTube
+    path in process_gameplay_source_youtube — a sequential, single-threaded
+    loop here left 3 of the worker's 4 vCPUs idle for the whole job, making a
+    5-6 clip source take 15-25+ minutes with no progress logs in between,
+    which reads as a hang even though nothing was actually stuck.
+    """
     try:
         duration = await _ffprobe_duration(local_path)
         chunks = _plan_chunks(duration)
@@ -118,38 +125,49 @@ async def process_gameplay_source(source_id: str, local_path: Path, category: st
         logger.info(f"[gameplay {source_id}] {duration:.1f}s → {len(chunks)} clip(s)")
 
         made = 0
-        for start, dur in chunks:
-            clip_id = uuid.uuid4().hex[:12]
-            clip_path = tmp_dir / f"{clip_id}.mp4"
-            thumb_path = tmp_dir / f"{clip_id}.jpg"
+        made_lock = asyncio.Lock()
+        sem = asyncio.Semaphore(4)
 
-            # fast preset: much quicker than slow, acceptable quality for backgrounds
-            await _run([
-                "ffmpeg", "-y", "-ss", f"{start:.2f}", "-i", str(local_path), "-t", f"{dur:.2f}",
-                "-vf", f"{_REFRAME},fps=30", "-an",
-                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-                "-profile:v", "high", "-level", "4.0",
-                "-movflags", "+faststart",
-                "-threads", "1", str(clip_path),
-            ], "gameplay reframe", timeout=1200)
+        async def _process_chunk(idx: int, start: float, dur: float) -> None:
+            nonlocal made
+            async with sem:
+                clip_id = uuid.uuid4().hex[:12]
+                clip_path = tmp_dir / f"{clip_id}.mp4"
+                thumb_path = tmp_dir / f"{clip_id}.jpg"
 
-            await _run([
-                "ffmpeg", "-y", "-ss", f"{start + dur / 2:.2f}", "-i", str(local_path),
-                "-vf", _REFRAME, "-frames:v", "1", str(thumb_path),
-            ], "gameplay thumbnail", timeout=120)
+                # fast preset: much quicker than slow, acceptable quality for backgrounds
+                await _run([
+                    "ffmpeg", "-y", "-ss", f"{start:.2f}", "-i", str(local_path), "-t", f"{dur:.2f}",
+                    "-vf", f"{_REFRAME},fps=30", "-an",
+                    "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                    "-profile:v", "high", "-level", "4.0",
+                    "-movflags", "+faststart",
+                    "-threads", "4", str(clip_path),
+                ], "gameplay reframe", timeout=1200)
 
-            clip_url = await upload_gameplay_clip(clip_path, source_id, clip_id)
-            thumb_url = None
-            try:
-                thumb_url = await upload_gameplay_thumbnail(thumb_path, source_id, clip_id)
-            except Exception as e:
-                logger.warning(f"[gameplay {source_id}] thumbnail upload failed: {e}")
+                await _run([
+                    "ffmpeg", "-y", "-ss", f"{start + dur / 2:.2f}", "-i", str(local_path),
+                    "-vf", _REFRAME, "-frames:v", "1", str(thumb_path),
+                ], "gameplay thumbnail", timeout=120)
 
-            await db.insert_gameplay_clip(source_id, category, clip_url, thumb_url, dur)
-            made += 1
-            _status[source_id]["done"] = made
-            clip_path.unlink(missing_ok=True)
-            thumb_path.unlink(missing_ok=True)
+                clip_url = await upload_gameplay_clip(clip_path, source_id, clip_id)
+                thumb_url = None
+                try:
+                    thumb_url = await upload_gameplay_thumbnail(thumb_path, source_id, clip_id)
+                except Exception as e:
+                    logger.warning(f"[gameplay {source_id}] thumbnail upload failed for clip {clip_id}: {e}")
+
+                await db.insert_gameplay_clip(source_id, category, clip_url, thumb_url, dur)
+                clip_path.unlink(missing_ok=True)
+                thumb_path.unlink(missing_ok=True)
+
+                async with made_lock:
+                    made += 1
+                    _status[source_id]["done"] = made
+                logger.info(f"[gameplay {source_id}] clip {made}/{len(chunks)} done → {clip_url}")
+
+        tasks = [_process_chunk(idx, start, dur) for idx, (start, dur) in enumerate(chunks)]
+        await asyncio.gather(*tasks)
 
         if made == 0:
             raise RuntimeError("No usable clips produced from source")
