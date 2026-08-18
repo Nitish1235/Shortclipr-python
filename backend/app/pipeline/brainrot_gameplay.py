@@ -86,9 +86,14 @@ def _plan_chunks(duration: float) -> list[tuple[float, float]]:
     return chunks
 
 
-async def _run(cmd: list[str], what: str, timeout: int = 1200) -> None:
+async def _run(cmd: list[str], what: str, timeout: int = 1200, tag: str = "") -> None:
     """
     Run a subprocess and wait for it to finish.
+
+    Streams stderr line-by-line to the logger instead of buffering the whole
+    thing until exit — for a long ffmpeg encode this gives real-time progress
+    visibility, and if the container gets killed mid-encode we've at least
+    logged what stage it reached instead of losing the whole buffer.
 
     timeout: seconds to wait before killing the process (default 1200 = 20 min).
     This is intentionally generous — a `slow`-preset libx264 encode of a 120s
@@ -96,67 +101,193 @@ async def _run(cmd: list[str], what: str, timeout: int = 1200) -> None:
     that will still catch truly hung processes (stalled FFmpeg, broken pipe, etc.).
     """
     proc = await asyncio.create_subprocess_exec(
-        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        *cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
     )
+
+    last_lines: list[str] = []   # keep tail for error reporting
+
+    async def _pump_stderr() -> None:
+        assert proc.stderr is not None
+        line_count = 0
+        while True:
+            try:
+                line = await proc.stderr.readline()
+            except Exception:
+                break
+            if not line:
+                break
+            text = line.decode(errors="ignore").rstrip()
+            if not text:
+                continue
+            last_lines.append(text)
+            if len(last_lines) > 20:
+                last_lines.pop(0)
+            line_count += 1
+            # Log every ~100th ffmpeg progress line (frame=N fps=…) so the
+            # job stays visibly alive during a multi-minute encode without
+            # spamming — plus anything containing 'error'/'warning' always.
+            if "error" in text.lower() or "warning" in text.lower():
+                logger.warning(f"[{tag or what}] ffmpeg: {text}")
+            elif line_count % 100 == 0:
+                logger.info(f"[{tag or what}] ffmpeg progress: {text}")
+
+    pump_task = asyncio.create_task(_pump_stderr())
     try:
-        _, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        await asyncio.wait_for(proc.wait(), timeout=timeout)
     except asyncio.TimeoutError:
         proc.kill()
-        await proc.communicate()  # drain buffers
-        raise RuntimeError(f"{what} timed out after {timeout}s")
+        await proc.wait()
+        pump_task.cancel()
+        raise RuntimeError(
+            f"{what} timed out after {timeout}s. Last stderr: "
+            f"{' | '.join(last_lines[-5:])}"
+        )
+    finally:
+        try:
+            await asyncio.wait_for(pump_task, timeout=5)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            pass
+
     if proc.returncode != 0:
-        raise RuntimeError(f"{what} failed: {err.decode()[-400:]}")
+        raise RuntimeError(
+            f"{what} failed (rc={proc.returncode}): "
+            f"{' | '.join(last_lines[-5:])}"
+        )
 
 
 async def process_gameplay_source(source_id: str, local_path: Path, category: str, tmp_dir: Path) -> None:
-    """Full processing pipeline for one source. Updates _status as it goes and
-    the brainrot_gameplay_sources row at the end.
+    """Full processing pipeline for one source.
 
-    Chunks are processed concurrently (semaphore-capped), same as the YouTube
-    path in process_gameplay_source_youtube — a sequential, single-threaded
-    loop here left 3 of the worker's 4 vCPUs idle for the whole job, making a
-    5-6 clip source take 15-25+ minutes with no progress logs in between,
-    which reads as a hang even though nothing was actually stuck.
+    Strategy: split the raw source into ≤CHUNK_SECONDS keyframe-aligned
+    segments in ONE fast `-c copy` pass, DELETE the source immediately (frees
+    hundreds of MB of tmpfs — Cloud Run's /tmp is memory-backed and counts
+    against the container limit), then reframe each small segment independently.
+    Each reframe process now reads a ~50-100MB file instead of seeking through
+    the full 200MB-2GB source, eliminating the concurrent-seek I/O contention
+    and the OOM risk from keeping the whole source resident during encodes.
     """
     try:
         duration = await _ffprobe_duration(local_path)
         chunks = _plan_chunks(duration)
         _status[source_id] = {"status": "processing", "total": len(chunks), "done": 0, "error": None}
-        logger.info(f"[gameplay {source_id}] {duration:.1f}s → {len(chunks)} clip(s)")
+        try:
+            src_size_mb = local_path.stat().st_size / (1024 * 1024)
+            logger.info(f"[gameplay {source_id}] source={src_size_mb:.0f}MB, {duration:.1f}s → {len(chunks)} clip(s)")
+        except Exception:
+            logger.info(f"[gameplay {source_id}] {duration:.1f}s → {len(chunks)} clip(s)")
 
+        # ── Step A: split source into pre-cut segments (stream copy, no re-encode) ──
+        # One ffmpeg pass, near-zero CPU, near-zero memory. Each output is a
+        # keyframe-aligned segment ~= CHUNK_SECONDS long. Seek offset (start0
+        # from _plan_chunks) is honored via -ss before -i so the intro is
+        # skipped without decoding it. Segments won't be perfectly frame-aligned
+        # to _plan_chunks (they snap to the nearest keyframe) but that's fine —
+        # each will be re-encoded to a clean 9:16 clip in step B and reflect
+        # its own real duration, not the theoretical chunk boundary.
+        seg_dir = tmp_dir / "segments"
+        seg_dir.mkdir(exist_ok=True)
+        seg_start = chunks[0][0] if chunks else 0.0
+        logger.info(f"[gameplay {source_id}] splitting source into ≤{int(CHUNK_SECONDS)}s segments (skip head={seg_start:.0f}s)…")
+        await _run([
+            "ffmpeg", "-y",
+            "-threads", "1",
+            "-ss", f"{seg_start:.2f}", "-i", str(local_path),
+            "-c", "copy",
+            "-an",
+            "-f", "segment",
+            "-segment_time", f"{int(CHUNK_SECONDS)}",
+            "-reset_timestamps", "1",
+            "-map", "0:v:0",
+            str(seg_dir / "seg_%03d.mp4"),
+        ], "gameplay source split", timeout=1200, tag=f"gp:{source_id[:8]}:split")
+
+        # Free the raw source immediately — hundreds of MB back to the OS
+        # (matters a lot when /tmp is tmpfs and counted against RAM).
+        try:
+            local_path.unlink(missing_ok=True)
+        except Exception as unlink_exc:
+            logger.warning(f"[gameplay {source_id}] source cleanup failed: {unlink_exc}")
+
+        segments = sorted(seg_dir.glob("seg_*.mp4"))
+        if not segments:
+            raise RuntimeError("Source split produced no segments")
+
+        # Drop any final sliver that's under MIN_TRAILING_SECONDS — measure
+        # each segment's actual duration since keyframe-boundary splits don't
+        # always land exactly on CHUNK_SECONDS.
+        seg_durations: list[float] = []
+        for seg in segments:
+            try:
+                seg_dur = await _ffprobe_duration(seg)
+            except Exception as probe_exc:
+                logger.warning(f"[gameplay {source_id}] ffprobe failed on {seg.name}: {probe_exc}; skipping")
+                seg.unlink(missing_ok=True)
+                seg_dur = 0.0
+            seg_durations.append(seg_dur)
+
+        usable: list[tuple[Path, float]] = [
+            (seg, sd) for seg, sd in zip(segments, seg_durations) if sd >= MIN_TRAILING_SECONDS
+        ]
+        for seg, sd in zip(segments, seg_durations):
+            if sd < MIN_TRAILING_SECONDS:
+                seg.unlink(missing_ok=True)
+
+        if not usable:
+            raise RuntimeError("No usable segments after split")
+
+        # Runaway guard — same as _plan_chunks
+        usable = usable[:MAX_CLIPS_PER_SOURCE]
+
+        total = len(usable)
+        _status[source_id]["total"] = total
+        logger.info(f"[gameplay {source_id}] {total} usable segment(s) ready for reframe")
+
+        # ── Step B: reframe each pre-cut segment to 9:16 (parallel, sem-capped) ──
         made = 0
         made_lock = asyncio.Lock()
-        sem = asyncio.Semaphore(4)
+        # sem=2: 2 concurrent 1080p libx264 encodes fit comfortably in 8Gi
+        # RAM even with lanczos+unsharp (~500MB-1GB working set each) and use
+        # both CPU pairs on the 4-vCPU worker (each ffmpeg is single-threaded
+        # per the -threads flags below). sem=4 previously OOMed on longer
+        # sources — silent SIGKILL with no Python-visible error.
+        sem = asyncio.Semaphore(2)
 
-        async def _process_chunk(idx: int, start: float, dur: float) -> None:
+        async def _process_segment(idx: int, seg_path: Path, seg_dur: float) -> None:
             nonlocal made
             async with sem:
                 clip_id = uuid.uuid4().hex[:12]
                 clip_path = tmp_dir / f"{clip_id}.mp4"
                 thumb_path = tmp_dir / f"{clip_id}.jpg"
+                logger.info(f"[gameplay {source_id}] segment {idx+1}/{total} start ({seg_dur:.0f}s) → {clip_id}")
 
-                # fast preset: much quicker than slow, acceptable quality for backgrounds.
-                # -threads 1 is deliberate, NOT a leftover — without it ffmpeg auto-picks
-                # decode/filter/encode threads matching the host's vCPU count (4 here), so
-                # `sem` concurrent chunks each grab ~4 threads: N_chunks × 4 threads fighting
-                # over 4 physical cores (up to 16-way oversubscription at sem=4). That
-                # contention silently turns a ~1-2 min encode into 20+ min (see the identical,
-                # already-diagnosed bug in extractor.py's _encode_reframed_and_captioned).
-                # Pinning to 1 thread makes `sem`'s concurrency match the real CPU budget —
-                # N concurrent 1-thread encodes ≈ N cores used, no contention.
+                # -threads/-filter_complex_threads/-filter_threads all pinned to 1 —
+                # `sem` alone provides real concurrency; letting each ffmpeg
+                # auto-pick threads to host vCPU count oversubscribes the
+                # 4-vCPU worker and silently balloons a ~1-2 min encode into
+                # 20+ min (identical bug already diagnosed in extractor.py).
+                # Reads a small pre-cut segment (~50-100MB) instead of seeking
+                # through the huge source, so no I/O contention between parallel
+                # workers either.
                 await _run([
-                    "ffmpeg", "-y", "-ss", f"{start:.2f}", "-i", str(local_path), "-t", f"{dur:.2f}",
+                    "ffmpeg", "-y",
+                    "-threads", "1", "-filter_complex_threads", "1", "-filter_threads", "1",
+                    "-i", str(seg_path),
                     "-vf", f"{_REFRAME},fps=30", "-an",
                     "-c:v", "libx264", "-preset", "fast", "-crf", "18",
                     "-profile:v", "high", "-level", "4.0",
                     "-movflags", "+faststart",
                     "-threads", "1", str(clip_path),
-                ], "gameplay reframe", timeout=1200)
+                ], "gameplay reframe", timeout=1200, tag=f"gp:{source_id[:8]}:{idx+1}")
 
                 await _run([
-                    "ffmpeg", "-y", "-ss", f"{start + dur / 2:.2f}", "-i", str(local_path),
+                    "ffmpeg", "-y",
+                    "-threads", "1", "-filter_threads", "1",
+                    "-ss", f"{seg_dur / 2:.2f}", "-i", str(seg_path),
                     "-vf", _REFRAME, "-frames:v", "1", "-threads", "1", str(thumb_path),
-                ], "gameplay thumbnail", timeout=120)
+                ], "gameplay thumbnail", timeout=120, tag=f"gp:{source_id[:8]}:{idx+1}")
+
+                # Free the segment now that both outputs are produced
+                seg_path.unlink(missing_ok=True)
 
                 clip_url = await upload_gameplay_clip(clip_path, source_id, clip_id)
                 thumb_url = None
@@ -165,16 +296,16 @@ async def process_gameplay_source(source_id: str, local_path: Path, category: st
                 except Exception as e:
                     logger.warning(f"[gameplay {source_id}] thumbnail upload failed for clip {clip_id}: {e}")
 
-                await db.insert_gameplay_clip(source_id, category, clip_url, thumb_url, dur)
+                await db.insert_gameplay_clip(source_id, category, clip_url, thumb_url, seg_dur)
                 clip_path.unlink(missing_ok=True)
                 thumb_path.unlink(missing_ok=True)
 
                 async with made_lock:
                     made += 1
                     _status[source_id]["done"] = made
-                logger.info(f"[gameplay {source_id}] clip {made}/{len(chunks)} done → {clip_url}")
+                logger.info(f"[gameplay {source_id}] clip {made}/{total} done → {clip_url}")
 
-        tasks = [_process_chunk(idx, start, dur) for idx, (start, dur) in enumerate(chunks)]
+        tasks = [_process_segment(idx, seg, dur) for idx, (seg, dur) in enumerate(usable)]
         await asyncio.gather(*tasks)
 
         if made == 0:
