@@ -32,6 +32,26 @@ async function send(path, { method = 'POST', form, json } = {}) {
   return r.json().catch(() => ({}))
 }
 
+// `fetch` has no upload-progress API — a multi-hundred-MB/GB gameplay file can
+// take many minutes to PUT to the signed GCS URL, and without progress
+// feedback that looks indistinguishable from a hang. XHR exposes upload.onprogress.
+function putWithProgress(url, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', url)
+    xhr.setRequestHeader('Content-Type', file.type)
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve()
+      else reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`))
+    }
+    xhr.onerror = () => reject(new Error('Upload failed: network error'))
+    xhr.send(file)
+  })
+}
+
 const C = { red: '#cf1322', ink: '#111', line: '#e5e7eb', mute: '#6b7280', green: '#16a34a', amber: '#ca8a04' }
 const cardS = { background: '#fff', border: `1px solid ${C.line}`, borderRadius: 12, padding: 20 }
 const btnRed = { background: C.red, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontWeight: 700, fontSize: '.82rem', cursor: 'pointer' }
@@ -243,15 +263,13 @@ function GameplaySection({ notify }) {
           json: { filename: file.name, content_type: file.type } 
         })
         
-        // 2. Upload file to GCS
-        setUploadState('Uploading to Cloud...')
-        const uploadRes = await fetch(url, {
-          method: 'PUT',
-          body: file,
-          headers: { 'Content-Type': file.type }
-        })
-        if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.statusText}`)
-        
+        // 2. Upload file to GCS — this is the slow part for large gameplay
+        // recordings (can take many minutes, bound by upload bandwidth, not
+        // by anything on the backend). Show real progress so it doesn't look
+        // stuck — dispatch to the worker fires within ~1s of this finishing.
+        setUploadState('Uploading to Cloud... 0%')
+        await putWithProgress(url, file, (pct) => setUploadState(`Uploading to Cloud... ${pct}%`))
+
         // 3. Tell backend
         setUploadState('Finalizing...')
         const form = new FormData()

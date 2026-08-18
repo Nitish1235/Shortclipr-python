@@ -135,19 +135,27 @@ async def process_gameplay_source(source_id: str, local_path: Path, category: st
                 clip_path = tmp_dir / f"{clip_id}.mp4"
                 thumb_path = tmp_dir / f"{clip_id}.jpg"
 
-                # fast preset: much quicker than slow, acceptable quality for backgrounds
+                # fast preset: much quicker than slow, acceptable quality for backgrounds.
+                # -threads 1 is deliberate, NOT a leftover — without it ffmpeg auto-picks
+                # decode/filter/encode threads matching the host's vCPU count (4 here), so
+                # `sem` concurrent chunks each grab ~4 threads: N_chunks × 4 threads fighting
+                # over 4 physical cores (up to 16-way oversubscription at sem=4). That
+                # contention silently turns a ~1-2 min encode into 20+ min (see the identical,
+                # already-diagnosed bug in extractor.py's _encode_reframed_and_captioned).
+                # Pinning to 1 thread makes `sem`'s concurrency match the real CPU budget —
+                # N concurrent 1-thread encodes ≈ N cores used, no contention.
                 await _run([
                     "ffmpeg", "-y", "-ss", f"{start:.2f}", "-i", str(local_path), "-t", f"{dur:.2f}",
                     "-vf", f"{_REFRAME},fps=30", "-an",
                     "-c:v", "libx264", "-preset", "fast", "-crf", "18",
                     "-profile:v", "high", "-level", "4.0",
                     "-movflags", "+faststart",
-                    "-threads", "4", str(clip_path),
+                    "-threads", "1", str(clip_path),
                 ], "gameplay reframe", timeout=1200)
 
                 await _run([
                     "ffmpeg", "-y", "-ss", f"{start + dur / 2:.2f}", "-i", str(local_path),
-                    "-vf", _REFRAME, "-frames:v", "1", str(thumb_path),
+                    "-vf", _REFRAME, "-frames:v", "1", "-threads", "1", str(thumb_path),
                 ], "gameplay thumbnail", timeout=120)
 
                 clip_url = await upload_gameplay_clip(clip_path, source_id, clip_id)
@@ -366,21 +374,26 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
                         "-c", "copy",
                         "-avoid_negative_ts", "make_zero",
                         "-movflags", "+faststart",
-                        "-threads", "4",
+                        "-threads", "1",
                         str(clip_raw),
                     ], "gameplay full-source extract", timeout=300)
                     source_path.unlink(missing_ok=True)
                     clip_raw_done = True
                     logger.info(f"[gameplay-yt {source_id}] clip {clip_id} ← full-source fallback (Proxy-Seller)")
 
-                # ── Reframe — fast preset, 20 min ceiling —────────────────
+                # ── Reframe — fast preset, 20 min ceiling. -threads 1 is
+                # deliberate: `sem` already provides real concurrency (4
+                # chunks in parallel); letting each ffmpeg process also grab
+                # ~4 auto-picked threads oversubscribes the 4-vCPU worker up
+                # to 16-way and silently turns a ~1-2 min encode into 20+ min
+                # (identical bug already diagnosed in extractor.py) —────────
                 await _run([
                     "ffmpeg", "-y", "-i", str(clip_raw),
                     "-vf", f"{_REFRAME},fps=30", "-an",
                     "-c:v", "libx264", "-preset", "fast", "-crf", "18",
                     "-profile:v", "high", "-level", "4.0",
                     "-movflags", "+faststart",
-                    "-threads", "4",
+                    "-threads", "1",
                     str(clip_path),
                 ], "gameplay reframe", timeout=1200)
 
@@ -389,7 +402,7 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
                     "ffmpeg", "-y",
                     "-ss", f"{dur / 2:.2f}", "-i", str(clip_raw),
                     "-vf", _REFRAME, "-frames:v", "1",
-                    "-threads", "4",
+                    "-threads", "1",
                     str(thumb_path),
                 ], "gameplay thumbnail", timeout=120)
 
