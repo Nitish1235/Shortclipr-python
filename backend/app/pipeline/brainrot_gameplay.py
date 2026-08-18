@@ -421,16 +421,55 @@ async def process_gameplay_source_youtube(source_id: str, video_id: str, categor
             pass
 
 
-async def run_gameplay_on_worker(source_id: str, video_id: str, category: str) -> None:
+async def _download_gcs_file(gcs_path: str, dest: Path) -> Path:
+    """Download a gs://bucket/object URI to a local file."""
+    if not gcs_path.startswith("gs://"):
+        raise RuntimeError(f"Not a GCS URI: {gcs_path}")
+    bucket_name, _, object_name = gcs_path[len("gs://"):].partition("/")
+    if not bucket_name or not object_name:
+        raise RuntimeError(f"Malformed GCS URI: {gcs_path}")
+
+    def _sync_download() -> None:
+        from app.pipeline.uploader import _get_gcs_client
+        client = _get_gcs_client()
+        blob = client.bucket(bucket_name).blob(object_name)
+        blob.download_to_filename(str(dest))
+
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, _sync_download)
+    return dest
+
+
+async def run_gameplay_on_worker(
+    source_id: str,
+    category: str,
+    video_id: str | None = None,
+    gcs_path: str | None = None,
+) -> None:
     """Wrapper for running the gameplay processing on the FFmpeg worker.
     Creates a temporary directory, runs the process, and cleans it up.
-    This replaces running process_gameplay_source_youtube in-process via create_task.
+
+    Dispatches to the YouTube DASH path when video_id is set, or downloads the
+    uploaded/GCS file and runs the local-file reframe path when gcs_path is
+    set — the two source types are mutually exclusive (see
+    process_one_gameplay_job in the watcher).
     """
-    logger.info(f"[gameplay {source_id}] starting on worker, video_id={video_id}, category={category}")
+    logger.info(
+        f"[gameplay {source_id}] starting on worker, video_id={video_id}, "
+        f"gcs_path={gcs_path}, category={category}"
+    )
     try:
         with tempfile.TemporaryDirectory() as td:
             tmp_dir = Path(td)
-            await process_gameplay_source_youtube(source_id, video_id, category, tmp_dir)
+            if video_id:
+                await process_gameplay_source_youtube(source_id, video_id, category, tmp_dir)
+            elif gcs_path:
+                ext = Path(gcs_path).suffix or ".mp4"
+                local_path = tmp_dir / f"source{ext}"
+                await _download_gcs_file(gcs_path, local_path)
+                await process_gameplay_source(source_id, local_path, category, tmp_dir)
+            else:
+                raise RuntimeError("Gameplay source has neither video_id nor gcs_path")
     except Exception as e:
         logger.exception(f"[gameplay {source_id}] worker wrapper failed")
         try:
