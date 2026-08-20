@@ -215,6 +215,7 @@ async def _execute_brainrot_ffmpeg_stage(job_id: str) -> None:
                 clip_duration=clip_duration,
                 caption_style=payload.get("caption_style", "brainrot"),
                 caption_color=payload.get("caption_color", "yellow_black"),
+                caption_y=payload.get("caption_y", 0.82),
                 output_path=output_path,
                 music_path=music_path,
                 music_volume=payload.get("music_volume", 0.3),

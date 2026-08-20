@@ -17,6 +17,10 @@ import { brainrotApi } from './brainrotApi'
 import { T, card, pill, btn, sticker, pressHandlers, FONT } from './brainrotTheme'
 import PreviewStage from './PreviewStage'
 import { getChemistry } from './chemistry'
+import {
+  CAPTION_PRESETS, CAPTION_TRENDING, CAPTION_STYLE_BY_ID,
+  CAPTION_COLORS, CAPTION_COLOR_BY_ID, DEFAULT_CAPTION_COLOR, DEFAULT_CAPTION_Y,
+} from './captionStyles'
 
 // Evergreen 50/50 topics — reliably split an audience, which is what makes
 // a brainrot debate generate comments. Curated, not pulled from other users'
@@ -31,12 +35,6 @@ const SPARK_TOPICS = [
 ]
 
 const DURATION_PRESETS = [15, 30, 45, 60, 90, 120]
-const CAPTION_STYLES = [
-  { id: 'brainrot', label: 'Brainrot', blurb: 'Bouncy word-pop' },
-  { id: 'loud',     label: 'Loud',     blurb: 'ALL CAPS punch' },
-  { id: 'chaotic',  label: 'Chaotic',  blurb: 'Wiggly & wild' },
-  { id: 'meme',     label: 'Meme',     blurb: 'Clean & heavy' },
-]
 const PROVIDERS = [
   { id: 'unrealspeech', label: 'UnrealSpeech' },
   { id: 'lemonfox',     label: 'Lemonfox' },
@@ -98,6 +96,9 @@ export default function BrainrotStudio() {
   // ── Stage rail ───────────────────────────────────────────────────
   const [stage, setStage] = useState('spark')
 
+  // ── Top-level view: the create flow vs. the clips library ────────
+  const [view, setView] = useState('create')   // 'create' | 'clips'
+
   // ── Builder state ───────────────────────────────────────────────
   const [script, setScript]         = useState('')
   const [castCount, setCastCount]   = useState(2)
@@ -107,6 +108,9 @@ export default function BrainrotStudio() {
   const [category, setCategory]     = useState('all')
   const [duration, setDuration]     = useState(30)
   const [captionStyle, setCaption]  = useState('brainrot')
+  const [captionColor, setCaptionColor] = useState(DEFAULT_CAPTION_COLOR)
+  const [captionY, setCaptionY] = useState(DEFAULT_CAPTION_Y)
+  const [showMoreStyles, setShowMoreStyles] = useState(false)
   const [charSearch, setCharSearch] = useState('')
   const [motionMode, setMotionMode] = useState('turn_based')  // 'turn_based' | 'always_on'
   const [musicId, setMusicId]       = useState('')
@@ -178,6 +182,8 @@ export default function BrainrotStudio() {
       const draft = JSON.parse(raw)
       if (draft.script) setScript(draft.script)
       if (draft.captionStyle) setCaption(draft.captionStyle)
+      if (draft.captionColor) setCaptionColor(draft.captionColor)
+      if (draft.captionY) setCaptionY(draft.captionY)
       if (draft.duration) setDuration(draft.duration)
       if (draft.provider) setProvider(draft.provider)
       if (draft.category) setCategory(draft.category)
@@ -209,7 +215,7 @@ export default function BrainrotStudio() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
       const draft = {
-        script, captionStyle, duration, provider, category,
+        script, captionStyle, captionColor, captionY, duration, provider, category,
         motionMode, musicId, musicVolume, introSfxId, outroSfxId,
         backgroundId: background?.id || null,
         picked: picked.map(p => ({
@@ -220,7 +226,7 @@ export default function BrainrotStudio() {
       try { localStorage.setItem(draftKey, JSON.stringify(draft)) } catch { /* storage full/unavailable */ }
     }, 800)
     return () => clearTimeout(saveTimerRef.current)
-  }, [script, captionStyle, duration, provider, category, background, picked, draftKey,
+  }, [script, captionStyle, captionColor, captionY, duration, provider, category, background, picked, draftKey,
       motionMode, musicId, musicVolume, introSfxId, outroSfxId])
 
   const showToast = (msg, type = 'info') => {
@@ -325,6 +331,8 @@ export default function BrainrotStudio() {
   const moveCharacter = useCallback((side, x, y) =>
     setPicked(prev => prev.map(p => p.side === side ? { ...p, x, y } : p)), [])
 
+  const moveCaption = useCallback((y) => setCaptionY(y), [])
+
   // ── Voice preview ───────────────────────────────────────────────
   const playPreview = (url) => {
     if (!url) return
@@ -382,7 +390,8 @@ export default function BrainrotStudio() {
         gameplay_clip_id: background.id,
         duration_seconds: duration,
         caption_style: captionStyle,
-        caption_color: 'yellow_black',
+        caption_color: captionColor,
+        caption_y: captionY,
         tts_provider: provider,
         voice_left: picked.find(p => p.side === 'left')?.voiceId || '',
         voice_right: picked.find(p => p.side === 'right')?.voiceId || '',
@@ -429,6 +438,12 @@ export default function BrainrotStudio() {
   const anyOffline = !rosterOnline || !clipsOnline
   const retryFetches = () => setRefetchTick(t => t + 1)
 
+  // clips tab data: merge the actively-polling job in so it shows up live
+  const libraryClips = activeJob && isActive(activeJob)
+    ? [activeJob, ...myClips.filter(c => c.job_id !== activeJob.job_id)]
+    : myClips
+  const renderingCount = libraryClips.filter(c => isActive(c)).length
+
   // ── Render ──────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: '100vh', background: T.paper, fontFamily: FONT, color: T.ink,
@@ -437,6 +452,12 @@ export default function BrainrotStudio() {
       <Header user={user} onLogout={logout} navigate={navigate}
         connectionOffline={anyOffline} onRetryConnection={retryFetches} />
 
+      <ViewTabs view={view} onChange={setView}
+        clipCount={libraryClips.length} renderingCount={renderingCount} />
+
+      {view === 'clips' ? (
+        <ClipsLibrary clips={libraryClips} onCreate={() => setView('create')} />
+      ) : (
       <div style={{ maxWidth: 1180, margin: '0 auto', padding: '22px 20px 80px',
         display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 340px', gap: 26, alignItems: 'start' }}>
 
@@ -690,38 +711,10 @@ export default function BrainrotStudio() {
                   borderRadius: 12, padding: 10,
                 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(96px,1fr))', gap: 6 }}>
-                    {visibleClips.map(clip => {
-                      const on = background?.id === clip.id
-                      return (
-                        <button key={clip.id} onClick={() => setBackground(clip)}
-                          style={{
-                            cursor: 'pointer', padding: 3,
-                            background: on ? STAGE_BY_ID.scene.accent : 'transparent',
-                            border: on ? `2px solid ${STAGE_BY_ID.scene.accent}` : `1px solid rgba(255,255,255,.06)`,
-                            borderRadius: 8, transition: 'all .12s',
-                          }}>
-                          <div style={{ width: '100%', aspectRatio: '9/16', borderRadius: 5, overflow: 'hidden',
-                            background: '#000', position: 'relative' }}>
-                            {clip.thumbnail_url
-                              ? <img src={clip.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  color: '#666', fontSize: '.58rem', fontWeight: 700, textTransform: 'capitalize' }}>{clip.category}</div>}
-                            {on && <div style={{ position: 'absolute', top: 4, right: 4,
-                              background: T.ink, color: '#fff', width: 16, height: 16, borderRadius: '50%',
-                              fontSize: '.58rem', fontWeight: 900,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</div>}
-                          </div>
-                          {clip.source_title && (
-                            <div style={{ fontSize: '.52rem', fontWeight: 700,
-                              color: on ? T.ink : 'rgba(255,255,255,.6)',
-                              marginTop: 3, padding: '0 2px',
-                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {clip.source_title}
-                            </div>
-                          )}
-                        </button>
-                      )
-                    })}
+                    {visibleClips.map(clip => (
+                      <GameplayTile key={clip.id} clip={clip}
+                        on={background?.id === clip.id} onClick={() => setBackground(clip)} />
+                    ))}
                   </div>
                 </div>
               </>
@@ -762,9 +755,9 @@ export default function BrainrotStudio() {
 
             <StageDivider />
 
-            <SubLabel accent={STAGE_BY_ID.style.accent}>Caption energy</SubLabel>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8, marginBottom: 24 }}>
-              {CAPTION_STYLES.map(cs => {
+            <SubLabel accent={STAGE_BY_ID.style.accent}>Caption style</SubLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8, marginBottom: 10 }}>
+              {CAPTION_PRESETS.map(cs => {
                 const on = captionStyle === cs.id
                 return (
                   <button key={cs.id} onClick={() => setCaption(cs.id)}
@@ -773,11 +766,100 @@ export default function BrainrotStudio() {
                       border: on ? `1.5px solid ${T.ink}` : `1.5px solid ${T.ink}22`,
                       borderRadius: 10, transition: 'all .12s' }}>
                     <div style={{ fontSize: '.86rem', fontWeight: 800 }}>{cs.label}</div>
-                    <div style={{ fontSize: '.66rem', fontWeight: 500, opacity: .7, marginTop: 2 }}>{cs.blurb}</div>
+                    <div style={{ fontSize: '.66rem', fontWeight: 500, opacity: .7, marginTop: 2 }}>{cs.sub}</div>
                   </button>
                 )
               })}
             </div>
+
+            <button onClick={() => setShowMoreStyles(v => !v)}
+              style={{
+                cursor: 'pointer', background: 'transparent', border: 'none', padding: '2px 0',
+                fontFamily: FONT, fontSize: '.76rem', fontWeight: 700, color: T.mute,
+                display: 'flex', alignItems: 'center', gap: 5, marginBottom: showMoreStyles ? 10 : 24,
+              }}>
+              {showMoreStyles ? '▾' : '▸'} {showMoreStyles ? 'Hide' : 'More trending styles'}
+              {!showMoreStyles && CAPTION_TRENDING.some(cs => cs.id === captionStyle) && (
+                <span style={{ ...pill(STAGE_BY_ID.style.accent, { padding: '1px 7px', fontSize: '.6rem' }) }}>
+                  {CAPTION_STYLE_BY_ID[captionStyle]?.label} selected
+                </span>
+              )}
+            </button>
+
+            {showMoreStyles && (
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8, marginBottom: 24,
+                background: '#fffdf5', border: `1px solid ${T.ink}14`, borderRadius: 10, padding: 10,
+              }}>
+                {CAPTION_TRENDING.map(cs => {
+                  const on = captionStyle === cs.id
+                  return (
+                    <button key={cs.id} onClick={() => setCaption(cs.id)}
+                      style={{ cursor: 'pointer', textAlign: 'left', padding: '9px 11px',
+                        background: on ? T.ink : '#fff', color: on ? '#fff' : T.ink,
+                        border: on ? `1.5px solid ${T.ink}` : `1.5px solid ${T.ink}18`,
+                        borderRadius: 9, transition: 'all .12s' }}>
+                      <div style={{ fontSize: '.8rem', fontWeight: 800 }}>{cs.label}</div>
+                      <div style={{ fontSize: '.62rem', fontWeight: 500, opacity: .7, marginTop: 2 }}>{cs.sub}</div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+              <SubLabel accent={STAGE_BY_ID.style.accent}>Caption color</SubLabel>
+              <span style={{ fontSize: '.72rem', fontWeight: 700, color: T.mute }}>
+                {CAPTION_COLOR_BY_ID[captionColor]?.label}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
+              {CAPTION_COLORS.map(c => {
+                const on = captionColor === c.id
+                return (
+                  <button key={c.id} onClick={() => setCaptionColor(c.id)} title={c.label}
+                    style={{
+                      cursor: 'pointer', width: 34, height: 34, borderRadius: 9,
+                      background: c.text,
+                      border: `2px solid ${c.outline === '#FFFFFF' ? T.ink + '55' : c.outline}`,
+                      boxShadow: on ? `0 0 0 3px ${T.ink}` : 'none',
+                      transition: 'box-shadow .12s',
+                    }} />
+                )
+              })}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+              <SubLabel accent={STAGE_BY_ID.style.accent}>Caption position</SubLabel>
+              <span style={{ fontFamily: FONT_MONO, fontSize: '.68rem', fontWeight: 700, color: T.mute }}>
+                {Math.round(captionY * 100)}% down
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              <span style={{ fontSize: '.68rem', fontWeight: 700, color: T.mute }}>Top</span>
+              <input type="range" min={0} max={1} step={0.01} value={captionY}
+                onChange={e => setCaptionY(Number(e.target.value))}
+                style={{ flex: 1, accentColor: STAGE_BY_ID.style.accent }} />
+              <span style={{ fontSize: '.68rem', fontWeight: 700, color: T.mute }}>Bottom</span>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 24 }}>
+              {[{ label: 'Top', v: 0.14 }, { label: 'Middle', v: 0.5 }, { label: 'Bottom', v: 0.82 }].map(p => (
+                <button key={p.label} onClick={() => setCaptionY(p.v)}
+                  style={{
+                    cursor: 'pointer',
+                    background: Math.abs(captionY - p.v) < 0.01 ? T.ink : '#fff',
+                    color: Math.abs(captionY - p.v) < 0.01 ? '#fff' : T.ink,
+                    border: `1.5px solid ${T.ink}33`,
+                    borderRadius: 999, padding: '4px 12px',
+                    fontSize: '.7rem', fontWeight: 700, fontFamily: FONT,
+                  }}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <StageFootnote>
+              Horizontally always centered — drag the caption right on the preview, or use the slider. Burned in at this exact spot when your clip renders.
+            </StageFootnote>
 
             <StageDivider />
 
@@ -910,7 +992,7 @@ export default function BrainrotStudio() {
                   <em style={{ color: T.mute }}>No backdrop yet</em>}
               </CallsheetRow>
               <CallsheetRow label="Style" done={stageDone.style} onEdit={() => goToStage('style')} last>
-                {duration}s · {CAPTION_STYLES.find(c => c.id === captionStyle)?.label || captionStyle} · {motionMode === 'always_on' ? 'always on' : 'turn-based'}
+                {duration}s · {CAPTION_STYLE_BY_ID[captionStyle]?.label || captionStyle} ({CAPTION_COLOR_BY_ID[captionColor]?.label}) · {motionMode === 'always_on' ? 'always on' : 'turn-based'}
                 {musicId ? ` · music: ${musicLib.find(m => m.id === musicId)?.name || 'on'}` : ''}
               </CallsheetRow>
             </div>
@@ -949,7 +1031,10 @@ export default function BrainrotStudio() {
             background={background}
             characters={picked}
             captionStyle={captionStyle}
+            captionColor={captionColor}
+            captionY={captionY}
             onMoveCharacter={moveCharacter}
+            onMoveCaption={moveCaption}
             chemistry={chemistry}
           />
 
@@ -983,9 +1068,7 @@ export default function BrainrotStudio() {
           )}
         </div>
       </div>
-
-      {/* ══ Your clips ═════════════════════════════════════════ */}
-      <ClipsHistory clips={myClips} navigate={navigate} activeJob={activeJob} />
+      )}
 
       {/* toast */}
       {toast && (
@@ -1068,8 +1151,67 @@ function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection
           padding: '4px 8px',
         }}>Sign out</button>
       </div>
-      <style>{`@keyframes br-pulse-dot { 0%,100% { opacity: .4 } 50% { opacity: 1 } }`}</style>
+      <style>{`
+        @keyframes br-pulse-dot { 0%,100% { opacity: .4 } 50% { opacity: 1 } }
+        @keyframes brSpin { to { transform: rotate(360deg) } }
+      `}</style>
     </header>
+  )
+}
+
+// ── ViewTabs ─────────────────────────────────────────────────────
+// The studio's top-level menu: build a new clip, or browse everything
+// you've already made. Sits directly under the header as a persistent
+// wayfinder — not buried in a dropdown — so "where are my old clips"
+// never requires scrolling to find out.
+function ViewTabs({ view, onChange, clipCount, renderingCount }) {
+  const TABS = [
+    { id: 'create', label: 'Create', icon: '⚡' },
+    { id: 'clips',  label: 'My Clips', icon: '🎬', count: clipCount },
+  ]
+  return (
+    <div style={{
+      position: 'sticky', top: 65, zIndex: 150,
+      background: 'rgba(251,246,234,.92)', backdropFilter: 'blur(10px)',
+      borderBottom: `1px solid ${T.ink}14`,
+    }}>
+      <div style={{ maxWidth: 1180, margin: '0 auto', padding: '10px 20px 0',
+        display: 'flex', gap: 6 }}>
+        {TABS.map(t => {
+          const on = view === t.id
+          return (
+            <button key={t.id} onClick={() => onChange(t.id)}
+              style={{
+                position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7,
+                padding: '9px 16px', fontFamily: FONT, fontSize: '.84rem', fontWeight: 800,
+                color: on ? T.ink : T.mute,
+                background: on ? T.paper2 : 'transparent',
+                border: `1.5px solid ${on ? T.ink : 'transparent'}`,
+                borderBottom: on ? `1.5px solid ${T.paper2}` : `1.5px solid transparent`,
+                borderRadius: '10px 10px 0 0',
+                marginBottom: -1,
+                transition: 'all .12s',
+              }}>
+              <span>{t.icon}</span>{t.label}
+              {typeof t.count === 'number' && t.count > 0 && (
+                <span style={{
+                  fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 800,
+                  color: on ? '#fff' : T.ink,
+                  background: on ? T.ink : `${T.ink}14`,
+                  borderRadius: 999, padding: '1px 6px', minWidth: 16, textAlign: 'center',
+                }}>{t.count}</span>
+              )}
+              {t.id === 'clips' && renderingCount > 0 && (
+                <span title={`${renderingCount} rendering`} style={{
+                  width: 7, height: 7, borderRadius: '50%', background: T.red,
+                  animation: 'br-pulse-dot 1.4s ease-in-out infinite',
+                }} />
+              )}
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -1269,14 +1411,32 @@ function OfflineState({ title, sub, onRetry }) {
 // table of contents, not a form's step indicator.
 function StageRail({ stage, onJump, stageDone }) {
   const activeIdx = STAGES.findIndex(s => s.id === stage)
+  const active = STAGES[activeIdx]
+  const doneCount = STAGES.filter(s => stageDone[s.id]).length
+
   return (
     <div style={{
       background: '#fffdf7',
       border: `1px solid ${T.ink}12`,
       borderRadius: 14,
-      padding: '18px 22px',
+      padding: '18px 22px 20px',
       boxShadow: `0 1px 0 ${T.ink}05`,
     }}>
+      {/* Live readout — which chapter you're in + overall completion,
+          so the rail below reads as a map, not just a row of buttons. */}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: '1.1rem' }}>{active.icon}</span>
+          <span style={{ fontFamily: FONT_DISPLAY, fontSize: '1rem', fontWeight: 600, color: T.ink }}>
+            {active.title}
+          </span>
+        </div>
+        <span style={{ fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 700,
+          color: T.mute, letterSpacing: '.06em' }}>
+          {doneCount}/{STAGES.length} READY
+        </span>
+      </div>
+
       <div style={{
         display: 'grid',
         gridTemplateColumns: `repeat(${STAGES.length}, 1fr)`,
@@ -1284,14 +1444,21 @@ function StageRail({ stage, onJump, stageDone }) {
         position: 'relative',
         gap: 4,
       }}>
-        {/* Connector line — sits behind the nodes */}
+        {/* Connector line — sits behind the nodes, fills with the completed
+            stages' own accent colors rather than a flat ink bar. */}
         <div style={{
-          position: 'absolute', left: '10%', right: '10%', top: 14, height: 1,
-          background: `linear-gradient(to right, ${T.ink} 0%, ${T.ink} ${(activeIdx / (STAGES.length - 1)) * 100}%, ${T.ink}22 ${(activeIdx / (STAGES.length - 1)) * 100}%, ${T.ink}22 100%)`,
-          zIndex: 0,
-        }} />
+          position: 'absolute', left: '10%', right: '10%', top: 17, height: 2,
+          background: `${T.ink}16`, borderRadius: 2, zIndex: 0, overflow: 'hidden',
+        }}>
+          <div style={{
+            height: '100%', borderRadius: 2,
+            width: `${(activeIdx / (STAGES.length - 1)) * 100}%`,
+            background: `linear-gradient(to right, ${STAGES.map(s => s.accent).join(',')})`,
+            transition: 'width .25s ease',
+          }} />
+        </div>
         {STAGES.map((s, i) => {
-          const active = stage === s.id
+          const isActive = stage === s.id
           const done = stageDone[s.id]
           const isPast = i < activeIdx
           return (
@@ -1303,23 +1470,32 @@ function StageRail({ stage, onJump, stageDone }) {
                 fontFamily: FONT,
               }}>
               <div style={{
-                width: active ? 32 : 28, height: active ? 32 : 28,
+                position: 'relative',
+                width: isActive ? 38 : 32, height: isActive ? 38 : 32,
                 borderRadius: '50%',
-                background: active ? s.accent : done || isPast ? T.ink : '#fffdf7',
-                border: `1.5px solid ${active || done || isPast ? T.ink : T.ink + '44'}`,
-                color: active ? (s.accent === '#ffd23f' ? T.ink : '#fff') : done || isPast ? '#fff' : T.mute,
+                background: isActive ? s.accent : done || isPast ? '#fff' : '#fffdf7',
+                border: `1.5px solid ${isActive || done || isPast ? T.ink : T.ink + '44'}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: active ? '.78rem' : '.7rem', fontWeight: 700,
-                fontFamily: FONT_MONO,
+                fontSize: isActive ? '1.05rem' : '.9rem',
                 transition: 'all .18s ease',
-                boxShadow: active ? `0 4px 12px ${s.accent}55` : 'none',
+                boxShadow: isActive ? `0 0 0 5px ${s.accent}2a, 0 6px 14px ${s.accent}55` : 'none',
+                transform: isActive ? 'translateY(-1px)' : 'none',
               }}>
-                {done && !active ? '✓' : String(i + 1).padStart(2, '0')}
+                <span style={{ filter: !isActive && !done && !isPast ? 'grayscale(1) opacity(.5)' : 'none' }}>{s.icon}</span>
+                {(done || isPast) && (
+                  <span style={{
+                    position: 'absolute', bottom: -3, right: -3,
+                    width: 15, height: 15, borderRadius: '50%',
+                    background: T.green, border: `1.5px solid ${T.paper2}`,
+                    color: '#fff', fontSize: '.5rem', fontWeight: 900,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>✓</span>
+                )}
               </div>
               <div style={{
-                fontSize: active ? '.75rem' : '.7rem',
-                fontWeight: active ? 700 : 500,
-                color: active ? T.ink : done || isPast ? T.ink : T.mute,
+                fontSize: isActive ? '.75rem' : '.7rem',
+                fontWeight: isActive ? 800 : 500,
+                color: isActive ? T.ink : done || isPast ? T.ink : T.mute,
                 letterSpacing: '-.01em',
                 transition: 'all .18s ease',
               }}>
@@ -1330,6 +1506,56 @@ function StageRail({ stage, onJump, stageDone }) {
         })}
       </div>
     </div>
+  )
+}
+
+// ── Gameplay backdrop tile ──────────────────────────────────────────
+// Hover-to-play: shows the poster thumbnail at rest (cheap — no video
+// decode for tiles the user isn't looking at) and swaps to the real
+// looping clip on hover, same footage that renders server-side. Playing
+// every tile at once would mean dozens of simultaneous video decodes for
+// a library this size — hover keeps it to at most one.
+function GameplayTile({ clip, on, onClick }) {
+  const videoRef = useRef(null)
+  const handleEnter = () => { videoRef.current?.play().catch(() => {}) }
+  const handleLeave = () => {
+    const v = videoRef.current
+    if (v) { v.pause(); v.currentTime = 0 }
+  }
+  return (
+    <button onClick={onClick} onMouseEnter={handleEnter} onMouseLeave={handleLeave}
+      style={{
+        cursor: 'pointer', padding: 3,
+        background: on ? STAGE_BY_ID.scene.accent : 'transparent',
+        border: on ? `2px solid ${STAGE_BY_ID.scene.accent}` : `1px solid rgba(255,255,255,.06)`,
+        borderRadius: 8, transition: 'all .12s',
+      }}>
+      <div style={{ width: '100%', aspectRatio: '9/16', borderRadius: 5, overflow: 'hidden',
+        background: '#000', position: 'relative' }}>
+        {clip.gcs_path ? (
+          <video ref={videoRef} src={clip.gcs_path} poster={clip.thumbnail_url || undefined}
+            muted loop playsInline preload="none"
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : clip.thumbnail_url ? (
+          <img src={clip.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#666', fontSize: '.58rem', fontWeight: 700, textTransform: 'capitalize' }}>{clip.category}</div>
+        )}
+        {on && <div style={{ position: 'absolute', top: 4, right: 4,
+          background: T.ink, color: '#fff', width: 16, height: 16, borderRadius: '50%',
+          fontSize: '.58rem', fontWeight: 900,
+          display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</div>}
+      </div>
+      {clip.source_title && (
+        <div style={{ fontSize: '.52rem', fontWeight: 700,
+          color: on ? T.ink : 'rgba(255,255,255,.6)',
+          marginTop: 3, padding: '0 2px',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {clip.source_title}
+        </div>
+      )}
+    </button>
   )
 }
 
@@ -1472,37 +1698,164 @@ function ProgressCard({ job }) {
 }
 
 // ── Clips history ─────────────────────────────────────────────────
-function ClipsHistory({ clips, activeJob }) {
-  const merged = activeJob && isActive(activeJob)
-    ? [activeJob, ...clips.filter(c => c.job_id !== activeJob.job_id)]
-    : clips
-  if (!merged.length) return null
+// ── ClipsLibrary — the "My Clips" tab ───────────────────────────────
+// A real gallery, not an afterthought scrolled past under the builder:
+// status filters with live counts, a bigger card with a hover-to-play
+// treatment, a status badge, and an empty state that routes straight
+// back to Create instead of just saying "nothing here."
+const STATUS_META = {
+  complete:            { label: 'Ready',      color: '#1fa14e' },
+  failed:              { label: 'Failed',     color: '#cf1322' },
+  created:             { label: 'Queued',     color: '#6b6456' },
+  generating_script:   { label: 'Writing',    color: '#2d6cdf' },
+  synthesizing_voice:  { label: 'Voicing',    color: '#2d6cdf' },
+  rendering:           { label: 'Rendering',  color: '#2d6cdf' },
+}
+const LIBRARY_FILTERS = [
+  { id: 'all',      label: 'All' },
+  { id: 'active',   label: 'Rendering' },
+  { id: 'complete', label: 'Ready' },
+  { id: 'failed',   label: 'Failed' },
+]
+
+function ClipsLibrary({ clips, onCreate }) {
+  const [filter, setFilter] = useState('all')
+
+  const counts = useMemo(() => ({
+    all: clips.length,
+    active: clips.filter(c => isActive(c)).length,
+    complete: clips.filter(c => c.status === 'complete').length,
+    failed: clips.filter(c => c.status === 'failed').length,
+  }), [clips])
+
+  const visible = useMemo(() => {
+    if (filter === 'all') return clips
+    if (filter === 'active') return clips.filter(c => isActive(c))
+    return clips.filter(c => c.status === filter)
+  }, [clips, filter])
+
   return (
-    <div style={{ maxWidth: 1180, margin: '0 auto', padding: '0 20px 80px' }}>
-      <h2 style={{ fontSize: '1.3rem', fontWeight: 900, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ transform: 'rotate(-6deg)', display: 'inline-block' }}>🎬</span> Your Brainrot Clips
-      </h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(190px,1fr))', gap: 16 }}>
-        {merged.map(job => (
-          <div key={job.job_id} style={{ ...card({ padding: 8 }) }}>
-            <div style={{ width: '100%', aspectRatio: '9/16', borderRadius: 8, overflow: 'hidden', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {job.status === 'complete' && job.output_url ? (
-                <video src={job.output_url} controls playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : job.status === 'failed' ? (
-                <div style={{ color: '#ff8a8a', fontSize: '.72rem', fontWeight: 800, textAlign: 'center', padding: 12 }}>
-                  ⚠ {job.error_message || 'Failed'}
-                </div>
-              ) : (
-                <div style={{ color: '#fff', fontSize: '.74rem', fontWeight: 800, textAlign: 'center', padding: 12 }}>
-                  {job.current_step || 'Processing…'}<br /><span style={{ opacity: .6 }}>{job.progress || 0}%</span>
-                </div>
-              )}
+    <div style={{ maxWidth: 1180, margin: '0 auto', padding: '26px 20px 80px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
+        <div>
+          <h1 style={{ margin: 0, fontFamily: FONT_DISPLAY, fontWeight: 600,
+            fontSize: 'clamp(1.4rem, 2.4vw, 1.8rem)', letterSpacing: '-.02em', color: T.ink }}>
+            Your Brainrot clips
+          </h1>
+          <p style={{ margin: '4px 0 0', fontSize: '.82rem', color: T.mute }}>
+            Every clip you've generated, in one place.
+          </p>
+        </div>
+        <button onClick={onCreate} {...pressHandlers}
+          style={{ ...btn(T.ink, '#fff', { padding: '10px 18px', fontSize: '.82rem' }) }}>
+          + New clip
+        </button>
+      </div>
+
+      {clips.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
+          {LIBRARY_FILTERS.map(f => {
+            const on = filter === f.id
+            const n = counts[f.id]
+            return (
+              <button key={f.id} onClick={() => setFilter(f.id)}
+                style={{
+                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+                  background: on ? T.ink : '#fff',
+                  color: on ? '#fff' : T.ink,
+                  border: `1.5px solid ${T.ink}33`,
+                  borderRadius: 999, padding: '6px 13px',
+                  fontSize: '.76rem', fontWeight: 700, fontFamily: FONT,
+                }}>
+                {f.label}
+                <span style={{
+                  fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 800,
+                  color: on ? '#fff' : T.mute, opacity: on ? .85 : 1,
+                }}>{n}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {clips.length === 0 ? (
+        <div style={{
+          textAlign: 'center', padding: '64px 20px',
+          background: '#fffdf5', border: `1.5px dashed ${T.ink}30`, borderRadius: 16,
+        }}>
+          <div style={{ fontSize: '2.4rem', marginBottom: 12 }}>🎬</div>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: '1.15rem', fontWeight: 600, color: T.ink, marginBottom: 6 }}>
+            No clips yet
+          </div>
+          <div style={{ fontSize: '.84rem', color: T.mute, maxWidth: '36ch', margin: '0 auto 18px', lineHeight: 1.5 }}>
+            Your first brainrot clip is a script, a cast, and a backdrop away.
+          </div>
+          <button onClick={onCreate} {...pressHandlers}
+            style={{ ...btn(T.red, '#fff', { padding: '11px 20px' }) }}>
+            ⚡ Make your first clip
+          </button>
+        </div>
+      ) : visible.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: T.mute, fontSize: '.86rem' }}>
+          Nothing in this filter yet.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 18 }}>
+          {visible.map(job => <ClipCard key={job.job_id} job={job} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ClipCard({ job }) {
+  const meta = STATUS_META[job.status] || STATUS_META.created
+  return (
+    <div style={{ ...card({ padding: 8 }), transition: 'transform .12s, box-shadow .12s' }}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'translate(-2px,-2px)'; e.currentTarget.style.boxShadow = sticker(6) }}
+      onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = sticker(4) }}>
+      <div style={{ position: 'relative', width: '100%', aspectRatio: '9/16', borderRadius: 8, overflow: 'hidden',
+        background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {job.status === 'complete' && job.output_url ? (
+          <video src={job.output_url} controls playsInline preload="metadata"
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : job.status === 'failed' ? (
+          <div style={{ color: '#ff8a8a', fontSize: '.72rem', fontWeight: 800, textAlign: 'center', padding: 12 }}>
+            ⚠ {job.error_message || 'Failed'}
+          </div>
+        ) : (
+          <div style={{ width: '100%', padding: 16 }}>
+            <div style={{ color: '#fff', fontSize: '.74rem', fontWeight: 800, textAlign: 'center', marginBottom: 10 }}>
+              <span style={{ display: 'inline-block', animation: 'brSpin 1s linear infinite', marginRight: 6 }}>🌀</span>
+              {job.current_step || 'Processing…'}
             </div>
-            <div style={{ padding: '8px 4px 3px', fontSize: '.66rem', fontWeight: 700, color: T.mute }}>
-              {job.created_at ? new Date(job.created_at).toLocaleString() : ''}
+            <div style={{ height: 6, background: 'rgba(255,255,255,.15)', borderRadius: 999, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${job.progress || 0}%`, background: T.red, transition: 'width .5s' }} />
             </div>
           </div>
-        ))}
+        )}
+        <span style={{
+          position: 'absolute', top: 8, left: 8,
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          background: 'rgba(0,0,0,.65)', color: '#fff',
+          fontSize: '.6rem', fontWeight: 800, padding: '3px 8px', borderRadius: 999,
+        }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: meta.color }} />
+          {meta.label}
+        </span>
+      </div>
+      <div style={{ padding: '9px 4px 3px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+        <span style={{ fontSize: '.66rem', fontWeight: 700, color: T.mute }}>
+          {job.created_at ? new Date(job.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}
+        </span>
+        {job.status === 'complete' && job.output_url && (
+          <a href={job.output_url} target="_blank" rel="noopener noreferrer"
+            title="Open full size"
+            style={{ fontSize: '.66rem', fontWeight: 800, color: T.ink, textDecoration: 'none' }}>
+            Open ↗
+          </a>
+        )}
       </div>
     </div>
   )

@@ -42,6 +42,7 @@ VALID_TTS_PROVIDERS = ["unrealspeech", "lemonfox"]
 VALID_MOTION_MODES = ["turn_based", "always_on"]
 DEFAULT_CAPTION_STYLE = "brainrot"
 DEFAULT_CAPTION_COLOR = "yellow_black"
+DEFAULT_CAPTION_Y = 0.82
 
 
 # ── Request schema ──────────────────────────────────────────────
@@ -91,6 +92,7 @@ class BrainrotJobOptions(BaseModel):
     duration_seconds: int = 30
     caption_style: str = DEFAULT_CAPTION_STYLE
     caption_color: str = DEFAULT_CAPTION_COLOR
+    caption_y: float = DEFAULT_CAPTION_Y   # 0=top, 1=bottom — the "Caption position" slider
     voice_left: str = ""
     voice_right: str = ""
     tts_provider: str = "unrealspeech"
@@ -122,6 +124,11 @@ class BrainrotJobOptions(BaseModel):
     @classmethod
     def validate_caption_color(cls, v: str) -> str:
         return v if v in VALID_COLORS else DEFAULT_CAPTION_COLOR
+
+    @field_validator("caption_y")
+    @classmethod
+    def clamp_caption_y(cls, v: float) -> float:
+        return max(0.0, min(1.0, v))
 
     @field_validator("tts_provider")
     @classmethod
@@ -252,6 +259,7 @@ async def create_brainrot_job(body: CreateBrainrotJobRequest, current_user: Curr
         "duration_seconds": opts.duration_seconds,
         "caption_style": opts.caption_style,
         "caption_color": opts.caption_color,
+        "caption_y": opts.caption_y,
         "voice_left": voice_left,
         "voice_right": voice_right,
         "tts_provider": opts.tts_provider,

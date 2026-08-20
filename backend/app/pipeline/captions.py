@@ -239,6 +239,23 @@ def _resolve_pos(h_align: str, v_align: str) -> tuple[int, int, int]:
     return _POS.get(key, _POS["bottom_center"])
 
 
+# PlayResX / 2 and PlayResY — must match _ASS_HEADER's PlayResX=1080/PlayResY=1920.
+_CANVAS_W_HALF = 540
+_PLAYRES_Y = 1920
+
+
+# Vertical caption slider (Brainrot Studio "Caption position" control, and
+# any future caller that wants continuous placement instead of the 9-preset
+# grid above). Horizontally always dead-center — only Y is user-adjustable —
+# so alignment is fixed at 5 (middle-center): \pos's y lands the caption's
+# own vertical CENTER at that point, which is what makes the full 0..1 range
+# usable edge-to-edge without the text clipping off-canvas the way a
+# top/bottom-anchored alignment would at the extremes.
+def _resolve_slider_pos(caption_y: float) -> tuple[int, int, int]:
+    y_frac = max(0.0, min(1.0, caption_y))
+    return _CANVAS_W_HALF, round(y_frac * _PLAYRES_Y), 5
+
+
 # ══════════════════════════════════════════════════════════════
 #  FONT OPTIONS — bundled in backend/app/assets/fonts/, registered
 #  with fontconfig in the Dockerfile (fc-cache). Family names below
@@ -959,6 +976,7 @@ def build_ass_content(
     clip_duration: float = 0.0,
     font:          str = DEFAULT_FONT,
     title_color:   str = "#FFFFFF",
+    caption_y:     float | None = None,
 ) -> str:
     """
     Build a complete .ass subtitle file string.
@@ -986,8 +1004,20 @@ def build_ass_content(
                          caption `color` combo (see title_box.TITLE_TEXT_COLORS).
                          The title's background box (if any) is rendered
                          separately as a PNG overlay — see title_box.py.
+        caption_y:      0.0-1.0 normalized vertical position (0 = top edge,
+                         1 = bottom edge), canvas-relative — same convention
+                         as brainrot_composite.CharacterPlacement.y. When
+                         given, OVERRIDES h_align/v_align entirely: captions
+                         sit horizontally dead-center with their vertical
+                         center continuously placed at caption_y (see
+                         _resolve_slider_pos), instead of snapping to the
+                         9-preset grid. None keeps the existing preset
+                         behaviour — fully backward compatible.
     """
-    x, y, alignment = _resolve_pos(h_align, v_align)
+    x, y, alignment = (
+        _resolve_slider_pos(caption_y) if caption_y is not None
+        else _resolve_pos(h_align, v_align)
+    )
     style_key = style if style in _BASE_STYLES else "minimal"
     color_key = color if color in COLOR_COMBOS else DEFAULT_COLOR
     font_key  = font if font in FONT_OPTIONS else DEFAULT_FONT
@@ -1115,6 +1145,7 @@ async def burn_captions(
     title_color:    str = DEFAULT_TITLE_TEXT_COLOR,
     title_bg:       str = DEFAULT_TITLE_BG,
     title_bg_opacity: float = DEFAULT_TITLE_BG_OPACITY,
+    caption_y:      float | None = None,
 ) -> Path:
     """
     Burn captions into a clip via FFmpeg ASS filter — and, if `hook_title`
@@ -1133,7 +1164,7 @@ async def burn_captions(
         captions, style, color, h_align, v_align, words_per_line,
         hook_title=hook_title, template=template,
         title_permanent=title_permanent, clip_duration=clip_duration, font=font,
-        title_color=title_color_hex,
+        title_color=title_color_hex, caption_y=caption_y,
     )
 
     with tempfile.NamedTemporaryFile(

@@ -24,6 +24,20 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import BrainrotNav from './BrainrotNav'
 import brainrotCharactersSeed from '../../data/brainrotCharactersSeed'
+import {
+  CAPTION_PRESETS, CAPTION_TRENDING, CAPTION_STYLE_BY_ID,
+  CAPTION_COLORS, DEFAULT_CAPTION_STYLE,
+  captionTextStyle, CAPTION_KEYFRAMES,
+} from './captionStyles'
+
+// A representative slice of the full trending-style catalog for the
+// landing page's static demo — the real picker (all 16 styles) lives in
+// the Studio dashboard; this just needs to prove the feature exists and
+// look like the same system, not repeat the whole catalog.
+const DEMO_STYLES = [
+  ...CAPTION_PRESETS.slice(0, 1),
+  ...CAPTION_TRENDING.filter(s => ['karaoke', 'hormozi', 'mrbeast', 'neon', 'minimal'].includes(s.id)),
+]
 
 // ── Design tokens (local to landing — brainrot-flavored) ────────────
 const P = {
@@ -182,8 +196,15 @@ function LiveStage({
         }}>{title}</div>
       )}
 
-      {/* Caption — UPPER-MIDDLE (top 22% per product spec) */}
-      {current && (
+      {/* Caption — UPPER-MIDDLE (top 22% per product spec).
+          `current.styleId` (set by the interactive Builder demo) switches
+          this to a real approximation of the chosen trending caption style
+          — same catalog/metadata as the Studio dashboard preview (see
+          captionStyles.js). Without it (Hero / ClipWall's static examples),
+          falls back to the original sticker-chip look untouched. */}
+      {current && (current.styleId ? (
+        <CaptionDemo current={current} fadeIn={fadeIn} />
+      ) : (
         <div style={{
           position: 'absolute', top: '22%', left: '50%',
           transform: 'translateX(-50%)',
@@ -202,7 +223,7 @@ function LiveStage({
           transition: 'opacity .2s',
           zIndex: 7,
         }}>{current.text}</div>
-      )}
+      ))}
 
       {/* Characters — actual roster canon.png images */}
       {leftChar && (
@@ -234,6 +255,36 @@ function LiveStage({
           <span>❤️ {stats.likes}</span>
         </div>
       )}
+    </div>
+  )
+}
+
+// Real trending-style caption approximation — same metadata/keyframes as
+// PreviewStage.jsx's dashboard preview (captionStyles.js), rendered without
+// the sticker-chip box so it reads like an actual burned-in caption.
+function CaptionDemo({ current, fadeIn }) {
+  const style = CAPTION_STYLE_BY_ID[current.styleId] || CAPTION_STYLE_BY_ID[DEFAULT_CAPTION_STYLE]
+  const color = current.colorMeta || { text: P.captionYellow, outline: '#000000' }
+  const base = captionTextStyle(style, color)
+  return (
+    <div style={{
+      position: 'absolute', top: '22%', left: '50%',
+      transform: 'translateX(-50%)', maxWidth: '85%',
+      textAlign: 'center', opacity: fadeIn ? 1 : 0,
+      transition: 'opacity .2s', zIndex: 7, pointerEvents: 'none',
+    }}>
+      <span
+        key={`${current.styleId}:${color.text}`}
+        style={{
+          display: 'inline-block', fontSize: style.big ? '1.05rem' : '.86rem',
+          lineHeight: 1.2, whiteSpace: 'nowrap',
+          ...base,
+          ...(style.boxed ? { background: 'rgba(0,0,0,.82)', padding: '5px 10px', borderRadius: 5, WebkitTextStroke: '0px transparent' } : {}),
+          ...(style.glow ? { filter: `drop-shadow(0 0 5px ${color.text}) drop-shadow(0 0 10px ${color.text}99)` } : {}),
+          ...(style.anim && style.anim !== 'none' ? { animation: `${style.anim} .5s ease-out` } : {}),
+        }}
+      >{current.text}</span>
+      <style>{CAPTION_KEYFRAMES}</style>
     </div>
   )
 }
@@ -674,14 +725,22 @@ function ClipWall({ characters, clips }) {
 // ═══════════════════════════════════════════════════════════════════
 //  Section: INTERACTIVE BUILDER — user swaps chars/bg/color, preview updates
 // ═══════════════════════════════════════════════════════════════════
+// A representative slice of the real colour catalog for the compact demo
+// column — the full 13-combo picker lives in the Studio dashboard.
+const DEMO_COLORS = CAPTION_COLORS.filter(c =>
+  ['yellow_black', 'white_black', 'butter_yellow', 'hot_pink_black', 'electric_blue_white', 'gold_premium'].includes(c.id))
+
 function Builder({ characters, clips }) {
   const [leftIdx, setLeftIdx] = useState(0)
   const [rightIdx, setRightIdx] = useState(1)
   const [clipIdx, setClipIdx] = useState(0)
   const [colorIdx, setColorIdx] = useState(0)
+  const [styleIdx, setStyleIdx] = useState(0)
 
-  const swatches = [P.captionYellow, '#ff4dd8', '#86efac', '#ffffff', P.ink]
-  const dialogue = { text: 'THIS IS SO FIRE 🔥', speaker: 'left', color: swatches[colorIdx] }
+  const dialogue = {
+    text: 'THIS IS SO FIRE 🔥', speaker: 'left',
+    styleId: DEMO_STYLES[styleIdx].id, colorMeta: DEMO_COLORS[colorIdx],
+  }
 
   const leftPool = characters.slice(0, 4)
   const rightPool = characters.slice(4, 8)
@@ -730,12 +789,25 @@ function Builder({ characters, clips }) {
               })}
             </div>
           </ControlCard>
+          <ControlCard label="Caption style · trending on TikTok/Reels">
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              {DEMO_STYLES.map((s, i) => (
+                <div key={s.id} onClick={() => setStyleIdx(i)} title={s.sub} style={{
+                  padding: '4px 9px', borderRadius: 999,
+                  border: `1.5px solid ${P.ink}`, cursor: 'pointer',
+                  background: styleIdx === i ? P.ink : '#fff',
+                  color: styleIdx === i ? '#fff' : P.ink,
+                  fontSize: '.66rem', fontWeight: 800,
+                }}>{s.label}</div>
+              ))}
+            </div>
+          </ControlCard>
           <ControlCard label="Caption color">
             <div style={{ display: 'flex', gap: 6 }}>
-              {swatches.map((sw, i) => (
-                <div key={i} onClick={() => setColorIdx(i)} style={{
-                  width: 28, height: 28, borderRadius: 6, background: sw,
-                  border: `2px solid ${P.ink}`, cursor: 'pointer',
+              {DEMO_COLORS.map((c, i) => (
+                <div key={c.id} onClick={() => setColorIdx(i)} title={c.label} style={{
+                  width: 28, height: 28, borderRadius: 6, background: c.text,
+                  border: `2px solid ${c.outline === '#FFFFFF' ? P.ink : c.outline}`, cursor: 'pointer',
                   boxShadow: colorIdx === i ? `0 0 0 3px ${P.brain}` : 'none',
                 }}/>
               ))}

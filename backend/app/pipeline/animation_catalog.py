@@ -28,6 +28,9 @@ MOTIONS: list[Motion] = [
     Motion("drop",   "Drop In", "Drops down from above the top edge."),
     Motion("pop",    "Pop",    "Quick little pop into place."),
     Motion("cut",    "Cut",    "Appears instantly, no travel."),
+    Motion("float",  "Float",  "Rises up slowly and gently — dreamy, unhurried."),
+    Motion("swoop",  "Swoop",  "Enters diagonally from the side and slightly above — an arcing swoop."),
+    Motion("snap",   "Snap",   "Barely moves, then snaps into place at the last instant — a spring-release."),
 ]
 
 VALID_MOTIONS: set[str] = {m.id for m in MOTIONS}

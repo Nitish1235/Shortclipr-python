@@ -36,6 +36,8 @@ SLIDE_RAMP_SECONDS = 0.28   # default travel time to move fully on/off screen
 POP_RAMP_SECONDS = 0.14     # faster ramp for the "pop" motion
 CUT_RAMP_SECONDS = 0.001    # effectively instant (no visible travel)
 BOUNCE_RAMP_SECONDS = 0.45  # slower — needs room for the overshoot to read
+FLOAT_RAMP_SECONDS = 0.65   # slower still — a "float", not a "rise"
+SNAP_RAMP_SECONDS = 0.09    # faster than pop, slower than cut — a spring release
 
 # Idle sway (present but not currently speaking) vs talk-bob (actively
 # speaking this line) — both are small continuous Y-axis oscillations
@@ -110,7 +112,12 @@ def _motion_offset(
     to the character's on-screen (x, y) that parks it just off-canvas for
     that motion, how long the travel ramp lasts, and which easing curve
     _axis_expr should drive it with. dx/dy are large enough to hide the
-    character fully; the exact magnitude only needs to clear the frame."""
+    character fully; the exact magnitude only needs to clear the frame.
+
+    `side` here is the NEAREST edge (caller passes the near_side computed
+    from char.x in _character_overlay_filter), not char.side's dialogue-slot
+    label — a side-anchored motion always travels to/from whichever edge the
+    character is actually closest to on screen."""
     if motion_id == "rise":
         # Start/end below the bottom edge.
         return 0.0, (CANVAS_H + 40) - on_y, SLIDE_RAMP_SECONDS, "ease"
@@ -131,6 +138,26 @@ def _motion_offset(
         # actually read on screen instead of looking like a glitch.
         off_x = (-char_w - 40) if side == "left" else (CANVAS_W + 40)
         return off_x - on_x, 0.0, BOUNCE_RAMP_SECONDS, "bounce"
+    if motion_id == "float":
+        # Same start point as "rise" (below the bottom edge) but a much
+        # slower ramp with the standard decelerate-into-place ease — reads
+        # as drifting up, not popping up.
+        return 0.0, (CANVAS_H + 40) - on_y, FLOAT_RAMP_SECONDS, "ease"
+    if motion_id == "swoop":
+        # Diagonal: off the character's own side edge (like slide) AND
+        # starting partway above its resting height, so the travel path is
+        # an arc rather than a straight horizontal glide. The Y component
+        # only needs to be visible-ish since the character is off-canvas on
+        # X for the whole ramp anyway.
+        off_x = (-char_w - 40) if side == "left" else (CANVAS_W + 40)
+        return off_x - on_x, -(char_h * 0.6), SLIDE_RAMP_SECONDS, "ease"
+    if motion_id == "snap":
+        # Off the character's own side edge, like slide, but with an
+        # accelerate-FROM-rest ease (see _ease_ramp "in") and a very short
+        # ramp — the character barely moves at first, then whips into place
+        # right at the end, like a released spring rather than a glide.
+        off_x = (-char_w - 40) if side == "left" else (CANVAS_W + 40)
+        return off_x - on_x, 0.0, SNAP_RAMP_SECONDS, "snap"
     # "slide" (default): off the character's own side edge, horizontally.
     off_x = (-char_w - 40) if side == "left" else (CANVAS_W + 40)
     return off_x - on_x, 0.0, SLIDE_RAMP_SECONDS, "ease"
@@ -201,17 +228,23 @@ def _axis_expr(
     (ready to re-enter) before/between windows, and at exit_end_val after the
     final window — both off-canvas, so the discontinuity between them is
     never visible. Built outside-in in the same nested-if style as
-    extractor.py's _zoom_expr()."""
+    extractor.py's _zoom_expr().
+
+    entry_ease also accepts "snap" (see _motion_offset) — an accelerate-
+    FROM-rest curve (_ease_ramp's "in" kind) that makes the character barely
+    move at first then whip into place, instead of "out"'s decelerate-INTO-
+    place glide."""
     hold_expr = (
         _presence_sway_expr(on_val, speak_windows) if speak_windows is not None
         else f"{on_val:.1f}"
     )
+    entry_kind = "bounce" if entry_ease == "bounce" else ("in" if entry_ease == "snap" else "out")
     expr = f"{exit_end_val:.1f}"  # resting place after the last window
     for start, end in reversed(windows):
         ramp_in_end = start + ramp_in
         ramp_out_start = end - ramp_out
         entry = _ease_ramp(
-            "bounce" if entry_ease == "bounce" else "out",
+            entry_kind,
             f"t-{start:.3f}", ramp_in, enter_start_val, on_val,
         )
         # "bounce" applied to an exit overshoots PAST exit_end_val before
@@ -287,18 +320,28 @@ def _character_overlay_filter(
     on_x = float(_even(char.x * CANVAS_W - char_w / 2))
     on_y = float(_even(char.y * CANVAS_H))
 
+    # Which edge a side-anchored motion (slide/bounce/swoop/snap, and the
+    # off-canvas park below) travels to/from is driven by where the
+    # character actually SITS on screen (char.x vs canvas center) — not by
+    # its "left"/"right" speaker-slot label. char.side is a dialogue/casting
+    # concept (who's assigned that side of the argument); a user can freely
+    # drag a "left" character anywhere via the preview stage, and once
+    # they're closer to the right edge, their motion should travel to/from
+    # the right edge too, or the entry/exit reads as backwards.
+    near_side = "left" if char.x < 0.5 else "right"
+
     rotate = f"rotate={char.rotation}*PI/180:c=none[{input_label}_rot];[{input_label}_rot]" if char.rotation else f"[{input_label}]"
 
     if not windows:
         # Character never speaks — park it fully off-canvas on its own side.
-        off_x = (-char_w - 40) if char.side == "left" else (CANVAS_W + 40)
+        off_x = (-char_w - 40) if near_side == "left" else (CANVAS_W + 40)
         return (
             f"{rotate}scale={char_w}:-1[{input_label}_s];"
             f"[{bg_label}][{input_label}_s]overlay=x={int(off_x)}:y={int(on_y)}[{out_label}]"
         )
 
-    entry_dx, entry_dy, entry_ramp, entry_ease = _motion_offset(char.entry, char.side, on_x, on_y, char_w, char_h)
-    exit_dx, exit_dy, exit_ramp, exit_ease = _motion_offset(char.exit, char.side, on_x, on_y, char_w, char_h)
+    entry_dx, entry_dy, entry_ramp, entry_ease = _motion_offset(char.entry, near_side, on_x, on_y, char_w, char_h)
+    exit_dx, exit_dy, exit_ramp, exit_ease = _motion_offset(char.exit, near_side, on_x, on_y, char_w, char_h)
 
     x_expr = _axis_expr(
         windows, on_x, on_x + entry_dx, on_x + exit_dx, entry_ramp, exit_ramp,
@@ -393,6 +436,7 @@ async def render(
     caption_style: str,
     caption_color: str,
     output_path: Path,
+    caption_y: float = 0.82,   # 0=top, 1=bottom, canvas-relative — see captions.py's _resolve_slider_pos
     music_path: Path | None = None,
     music_volume: float = 0.3,
     intro_sfx: Path | None = None,
@@ -444,7 +488,7 @@ async def render(
     filter_parts.append(audio_filter)
 
     captions = [Caption(start=l.start, end=l.end, text=l.text) for l in lines]
-    ass_content = build_ass_content(captions, style=caption_style, color=caption_color)
+    ass_content = build_ass_content(captions, style=caption_style, color=caption_color, caption_y=caption_y)
     with tempfile.NamedTemporaryFile(suffix=".ass", mode="w", encoding="utf-8", delete=False) as f:
         f.write(ass_content)
         ass_path = f.name
