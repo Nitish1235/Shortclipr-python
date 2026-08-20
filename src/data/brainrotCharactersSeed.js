@@ -12,15 +12,24 @@
 // place for an empty state.
 //
 // These 20 images were downscaled to 320px-wide WebP (~15KB each, ~300KB
-// total) specifically for this purpose — see public/brainrot/characters/.
+// total) specifically for this purpose — see public/brainrot-characters/.
 // Picked one-or-two per family (all 11 families represented) for maximum
 // visual variety in the Parade marquee, which is what sells "100+" even
 // though only 20 are actually shipped here.
 //
+// IMPORTANT: this directory is named "brainrot-characters", NOT nested as
+// "brainrot/characters" — Vite copies public/ verbatim into dist/, and a
+// physical dist/brainrot/ directory collides with the /brainrot SPA route.
+// nginx's `try_files $uri $uri/ /index.html` matches that real directory
+// before ever falling through to index.html, and with autoindex off,
+// returns 403 "directory index forbidden" instead of serving the app —
+// which is exactly what happened in production when this was first added
+// as public/brainrot/characters/. Keep this flat/unnested going forward.
+//
 // BrainrotLanding.jsx uses this ONLY when the live API returns nothing —
 // real API data always wins once it's available.
 
-const BASE = '/brainrot/characters'
+const BASE = '/brainrot-characters'
 
 const brainrotCharactersSeed = [
   { id: 'dougie-blunt',        name: 'Dougie Blunt',           family: 'Household', archetype: 'Loud Dumb Dad',              gender: 'male',    role: 'Confidently wrong. Drives plots by misunderstanding them.',       tier: 1, pairs: ['kip-blunt', 'marla-blunt'] },
