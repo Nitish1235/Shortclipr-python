@@ -39,6 +39,14 @@ BOUNCE_RAMP_SECONDS = 0.45  # slower — needs room for the overshoot to read
 FLOAT_RAMP_SECONDS = 0.65   # slower still — a "float", not a "rise"
 SNAP_RAMP_SECONDS = 0.09    # faster than pop, slower than cut — a spring release
 
+# "none" motion: no travel at all (same dx/dy=0 as "cut"), so it needs its
+# own cue that it's now this character's turn — a small grow-in-place
+# instead of a move. NONE_SCALE_BOOST is a multiplier on top of whatever
+# base scale the character is already set to (char.scale), so it layers
+# correctly regardless of how big/small the user has sized them.
+NONE_SCALE_BOOST = 1.08
+NONE_SCALE_RAMP_SECONDS = 0.18
+
 # Idle sway (present but not currently speaking) vs talk-bob (actively
 # speaking this line) — both are small continuous Y-axis oscillations
 # layered on top of the character's held position, driven by `t` the same
@@ -127,9 +135,12 @@ def _motion_offset(
     if motion_id == "pop":
         # Small quick nudge up into place — reads as a pop, not a full slide.
         return 0.0, 90.0, POP_RAMP_SECONDS, "ease"
-    if motion_id == "cut":
-        # No travel — appears/disappears in place. Easing is moot at this
-        # ramp length but "ease" is still numerically safe (see _ease()).
+    if motion_id in ("cut", "none"):
+        # No travel — appears/disappears in place. "none" is the same
+        # underlying treatment as "cut", just a more discoverable label for
+        # anyone specifically looking for "no animation" (see
+        # animation_catalog.py). Easing is moot at this ramp length but
+        # "ease" is still numerically safe (see _ease()).
         return 0.0, 0.0, CUT_RAMP_SECONDS, "ease"
     if motion_id == "bounce":
         # Off the character's own side edge, like slide, but flies past the
@@ -185,6 +196,49 @@ def _ease_ramp(kind: str, t_expr: str, duration: float, start_val: float, end_va
     else:  # "out" (default) — also correct (if slightly generous) for cut/pop
         progress = f"(1-pow(1-{p},3))"
     return f"({start_val:.1f}+{diff}*{progress})"
+
+
+def _scale_expr(windows: list[tuple[float, float]], ramp_in: float, ramp_out: float, boost: float) -> str:
+    """Piecewise scale-PERCENT expression (100 = 1.0x — _ease_ramp formats
+    values at .1f precision, and 1.08 would round to 1.1, turning an 8%
+    boost into 10%; working in percent keeps 108.0 exact). Divide the
+    result by 100 at the call site.
+
+    100 outside any window. Inside a window: ramps up to boost*100 over
+    ramp_in at the start (jumps straight there if ramp_in is 0 — that side
+    isn't "none", so its own position motion already handles the entry and
+    scale should just already be at rest, not mid-ramp), holds at
+    boost*100 through the window, ramps back to 100 over ramp_out at the
+    end (same skip rule). Reuses _ease_ramp's "out"/"in" curves so the
+    grow/shrink reads consistently with the position ramps elsewhere.
+
+    This is the stand-in visual cue for the "none" motion (see
+    animation_catalog.py) — since it has zero travel (same as "cut"), a
+    small grow-in-place is what signals "it's this character's turn now"
+    instead of a move."""
+    boost_pct = boost * 100.0
+    expr = "100.0"
+    for start, end in reversed(windows):
+        ramp_in_end = start + ramp_in
+        ramp_out_start = end - ramp_out
+        entry = (
+            _ease_ramp("out", f"t-{start:.3f}", ramp_in, 100.0, boost_pct)
+            if ramp_in > 0 else f"{boost_pct:.1f}"
+        )
+        exit_ = (
+            _ease_ramp("in", f"t-{ramp_out_start:.3f}", ramp_out, boost_pct, 100.0)
+            if ramp_out > 0 else f"{boost_pct:.1f}"
+        )
+        hold = f"{boost_pct:.1f}"
+        window_expr = (
+            f"if(lt(t,{ramp_in_end:.3f}),{entry},"
+            f"if(lt(t,{ramp_out_start:.3f}),{hold},{exit_}))"
+        )
+        expr = (
+            f"if(lt(t,{start:.3f}),100.0,"
+            f"if(between(t,{start:.3f},{end:.3f}),{window_expr},{expr}))"
+        )
+    return expr
 
 
 def _presence_sway_expr(base_val: float, speak_windows: list[tuple[float, float]]) -> str:
@@ -314,7 +368,11 @@ def _character_overlay_filter(
     """One [scale][overlay] pair for a single character, with independent
     entry and exit motions (see animation_catalog.py / _motion_offset) driven
     on both axes by _axis_expr, plus idle/talk sway (Y-axis only — see
-    _presence_sway_expr) layered into the held portion of each window."""
+    _presence_sway_expr) layered into the held portion of each window.
+    "cut"/"none" (zero-travel motions) additionally get an explicit
+    overlay `enable=` hide/show toggle, and "none" gets a time-varying
+    `scale=` expression that grows it slightly while active — see the
+    comments where those are built, below."""
     char_w = _even(CANVAS_W * _CHAR_BASE_WIDTH_FRAC * char.scale)
     char_h = char_w * _CHAR_ASPECT
     on_x = float(_even(char.x * CANVAS_W - char_w / 2))
@@ -352,9 +410,29 @@ def _character_overlay_filter(
         entry_ease, exit_ease, speak_windows,
     )
 
+    # "cut" and "none" both resolve to dx=dy=0 (see _motion_offset) — the
+    # character never travels off-canvas, so unlike every other motion it
+    # needs an explicit hide/show toggle instead of relying on position to
+    # clear the frame. Scoped to when BOTH entry and exit lack travel (the
+    # normal way to pick either) so it never fights a real position ramp on
+    # the other side of a mixed pairing.
+    enable_clause = ""
+    if char.entry in ("cut", "none") and char.exit in ("cut", "none"):
+        windows_bool = "+".join(f"between(t,{s:.3f},{e:.3f})" for s, e in windows)
+        enable_clause = f":enable='{windows_bool}'"
+
+    # "none" additionally grows the character slightly while it's their
+    # turn — the size cue standing in for the travel "none"/"cut" skip.
+    scale_filter = f"scale={char_w}:-1"
+    if char.entry == "none" or char.exit == "none":
+        ramp_in = NONE_SCALE_RAMP_SECONDS if char.entry == "none" else 0.0
+        ramp_out = NONE_SCALE_RAMP_SECONDS if char.exit == "none" else 0.0
+        scale_pct_expr = _scale_expr(windows, ramp_in, ramp_out, NONE_SCALE_BOOST)
+        scale_filter = f"scale=w='{char_w}*({scale_pct_expr})/100':h=-1:eval=frame"
+
     return (
-        f"{rotate}scale={char_w}:-1[{input_label}_s];"
-        f"[{bg_label}][{input_label}_s]overlay=x='{x_expr}':y='{y_expr}'[{out_label}]"
+        f"{rotate}{scale_filter}[{input_label}_s];"
+        f"[{bg_label}][{input_label}_s]overlay=x='{x_expr}':y='{y_expr}'{enable_clause}[{out_label}]"
     )
 
 

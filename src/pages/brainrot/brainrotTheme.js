@@ -1,67 +1,61 @@
-// brainrotTheme.js — shared visual tokens for the Brainrot Studio.
+// brainrotTheme.js — Swiss minimal design tokens for the Brainrot Studio.
 //
-// Deliberately DISTINCT from the YouTube-Shorts dashboard (dark sidebar +
-// clean corporate red). Brainrot's identity is a playful "sticker / doodle
-// notebook" look: warm paper background, chunky black outlines, hard offset
-// shadows, bold type. Same brand red accent (#cf1322) so it still reads as
-// ShortClipr, per the theme-23 exploration the user picked.
+// Ultra-clean, typography-driven. White surfaces, thin borders, no shadows,
+// no decoration. Inter throughout — no serif, no monospace UI labels.
+// Brand red (#cf1322) stays as the primary accent so it still reads as
+// ShortClipr.
 
 export const T = {
-  ink:      '#161616',
-  paper:    '#fbf6ea',
-  paper2:   '#fffdf7',
+  ink:      '#111111',
+  paper:    '#fafafa',
+  paper2:   '#ffffff',
   red:      '#cf1322',
   redDark:  '#a10e1b',
   yellow:   '#ffd23f',
   blue:     '#2d6cdf',
-  green:    '#1fa14e',
-  mute:     '#6b6456',
-  line:     '#161616',
+  green:    '#22c55e',
+  mute:     '#888888',
+  line:     '#e5e5e5',
+  lineSoft: '#f0f0f0',
 }
 
-// Hard "sticker" shadow — the signature of the look.
-export const sticker = (offset = 4, color = T.ink) => `${offset}px ${offset}px 0 ${color}`
-
-// A chunky bordered card.
 export const card = (extra = {}) => ({
   background: T.paper2,
-  border: `2.5px solid ${T.ink}`,
-  borderRadius: 14,
-  boxShadow: sticker(4),
+  border: `1px solid ${T.line}`,
+  borderRadius: 12,
   ...extra,
 })
 
-// A doodle-style pill/badge.
-export const pill = (bg = T.yellow, extra = {}) => ({
+export const pill = (bg = T.lineSoft, extra = {}) => ({
   display: 'inline-flex', alignItems: 'center', gap: 5,
   background: bg,
-  border: `2px solid ${T.ink}`,
+  border: `1px solid ${T.line}`,
   borderRadius: 999,
-  padding: '3px 10px',
-  fontSize: '.68rem', fontWeight: 800,
+  padding: '4px 12px',
+  fontSize: '.75rem', fontWeight: 500,
   color: T.ink,
   ...extra,
 })
 
-// A chunky button.
-export const btn = (bg = T.red, fg = '#fff', extra = {}) => ({
+export const btn = (bg = T.ink, fg = '#fff', extra = {}) => ({
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
   background: bg, color: fg,
-  border: `2.5px solid ${T.ink}`,
-  borderRadius: 12,
-  padding: '11px 18px',
-  fontSize: '.92rem', fontWeight: 800,
+  border: 'none',
+  borderRadius: 8,
+  padding: '11px 20px',
+  fontSize: '.88rem', fontWeight: 500,
   cursor: 'pointer',
-  boxShadow: sticker(4),
-  transition: 'transform .1s, box-shadow .1s',
+  transition: 'opacity .15s',
   userSelect: 'none',
+  ...extra,
 })
 
-// Press-down interaction handlers for chunky buttons (call on a <button>).
+export const sticker = () => 'none'
+
 export const pressHandlers = {
-  onMouseDown: (e) => { e.currentTarget.style.transform = 'translate(3px,3px)'; e.currentTarget.style.boxShadow = sticker(1) },
-  onMouseUp:   (e) => { e.currentTarget.style.transform = 'translate(0,0)';     e.currentTarget.style.boxShadow = sticker(4) },
-  onMouseLeave:(e) => { e.currentTarget.style.transform = 'translate(0,0)';     e.currentTarget.style.boxShadow = sticker(4) },
+  onMouseDown: (e) => { e.currentTarget.style.opacity = '0.85' },
+  onMouseUp:   (e) => { e.currentTarget.style.opacity = '1' },
+  onMouseLeave:(e) => { e.currentTarget.style.opacity = '1' },
 }
 
 export const FONT = `'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif`

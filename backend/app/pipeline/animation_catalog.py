@@ -31,6 +31,7 @@ MOTIONS: list[Motion] = [
     Motion("float",  "Float",  "Rises up slowly and gently — dreamy, unhurried."),
     Motion("swoop",  "Swoop",  "Enters diagonally from the side and slightly above — an arcing swoop."),
     Motion("snap",   "Snap",   "Barely moves, then snaps into place at the last instant — a spring-release."),
+    Motion("none",   "None",   "No travel, in place like Cut — but grows slightly while it's their turn."),
 ]
 
 VALID_MOTIONS: set[str] = {m.id for m in MOTIONS}

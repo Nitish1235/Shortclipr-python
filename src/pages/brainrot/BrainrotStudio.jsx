@@ -1,20 +1,14 @@
 // BrainrotStudio.jsx — the Brainrot Clips Maker creator + clips history.
 //
-// Distinct "sticker / doodle" identity (see brainrotTheme.js) so it never
-// reads as a reskin of the YouTube-Shorts dashboard. One page:
-//   left  = build controls (script, cast, background, vibe)
-//   right = sticky 9:16 live preview + Generate
-//   below = your generated brainrot clips
-//
-// Every control is backed by a real /brainrot/* endpoint built in Phase 1/2:
-// characters (with images), voices (with previews + gender auto-assign),
-// entry/exit animations, gameplay backgrounds, job submit + poll.
+// Swiss minimal design: ultra-clean white surfaces, thin borders, no shadows,
+// typography-driven. Inter throughout. Same layout contract: left = controls,
+// right = sticky 9:16 preview + Generate, tabs for create/clips.
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { brainrotApi } from './brainrotApi'
-import { T, card, pill, btn, sticker, pressHandlers, FONT } from './brainrotTheme'
+import { T, card, pill, btn, pressHandlers, FONT } from './brainrotTheme'
 import PreviewStage from './PreviewStage'
 import { getChemistry } from './chemistry'
 import {
@@ -22,11 +16,6 @@ import {
   CAPTION_COLORS, CAPTION_COLOR_BY_ID, DEFAULT_CAPTION_COLOR, DEFAULT_CAPTION_Y,
 } from './captionStyles'
 
-// Evergreen 50/50 topics — reliably split an audience, which is what makes
-// a brainrot debate generate comments. Curated, not pulled from other users'
-// job history: script_input is live creator content and often half-formed,
-// so surfacing it cross-account would be a privacy leak dressed up as a
-// feature. See chemistry-pass design doc, Pass 05.
 const SPARK_TOPICS = [
   'iPhone vs Android', 'Pizza vs Burgers', 'Cats vs Dogs',
   'Morning person vs Night owl', 'Summer vs Winter', 'PS5 vs Xbox',
@@ -41,34 +30,14 @@ const PROVIDERS = [
 ]
 const ACTIVE_STATUSES = ['created', 'generating_script', 'synthesizing_voice', 'rendering']
 
-// Each stage is a distinct "room" in the studio — same underlying design
-// system, but its own accent color, editorial kicker label, and container
-// treatment so the user always knows where they are. The rail below is a
-// real progress spine (StageRail), not a row of interchangeable pills.
-//
-// accent: the one signature color that runs through only this stage's
-//         container (heading rule, active node in the rail, focused input
-//         underline). Kept inside the existing palette so nothing clashes.
-// kicker: the small caps-monospace label that sits above each stage's
-//         serif display heading — reads as a section marker in an editorial
-//         layout (Vogue TOC / annual-report chapter, not a form step).
-// title:  editorial noun-phrase headline for the stage (was just "Cast",
-//         now "Casting call" — same word, different job).
 const STAGES = [
-  { id: 'spark',  label: 'Spark',  icon: '💡', kicker: 'Chapter 01', title: 'The premise',     hint: 'What are they arguing about?',         accent: '#ffd23f' },
-  { id: 'cast',   label: 'Cast',   icon: '🎭', kicker: 'Chapter 02', title: 'Casting call',    hint: "Who's on screen?",                     accent: '#cf1322' },
-  { id: 'scene',  label: 'Scene',  icon: '🎮', kicker: 'Chapter 03', title: 'The backdrop',    hint: 'The satisfying loop behind it all.',   accent: '#2d6cdf' },
-  { id: 'style',  label: 'Style',  icon: '🎨', kicker: 'Chapter 04', title: 'Style & sound',   hint: 'Length, captions, motion, music.',     accent: '#1fa14e' },
-  { id: 'review', label: 'Review', icon: '✅', kicker: 'Chapter 05', title: 'Final callsheet', hint: 'Everything, at a glance.',             accent: '#161616' },
+  { id: 'spark',  label: 'Script',     title: 'Script',       hint: 'What are they arguing about?' },
+  { id: 'cast',   label: 'Cast',       title: 'Cast',         hint: "Who's on screen?" },
+  { id: 'scene',  label: 'Scene',      title: 'Scene',        hint: 'Pick a gameplay background.' },
+  { id: 'style',  label: 'Style',      title: 'Style',        hint: 'Length, captions, motion, music.' },
+  { id: 'review', label: 'Review',     title: 'Review',       hint: 'Everything at a glance.' },
 ]
 const STAGE_BY_ID = Object.fromEntries(STAGES.map(s => [s.id, s]))
-
-// The one editorial display face used across every stage heading. Kept
-// as a CSS var-style constant rather than a JS import so we can serve it
-// from Google Fonts (which is CSP-allowed in the app) via a <link> in
-// index.html without shipping any @font-face bytes here.
-const FONT_DISPLAY = `'Fraunces', 'Iowan Old Style', Georgia, serif`
-const FONT_MONO = `ui-monospace, 'SF Mono', Menlo, Consolas, monospace`
 
 export default function BrainrotStudio() {
   const { user, logout } = useAuth()
@@ -446,8 +415,7 @@ export default function BrainrotStudio() {
 
   // ── Render ──────────────────────────────────────────────────────
   return (
-    <div style={{ minHeight: '100vh', background: T.paper, fontFamily: FONT, color: T.ink,
-      backgroundImage: `radial-gradient(${T.ink}14 1px, transparent 1px)`, backgroundSize: '22px 22px' }}>
+    <div style={{ minHeight: '100vh', background: T.paper, fontFamily: FONT, color: T.ink }}>
 
       <Header user={user} onLogout={logout} navigate={navigate}
         connectionOffline={anyOffline} onRetryConnection={retryFetches} />
@@ -458,8 +426,8 @@ export default function BrainrotStudio() {
       {view === 'clips' ? (
         <ClipsLibrary clips={libraryClips} onCreate={() => setView('create')} />
       ) : (
-      <div style={{ maxWidth: 1180, margin: '0 auto', padding: '22px 20px 80px',
-        display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 340px', gap: 26, alignItems: 'start' }}>
+      <div style={{ maxWidth: 1140, margin: '0 auto', padding: '28px 24px 80px',
+        display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 32, alignItems: 'start' }}>
 
         {/* ══ LEFT: builder ══════════════════════════════════════ */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
@@ -468,42 +436,38 @@ export default function BrainrotStudio() {
 
           {stage === 'spark' && (
           <StageShell id="spark">
-            {/* A generous writing surface — feels like a manuscript page,
-                not a form field. Cream inner tint, hairline rule under the
-                text area that matches the stage accent. */}
             <div style={{ position: 'relative' }}>
               <textarea
                 value={script}
                 onChange={e => setScript(e.target.value)}
-                placeholder="A hot take. An argument. Something people would fight about in the comments."
+                placeholder="A hot take, an argument, something people would fight about in the comments..."
                 rows={4}
                 style={{
                   width: '100%', resize: 'vertical', boxSizing: 'border-box',
-                  background: '#fffdf5',
-                  border: `1.5px solid ${T.ink}22`,
-                  borderBottom: `3px solid ${STAGE_BY_ID.spark.accent}`,
-                  borderRadius: 12,
-                  padding: '18px 18px',
-                  fontSize: '1.05rem', fontFamily: FONT_DISPLAY, fontStyle: 'italic',
-                  color: T.ink, lineHeight: 1.55, outline: 'none',
+                  background: '#fff',
+                  border: `1px solid ${T.line}`,
+                  borderRadius: 10,
+                  padding: '14px 16px',
+                  fontSize: '.92rem', fontFamily: FONT,
+                  color: T.ink, lineHeight: 1.6, outline: 'none',
                 }}
               />
-              <div style={{ position: 'absolute', top: 10, right: 14, fontFamily: FONT_MONO,
-                fontSize: '.62rem', color: T.mute, letterSpacing: '.05em' }}>
+              <div style={{ position: 'absolute', top: 12, right: 14,
+                fontSize: '.7rem', color: T.mute }}>
                 {script.length}/280
               </div>
             </div>
 
             <div style={{ marginTop: 16 }}>
-              <SubLabel accent={STAGE_BY_ID.spark.accent}>Or try one that always lands</SubLabel>
+              <SubLabel>Or try a topic</SubLabel>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 <button onClick={() => setScript(pickTopic(script))} {...pressHandlers}
-                  style={{ ...pill(STAGE_BY_ID.spark.accent, { cursor: 'pointer', fontWeight: 900 }) }}>
-                  🎲 Surprise me
+                  style={{ ...pill(T.ink, { cursor: 'pointer', color: '#fff', border: 'none' }) }}>
+                  Surprise me
                 </button>
                 {SPARK_TOPICS.slice(0, 6).map(t => (
                   <button key={t} onClick={() => setScript(t)}
-                    style={{ ...pill('#fff', { cursor: 'pointer', border: `1.5px solid ${T.ink}33` }) }}>
+                    style={{ ...pill('#fff', { cursor: 'pointer' }) }}>
                     {t}
                   </button>
                 ))}
@@ -512,15 +476,15 @@ export default function BrainrotStudio() {
 
             <StageFootnote>
               The AI writes each character fully in-character and paces the dialogue to
-              your chosen clip length. You'll be able to edit any line before rendering.
+              your chosen clip length.
             </StageFootnote>
-            <StageNextButton label="Next — casting call" onClick={goNext} accent={STAGE_BY_ID.cast.accent} />
+            <StageNextButton label="Next: Cast" onClick={goNext} />
           </StageShell>
           )}
 
           {stage === 'cast' && (
           <StageShell id="cast">
-            <SubLabel accent={STAGE_BY_ID.cast.accent}>Cast size</SubLabel>
+            <SubLabel>Cast size</SubLabel>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 20 }}>
               {[
                 { n: 0, title: 'Solo narrator',  sub: 'Voice only' },
@@ -531,23 +495,22 @@ export default function BrainrotStudio() {
                 return (
                   <button key={opt.n} onClick={() => setCast(opt.n)}
                     style={{
-                      cursor: 'pointer', textAlign: 'left', padding: '10px 12px',
+                      cursor: 'pointer', textAlign: 'left', padding: '12px 14px',
                       background: on ? T.ink : '#fff',
                       color: on ? '#fff' : T.ink,
-                      border: `1.5px solid ${on ? T.ink : T.ink + '33'}`,
+                      border: `1px solid ${on ? T.ink : T.line}`,
                       borderRadius: 10, transition: 'all .12s',
                     }}>
-                    <div style={{ fontWeight: 800, fontSize: '.82rem' }}>{opt.title}</div>
-                    <div style={{ fontSize: '.64rem', opacity: .75, marginTop: 2 }}>{opt.sub}</div>
+                    <div style={{ fontWeight: 500, fontSize: '.85rem' }}>{opt.title}</div>
+                    <div style={{ fontSize: '.72rem', opacity: .6, marginTop: 2 }}>{opt.sub}</div>
                   </button>
                 )
               })}
             </div>
 
-            {/* signature casts — quick reload of a saved pair */}
             {signatureCasts.length > 0 && castCount === 2 && (
               <div style={{ marginBottom: 20 }}>
-                <SubLabel accent={STAGE_BY_ID.cast.accent}>Your signature casts</SubLabel>
+                <SubLabel>Saved casts</SubLabel>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {signatureCasts.map(cast => (
                     <SignatureCastChip key={cast.id} cast={cast} roster={roster}
@@ -558,10 +521,9 @@ export default function BrainrotStudio() {
               </div>
             )}
 
-            {/* picked character cards */}
             {picked.length > 0 && (
               <div style={{ marginBottom: 20 }}>
-                <SubLabel accent={STAGE_BY_ID.cast.accent}>On stage</SubLabel>
+                <SubLabel>Selected</SubLabel>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {picked.map(p => (
                     <PickedCard key={p.id} p={p} motions={motions}
@@ -578,17 +540,17 @@ export default function BrainrotStudio() {
                     <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
                       <div style={{ flex: 1 }}><ChemistryBadge chemistry={chemistry} /></div>
                       <button onClick={saveCurrentCast} disabled={isSavedPair || savingCast}
-                        title={isSavedPair ? 'Already saved' : 'Save this pair as a signature cast'}
+                        title={isSavedPair ? 'Already saved' : 'Save this pair'}
                         style={{
                           cursor: isSavedPair ? 'default' : 'pointer',
                           background: '#fff',
-                          border: `1.5px solid ${isSavedPair ? T.green : T.ink + '33'}`,
-                          borderRadius: 10, padding: '0 14px',
-                          fontWeight: 800, fontSize: '.76rem',
+                          border: `1px solid ${isSavedPair ? T.green : T.line}`,
+                          borderRadius: 8, padding: '0 14px',
+                          fontWeight: 500, fontSize: '.8rem',
                           color: isSavedPair ? T.green : T.ink,
                           whiteSpace: 'nowrap', fontFamily: FONT,
                         }}>
-                        {isSavedPair ? '✓ Saved' : savingCast ? 'Saving…' : 'Save cast'}
+                        {isSavedPair ? 'Saved' : savingCast ? 'Saving...' : 'Save cast'}
                       </button>
                     </div>
                   )}
@@ -598,63 +560,59 @@ export default function BrainrotStudio() {
 
             {castCount > 0 && !rosterOnline && roster.length === 0 ? (
               <OfflineState
-                title="Character library isn't reachable right now"
-                sub="Nothing on your end — we'll retry automatically. Or trigger it manually below."
+                title="Character library unreachable"
+                sub="We'll retry automatically, or you can trigger it manually."
                 onRetry={retryFetches}
               />
             ) : castCount > 0 ? (
               <>
-                <SubLabel accent={STAGE_BY_ID.cast.accent}>Choose from {roster.length || '100+'} characters</SubLabel>
+                <SubLabel>Characters ({roster.length || '100+'})</SubLabel>
                 <input value={charSearch} onChange={e => setCharSearch(e.target.value)}
-                  placeholder="Search by name, family, or archetype…"
+                  placeholder="Search by name, family, or archetype..."
                   style={{ width: '100%', boxSizing: 'border-box', marginBottom: 12,
-                    background: '#fff', border: `1.5px solid ${T.ink}22`, borderRadius: 10,
-                    padding: '10px 14px', fontSize: '.86rem', fontFamily: FONT, outline: 'none' }} />
-                {/* Casting-board treatment: dark backdrop lets character art pop
-                    like a theatrical spotlight, distinct from the paper feel of
-                    every other stage. */}
+                    background: '#fff', border: `1px solid ${T.line}`, borderRadius: 8,
+                    padding: '10px 14px', fontSize: '.85rem', fontFamily: FONT, outline: 'none' }} />
                 <div style={{
-                  background: 'radial-gradient(circle at 50% 30%, #23202b 0%, #16141c 100%)',
-                  borderRadius: 12, padding: 10,
-                  boxShadow: `inset 0 2px 12px rgba(0,0,0,.4)`,
+                  background: '#fff',
+                  border: `1px solid ${T.line}`,
+                  borderRadius: 10, padding: 8,
                 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(84px,1fr))',
-                    gap: 8, maxHeight: 320, overflowY: 'auto', padding: 4 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(80px,1fr))',
+                    gap: 6, maxHeight: 320, overflowY: 'auto', padding: 2 }}>
                     {filteredRoster.map(ch => {
                       const on = picked.some(p => p.id === ch.id)
                       return (
                         <button key={ch.id} onClick={() => toggleCharacter(ch)} title={`${ch.name} — ${ch.archetype}`}
                           style={{ position: 'relative', cursor: 'pointer', padding: 4,
-                            background: on ? STAGE_BY_ID.cast.accent : 'rgba(255,255,255,.04)',
-                            border: on ? `2px solid ${STAGE_BY_ID.cast.accent}` : `1px solid rgba(255,255,255,.08)`,
-                            borderRadius: 10, transition: 'all .1s' }}>
+                            background: on ? T.lineSoft : '#fff',
+                            border: on ? `2px solid ${T.ink}` : `1px solid ${T.line}`,
+                            borderRadius: 8, transition: 'all .1s' }}>
                           <div style={{ width: '100%', aspectRatio: '1', borderRadius: 6, overflow: 'hidden',
-                            background: 'rgba(0,0,0,.3)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+                            background: T.lineSoft, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
                             <img src={ch.image_url} alt={ch.name} loading="lazy"
                               style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                           </div>
-                          <div style={{ fontSize: '.58rem', fontWeight: 800, marginTop: 4, lineHeight: 1.1,
-                            color: on ? T.ink : '#fff',
+                          <div style={{ fontSize: '.62rem', fontWeight: 500, marginTop: 4, lineHeight: 1.1,
+                            color: T.ink,
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ch.name}</div>
-                          {on && <div style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18,
+                          {on && <div style={{ position: 'absolute', top: -5, right: -5, width: 16, height: 16,
                             borderRadius: '50%', background: T.ink, color: '#fff',
-                            fontSize: '.62rem', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</div>}
+                            fontSize: '.58rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</div>}
                         </button>
                       )
                     })}
                   </div>
                 </div>
-                {/* provider toggle */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
-                  <span style={{ fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 700, color: T.mute, letterSpacing: '.05em', textTransform: 'uppercase' }}>Voice engine</span>
+                  <span style={{ fontSize: '.75rem', color: T.mute }}>Voice engine</span>
                   {PROVIDERS.map(pr => (
                     <button key={pr.id} onClick={() => setProvider(pr.id)}
                       style={{
                         cursor: 'pointer', padding: '5px 12px',
                         background: provider === pr.id ? T.ink : '#fff',
                         color: provider === pr.id ? '#fff' : T.ink,
-                        border: `1.5px solid ${T.ink}33`,
-                        borderRadius: 999, fontSize: '.72rem', fontWeight: 700,
+                        border: `1px solid ${provider === pr.id ? T.ink : T.line}`,
+                        borderRadius: 999, fontSize: '.75rem', fontWeight: 500,
                       }}>
                       {pr.label}
                     </button>
@@ -666,7 +624,7 @@ export default function BrainrotStudio() {
                 Pure narrator voice-over — no characters on screen, just captions over gameplay.
               </StageFootnote>
             )}
-            <StageNextButton label="Next — the backdrop" onClick={goNext} accent={STAGE_BY_ID.scene.accent} />
+            <StageNextButton label="Next: Scene" onClick={goNext} />
           </StageShell>
           )}
 
@@ -674,18 +632,17 @@ export default function BrainrotStudio() {
           <StageShell id="scene">
             {!clipsOnline && clipsLib.length === 0 ? (
               <OfflineState
-                title="Backdrop library isn't reachable right now"
+                title="Backdrop library unreachable"
                 sub="Not your fault. Retry, or come back to this step later."
                 onRetry={retryFetches}
               />
             ) : clipsLib.length === 0 ? (
               <StageFootnote>
-                No backdrops uploaded to the library yet. An admin adds gameplay
-                clips through the internal library — check back once one lands.
+                No backdrops uploaded yet. An admin adds gameplay clips through the internal library.
               </StageFootnote>
             ) : (
               <>
-                <SubLabel accent={STAGE_BY_ID.scene.accent}>Category</SubLabel>
+                <SubLabel>Category</SubLabel>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
                   {categories.map(cat => (
                     <button key={cat} onClick={() => setCategory(cat)}
@@ -693,24 +650,21 @@ export default function BrainrotStudio() {
                         cursor: 'pointer',
                         background: category === cat ? T.ink : '#fff',
                         color: category === cat ? '#fff' : T.ink,
-                        border: `1.5px solid ${T.ink}33`,
-                        borderRadius: 999, padding: '5px 12px',
-                        fontSize: '.72rem', fontWeight: 700, fontFamily: FONT,
+                        border: `1px solid ${category === cat ? T.ink : T.line}`,
+                        borderRadius: 999, padding: '5px 14px',
+                        fontSize: '.75rem', fontWeight: 500, fontFamily: FONT,
                         textTransform: 'capitalize',
                       }}>
                       {cat.replace(/_/g, ' ')}
                     </button>
                   ))}
                 </div>
-                {/* Cinematic video-wall — dark inset frame lets the 9:16
-                    thumbnails read like an actual bank of screens in an
-                    editing suite, not a form's asset picker. */}
                 <div style={{
-                  background: '#0d0d10',
-                  border: `1.5px solid ${T.ink}33`,
-                  borderRadius: 12, padding: 10,
+                  background: '#fff',
+                  border: `1px solid ${T.line}`,
+                  borderRadius: 10, padding: 8,
                 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(96px,1fr))', gap: 6 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(92px,1fr))', gap: 6 }}>
                     {visibleClips.map(clip => (
                       <GameplayTile key={clip.id} clip={clip}
                         on={background?.id === clip.id} onClick={() => setBackground(clip)} />
@@ -719,24 +673,22 @@ export default function BrainrotStudio() {
                 </div>
               </>
             )}
-            <StageNextButton label="Next — style & sound" onClick={goNext} accent={STAGE_BY_ID.style.accent} />
+            <StageNextButton label="Next: Style" onClick={goNext} />
           </StageShell>
           )}
 
           {stage === 'style' && (
           <StageShell id="style">
-            {/* Length — big monospace digit as the primary readout, slider
-                and preset chips as the two ways to change it. */}
-            <SubLabel accent={STAGE_BY_ID.style.accent}>Clip length</SubLabel>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 10 }}>
-              <span style={{ fontFamily: FONT_MONO, fontSize: '2.4rem', fontWeight: 700, letterSpacing: '-.03em', color: T.ink, lineHeight: 1 }}>
+            <SubLabel>Duration</SubLabel>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: '1.8rem', fontWeight: 500, color: T.ink, lineHeight: 1 }}>
                 {duration}
               </span>
-              <span style={{ fontFamily: FONT_MONO, fontSize: '.9rem', color: T.mute }}>seconds</span>
+              <span style={{ fontSize: '.85rem', color: T.mute }}>seconds</span>
             </div>
             <input type="range" min={5} max={120} step={5} value={duration}
               onChange={e => setDuration(Number(e.target.value))}
-              style={{ width: '100%', accentColor: STAGE_BY_ID.style.accent }} />
+              style={{ width: '100%', accentColor: T.ink }} />
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8, marginBottom: 24 }}>
               {DURATION_PRESETS.map(d => (
                 <button key={d} onClick={() => setDuration(d)}
@@ -744,9 +696,9 @@ export default function BrainrotStudio() {
                     cursor: 'pointer',
                     background: duration === d ? T.ink : '#fff',
                     color: duration === d ? '#fff' : T.ink,
-                    border: `1.5px solid ${T.ink}33`,
+                    border: `1px solid ${duration === d ? T.ink : T.line}`,
                     borderRadius: 999, padding: '4px 12px',
-                    fontFamily: FONT_MONO, fontSize: '.72rem', fontWeight: 700,
+                    fontSize: '.75rem', fontWeight: 500,
                   }}>
                   {d}s
                 </button>
@@ -755,18 +707,18 @@ export default function BrainrotStudio() {
 
             <StageDivider />
 
-            <SubLabel accent={STAGE_BY_ID.style.accent}>Caption style</SubLabel>
+            <SubLabel>Caption style</SubLabel>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8, marginBottom: 10 }}>
               {CAPTION_PRESETS.map(cs => {
                 const on = captionStyle === cs.id
                 return (
                   <button key={cs.id} onClick={() => setCaption(cs.id)}
-                    style={{ cursor: 'pointer', textAlign: 'left', padding: '10px 12px',
+                    style={{ cursor: 'pointer', textAlign: 'left', padding: '12px 14px',
                       background: on ? T.ink : '#fff', color: on ? '#fff' : T.ink,
-                      border: on ? `1.5px solid ${T.ink}` : `1.5px solid ${T.ink}22`,
+                      border: `1px solid ${on ? T.ink : T.line}`,
                       borderRadius: 10, transition: 'all .12s' }}>
-                    <div style={{ fontSize: '.86rem', fontWeight: 800 }}>{cs.label}</div>
-                    <div style={{ fontSize: '.66rem', fontWeight: 500, opacity: .7, marginTop: 2 }}>{cs.sub}</div>
+                    <div style={{ fontSize: '.85rem', fontWeight: 500 }}>{cs.label}</div>
+                    <div style={{ fontSize: '.72rem', opacity: .6, marginTop: 2 }}>{cs.sub}</div>
                   </button>
                 )
               })}
@@ -775,13 +727,13 @@ export default function BrainrotStudio() {
             <button onClick={() => setShowMoreStyles(v => !v)}
               style={{
                 cursor: 'pointer', background: 'transparent', border: 'none', padding: '2px 0',
-                fontFamily: FONT, fontSize: '.76rem', fontWeight: 700, color: T.mute,
+                fontFamily: FONT, fontSize: '.8rem', fontWeight: 500, color: T.mute,
                 display: 'flex', alignItems: 'center', gap: 5, marginBottom: showMoreStyles ? 10 : 24,
               }}>
-              {showMoreStyles ? '▾' : '▸'} {showMoreStyles ? 'Hide' : 'More trending styles'}
+              {showMoreStyles ? 'Hide styles' : 'More styles'}
               {!showMoreStyles && CAPTION_TRENDING.some(cs => cs.id === captionStyle) && (
-                <span style={{ ...pill(STAGE_BY_ID.style.accent, { padding: '1px 7px', fontSize: '.6rem' }) }}>
-                  {CAPTION_STYLE_BY_ID[captionStyle]?.label} selected
+                <span style={{ ...pill(T.lineSoft, { padding: '2px 8px', fontSize: '.68rem' }) }}>
+                  {CAPTION_STYLE_BY_ID[captionStyle]?.label}
                 </span>
               )}
             </button>
@@ -789,18 +741,18 @@ export default function BrainrotStudio() {
             {showMoreStyles && (
               <div style={{
                 display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8, marginBottom: 24,
-                background: '#fffdf5', border: `1px solid ${T.ink}14`, borderRadius: 10, padding: 10,
+                background: T.paper, border: `1px solid ${T.line}`, borderRadius: 10, padding: 10,
               }}>
                 {CAPTION_TRENDING.map(cs => {
                   const on = captionStyle === cs.id
                   return (
                     <button key={cs.id} onClick={() => setCaption(cs.id)}
-                      style={{ cursor: 'pointer', textAlign: 'left', padding: '9px 11px',
+                      style={{ cursor: 'pointer', textAlign: 'left', padding: '10px 12px',
                         background: on ? T.ink : '#fff', color: on ? '#fff' : T.ink,
-                        border: on ? `1.5px solid ${T.ink}` : `1.5px solid ${T.ink}18`,
-                        borderRadius: 9, transition: 'all .12s' }}>
-                      <div style={{ fontSize: '.8rem', fontWeight: 800 }}>{cs.label}</div>
-                      <div style={{ fontSize: '.62rem', fontWeight: 500, opacity: .7, marginTop: 2 }}>{cs.sub}</div>
+                        border: `1px solid ${on ? T.ink : T.line}`,
+                        borderRadius: 8, transition: 'all .12s' }}>
+                      <div style={{ fontSize: '.82rem', fontWeight: 500 }}>{cs.label}</div>
+                      <div style={{ fontSize: '.68rem', opacity: .6, marginTop: 2 }}>{cs.sub}</div>
                     </button>
                   )
                 })}
@@ -808,8 +760,8 @@ export default function BrainrotStudio() {
             )}
 
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-              <SubLabel accent={STAGE_BY_ID.style.accent}>Caption color</SubLabel>
-              <span style={{ fontSize: '.72rem', fontWeight: 700, color: T.mute }}>
+              <SubLabel>Caption color</SubLabel>
+              <span style={{ fontSize: '.75rem', color: T.mute }}>
                 {CAPTION_COLOR_BY_ID[captionColor]?.label}
               </span>
             </div>
@@ -819,10 +771,10 @@ export default function BrainrotStudio() {
                 return (
                   <button key={c.id} onClick={() => setCaptionColor(c.id)} title={c.label}
                     style={{
-                      cursor: 'pointer', width: 34, height: 34, borderRadius: 9,
+                      cursor: 'pointer', width: 32, height: 32, borderRadius: 8,
                       background: c.text,
-                      border: `2px solid ${c.outline === '#FFFFFF' ? T.ink + '55' : c.outline}`,
-                      boxShadow: on ? `0 0 0 3px ${T.ink}` : 'none',
+                      border: `1px solid ${c.outline === '#FFFFFF' ? T.line : c.outline}`,
+                      boxShadow: on ? `0 0 0 2px ${T.ink}` : 'none',
                       transition: 'box-shadow .12s',
                     }} />
                 )
@@ -830,17 +782,17 @@ export default function BrainrotStudio() {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-              <SubLabel accent={STAGE_BY_ID.style.accent}>Caption position</SubLabel>
-              <span style={{ fontFamily: FONT_MONO, fontSize: '.68rem', fontWeight: 700, color: T.mute }}>
-                {Math.round(captionY * 100)}% down
+              <SubLabel>Caption position</SubLabel>
+              <span style={{ fontSize: '.75rem', color: T.mute }}>
+                {Math.round(captionY * 100)}%
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-              <span style={{ fontSize: '.68rem', fontWeight: 700, color: T.mute }}>Top</span>
+              <span style={{ fontSize: '.72rem', color: T.mute }}>Top</span>
               <input type="range" min={0} max={1} step={0.01} value={captionY}
                 onChange={e => setCaptionY(Number(e.target.value))}
-                style={{ flex: 1, accentColor: STAGE_BY_ID.style.accent }} />
-              <span style={{ fontSize: '.68rem', fontWeight: 700, color: T.mute }}>Bottom</span>
+                style={{ flex: 1, accentColor: T.ink }} />
+              <span style={{ fontSize: '.72rem', color: T.mute }}>Bottom</span>
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 24 }}>
               {[{ label: 'Top', v: 0.14 }, { label: 'Middle', v: 0.5 }, { label: 'Bottom', v: 0.82 }].map(p => (
@@ -849,83 +801,79 @@ export default function BrainrotStudio() {
                     cursor: 'pointer',
                     background: Math.abs(captionY - p.v) < 0.01 ? T.ink : '#fff',
                     color: Math.abs(captionY - p.v) < 0.01 ? '#fff' : T.ink,
-                    border: `1.5px solid ${T.ink}33`,
+                    border: `1px solid ${Math.abs(captionY - p.v) < 0.01 ? T.ink : T.line}`,
                     borderRadius: 999, padding: '4px 12px',
-                    fontSize: '.7rem', fontWeight: 700, fontFamily: FONT,
+                    fontSize: '.75rem', fontWeight: 500, fontFamily: FONT,
                   }}>
                   {p.label}
                 </button>
               ))}
             </div>
             <StageFootnote>
-              Horizontally always centered — drag the caption right on the preview, or use the slider. Burned in at this exact spot when your clip renders.
+              Drag the caption on the preview to reposition. Burned in at this exact spot when rendered.
             </StageFootnote>
 
             <StageDivider />
 
-            <SubLabel accent={STAGE_BY_ID.style.accent}>Motion mode</SubLabel>
+            <SubLabel>Motion mode</SubLabel>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 24 }}>
-              <button onClick={() => setMotionMode('turn_based')}
-                style={{
-                  cursor: 'pointer', textAlign: 'left', padding: '10px 12px',
-                  background: motionMode === 'turn_based' ? T.ink : '#fff',
-                  color: motionMode === 'turn_based' ? '#fff' : T.ink,
-                  border: motionMode === 'turn_based' ? `1.5px solid ${T.ink}` : `1.5px solid ${T.ink}22`,
-                  borderRadius: 10,
-                }}>
-                <div style={{ fontWeight: 800, fontSize: '.82rem' }}>Turn-based</div>
-                <div style={{ fontSize: '.64rem', fontWeight: 500, opacity: .75, marginTop: 2 }}>Enters/exits per line — classic brainrot</div>
-              </button>
-              <button onClick={() => setMotionMode('always_on')}
-                style={{
-                  cursor: 'pointer', textAlign: 'left', padding: '10px 12px',
-                  background: motionMode === 'always_on' ? T.ink : '#fff',
-                  color: motionMode === 'always_on' ? '#fff' : T.ink,
-                  border: motionMode === 'always_on' ? `1.5px solid ${T.ink}` : `1.5px solid ${T.ink}22`,
-                  borderRadius: 10,
-                }}>
-                <div style={{ fontWeight: 800, fontSize: '.82rem' }}>Always on</div>
-                <div style={{ fontSize: '.64rem', fontWeight: 500, opacity: .75, marginTop: 2 }}>Both stay put the whole clip</div>
-              </button>
+              {[
+                { id: 'turn_based', title: 'Turn-based', sub: 'Enters/exits per line' },
+                { id: 'always_on',  title: 'Always on',  sub: 'Both stay on screen' },
+              ].map(opt => {
+                const on = motionMode === opt.id
+                return (
+                  <button key={opt.id} onClick={() => setMotionMode(opt.id)}
+                    style={{
+                      cursor: 'pointer', textAlign: 'left', padding: '12px 14px',
+                      background: on ? T.ink : '#fff', color: on ? '#fff' : T.ink,
+                      border: `1px solid ${on ? T.ink : T.line}`,
+                      borderRadius: 10,
+                    }}>
+                    <div style={{ fontWeight: 500, fontSize: '.85rem' }}>{opt.title}</div>
+                    <div style={{ fontSize: '.72rem', opacity: .6, marginTop: 2 }}>{opt.sub}</div>
+                  </button>
+                )
+              })}
             </div>
 
             <StageDivider />
 
-            <SubLabel accent={STAGE_BY_ID.style.accent}>Background music</SubLabel>
+            <SubLabel>Background music</SubLabel>
             {musicLib.length === 0 ? (
-              <StageFootnote>No tracks in the library yet — an admin adds these.</StageFootnote>
+              <StageFootnote>No tracks in the library yet.</StageFootnote>
             ) : (
               <>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
                   <button onClick={() => setMusicId('')}
                     style={{
-                      cursor: 'pointer', padding: '5px 12px',
+                      cursor: 'pointer', padding: '5px 14px',
                       background: !musicId ? T.ink : '#fff',
                       color: !musicId ? '#fff' : T.ink,
-                      border: `1.5px solid ${T.ink}33`,
-                      borderRadius: 999, fontSize: '.72rem', fontWeight: 700, fontFamily: FONT,
+                      border: `1px solid ${!musicId ? T.ink : T.line}`,
+                      borderRadius: 999, fontSize: '.75rem', fontWeight: 500, fontFamily: FONT,
                     }}>None</button>
                   {musicLib.map(m => (
                     <button key={m.id} onClick={() => setMusicId(m.id)}
                       style={{
-                        cursor: 'pointer', padding: '5px 12px',
+                        cursor: 'pointer', padding: '5px 14px',
                         background: musicId === m.id ? T.ink : '#fff',
                         color: musicId === m.id ? '#fff' : T.ink,
-                        border: `1.5px solid ${T.ink}33`,
-                        borderRadius: 999, fontSize: '.72rem', fontWeight: 700, fontFamily: FONT,
+                        border: `1px solid ${musicId === m.id ? T.ink : T.line}`,
+                        borderRadius: 999, fontSize: '.75rem', fontWeight: 500, fontFamily: FONT,
                       }}>{m.name}</button>
                   ))}
                 </div>
                 {musicId && (
                   <div style={{ marginBottom: 8 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: FONT_MONO,
-                      fontSize: '.64rem', color: T.mute, marginBottom: 4 }}>
-                      <span>Volume · ducks under dialogue</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between',
+                      fontSize: '.75rem', color: T.mute, marginBottom: 4 }}>
+                      <span>Volume</span>
                       <span>{Math.round(musicVolume * 100)}%</span>
                     </div>
                     <input type="range" min={0.2} max={0.4} step={0.02} value={musicVolume}
                       onChange={e => setMusicVolume(Number(e.target.value))}
-                      style={{ width: '100%', accentColor: STAGE_BY_ID.style.accent }} />
+                      style={{ width: '100%', accentColor: T.ink }} />
                   </div>
                 )}
               </>
@@ -934,24 +882,24 @@ export default function BrainrotStudio() {
             {sfxLib.length > 0 && (
               <>
                 <div style={{ height: 20 }} />
-                <SubLabel accent={STAGE_BY_ID.style.accent}>Sound effects</SubLabel>
+                <SubLabel>Sound effects</SubLabel>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <label style={{ flex: 1 }}>
-                    <span style={{ fontFamily: FONT_MONO, fontSize: '.62rem', color: T.mute, letterSpacing: '.05em', textTransform: 'uppercase' }}>Intro</span>
+                    <span style={{ fontSize: '.72rem', color: T.mute, textTransform: 'uppercase' }}>Intro</span>
                     <select value={introSfxId} onChange={e => setIntroSfxId(e.target.value)}
                       style={{ width: '100%', boxSizing: 'border-box', marginTop: 4,
-                        background: '#fff', border: `1.5px solid ${T.ink}22`, borderRadius: 8,
-                        padding: '8px 10px', fontSize: '.78rem', fontFamily: FONT, cursor: 'pointer' }}>
+                        background: '#fff', border: `1px solid ${T.line}`, borderRadius: 8,
+                        padding: '8px 10px', fontSize: '.82rem', fontFamily: FONT, cursor: 'pointer' }}>
                       <option value="">None</option>
                       {sfxLib.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </label>
                   <label style={{ flex: 1 }}>
-                    <span style={{ fontFamily: FONT_MONO, fontSize: '.62rem', color: T.mute, letterSpacing: '.05em', textTransform: 'uppercase' }}>Outro</span>
+                    <span style={{ fontSize: '.72rem', color: T.mute, textTransform: 'uppercase' }}>Outro</span>
                     <select value={outroSfxId} onChange={e => setOutroSfxId(e.target.value)}
                       style={{ width: '100%', boxSizing: 'border-box', marginTop: 4,
-                        background: '#fff', border: `1.5px solid ${T.ink}22`, borderRadius: 8,
-                        padding: '8px 10px', fontSize: '.78rem', fontFamily: FONT, cursor: 'pointer' }}>
+                        background: '#fff', border: `1px solid ${T.line}`, borderRadius: 8,
+                        padding: '8px 10px', fontSize: '.82rem', fontFamily: FONT, cursor: 'pointer' }}>
                       <option value="">None</option>
                       {sfxLib.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
@@ -960,63 +908,55 @@ export default function BrainrotStudio() {
               </>
             )}
 
-            <StageNextButton label="Next — final callsheet" onClick={goNext} accent={STAGE_BY_ID.review.accent} />
+            <StageNextButton label="Next: Review" onClick={goNext} />
           </StageShell>
           )}
 
           {stage === 'review' && (
           <StageShell id="review">
-            {/* Callsheet: monospace lines like a shot list / receipt.
-                No dashed borders, no big colored banners — quiet confidence. */}
             <div style={{
-              border: `1.5px solid ${T.ink}`,
-              borderRadius: 12, overflow: 'hidden', background: '#fff',
+              border: `1px solid ${T.line}`,
+              borderRadius: 10, overflow: 'hidden', background: '#fff',
             }}>
               <div style={{ background: T.ink, color: '#fff',
-                padding: '10px 14px', display: 'flex', justifyContent: 'space-between',
-                alignItems: 'center', fontFamily: FONT_MONO, fontSize: '.62rem',
-                letterSpacing: '.1em', textTransform: 'uppercase' }}>
-                <span>Callsheet · Brainrot Clip</span>
-                <span style={{ opacity: .6 }}>{problems.length === 0 ? 'READY' : `${problems.length} MISSING`}</span>
+                padding: '10px 16px', display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', fontSize: '.75rem', fontWeight: 500 }}>
+                <span>Summary</span>
+                <span style={{ opacity: .6 }}>{problems.length === 0 ? 'Ready' : `${problems.length} missing`}</span>
               </div>
-              <CallsheetRow label="Premise" done={stageDone.spark} onEdit={() => goToStage('spark')}>
-                {script.trim() ? `"${script.trim().slice(0, 80)}${script.trim().length > 80 ? '…' : ''}"` : <em style={{ color: T.mute }}>No topic yet</em>}
+              <CallsheetRow label="Script" done={stageDone.spark} onEdit={() => goToStage('spark')}>
+                {script.trim() ? `"${script.trim().slice(0, 80)}${script.trim().length > 80 ? '...' : ''}"` : <em style={{ color: T.mute }}>No topic yet</em>}
               </CallsheetRow>
               <CallsheetRow label="Cast" done={stageDone.cast} onEdit={() => goToStage('cast')}>
                 {castCount === 0 ? 'Narrator only' :
-                  picked.length ? `${picked.map(p => p.name).join(' vs ')}${chemistry ? ` · ${chemistry.emoji} ${chemistry.label}` : ''}` :
+                  picked.length ? picked.map(p => p.name).join(' vs ') :
                   <em style={{ color: T.mute }}>{`0 of ${castCount} picked`}</em>}
               </CallsheetRow>
-              <CallsheetRow label="Backdrop" done={stageDone.scene} onEdit={() => goToStage('scene')}>
+              <CallsheetRow label="Scene" done={stageDone.scene} onEdit={() => goToStage('scene')}>
                 {background ? `${background.category?.replace(/_/g, ' ') || 'Background'}${background.source_title ? ` — ${background.source_title}` : ''}` :
                   <em style={{ color: T.mute }}>No backdrop yet</em>}
               </CallsheetRow>
               <CallsheetRow label="Style" done={stageDone.style} onEdit={() => goToStage('style')} last>
-                {duration}s · {CAPTION_STYLE_BY_ID[captionStyle]?.label || captionStyle} ({CAPTION_COLOR_BY_ID[captionColor]?.label}) · {motionMode === 'always_on' ? 'always on' : 'turn-based'}
-                {musicId ? ` · music: ${musicLib.find(m => m.id === musicId)?.name || 'on'}` : ''}
+                {duration}s · {CAPTION_STYLE_BY_ID[captionStyle]?.label || captionStyle} · {motionMode === 'always_on' ? 'always on' : 'turn-based'}
+                {musicId ? ` · ${musicLib.find(m => m.id === musicId)?.name || 'music'}` : ''}
               </CallsheetRow>
             </div>
 
-            <div style={{ marginTop: 18, display: 'flex', gap: 10, alignItems: 'flex-start',
-              padding: '12px 14px', background: '#fffdf5',
-              borderLeft: `3px solid ${STAGE_BY_ID.review.accent}`, borderRadius: 6 }}>
-              <div style={{ fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 700,
-                color: T.mute, letterSpacing: '.06em', flexShrink: 0, paddingTop: 2 }}>COST</div>
-              <div style={{ fontSize: '.8rem', color: T.ink, lineHeight: 1.5 }}>
-                <strong>1 credit</strong> — charged only when the clip finishes rendering.
-                If anything fails on our end, it's refunded automatically.
+            <div style={{ marginTop: 16, padding: '12px 16px',
+              background: T.paper, borderRadius: 8 }}>
+              <div style={{ fontSize: '.82rem', color: T.ink, lineHeight: 1.5 }}>
+                <strong style={{ fontWeight: 500 }}>1 credit</strong> — charged only when the clip finishes rendering.
+                Refunded automatically if anything fails.
               </div>
             </div>
 
             {problems.length > 0 && (
-              <div style={{ marginTop: 12, padding: '10px 14px',
-                background: '#fff8f8', borderLeft: `3px solid ${T.red}`, borderRadius: 6 }}>
-                <div style={{ fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 700,
-                  color: T.redDark, letterSpacing: '.06em', marginBottom: 6 }}>NEEDS ATTENTION</div>
+              <div style={{ marginTop: 12, padding: '12px 16px',
+                background: '#fef2f2', borderRadius: 8 }}>
                 {problems.map((p, i) => (
-                  <div key={i} style={{ fontSize: '.8rem', fontWeight: 600, color: T.ink,
+                  <div key={i} style={{ fontSize: '.82rem', fontWeight: 500, color: T.redDark,
                     display: 'flex', gap: 8, marginBottom: 2 }}>
-                    <span style={{ color: T.red, fontWeight: 900 }}>·</span>{p}
+                    <span>·</span>{p}
                   </div>
                 ))}
               </div>
@@ -1033,6 +973,7 @@ export default function BrainrotStudio() {
             captionStyle={captionStyle}
             captionColor={captionColor}
             captionY={captionY}
+            motionMode={motionMode}
             onMoveCharacter={moveCharacter}
             onMoveCaption={moveCaption}
             chemistry={chemistry}
@@ -1043,23 +984,21 @@ export default function BrainrotStudio() {
           ) : (
             <>
               <button onClick={generate} disabled={!canGenerate} {...pressHandlers}
-                style={{ ...btn(canGenerate ? T.red : '#c9c2b2', '#fff'),
-                  width: '100%', padding: '15px 0', fontSize: '1.05rem',
-                  cursor: canGenerate ? 'pointer' : 'not-allowed',
-                  boxShadow: canGenerate ? sticker(5) : 'none' }}>
-                {submitting ? 'Starting…' : '⚡ Generate Brainrot Clip'}
+                style={{ ...btn(canGenerate ? T.ink : T.line, '#fff'),
+                  width: '100%', padding: '14px 0', fontSize: '.92rem',
+                  cursor: canGenerate ? 'pointer' : 'not-allowed' }}>
+                {submitting ? 'Starting...' : 'Generate'}
               </button>
               {problems.length > 0 && (
-                <div style={{ padding: '10px 14px', background: '#fffdf7',
-                  border: `1px solid ${T.ink}18`, borderRadius: 10 }}>
-                  <div style={{ fontFamily: FONT_MONO, fontSize: '.6rem', fontWeight: 700,
-                    color: T.mute, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+                <div style={{ padding: '12px 14px', background: T.paper,
+                  borderRadius: 8 }}>
+                  <div style={{ fontSize: '.72rem', color: T.mute, marginBottom: 6 }}>
                     Still needed
                   </div>
                   {problems.map((p, i) => (
-                    <div key={i} style={{ fontSize: '.78rem', fontWeight: 600, color: T.ink,
+                    <div key={i} style={{ fontSize: '.8rem', fontWeight: 500, color: T.ink,
                       display: 'flex', gap: 7, marginBottom: 2 }}>
-                      <span style={{ color: T.red, fontWeight: 900 }}>·</span>{p}
+                      <span style={{ color: T.mute }}>·</span>{p}
                     </div>
                   ))}
                 </div>
@@ -1070,12 +1009,12 @@ export default function BrainrotStudio() {
       </div>
       )}
 
-      {/* toast */}
       {toast && (
-        <div style={{ position: 'fixed', bottom: 22, left: '50%', transform: 'translateX(-50%)', zIndex: 999,
-          ...card({ background: toast.type === 'err' ? '#fff4f4' : toast.type === 'ok' ? '#f2fff5' : T.paper2 }),
-          padding: '11px 18px', fontSize: '.86rem', fontWeight: 800,
-          color: toast.type === 'err' ? T.redDark : toast.type === 'ok' ? T.green : T.ink }}>
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 999,
+          background: toast.type === 'err' ? '#fef2f2' : toast.type === 'ok' ? '#f0fdf4' : '#fff',
+          border: `1px solid ${toast.type === 'err' ? '#fecaca' : toast.type === 'ok' ? '#bbf7d0' : T.line}`,
+          borderRadius: 8, padding: '10px 18px', fontSize: '.85rem', fontWeight: 500,
+          color: toast.type === 'err' ? T.redDark : toast.type === 'ok' ? '#166534' : T.ink }}>
           {toast.msg}
         </div>
       )}
@@ -1091,33 +1030,20 @@ function pickTopic(current) {
   return pool[Math.floor(Math.random() * pool.length)] || SPARK_TOPICS[0]
 }
 
-// ── Header ────────────────────────────────────────────────────────
-// ── Header ────────────────────────────────────────────────────────
-// Clean, quiet, editorial. Accepts an optional connection-offline chip
-// that replaces the old page-wide red banner — see anyOffline logic in
-// the main component.
 function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection }) {
   const initials = (user?.full_name || user?.email || 'U')[0].toUpperCase()
   return (
     <header style={{
-      position: 'sticky', top: 0, zIndex: 200, background: 'rgba(251,246,234,.92)',
-      backdropFilter: 'blur(10px)',
-      borderBottom: `1px solid ${T.ink}22`, padding: '14px 24px',
+      position: 'sticky', top: 0, zIndex: 200, background: 'rgba(255,255,255,.92)',
+      backdropFilter: 'blur(12px)',
+      borderBottom: `1px solid ${T.line}`, padding: '12px 24px',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: '1.35rem' }}>🧠</span>
-          <div>
-            <div style={{ fontFamily: FONT_DISPLAY, fontSize: '1.15rem', fontWeight: 700, lineHeight: 1, letterSpacing: '-.02em' }}>
-              Brainrot <span style={{ fontStyle: 'italic', color: T.red }}>Studio</span>
-            </div>
-            <div style={{ fontFamily: FONT_MONO, fontSize: '.58rem', fontWeight: 500, color: T.mute,
-              textTransform: 'uppercase', letterSpacing: '.14em', marginTop: 2 }}>
-              by ShortClipr
-            </div>
-          </div>
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 24, height: 24, borderRadius: 6, background: T.ink }} />
+        <span style={{ fontSize: '.95rem', fontWeight: 500, letterSpacing: '-.02em' }}>
+          Brainrot Studio
+        </span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {connectionOffline && (
@@ -1125,29 +1051,28 @@ function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection
             title="Some data isn't reachable — click to retry"
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-              background: 'rgba(255,210,63,.18)',
-              border: `1px solid rgba(207,19,34,.35)`, borderRadius: 999,
-              padding: '4px 12px 4px 10px',
-              fontFamily: FONT, fontSize: '.72rem', fontWeight: 600, color: T.ink,
+              background: '#fef2f2', border: `1px solid #fecaca`, borderRadius: 999,
+              padding: '4px 12px',
+              fontFamily: FONT, fontSize: '.75rem', fontWeight: 500, color: T.redDark,
             }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.red,
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.red,
               display: 'inline-block', animation: 'br-pulse-dot 1.4s ease-in-out infinite' }} />
             Reconnecting
           </button>
         )}
         <Link to="/youtube-shorts/dashboard" style={{
-          fontFamily: FONT, fontSize: '.78rem', fontWeight: 600, color: T.mute,
+          fontFamily: FONT, fontSize: '.82rem', fontWeight: 500, color: T.mute,
           textDecoration: 'none', padding: '6px 10px', borderRadius: 6,
-        }}>← Shorts dashboard</Link>
-        <div style={{ width: 32, height: 32, borderRadius: '50%',
-          background: T.ink, border: `1px solid ${T.ink}`,
+        }}>Shorts dashboard</Link>
+        <div style={{ width: 30, height: 30, borderRadius: '50%',
+          background: T.lineSoft,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#fff', fontWeight: 700, fontSize: '.78rem', overflow: 'hidden' }}>
+          color: T.ink, fontWeight: 500, fontSize: '.78rem', overflow: 'hidden' }}>
           {user?.avatar_url ? <img src={user.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials}
         </div>
         <button onClick={onLogout} style={{
           background: 'transparent', border: 'none', cursor: 'pointer',
-          fontFamily: FONT, fontSize: '.75rem', fontWeight: 600, color: T.mute,
+          fontFamily: FONT, fontSize: '.78rem', fontWeight: 500, color: T.mute,
           padding: '4px 8px',
         }}>Sign out</button>
       </div>
@@ -1159,51 +1084,43 @@ function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection
   )
 }
 
-// ── ViewTabs ─────────────────────────────────────────────────────
-// The studio's top-level menu: build a new clip, or browse everything
-// you've already made. Sits directly under the header as a persistent
-// wayfinder — not buried in a dropdown — so "where are my old clips"
-// never requires scrolling to find out.
 function ViewTabs({ view, onChange, clipCount, renderingCount }) {
   const TABS = [
-    { id: 'create', label: 'Create', icon: '⚡' },
-    { id: 'clips',  label: 'My Clips', icon: '🎬', count: clipCount },
+    { id: 'create', label: 'Create' },
+    { id: 'clips',  label: 'My clips', count: clipCount },
   ]
   return (
     <div style={{
-      position: 'sticky', top: 65, zIndex: 150,
-      background: 'rgba(251,246,234,.92)', backdropFilter: 'blur(10px)',
-      borderBottom: `1px solid ${T.ink}14`,
+      position: 'sticky', top: 49, zIndex: 150,
+      background: 'rgba(255,255,255,.92)', backdropFilter: 'blur(12px)',
+      borderBottom: `1px solid ${T.line}`,
     }}>
-      <div style={{ maxWidth: 1180, margin: '0 auto', padding: '10px 20px 0',
-        display: 'flex', gap: 6 }}>
+      <div style={{ maxWidth: 1140, margin: '0 auto', padding: '0 24px',
+        display: 'flex', gap: 4 }}>
         {TABS.map(t => {
           const on = view === t.id
           return (
             <button key={t.id} onClick={() => onChange(t.id)}
               style={{
-                position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7,
-                padding: '9px 16px', fontFamily: FONT, fontSize: '.84rem', fontWeight: 800,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                padding: '12px 16px', fontFamily: FONT, fontSize: '.85rem', fontWeight: 500,
                 color: on ? T.ink : T.mute,
-                background: on ? T.paper2 : 'transparent',
-                border: `1.5px solid ${on ? T.ink : 'transparent'}`,
-                borderBottom: on ? `1.5px solid ${T.paper2}` : `1.5px solid transparent`,
-                borderRadius: '10px 10px 0 0',
-                marginBottom: -1,
+                background: 'transparent', border: 'none',
+                borderBottom: `2px solid ${on ? T.ink : 'transparent'}`,
                 transition: 'all .12s',
               }}>
-              <span>{t.icon}</span>{t.label}
+              {t.label}
               {typeof t.count === 'number' && t.count > 0 && (
                 <span style={{
-                  fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 800,
-                  color: on ? '#fff' : T.ink,
-                  background: on ? T.ink : `${T.ink}14`,
-                  borderRadius: 999, padding: '1px 6px', minWidth: 16, textAlign: 'center',
+                  fontSize: '.7rem', fontWeight: 500,
+                  color: on ? '#fff' : T.mute,
+                  background: on ? T.ink : T.lineSoft,
+                  borderRadius: 999, padding: '1px 7px', minWidth: 16, textAlign: 'center',
                 }}>{t.count}</span>
               )}
               {t.id === 'clips' && renderingCount > 0 && (
                 <span title={`${renderingCount} rendering`} style={{
-                  width: 7, height: 7, borderRadius: '50%', background: T.red,
+                  width: 6, height: 6, borderRadius: '50%', background: T.red,
                   animation: 'br-pulse-dot 1.4s ease-in-out infinite',
                 }} />
               )}
@@ -1215,47 +1132,25 @@ function ViewTabs({ view, onChange, clipCount, renderingCount }) {
   )
 }
 
-// ── StageShell — one per stage, gives each its own visual identity ──
-// A stage's outer container isn't a generic sticker card anymore. It's a
-// spacious editorial page-fragment with a colored accent rail on the left
-// (the stage's signature accent), a monospace kicker label ("Chapter 02"),
-// and a serif display heading. Same container across all stages so the
-// system reads as coherent; the accent color and heading text are what
-// give each stage its own room.
 function StageShell({ id, children }) {
   const meta = STAGE_BY_ID[id]
   return (
     <section style={{
-      background: '#fffdf7',
-      borderRadius: 16,
-      border: `1px solid ${T.ink}18`,
-      boxShadow: `0 1px 0 ${T.ink}08, 0 12px 40px -20px ${T.ink}22`,
-      overflow: 'hidden',
-      position: 'relative',
+      background: '#fff',
+      borderRadius: 12,
+      border: `1px solid ${T.line}`,
     }}>
-      {/* Accent rail — the one bit of stage-specific color on the shell */}
-      <div style={{
-        position: 'absolute', left: 0, top: 0, bottom: 0, width: 4,
-        background: meta.accent,
-      }} />
-      <div style={{ padding: '26px 28px 28px 32px' }}>
-        <div style={{
-          fontFamily: FONT_MONO, fontSize: '.65rem', fontWeight: 600,
-          color: T.mute, letterSpacing: '.14em', textTransform: 'uppercase',
-          marginBottom: 4,
-        }}>
-          {meta.kicker} · {meta.label}
-        </div>
+      <div style={{ padding: '24px 24px 28px' }}>
         <h2 style={{
-          margin: '0 0 6px', fontFamily: FONT_DISPLAY, fontWeight: 600,
-          fontSize: 'clamp(1.5rem, 2.2vw, 1.85rem)', letterSpacing: '-.02em',
-          color: T.ink, lineHeight: 1.05,
+          margin: '0 0 4px', fontWeight: 500,
+          fontSize: '1.15rem', letterSpacing: '-.02em',
+          color: T.ink, lineHeight: 1.2,
         }}>
           {meta.title}
         </h2>
         <p style={{
-          margin: '0 0 22px', fontSize: '.86rem', color: T.mute,
-          lineHeight: 1.5, maxWidth: '52ch',
+          margin: '0 0 20px', fontSize: '.85rem', color: T.mute,
+          lineHeight: 1.5,
         }}>
           {meta.hint}
         </p>
@@ -1265,82 +1160,70 @@ function StageShell({ id, children }) {
   )
 }
 
-// ── SubLabel — the small monospace section marker inside a StageShell ──
-function SubLabel({ children, accent }) {
+function SubLabel({ children }) {
   return (
     <div style={{
-      display: 'inline-flex', alignItems: 'center', gap: 8,
-      fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 700,
-      color: T.mute, letterSpacing: '.08em', textTransform: 'uppercase',
-      marginBottom: 10,
+      fontSize: '.75rem', fontWeight: 500,
+      color: T.mute, textTransform: 'uppercase',
+      letterSpacing: '.04em',
+      marginBottom: 8,
     }}>
-      {accent && <span style={{ width: 8, height: 8, background: accent, borderRadius: 2 }} />}
       {children}
     </div>
   )
 }
 
-// ── StageDivider — hair-thin rule between sub-groups inside a shell ──
 function StageDivider() {
-  return <div style={{ height: 1, background: `${T.ink}12`, margin: '2px 0 20px' }} />
+  return <div style={{ height: 1, background: T.lineSoft, margin: '4px 0 20px' }} />
 }
 
-// ── StageFootnote — small muted explanatory copy at the bottom ──
 function StageFootnote({ children }) {
   return (
     <p style={{
-      margin: '14px 0 0', fontSize: '.76rem', color: T.mute,
-      lineHeight: 1.55, fontStyle: 'italic',
+      margin: '14px 0 0', fontSize: '.8rem', color: T.mute,
+      lineHeight: 1.55,
     }}>
       {children}
     </p>
   )
 }
 
-// ── StageNextButton — quiet forward affordance, not a chunky primary ──
-// The rail supports jumping anywhere; this is just the linear "keep going"
-// path a first-time user naturally follows. Restraint here matters —
-// the real primary CTA is Generate in the right column.
-function StageNextButton({ label, onClick, accent = T.red }) {
+function StageNextButton({ label, onClick }) {
   return (
     <button onClick={onClick}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 6,
-        marginTop: 26, cursor: 'pointer',
+        marginTop: 24, cursor: 'pointer',
         background: 'transparent', border: 'none',
-        fontFamily: FONT, fontSize: '.82rem', fontWeight: 700, color: T.ink,
-        padding: '4px 0', letterSpacing: '-.01em',
+        fontFamily: FONT, fontSize: '.85rem', fontWeight: 500, color: T.ink,
+        padding: '4px 0',
       }}
-      onMouseEnter={e => { e.currentTarget.style.color = accent }}
-      onMouseLeave={e => { e.currentTarget.style.color = T.ink }}
+      onMouseEnter={e => { e.currentTarget.style.opacity = '0.6' }}
+      onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
     >
-      {label} <span style={{ transition: 'transform .12s', display: 'inline-block' }}>→</span>
+      {label} <span style={{ display: 'inline-block' }}>→</span>
     </button>
   )
 }
 
-// ── CallsheetRow — one line in the Review stage's callsheet ──
-// Monospace treatment, thin rules, no dashed borders. Reads as a shot
-// list / receipt / manifest — quiet confidence, not a form.
 function CallsheetRow({ label, done, onEdit, children, last }) {
   return (
     <div style={{
-      display: 'grid', gridTemplateColumns: '90px 1fr 60px', gap: 12, alignItems: 'center',
-      padding: '12px 14px',
-      borderBottom: last ? 'none' : `1px solid ${T.ink}12`,
+      display: 'grid', gridTemplateColumns: '80px 1fr 50px', gap: 12, alignItems: 'center',
+      padding: '12px 16px',
+      borderBottom: last ? 'none' : `1px solid ${T.lineSoft}`,
     }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 6,
-        fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 700,
+        fontSize: '.78rem', fontWeight: 500,
         color: done ? T.ink : T.mute,
-        letterSpacing: '.08em', textTransform: 'uppercase',
       }}>
-        <span style={{ color: done ? T.green : T.ink + '55', fontFamily: FONT }}>
+        <span style={{ color: done ? T.green : T.line, fontSize: '.6rem' }}>
           {done ? '●' : '○'}
         </span>
         {label}
       </div>
-      <div style={{ fontSize: '.86rem', color: T.ink, overflow: 'hidden',
+      <div style={{ fontSize: '.85rem', color: T.ink, overflow: 'hidden',
         textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {children}
       </div>
@@ -1348,9 +1231,8 @@ function CallsheetRow({ label, done, onEdit, children, last }) {
         style={{
           justifySelf: 'end', cursor: 'pointer',
           background: 'transparent', border: 'none',
-          fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 700,
-          color: T.mute, letterSpacing: '.08em', textTransform: 'uppercase',
-          padding: '4px 6px',
+          fontFamily: FONT, fontSize: '.75rem', fontWeight: 500,
+          color: T.mute, padding: '4px 6px',
         }}
         onMouseEnter={e => e.currentTarget.style.color = T.ink}
         onMouseLeave={e => e.currentTarget.style.color = T.mute}
@@ -1373,17 +1255,16 @@ function OfflineState({ title, sub, onRetry }) {
   return (
     <div style={{
       textAlign: 'center', padding: '32px 20px',
-      background: '#fffdf5',
-      border: `1px dashed ${T.ink}33`,
+      background: T.paper2,
+      border: `1px solid ${T.line}`,
       borderRadius: 12,
     }}>
-      <div style={{ fontSize: '1.8rem', marginBottom: 10, opacity: .35 }}>⚡</div>
-      <div style={{ fontFamily: FONT_DISPLAY, fontSize: '1rem', fontWeight: 600,
-        color: T.ink, marginBottom: 6, letterSpacing: '-.01em' }}>
+      <div style={{ fontSize: '1rem', fontWeight: 500,
+        color: T.ink, marginBottom: 6 }}>
         {title}
       </div>
       {sub && (
-        <div style={{ fontSize: '.78rem', color: T.mute, lineHeight: 1.5,
+        <div style={{ fontSize: '.8rem', color: T.mute, lineHeight: 1.5,
           maxWidth: '38ch', margin: '0 auto 16px' }}>
           {sub}
         </div>
@@ -1393,7 +1274,7 @@ function OfflineState({ title, sub, onRetry }) {
           cursor: retrying ? 'default' : 'pointer',
           background: T.ink, color: '#fff',
           border: 'none', borderRadius: 8, padding: '8px 18px',
-          fontFamily: FONT, fontSize: '.78rem', fontWeight: 700,
+          fontFamily: FONT, fontSize: '.8rem', fontWeight: 500,
           opacity: retrying ? .6 : 1,
         }}>
         {retrying ? 'Retrying…' : 'Retry'}
@@ -1402,119 +1283,44 @@ function OfflineState({ title, sub, onRetry }) {
   )
 }
 
-// ── StageRail — a real progress spine, not a row of pills ──
-// Horizontal, always visible, every stage clickable — same navigation
-// contract as before. What changed: it now reads as a *progression* —
-// numbered nodes on a shared spine, connectors between them filled dark
-// where done, muted where remaining, current stage sized larger with
-// its own accent color as the spot of emphasis. Feels like a printed
-// table of contents, not a form's step indicator.
 function StageRail({ stage, onJump, stageDone }) {
-  const activeIdx = STAGES.findIndex(s => s.id === stage)
-  const active = STAGES[activeIdx]
   const doneCount = STAGES.filter(s => stageDone[s.id]).length
 
   return (
     <div style={{
-      background: '#fffdf7',
-      border: `1px solid ${T.ink}12`,
-      borderRadius: 14,
-      padding: '18px 22px 20px',
-      boxShadow: `0 1px 0 ${T.ink}05`,
+      display: 'flex', alignItems: 'center', gap: 2,
+      background: T.paper2,
+      border: `1px solid ${T.line}`,
+      borderRadius: 10,
+      padding: 4,
     }}>
-      {/* Live readout — which chapter you're in + overall completion,
-          so the rail below reads as a map, not just a row of buttons. */}
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: '1.1rem' }}>{active.icon}</span>
-          <span style={{ fontFamily: FONT_DISPLAY, fontSize: '1rem', fontWeight: 600, color: T.ink }}>
-            {active.title}
-          </span>
-        </div>
-        <span style={{ fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 700,
-          color: T.mute, letterSpacing: '.06em' }}>
-          {doneCount}/{STAGES.length} READY
-        </span>
-      </div>
-
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(${STAGES.length}, 1fr)`,
-        alignItems: 'flex-start',
-        position: 'relative',
-        gap: 4,
-      }}>
-        {/* Connector line — sits behind the nodes, fills with the completed
-            stages' own accent colors rather than a flat ink bar. */}
-        <div style={{
-          position: 'absolute', left: '10%', right: '10%', top: 17, height: 2,
-          background: `${T.ink}16`, borderRadius: 2, zIndex: 0, overflow: 'hidden',
-        }}>
-          <div style={{
-            height: '100%', borderRadius: 2,
-            width: `${(activeIdx / (STAGES.length - 1)) * 100}%`,
-            background: `linear-gradient(to right, ${STAGES.map(s => s.accent).join(',')})`,
-            transition: 'width .25s ease',
-          }} />
-        </div>
-        {STAGES.map((s, i) => {
-          const isActive = stage === s.id
-          const done = stageDone[s.id]
-          const isPast = i < activeIdx
-          return (
-            <button key={s.id} onClick={() => onJump(s.id)} title={s.hint}
-              style={{
-                cursor: 'pointer', background: 'transparent', border: 'none',
-                padding: 0, display: 'flex', flexDirection: 'column',
-                alignItems: 'center', gap: 8, position: 'relative', zIndex: 1,
-                fontFamily: FONT,
-              }}>
-              <div style={{
-                position: 'relative',
-                width: isActive ? 38 : 32, height: isActive ? 38 : 32,
-                borderRadius: '50%',
-                background: isActive ? s.accent : done || isPast ? '#fff' : '#fffdf7',
-                border: `1.5px solid ${isActive || done || isPast ? T.ink : T.ink + '44'}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: isActive ? '1.05rem' : '.9rem',
-                transition: 'all .18s ease',
-                boxShadow: isActive ? `0 0 0 5px ${s.accent}2a, 0 6px 14px ${s.accent}55` : 'none',
-                transform: isActive ? 'translateY(-1px)' : 'none',
-              }}>
-                <span style={{ filter: !isActive && !done && !isPast ? 'grayscale(1) opacity(.5)' : 'none' }}>{s.icon}</span>
-                {(done || isPast) && (
-                  <span style={{
-                    position: 'absolute', bottom: -3, right: -3,
-                    width: 15, height: 15, borderRadius: '50%',
-                    background: T.green, border: `1.5px solid ${T.paper2}`,
-                    color: '#fff', fontSize: '.5rem', fontWeight: 900,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>✓</span>
-                )}
-              </div>
-              <div style={{
-                fontSize: isActive ? '.75rem' : '.7rem',
-                fontWeight: isActive ? 800 : 500,
-                color: isActive ? T.ink : done || isPast ? T.ink : T.mute,
-                letterSpacing: '-.01em',
-                transition: 'all .18s ease',
-              }}>
-                {s.label}
-              </div>
-            </button>
-          )
-        })}
-      </div>
+      {STAGES.map((s) => {
+        const isActive = stage === s.id
+        const done = stageDone[s.id]
+        return (
+          <button key={s.id} onClick={() => onJump(s.id)} title={s.hint}
+            style={{
+              cursor: 'pointer', border: 'none',
+              flex: 1, padding: '8px 6px',
+              borderRadius: 8,
+              background: isActive ? T.ink : 'transparent',
+              color: isActive ? '#fff' : done ? T.ink : T.mute,
+              fontFamily: FONT, fontSize: '.78rem', fontWeight: 500,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+              transition: 'all .15s',
+            }}>
+            {done && !isActive && <span style={{ color: T.green, fontSize: '.6rem' }}>●</span>}
+            {s.label}
+          </button>
+        )
+      })}
+      <span style={{ fontSize: '.7rem', fontWeight: 500, color: T.mute, padding: '0 8px', whiteSpace: 'nowrap' }}>
+        {doneCount}/{STAGES.length}
+      </span>
     </div>
   )
 }
 
-// ── Gameplay backdrop tile ──────────────────────────────────────────
-// Hover-to-play: shows the poster thumbnail at rest (cheap — no video
-// decode for tiles the user isn't looking at) and swaps to the real
-// looping clip on hover, same footage that renders server-side. Playing
-// every tile at once would mean dozens of simultaneous video decodes for
-// a library this size — hover keeps it to at most one.
 function GameplayTile({ clip, on, onClick }) {
   const videoRef = useRef(null)
   const handleEnter = () => { videoRef.current?.play().catch(() => {}) }
@@ -1526,8 +1332,8 @@ function GameplayTile({ clip, on, onClick }) {
     <button onClick={onClick} onMouseEnter={handleEnter} onMouseLeave={handleLeave}
       style={{
         cursor: 'pointer', padding: 3,
-        background: on ? STAGE_BY_ID.scene.accent : 'transparent',
-        border: on ? `2px solid ${STAGE_BY_ID.scene.accent}` : `1px solid rgba(255,255,255,.06)`,
+        background: on ? T.ink : 'transparent',
+        border: on ? `2px solid ${T.ink}` : `1px solid ${T.line}`,
         borderRadius: 8, transition: 'all .12s',
       }}>
       <div style={{ width: '100%', aspectRatio: '9/16', borderRadius: 5, overflow: 'hidden',
@@ -1540,16 +1346,16 @@ function GameplayTile({ clip, on, onClick }) {
           <img src={clip.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#666', fontSize: '.58rem', fontWeight: 700, textTransform: 'capitalize' }}>{clip.category}</div>
+            color: '#666', fontSize: '.6rem', fontWeight: 500, textTransform: 'capitalize' }}>{clip.category}</div>
         )}
         {on && <div style={{ position: 'absolute', top: 4, right: 4,
-          background: T.ink, color: '#fff', width: 16, height: 16, borderRadius: '50%',
-          fontSize: '.58rem', fontWeight: 900,
+          background: '#fff', color: T.ink, width: 16, height: 16, borderRadius: '50%',
+          fontSize: '.58rem', fontWeight: 600,
           display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</div>}
       </div>
       {clip.source_title && (
-        <div style={{ fontSize: '.52rem', fontWeight: 700,
-          color: on ? T.ink : 'rgba(255,255,255,.6)',
+        <div style={{ fontSize: '.55rem', fontWeight: 500,
+          color: on ? '#fff' : T.mute,
           marginTop: 3, padding: '0 2px',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {clip.source_title}
@@ -1559,26 +1365,24 @@ function GameplayTile({ clip, on, onClick }) {
   )
 }
 
-// ── Chemistry badge ─────────────────────────────────────────────────
 function ChemistryBadge({ chemistry }) {
   return (
-    <div style={{ ...card({ padding: '10px 14px', boxShadow: sticker(2) }),
+    <div style={{ ...card({ padding: '10px 14px' }),
       display: 'flex', alignItems: 'center', gap: 10 }}>
-      <span style={{ fontSize: '1.3rem' }}>{chemistry.emoji}</span>
+      <span style={{ fontSize: '1.2rem' }}>{chemistry.emoji}</span>
       <div>
-        <div style={{ fontSize: '.82rem', fontWeight: 900 }}>{chemistry.label}</div>
-        <div style={{ fontSize: '.68rem', fontWeight: 600, color: T.mute }}>{chemistry.blurb}</div>
+        <div style={{ fontSize: '.82rem', fontWeight: 500 }}>{chemistry.label}</div>
+        <div style={{ fontSize: '.72rem', color: T.mute }}>{chemistry.blurb}</div>
       </div>
     </div>
   )
 }
 
-// ── Signature cast chip ──────────────────────────────────────────────
 function SignatureCastChip({ cast, roster, onLoad, onDelete }) {
   const chars = cast.character_ids.map(id => roster.find(r => r.id === id)).filter(Boolean)
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
-      background: T.paper2, border: `2px solid ${T.ink}`, borderRadius: 999, padding: '4px 6px 4px 4px' }}>
+      background: T.paper2, border: `1px solid ${T.line}`, borderRadius: 999, padding: '4px 8px 4px 4px' }}>
       <button onClick={onLoad} title={`Load ${cast.label || 'this cast'}`}
         style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
           background: 'none', border: 'none', padding: '2px 4px', fontFamily: FONT }}>
@@ -1586,49 +1390,48 @@ function SignatureCastChip({ cast, roster, onLoad, onDelete }) {
           {chars.map((c, i) => (
             <img key={c.id} src={c.image_url} alt="" style={{
               width: 22, height: 22, borderRadius: '50%', objectFit: 'cover',
-              border: `1.5px solid ${T.ink}`, background: '#e9e3d3',
+              border: `1px solid ${T.line}`, background: T.lineSoft,
               marginLeft: i > 0 ? -8 : 0,
             }} />
           ))}
         </div>
-        <span style={{ fontSize: '.72rem', fontWeight: 800 }}>{cast.label || 'Signature cast'}</span>
+        <span style={{ fontSize: '.75rem', fontWeight: 500 }}>{cast.label || 'Signature cast'}</span>
       </button>
       <button onClick={onDelete} title="Delete"
         style={{ cursor: 'pointer', background: 'none', border: 'none', color: T.mute,
-          fontSize: '.7rem', fontWeight: 900, padding: '2px 6px' }}>✕</button>
+          fontSize: '.7rem', fontWeight: 500, padding: '2px 6px' }}>✕</button>
     </div>
   )
 }
 
-// ── Picked character card ─────────────────────────────────────────
 function PickedCard({ p, motions, voices, onRemove, onVoice, onEntry, onExit, onPreview, onScale, onRotation }) {
   const selectStyle = {
-    background: T.paper2, border: `2px solid ${T.ink}`, borderRadius: 8,
-    padding: '5px 8px', fontSize: '.72rem', fontWeight: 700, fontFamily: FONT, cursor: 'pointer', width: '100%',
+    background: T.paper2, border: `1px solid ${T.line}`, borderRadius: 8,
+    padding: '6px 8px', fontSize: '.78rem', fontWeight: 500, fontFamily: FONT, cursor: 'pointer', width: '100%',
   }
   const selectedVoice = voices.find(v => v.voice_id === p.voiceId)
   return (
-    <div style={{ ...card({ padding: 10, boxShadow: sticker(2) }), display: 'flex', gap: 10 }}>
-      <div style={{ position: 'relative', width: 56, flexShrink: 0 }}>
-        <div style={{ width: 56, height: 56, borderRadius: 8, overflow: 'hidden', background: '#e9e3d3', border: `2px solid ${T.ink}` }}>
+    <div style={{ ...card({ padding: 12 }), display: 'flex', gap: 12 }}>
+      <div style={{ position: 'relative', width: 52, flexShrink: 0 }}>
+        <div style={{ width: 52, height: 52, borderRadius: 8, overflow: 'hidden', background: T.lineSoft, border: `1px solid ${T.line}` }}>
           <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </div>
-        <span style={{ ...pill(p.side === 'left' ? '#cde3ff' : '#ffe0cd', { padding: '1px 6px', fontSize: '.55rem', position: 'absolute', bottom: -8, left: '50%', transform: 'translateX(-50%)' }) }}>
+        <span style={{ ...pill(T.lineSoft, { padding: '1px 6px', fontSize: '.55rem', position: 'absolute', bottom: -8, left: '50%', transform: 'translateX(-50%)' }) }}>
           {p.side}
         </span>
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: '.86rem', fontWeight: 900, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-            <div style={{ fontSize: '.64rem', color: T.mute, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: '.85rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+            <div style={{ fontSize: '.72rem', color: T.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {p.archetype} · {p.gender}
             </div>
           </div>
-          <button onClick={onRemove} title="Remove" style={{ ...pill('#fff4f4', { cursor: 'pointer', color: T.redDark, padding: '2px 8px' }) }}>✕</button>
+          <button onClick={onRemove} title="Remove" style={{ cursor: 'pointer', background: 'none', border: `1px solid ${T.line}`,
+            borderRadius: 6, padding: '2px 8px', fontSize: '.7rem', color: T.mute }}>✕</button>
         </div>
-        {/* voice + preview */}
-        <div style={{ display: 'flex', gap: 6, margintop: 6, marginTop: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
           <select value={p.voiceId} onChange={e => onVoice(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
             <option value="">Auto voice (fits {p.gender})</option>
             {voices.map(v => (
@@ -1638,40 +1441,38 @@ function PickedCard({ p, motions, voices, onRemove, onVoice, onEntry, onExit, on
           <button onClick={() => onPreview(selectedVoice?.preview_url)}
             disabled={!selectedVoice?.preview_url}
             title={selectedVoice?.preview_url ? 'Play sample' : 'Pick a specific voice to preview'}
-            style={{ ...pill(selectedVoice?.preview_url ? T.yellow : T.paper2, { padding: '5px 9px', cursor: selectedVoice?.preview_url ? 'pointer' : 'not-allowed' }) }}>▶</button>
+            style={{ ...pill(selectedVoice?.preview_url ? T.lineSoft : T.paper2, { padding: '5px 9px', cursor: selectedVoice?.preview_url ? 'pointer' : 'not-allowed' }) }}>▶</button>
         </div>
-        {/* entry / exit */}
         <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
           <label style={{ flex: 1 }}>
-            <span style={{ fontSize: '.56rem', fontWeight: 800, color: T.mute, textTransform: 'uppercase', letterSpacing: '.05em' }}>Enter</span>
+            <span style={{ fontSize: '.65rem', fontWeight: 500, color: T.mute }}>Enter</span>
             <select value={p.entry} onChange={e => onEntry(e.target.value)} style={selectStyle}>
               {motions.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
           </label>
           <label style={{ flex: 1 }}>
-            <span style={{ fontSize: '.56rem', fontWeight: 800, color: T.mute, textTransform: 'uppercase', letterSpacing: '.05em' }}>Exit</span>
+            <span style={{ fontSize: '.65rem', fontWeight: 500, color: T.mute }}>Exit</span>
             <select value={p.exit} onChange={e => onExit(e.target.value)} style={selectStyle}>
               {motions.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
           </label>
         </div>
-        {/* scale / rotation */}
         <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
           <label style={{ flex: 1 }}>
-            <span style={{ fontSize: '.56rem', fontWeight: 800, color: T.mute, textTransform: 'uppercase', letterSpacing: '.05em' }}>
-              Size · {Math.round((p.scale ?? 1) * 100)}%
+            <span style={{ fontSize: '.65rem', fontWeight: 500, color: T.mute }}>
+              Size {Math.round((p.scale ?? 1) * 100)}%
             </span>
             <input type="range" min={0.7} max={1.3} step={0.05} value={p.scale ?? 1}
               onChange={e => onScale(Number(e.target.value))}
-              style={{ width: '100%', accentColor: T.red, display: 'block', marginTop: 2 }} />
+              style={{ width: '100%', accentColor: T.ink, display: 'block', marginTop: 2 }} />
           </label>
           <label style={{ flex: 1 }}>
-            <span style={{ fontSize: '.56rem', fontWeight: 800, color: T.mute, textTransform: 'uppercase', letterSpacing: '.05em' }}>
-              Tilt · {p.rotation ?? 0}°
+            <span style={{ fontSize: '.65rem', fontWeight: 500, color: T.mute }}>
+              Tilt {p.rotation ?? 0}°
             </span>
             <input type="range" min={-15} max={15} step={1} value={p.rotation ?? 0}
               onChange={e => onRotation(Number(e.target.value))}
-              style={{ width: '100%', accentColor: T.red, display: 'block', marginTop: 2 }} />
+              style={{ width: '100%', accentColor: T.ink, display: 'block', marginTop: 2 }} />
           </label>
         </div>
       </div>
@@ -1679,37 +1480,28 @@ function PickedCard({ p, motions, voices, onRemove, onVoice, onEntry, onExit, on
   )
 }
 
-// ── Progress card ─────────────────────────────────────────────────
 function ProgressCard({ job }) {
   const pct = job.progress || 0
   return (
     <div style={{ ...card({ padding: 16 }) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <span style={{ fontSize: '1.1rem', animation: 'brSpin 1s linear infinite', display: 'inline-block' }}>🌀</span>
-        <span style={{ fontWeight: 900, fontSize: '.92rem' }}>{job.current_step || 'Working…'}</span>
+        <span style={{ fontWeight: 500, fontSize: '.88rem' }}>{job.current_step || 'Working…'}</span>
       </div>
-      <div style={{ height: 12, background: T.paper, border: `2px solid ${T.ink}`, borderRadius: 999, overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${pct}%`, background: `repeating-linear-gradient(45deg,${T.red},${T.red} 8px,${T.redDark} 8px,${T.redDark} 16px)`, transition: 'width .5s' }} />
+      <div style={{ height: 6, background: T.lineSoft, borderRadius: 999, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: T.ink, transition: 'width .5s', borderRadius: 999 }} />
       </div>
-      <div style={{ marginTop: 6, fontSize: '.72rem', fontWeight: 800, color: T.mute, textAlign: 'right' }}>{pct}%</div>
-      <style>{`@keyframes brSpin{to{transform:rotate(360deg)}}`}</style>
+      <div style={{ marginTop: 6, fontSize: '.75rem', fontWeight: 500, color: T.mute, textAlign: 'right' }}>{pct}%</div>
     </div>
   )
 }
 
-// ── Clips history ─────────────────────────────────────────────────
-// ── ClipsLibrary — the "My Clips" tab ───────────────────────────────
-// A real gallery, not an afterthought scrolled past under the builder:
-// status filters with live counts, a bigger card with a hover-to-play
-// treatment, a status badge, and an empty state that routes straight
-// back to Create instead of just saying "nothing here."
 const STATUS_META = {
-  complete:            { label: 'Ready',      color: '#1fa14e' },
-  failed:              { label: 'Failed',     color: '#cf1322' },
-  created:             { label: 'Queued',     color: '#6b6456' },
-  generating_script:   { label: 'Writing',    color: '#2d6cdf' },
-  synthesizing_voice:  { label: 'Voicing',    color: '#2d6cdf' },
-  rendering:           { label: 'Rendering',  color: '#2d6cdf' },
+  complete:            { label: 'Ready',      color: T.green },
+  failed:              { label: 'Failed',     color: T.red },
+  created:             { label: 'Queued',     color: T.mute },
+  generating_script:   { label: 'Writing',    color: T.blue },
+  synthesizing_voice:  { label: 'Voicing',    color: T.blue },
+  rendering:           { label: 'Rendering',  color: T.blue },
 }
 const LIBRARY_FILTERS = [
   { id: 'all',      label: 'All' },
@@ -1739,39 +1531,39 @@ function ClipsLibrary({ clips, onCreate }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
         <div>
-          <h1 style={{ margin: 0, fontFamily: FONT_DISPLAY, fontWeight: 600,
-            fontSize: 'clamp(1.4rem, 2.4vw, 1.8rem)', letterSpacing: '-.02em', color: T.ink }}>
-            Your Brainrot clips
+          <h1 style={{ margin: 0, fontWeight: 500,
+            fontSize: 'clamp(1.3rem, 2.2vw, 1.6rem)', letterSpacing: '-.02em', color: T.ink }}>
+            Your clips
           </h1>
           <p style={{ margin: '4px 0 0', fontSize: '.82rem', color: T.mute }}>
-            Every clip you've generated, in one place.
+            Every clip you've generated.
           </p>
         </div>
         <button onClick={onCreate} {...pressHandlers}
           style={{ ...btn(T.ink, '#fff', { padding: '10px 18px', fontSize: '.82rem' }) }}>
-          + New clip
+          New clip
         </button>
       </div>
 
       {clips.length > 0 && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 20 }}>
           {LIBRARY_FILTERS.map(f => {
             const on = filter === f.id
             const n = counts[f.id]
             return (
               <button key={f.id} onClick={() => setFilter(f.id)}
                 style={{
-                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
-                  background: on ? T.ink : '#fff',
+                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
+                  background: on ? T.ink : T.paper2,
                   color: on ? '#fff' : T.ink,
-                  border: `1.5px solid ${T.ink}33`,
-                  borderRadius: 999, padding: '6px 13px',
-                  fontSize: '.76rem', fontWeight: 700, fontFamily: FONT,
+                  border: `1px solid ${on ? T.ink : T.line}`,
+                  borderRadius: 8, padding: '6px 13px',
+                  fontSize: '.78rem', fontWeight: 500, fontFamily: FONT,
                 }}>
                 {f.label}
                 <span style={{
-                  fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 800,
-                  color: on ? '#fff' : T.mute, opacity: on ? .85 : 1,
+                  fontSize: '.7rem', fontWeight: 500,
+                  color: on ? 'rgba(255,255,255,.7)' : T.mute,
                 }}>{n}</span>
               </button>
             )
@@ -1782,18 +1574,17 @@ function ClipsLibrary({ clips, onCreate }) {
       {clips.length === 0 ? (
         <div style={{
           textAlign: 'center', padding: '64px 20px',
-          background: '#fffdf5', border: `1.5px dashed ${T.ink}30`, borderRadius: 16,
+          background: T.paper2, border: `1px solid ${T.line}`, borderRadius: 12,
         }}>
-          <div style={{ fontSize: '2.4rem', marginBottom: 12 }}>🎬</div>
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: '1.15rem', fontWeight: 600, color: T.ink, marginBottom: 6 }}>
+          <div style={{ fontSize: '1.1rem', fontWeight: 500, color: T.ink, marginBottom: 6 }}>
             No clips yet
           </div>
           <div style={{ fontSize: '.84rem', color: T.mute, maxWidth: '36ch', margin: '0 auto 18px', lineHeight: 1.5 }}>
             Your first brainrot clip is a script, a cast, and a backdrop away.
           </div>
           <button onClick={onCreate} {...pressHandlers}
-            style={{ ...btn(T.red, '#fff', { padding: '11px 20px' }) }}>
-            ⚡ Make your first clip
+            style={{ ...btn(T.ink, '#fff', { padding: '11px 20px' }) }}>
+            Make your first clip
           </button>
         </div>
       ) : visible.length === 0 ? (
@@ -1801,7 +1592,7 @@ function ClipsLibrary({ clips, onCreate }) {
           Nothing in this filter yet.
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 18 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 16 }}>
           {visible.map(job => <ClipCard key={job.job_id} job={job} />)}
         </div>
       )}
@@ -1812,26 +1603,25 @@ function ClipsLibrary({ clips, onCreate }) {
 function ClipCard({ job }) {
   const meta = STATUS_META[job.status] || STATUS_META.created
   return (
-    <div style={{ ...card({ padding: 8 }), transition: 'transform .12s, box-shadow .12s' }}
-      onMouseEnter={e => { e.currentTarget.style.transform = 'translate(-2px,-2px)'; e.currentTarget.style.boxShadow = sticker(6) }}
-      onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = sticker(4) }}>
+    <div style={{ ...card({ padding: 8 }), transition: 'border-color .15s' }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = T.ink }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = T.line }}>
       <div style={{ position: 'relative', width: '100%', aspectRatio: '9/16', borderRadius: 8, overflow: 'hidden',
         background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {job.status === 'complete' && job.output_url ? (
           <video src={job.output_url} controls playsInline preload="metadata"
             style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : job.status === 'failed' ? (
-          <div style={{ color: '#ff8a8a', fontSize: '.72rem', fontWeight: 800, textAlign: 'center', padding: 12 }}>
-            ⚠ {job.error_message || 'Failed'}
+          <div style={{ color: '#ff8a8a', fontSize: '.78rem', fontWeight: 500, textAlign: 'center', padding: 12 }}>
+            {job.error_message || 'Failed'}
           </div>
         ) : (
           <div style={{ width: '100%', padding: 16 }}>
-            <div style={{ color: '#fff', fontSize: '.74rem', fontWeight: 800, textAlign: 'center', marginBottom: 10 }}>
-              <span style={{ display: 'inline-block', animation: 'brSpin 1s linear infinite', marginRight: 6 }}>🌀</span>
+            <div style={{ color: '#fff', fontSize: '.78rem', fontWeight: 500, textAlign: 'center', marginBottom: 10 }}>
               {job.current_step || 'Processing…'}
             </div>
-            <div style={{ height: 6, background: 'rgba(255,255,255,.15)', borderRadius: 999, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${job.progress || 0}%`, background: T.red, transition: 'width .5s' }} />
+            <div style={{ height: 4, background: 'rgba(255,255,255,.15)', borderRadius: 999, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${job.progress || 0}%`, background: '#fff', transition: 'width .5s', borderRadius: 999 }} />
             </div>
           </div>
         )}
@@ -1839,20 +1629,20 @@ function ClipCard({ job }) {
           position: 'absolute', top: 8, left: 8,
           display: 'inline-flex', alignItems: 'center', gap: 5,
           background: 'rgba(0,0,0,.65)', color: '#fff',
-          fontSize: '.6rem', fontWeight: 800, padding: '3px 8px', borderRadius: 999,
+          fontSize: '.6rem', fontWeight: 500, padding: '3px 8px', borderRadius: 999,
         }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: meta.color }} />
           {meta.label}
         </span>
       </div>
       <div style={{ padding: '9px 4px 3px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-        <span style={{ fontSize: '.66rem', fontWeight: 700, color: T.mute }}>
+        <span style={{ fontSize: '.72rem', fontWeight: 500, color: T.mute }}>
           {job.created_at ? new Date(job.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}
         </span>
         {job.status === 'complete' && job.output_url && (
           <a href={job.output_url} target="_blank" rel="noopener noreferrer"
             title="Open full size"
-            style={{ fontSize: '.66rem', fontWeight: 800, color: T.ink, textDecoration: 'none' }}>
+            style={{ fontSize: '.72rem', fontWeight: 500, color: T.ink, textDecoration: 'none' }}>
             Open ↗
           </a>
         )}

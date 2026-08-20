@@ -6,14 +6,16 @@ import { useRef, useCallback, useEffect, useState } from 'react'
 import { T } from './brainrotTheme'
 import { resolveCaptionPreview, CAPTION_KEYFRAMES } from './captionStyles'
 
-// CSS approximation of each real entry motion (see animation_catalog.py /
+// CSS approximation of each real motion (see animation_catalog.py /
 // brainrot_composite.py's _motion_offset — same 9 motion ids). `off(side)`
 // is an EXTRA transform layered on top of the character's normal centered
-// position, applied via a plain CSS transition (not keyframes) so toggling
-// one `entered` boolean drives both the entrance AND the mirror-image exit
-// with the same curve. Not a frame-accurate replica of the ffmpeg easing —
-// just enough to show "this is roughly how it moves," which is what the
-// picker in the Style stage needs.
+// position, applied via a plain CSS transition (not keyframes). Used for
+// BOTH a character's entry (MOTION_PREVIEW[c.entry]) and exit
+// (MOTION_PREVIEW[c.exit]) — the render below picks whichever one is
+// currently relevant, so entry and exit read as genuinely different
+// motions when they're set to different ids. Not a frame-accurate replica
+// of the ffmpeg easing — just enough to show "this is roughly how it
+// moves," which is what the picker in the Cast stage needs.
 const MOTION_PREVIEW = {
   slide:  { off: side => side === 'left' ? 'translateX(-140%)' : 'translateX(140%)', duration: '.4s', ease: 'ease-out' },
   bounce: { off: side => side === 'left' ? 'translateX(-140%)' : 'translateX(140%)', duration: '.5s', ease: 'cubic-bezier(.34,1.56,.64,1)' },
@@ -24,8 +26,25 @@ const MOTION_PREVIEW = {
   float:  { off: () => 'translateY(90%)', duration: '.9s', ease: 'ease-out' },
   swoop:  { off: side => `${side === 'left' ? 'translateX(-140%)' : 'translateX(140%)'} translateY(-40%)`, duration: '.4s', ease: 'ease-out' },
   snap:   { off: side => side === 'left' ? 'translateX(-140%)' : 'translateX(140%)', duration: '.18s', ease: 'cubic-bezier(.7,0,.84,0)' },
+  // Same instant hide/show as "cut" (see backend's enable= toggle for both),
+  // but while ON screen it grows slightly instead of staying flat — the
+  // stand-in cue for having zero travel (see brainrot_composite.py's
+  // NONE_SCALE_BOOST / _scale_expr).
+  none:   { off: () => 'scale(1)', duration: '.06s', ease: 'linear', fade: true, activeScale: 1.08, activeDuration: '.18s' },
 }
-const MOTION_LOOP_MS = 2400   // how often the preview replays each character's entry/exit
+const MOTION_LOOP_MS = 2400   // how long each character's turn holds before the next one swaps in
+
+// Whose turn is "on screen" next, given the current one — mirrors turn_based
+// mode's real behavior (brainrot_composite.py's _active_windows): with 2+
+// characters someone is always active, swapping directly to the next one;
+// with exactly 1, there's no one to swap TO, so it alternates shown/hidden
+// (null = hidden) to still demonstrate entry vs exit.
+function nextActiveSide(sides, current) {
+  if (sides.length === 0) return null
+  if (sides.length === 1) return current === sides[0] ? null : sides[0]
+  const idx = sides.indexOf(current)
+  return sides[(idx + 1) % sides.length]
+}
 
 // One sample line per style so the preview reads naturally at that style's
 // energy level, rather than one generic phrase force-fit into every look.
@@ -44,6 +63,7 @@ export default function PreviewStage({
   captionStyle = 'brainrot',
   captionColor = 'yellow_black',
   captionY = 0.82,      // 0-1 normalized vertical position (0=top, 1=bottom) — horizontally always centered
+  motionMode = 'turn_based',   // 'turn_based' | 'always_on' — see brainrot_composite.py's _active_windows
   onMoveCharacter,     // (side, x, y) => void
   onMoveCaption,       // (y) => void — dragging the caption directly on the stage
   chemistry,           // {emoji, label} | null — see chemistry.js
@@ -51,56 +71,59 @@ export default function PreviewStage({
   const stageRef = useRef(null)
   const dragState = useRef(null)
 
-  // Loops each character through its chosen entry motion so "Pop" vs
-  // "Swoop" vs "Snap" etc. reads as an actual difference, not just a label
-  // in a dropdown. Pauses while the user is actively dragging something on
-  // the stage so a drag gesture never fights the animation. Per-side (not
-  // one shared boolean) so picking a new motion for ONE character can
-  // replay just that character immediately, without waiting for the
-  // ambient loop or restarting the other character's animation.
-  const [entered, setEntered] = useState({})
+  // Simulates real turn_based playback: only ONE character is "active"
+  // (on screen) at a time, swapping to the next one on a timer — same
+  // shape as brainrot_composite.py's _active_windows (a character is
+  // present only during ITS OWN run of dialogue lines, and the next
+  // character's presence window starts right where this one's ends). Each
+  // character keeps its own entry AND exit motion distinct (see render
+  // below) instead of both characters entering/exiting in sync, which is
+  // what made every motion look interchangeable before. always_on mode
+  // (both characters stay put for the whole clip, no swapping) just holds
+  // everyone active and skips the loop entirely.
+  const sides = characters.map(c => c.side)
+  const sidesKey = sides.join(',')
+  const alwaysOn = motionMode === 'always_on'
+  const [activeSide, setActiveSide] = useState(sides[0] ?? null)
   const draggingRef = useRef(false)
-  const charactersRef = useRef(characters)
-  useEffect(() => { charactersRef.current = characters })
+
+  // Keep activeSide valid as the cast changes (size, or which character
+  // occupies a side) — falls back to the first side rather than pointing
+  // at one that no longer exists. Adjusted during render (React's
+  // "state derived from props" pattern) rather than in an effect, so a
+  // cast change never flashes a stale/invalid activeSide for one frame.
+  const [syncedSidesKey, setSyncedSidesKey] = useState(sidesKey)
+  if (sidesKey !== syncedSidesKey) {
+    setSyncedSidesKey(sidesKey)
+    if (!sides.includes(activeSide)) setActiveSide(sides[0] ?? null)
+  }
 
   useEffect(() => {
-    if (characters.length === 0) return
+    if (alwaysOn || sides.length === 0) return
     const id = setInterval(() => {
-      if (!draggingRef.current) {
-        setEntered(prev => {
-          const next = {}
-          charactersRef.current.forEach(c => { next[c.side] = !(prev[c.side] ?? true) })
-          return next
-        })
-      }
+      if (!draggingRef.current) setActiveSide(current => nextActiveSide(sides, current))
     }, MOTION_LOOP_MS)
     return () => clearInterval(id)
-  }, [characters.length])
+  }, [alwaysOn, sidesKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Instant feedback: the moment a character's entry/exit motion changes
-  // (picked in the Cast stage), replay THAT character's animation right
-  // away instead of waiting up to MOTION_LOOP_MS for the ambient loop to
-  // come around to it.
+  // Instant feedback: the moment a character's entry OR exit motion
+  // changes (picked in the Cast stage), show it right away instead of
+  // waiting for the loop to come back around. If that character is
+  // currently active, advance the turn (plays THEIR new exit motion,
+  // and the next character's entry); if they're not active, bring them
+  // on screen (plays their new entry motion).
   const prevMotionRef = useRef({})
   useEffect(() => {
+    if (alwaysOn) return
     characters.forEach(c => {
-      const prev = prevMotionRef.current[c.side]
       const key = `${c.entry}:${c.exit}`
+      const prev = prevMotionRef.current[c.side]
       if (prev !== undefined && prev !== key) {
-        setEntered(m => ({ ...m, [c.side]: false }))
-        // A short setTimeout (not requestAnimationFrame) to flip back: rAF
-        // is fully paused while the tab is backgrounded, so a user who
-        // alt-tabs mid-edit would see the character stuck off-canvas
-        // forever. setTimeout still fires in background tabs, just gets
-        // floored to ~1s under heavy throttling — either way it reliably
-        // completes, which matters more here than frame-perfect timing.
-        setTimeout(() => {
-          setEntered(m => ({ ...m, [c.side]: true }))
-        }, 30)
+        setActiveSide(current => current === c.side ? nextActiveSide(sides, current) : c.side)
       }
       prevMotionRef.current[c.side] = key
     })
-  }, [characters])
+  }, [characters, alwaysOn]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const onPointerDown = useCallback((e, side) => {
     draggingRef.current = true
@@ -136,9 +159,8 @@ export default function PreviewStage({
       style={{
         position: 'relative',
         width: '100%', aspectRatio: '9 / 16',
-        borderRadius: 22,
-        border: `3px solid ${T.ink}`,
-        boxShadow: `6px 6px 0 ${T.ink}`,
+        borderRadius: 16,
+        border: `1px solid ${T.line}`,
         overflow: 'hidden',
         background: '#000',
         touchAction: 'none',
@@ -170,12 +192,22 @@ export default function PreviewStage({
         </div>
       )}
 
-      {/* characters */}
+      {/* characters — active one (whoever's "turn" it is, or everyone in
+          always_on mode) is shown at rest; everyone else sits in their OWN
+          exit motion's off-canvas shape, ready to swap in via their OWN
+          entry motion. Entry and exit are genuinely different curves now —
+          previously exit was never visualized at all, which is why every
+          motion looked the same regardless of what you picked. */}
       {characters.map((c) => {
         const w = `${42 * (c.scale || 1)}%`
-        const motion = MOTION_PREVIEW[c.entry] || MOTION_PREVIEW.slide
+        const entryMotion = MOTION_PREVIEW[c.entry] || MOTION_PREVIEW.slide
+        const exitMotion = MOTION_PREVIEW[c.exit] || MOTION_PREVIEW.slide
         const base = `translate(-50%,-50%) rotate(${c.rotation || 0}deg)`
-        const isEntered = entered[c.side] ?? true
+        const isActive = alwaysOn || c.side === activeSide
+        // Which motion currently governs this character's transition: their
+        // own entry curve while becoming active, their own exit curve while
+        // becoming (or staying) inactive.
+        const motion = isActive ? entryMotion : exitMotion
         const x = c.x ?? (c.side === 'left' ? 0.25 : 0.75)
         // Same rule as the backend (brainrot_composite.py's near_side): a
         // side-anchored motion travels to/from whichever edge the character
@@ -195,9 +227,13 @@ export default function PreviewStage({
               left: `${x * 100}%`,
               top: `${(c.y ?? 0.78) * 100}%`,
               width: w,
-              transform: isEntered ? base : `${base} ${motion.off(nearSide)}`,
-              opacity: !isEntered && motion.fade ? 0 : 1,
-              transition: `transform ${motion.duration} ${motion.ease}, opacity ${motion.duration} ${motion.ease}`,
+              transform: isActive
+                ? (motion.activeScale ? `${base} scale(${motion.activeScale})` : base)
+                : `${base} ${motion.off(nearSide)}`,
+              opacity: !isActive && motion.fade ? 0 : 1,
+              transition: isActive && motion.activeScale
+                ? `transform ${motion.activeDuration || motion.duration} ${motion.ease}`
+                : `transform ${motion.duration} ${motion.ease}, opacity ${motion.duration} ${motion.ease}`,
               cursor: 'grab',
               filter: 'drop-shadow(0 4px 6px rgba(0,0,0,.4))',
               touchAction: 'none',
@@ -251,8 +287,8 @@ export default function PreviewStage({
       {characters.length > 0 && (
         <div style={{
           position: 'absolute', top: 8, left: 8,
-          background: 'rgba(0,0,0,.6)', color: '#fff',
-          fontSize: '.6rem', fontWeight: 700, padding: '3px 8px',
+          background: 'rgba(0,0,0,.55)', color: '#fff',
+          fontSize: '.6rem', fontWeight: 500, padding: '3px 8px',
           borderRadius: 999, pointerEvents: 'none',
         }}>drag to reposition</div>
       )}
@@ -261,8 +297,8 @@ export default function PreviewStage({
       {chemistry && (
         <div style={{
           position: 'absolute', top: 8, right: 8,
-          background: 'rgba(0,0,0,.6)', color: '#fff',
-          fontSize: '.6rem', fontWeight: 700, padding: '3px 8px',
+          background: 'rgba(0,0,0,.55)', color: '#fff',
+          fontSize: '.6rem', fontWeight: 500, padding: '3px 8px',
           borderRadius: 999, pointerEvents: 'none',
           display: 'flex', alignItems: 'center', gap: 4,
         }}><span>{chemistry.emoji}</span>{chemistry.label}</div>
