@@ -1034,30 +1034,26 @@ function pickTopic(current) {
   return pool[Math.floor(Math.random() * pool.length)] || SPARK_TOPICS[0]
 }
 
-function formatMinutes(mins) {
-  const n = Math.max(0, Math.round(Number(mins) || 0))
-  if (n < 60) return `${n}m`
-  const h = Math.floor(n / 60)
-  const m = n % 60
-  if (h >= 100) return `${h}h`
-  return m ? `${h}h ${m}m` : `${h}h`
-}
-
 function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection, libraryClips = [] }) {
   const initials = (user?.full_name || user?.email || 'U')[0].toUpperCase()
 
-  const renderingCount = libraryClips.filter(c => isActive(c)).length
+  // Brainrot-only stats — derived from this user's brainrot jobs alone.
+  // (Backend credits are currently shared with the YT-shorts pool, but the
+  // header should read cleanly as a brainrot dashboard, so we count clips
+  // straight from libraryClips instead of surfacing the shared user.credits_*
+  // fields.)
+  const totalCount     = libraryClips.length
   const readyCount     = libraryClips.filter(c => c.status === 'complete').length
+  const renderingCount = libraryClips.filter(c => isActive(c)).length
   const failedCount    = libraryClips.filter(c => c.status === 'failed').length
+  const queuedCount    = libraryClips.filter(c => c.status === 'created').length
 
   const stats = [
-    { n: user?.credits_used || 0,                          l: 'Shorts made',  c: T.red },
-    { n: user?.videos_remaining ?? 0,                      l: 'Credits left', c: T.green },
-    { n: formatMinutes(user?.video_minutes_used),          l: 'Minutes used', c: T.red },
-    { n: formatMinutes(user?.video_minutes_remaining),     l: 'Minutes left', c: T.green },
-    { n: renderingCount,                                   l: 'Rendering',    c: '#f59e0b' },
-    { n: readyCount,                                       l: 'Ready',        c: T.blue },
-    { n: failedCount,                                      l: 'Failed',       c: T.mute },
+    { n: totalCount,     l: 'Clips made', c: T.ink },
+    { n: readyCount,     l: 'Ready',      c: T.green },
+    { n: renderingCount, l: 'Rendering',  c: '#f59e0b' },
+    { n: queuedCount,    l: 'Queued',     c: T.blue },
+    { n: failedCount,    l: 'Failed',     c: failedCount > 0 ? T.red : T.mute },
   ]
 
   return (
