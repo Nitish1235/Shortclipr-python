@@ -364,20 +364,85 @@ async def claim_brainrot_ffmpeg_job(pool: asyncpg.Pool, region: str) -> dict | N
     return dict(row) if row else None
 
 
-async def release_brainrot_api_for_retry(pool: asyncpg.Pool, job_id: str) -> None:
-    """Bounce a failed brainrot API dispatch back to 'created' for retry."""
-    await pool.execute(
-        "UPDATE brainrot_jobs SET status = 'created', target_api_region = NULL, updated_at = NOW() WHERE job_id = $1",
+async def _refund_brainrot_job(pool: asyncpg.Pool, job_id: str) -> None:
+    """Refund the 1 credit reserved for a brainrot job that will never run.
+    Mirrors _refund_job() above but reads user_id/reserved_credits off
+    brainrot_jobs — that table has no clip_count column; the reservation
+    amount lives in payload->>'reserved_credits' (see POST /brainrot/jobs)."""
+    row = await pool.fetchrow(
+        "SELECT user_id, payload->>'reserved_credits' AS reserved FROM brainrot_jobs WHERE job_id = $1",
         job_id,
     )
+    if not row:
+        return
+    reserved = int(row["reserved"] or 0)
+    if reserved > 0:
+        await pool.execute(
+            "UPDATE users SET credits_used = GREATEST(0, credits_used - $2) WHERE id = $1",
+            str(row["user_id"]), reserved,
+        )
+        logger.info(f"[brainrot:{job_id}] Refunded {reserved} credit(s) to {row['user_id']}")
+
+
+async def release_brainrot_api_for_retry(pool: asyncpg.Pool, job_id: str) -> None:
+    """Bounce a failed brainrot API dispatch back to 'created' with exponential
+    backoff, or mark it failed + refund if MAX_RETRIES exceeded. Mirrors
+    release_api_for_retry() — without this, a permanently-broken dispatch
+    (e.g. a dead API worker) would retry forever: the job never completes,
+    never fails, and its reserved credit sits in limbo indefinitely."""
+    await pool.execute("""
+        UPDATE brainrot_jobs
+        SET status = CASE
+                WHEN retry_count >= $2 THEN 'failed'
+                ELSE 'created'
+            END,
+            error_message = CASE
+                WHEN retry_count >= $2 THEN 'Script generation failed after max retries'
+                ELSE NULL
+            END,
+            retry_count       = retry_count + 1,
+            target_api_region = NULL,
+            updated_at        = NOW()
+        WHERE job_id = $1
+    """, job_id, config.MAX_RETRIES)
+
+    row = await pool.fetchrow(
+        "SELECT status, retry_count FROM brainrot_jobs WHERE job_id = $1", job_id,
+    )
+    if row and row["status"] == "failed":
+        logger.error(f"[brainrot:{job_id}] Max API retries exceeded — marked as failed")
+        await _refund_brainrot_job(pool, job_id)
+    elif row:
+        logger.warning(f"[brainrot:{job_id}] API dispatch failed — retry {row['retry_count']}")
 
 
 async def release_brainrot_ffmpeg_for_retry(pool: asyncpg.Pool, job_id: str) -> None:
-    """Bounce a failed brainrot FFmpeg dispatch back to 'api_done' for retry."""
-    await pool.execute(
-        "UPDATE brainrot_jobs SET status = 'api_done', target_brainrot_region = NULL, updated_at = NOW() WHERE job_id = $1",
-        job_id,
+    """Bounce a failed brainrot FFmpeg dispatch back to 'api_done' with
+    exponential backoff, or fail + refund if MAX_RETRIES exceeded."""
+    await pool.execute("""
+        UPDATE brainrot_jobs
+        SET status = CASE
+                WHEN retry_count >= $2 THEN 'failed'
+                ELSE 'api_done'
+            END,
+            error_message = CASE
+                WHEN retry_count >= $2 THEN 'Rendering failed after max retries'
+                ELSE NULL
+            END,
+            retry_count          = retry_count + 1,
+            target_brainrot_region = NULL,
+            updated_at           = NOW()
+        WHERE job_id = $1
+    """, job_id, config.MAX_RETRIES)
+
+    row = await pool.fetchrow(
+        "SELECT status, retry_count FROM brainrot_jobs WHERE job_id = $1", job_id,
     )
+    if row and row["status"] == "failed":
+        logger.error(f"[brainrot:{job_id}] Max FFmpeg retries exceeded — marked as failed")
+        await _refund_brainrot_job(pool, job_id)
+    elif row:
+        logger.warning(f"[brainrot:{job_id}] FFmpeg dispatch failed — retry {row['retry_count']}")
 
 
 async def process_one_brainrot_api_job(pool: asyncpg.Pool) -> bool:

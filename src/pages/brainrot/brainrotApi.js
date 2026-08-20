@@ -17,6 +17,28 @@ async function getJSON(path) {
   return res.json()
 }
 
+async function postJSON(path, body) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST', headers: authHeaders(true), body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    let detail = `${path} → ${res.status}`
+    try { detail = (await res.json()).detail || detail } catch { /* ignore */ }
+    throw new Error(detail)
+  }
+  return res.json()
+}
+
+async function deleteJSON(path) {
+  const res = await fetch(`${API_BASE}${path}`, { method: 'DELETE', headers: authHeaders() })
+  if (!res.ok) {
+    let detail = `${path} → ${res.status}`
+    try { detail = (await res.json()).detail || detail } catch { /* ignore */ }
+    throw new Error(detail)
+  }
+  return res.json()
+}
+
 export const brainrotApi = {
   characters:    () => getJSON('/brainrot/characters'),
   voices:        () => getJSON('/brainrot/voices'),
@@ -25,6 +47,10 @@ export const brainrotApi = {
   audioAssets:   (type) => getJSON(`/brainrot/audio-assets${type ? `?type=${type}` : ''}`),
   listJobs:      () => getJSON('/brainrot/jobs'),
   getJob:        (id) => getJSON(`/brainrot/jobs/${id}`),
+
+  listSignatureCasts:   () => getJSON('/brainrot/signature-casts'),
+  saveSignatureCast:    (character_ids, label) => postJSON('/brainrot/signature-casts', { character_ids, label }),
+  deleteSignatureCast:  (id) => deleteJSON(`/brainrot/signature-casts/${id}`),
 
   async createJob(options) {
     const res = await fetch(`${API_BASE}/brainrot/jobs`, {

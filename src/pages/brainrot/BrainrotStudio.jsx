@@ -16,6 +16,19 @@ import { useAuth } from '../../context/AuthContext'
 import { brainrotApi } from './brainrotApi'
 import { T, card, pill, btn, sticker, pressHandlers, FONT } from './brainrotTheme'
 import PreviewStage from './PreviewStage'
+import { getChemistry } from './chemistry'
+
+// Evergreen 50/50 topics — reliably split an audience, which is what makes
+// a brainrot debate generate comments. Curated, not pulled from other users'
+// job history: script_input is live creator content and often half-formed,
+// so surfacing it cross-account would be a privacy leak dressed up as a
+// feature. See chemistry-pass design doc, Pass 05.
+const SPARK_TOPICS = [
+  'iPhone vs Android', 'Pizza vs Burgers', 'Cats vs Dogs',
+  'Morning person vs Night owl', 'Summer vs Winter', 'PS5 vs Xbox',
+  'Homework vs No homework', 'City vs Suburbs', 'Coffee vs Energy drinks',
+  'Texting vs Calling',
+]
 
 const DURATION_PRESETS = [15, 30, 45, 60, 90, 120]
 const CAPTION_STYLES = [
@@ -30,6 +43,22 @@ const PROVIDERS = [
 ]
 const ACTIVE_STATUSES = ['created', 'generating_script', 'synthesizing_voice', 'rendering']
 
+// The selection flow is a rail, not a wizard: every stage is reachable at
+// any time (click the rail), but each stage's content only renders when
+// active, so a first-time user sees ONE decision at a time instead of a
+// five-section wall of controls. The persistent preview (right column)
+// never depends on which stage is active — it always reflects the current
+// build, and Generate stays reachable from anywhere once requirements are
+// met, matching "jump anytime, render whenever ready" rather than gating
+// the render button behind reaching a final step.
+const STAGES = [
+  { id: 'spark',  label: 'Spark',  icon: '💡', hint: 'What are they arguing about?' },
+  { id: 'cast',   label: 'Cast',   icon: '🎭', hint: 'Who\'s arguing?' },
+  { id: 'scene',  label: 'Scene',  icon: '🎮', hint: 'What\'s playing behind them?' },
+  { id: 'style',  label: 'Style',  icon: '🎨', hint: 'Length, captions, motion, sound.' },
+  { id: 'review', label: 'Review', icon: '✅', hint: 'Everything, at a glance.' },
+]
+
 export default function BrainrotStudio() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -40,6 +69,13 @@ export default function BrainrotStudio() {
   const [motions, setMotions]   = useState([])
   const [clipsLib, setClipsLib] = useState([])
   const [refError, setRefError] = useState(null)
+  const [signatureCasts, setSignatureCasts] = useState([])
+  const [savingCast, setSavingCast] = useState(false)
+  const [musicLib, setMusicLib] = useState([])
+  const [sfxLib, setSfxLib]     = useState([])
+
+  // ── Stage rail ───────────────────────────────────────────────────
+  const [stage, setStage] = useState('spark')
 
   // ── Builder state ───────────────────────────────────────────────
   const [script, setScript]         = useState('')
@@ -51,14 +87,29 @@ export default function BrainrotStudio() {
   const [duration, setDuration]     = useState(30)
   const [captionStyle, setCaption]  = useState('brainrot')
   const [charSearch, setCharSearch] = useState('')
+  const [motionMode, setMotionMode] = useState('turn_based')  // 'turn_based' | 'always_on'
+  const [musicId, setMusicId]       = useState('')
+  const [musicVolume, setMusicVolume] = useState(0.3)
+  const [introSfxId, setIntroSfxId] = useState('')
+  const [outroSfxId, setOutroSfxId] = useState('')
 
   // ── Job state ───────────────────────────────────────────────────
   const [submitting, setSubmitting] = useState(false)
   const [activeJob, setActiveJob]   = useState(null)   // polled job being generated
   const [myClips, setMyClips]       = useState([])
   const [toast, setToast]           = useState(null)
+  const [refLoaded, setRefLoaded]   = useState(false)
   const pollRef = useRef(null)
   const audioRef = useRef(null)
+
+  // ── Draft autosave ───────────────────────────────────────────────
+  // Protects an interrupted session (mobile especially): a reload restores
+  // script, cast, background, and vibe from wherever the user left off.
+  // Keyed per-user so a shared browser can't leak one account's draft into
+  // another's session.
+  const draftKey = user?.user_id ? `brainrot_draft_${user.user_id}` : null
+  const hydratedRef = useRef(false)
+  const saveTimerRef = useRef(null)
 
   // ── Load reference data + history ───────────────────────────────
   useEffect(() => {
@@ -69,7 +120,10 @@ export default function BrainrotStudio() {
       brainrotApi.animations(),
       brainrotApi.gameplayClips(),
       brainrotApi.listJobs(),
-    ]).then(([c, v, a, g, j]) => {
+      brainrotApi.listSignatureCasts(),
+      brainrotApi.audioAssets('music'),
+      brainrotApi.audioAssets('sfx'),
+    ]).then(([c, v, a, g, j, s, m, fx]) => {
       if (!alive) return
       if (c.status === 'fulfilled') setRoster(c.value.characters || [])
       else setRefError('Could not load characters. Is the backend running & bucket configured?')
@@ -77,9 +131,70 @@ export default function BrainrotStudio() {
       if (a.status === 'fulfilled') setMotions(a.value.entry || [])
       if (g.status === 'fulfilled') setClipsLib(g.value.clips || [])
       if (j.status === 'fulfilled') setMyClips(j.value.jobs || [])
+      if (s.status === 'fulfilled') setSignatureCasts(s.value.casts || [])
+      if (m.status === 'fulfilled') setMusicLib(m.value.assets || [])
+      if (fx.status === 'fulfilled') setSfxLib(fx.value.assets || [])
+      setRefLoaded(true)
     })
     return () => { alive = false; if (pollRef.current) clearInterval(pollRef.current) }
   }, [])
+
+  // restore a saved draft once reference data is in (so characters/backgrounds
+  // can be re-hydrated with fresh image URLs rather than stale cached ones)
+  useEffect(() => {
+    if (!refLoaded || hydratedRef.current) return
+    hydratedRef.current = true
+    if (!draftKey) return
+    try {
+      const raw = localStorage.getItem(draftKey)
+      if (!raw) return
+      const draft = JSON.parse(raw)
+      if (draft.script) setScript(draft.script)
+      if (draft.captionStyle) setCaption(draft.captionStyle)
+      if (draft.duration) setDuration(draft.duration)
+      if (draft.provider) setProvider(draft.provider)
+      if (draft.category) setCategory(draft.category)
+      if (draft.motionMode) setMotionMode(draft.motionMode)
+      if (draft.musicId) setMusicId(draft.musicId)
+      if (draft.musicVolume) setMusicVolume(draft.musicVolume)
+      if (draft.introSfxId) setIntroSfxId(draft.introSfxId)
+      if (draft.outroSfxId) setOutroSfxId(draft.outroSfxId)
+      if (Array.isArray(draft.picked) && draft.picked.length) {
+        const hydrated = draft.picked
+          .map(saved => {
+            const ch = roster.find(r => r.id === saved.id)
+            return ch ? { ...ch, ...saved } : null
+          })
+          .filter(Boolean)
+        if (hydrated.length) { setCastCount(hydrated.length); setPicked(hydrated) }
+      }
+      if (draft.backgroundId) {
+        const bg = clipsLib.find(c => c.id === draft.backgroundId)
+        if (bg) setBackground(bg)
+      }
+      showToast('Picked up your draft from where you left off', 'ok')
+    } catch { /* corrupt or foreign draft — ignore, start fresh */ }
+  }, [refLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // debounced save on every change, once the initial restore has run
+  useEffect(() => {
+    if (!hydratedRef.current || !draftKey) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      const draft = {
+        script, captionStyle, duration, provider, category,
+        motionMode, musicId, musicVolume, introSfxId, outroSfxId,
+        backgroundId: background?.id || null,
+        picked: picked.map(p => ({
+          id: p.id, side: p.side, voiceId: p.voiceId, entry: p.entry, exit: p.exit,
+          x: p.x, y: p.y, scale: p.scale, rotation: p.rotation,
+        })),
+      }
+      try { localStorage.setItem(draftKey, JSON.stringify(draft)) } catch { /* storage full/unavailable */ }
+    }, 800)
+    return () => clearTimeout(saveTimerRef.current)
+  }, [script, captionStyle, duration, provider, category, background, picked, draftKey,
+      motionMode, musicId, musicVolume, introSfxId, outroSfxId])
 
   const showToast = (msg, type = 'info') => {
     setToast({ msg, type }); setTimeout(() => setToast(null), 3200)
@@ -95,6 +210,11 @@ export default function BrainrotStudio() {
     () => category === 'all' ? clipsLib : clipsLib.filter(c => c.category === category),
     [clipsLib, category],
   )
+
+  const chemistry = useMemo(() => {
+    if (picked.length !== 2) return null
+    return getChemistry(picked[0], picked[1])
+  }, [picked])
 
   const filteredRoster = useMemo(() => {
     const q = charSearch.trim().toLowerCase()
@@ -131,6 +251,50 @@ export default function BrainrotStudio() {
   const updatePicked = (id, patch) =>
     setPicked(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p))
 
+  // ── Signature casts — saved character pairs ─────────────────────
+  const loadSignatureCast = (cast) => {
+    const resolved = cast.character_ids
+      .map(id => roster.find(r => r.id === id))
+      .filter(Boolean)
+    if (resolved.length < 2) {
+      showToast('One of these characters left the roster — can\'t reload this cast.', 'warn')
+      return
+    }
+    const entry = motions[0]?.id || 'slide'
+    setCastCount(2)
+    setPicked(resolved.map((ch, i) => ({
+      ...ch, side: i === 0 ? 'left' : 'right', voiceId: '', entry, exit: entry,
+      x: i === 0 ? 0.26 : 0.74, y: 0.76, scale: 1, rotation: 0,
+    })))
+    showToast(`Loaded ${cast.label || 'signature cast'}`, 'ok')
+  }
+
+  const saveCurrentCast = async () => {
+    if (picked.length !== 2 || savingCast) return
+    setSavingCast(true)
+    try {
+      const label = `${picked[0].name} & ${picked[1].name}`
+      const cast = await brainrotApi.saveSignatureCast(picked.map(p => p.id), label)
+      setSignatureCasts(prev => [cast, ...prev])
+      showToast('Saved as a signature cast', 'ok')
+    } catch (e) {
+      showToast(e.message || 'Could not save this cast', 'err')
+    } finally {
+      setSavingCast(false)
+    }
+  }
+
+  const removeSignatureCast = async (id) => {
+    setSignatureCasts(prev => prev.filter(c => c.id !== id)) // optimistic
+    try { await brainrotApi.deleteSignatureCast(id) }
+    catch { showToast('Could not delete — try again', 'err') }
+  }
+
+  const isSavedPair = picked.length === 2 && signatureCasts.some(c => {
+    const ids = new Set(c.character_ids)
+    return ids.has(picked[0].id) && ids.has(picked[1].id)
+  })
+
   const moveCharacter = useCallback((side, x, y) =>
     setPicked(prev => prev.map(p => p.side === side ? { ...p, x, y } : p)), [])
 
@@ -160,6 +324,22 @@ export default function BrainrotStudio() {
 
   const canGenerate = problems.length === 0 && !submitting && !isActive(activeJob)
 
+  // Per-stage completion, driving the rail's checkmarks — Style and Review
+  // have no hard requirement of their own (sensible defaults / nothing to
+  // fill in), so they read "done" once the stages that DO gate Generate are.
+  const stageDone = {
+    spark: !!script.trim(),
+    cast: castCount === 0 || picked.length >= castCount,
+    scene: !!background,
+    style: true,
+    review: problems.length === 0,
+  }
+  const goToStage = (id) => setStage(id)
+  const goNext = () => {
+    const i = STAGES.findIndex(s => s.id === stage)
+    if (i >= 0 && i < STAGES.length - 1) setStage(STAGES[i + 1].id)
+  }
+
   // ── Submit + poll ───────────────────────────────────────────────
   const generate = async () => {
     if (!canGenerate) { if (problems.length) showToast(problems[0], 'warn'); return }
@@ -179,9 +359,14 @@ export default function BrainrotStudio() {
         tts_provider: provider,
         voice_left: picked.find(p => p.side === 'left')?.voiceId || '',
         voice_right: picked.find(p => p.side === 'right')?.voiceId || '',
-        motion_mode: 'turn_based',
+        motion_mode: motionMode,
+        music_asset_id: musicId || null,
+        music_volume: musicVolume,
+        intro_sfx_id: introSfxId || null,
+        outro_sfx_id: outroSfxId || null,
       }
       const { job_id } = await brainrotApi.createJob(options)
+      if (draftKey) { try { localStorage.removeItem(draftKey) } catch { /* ignore */ } }
       showToast('Cooking your brainrot clip… 🍳', 'ok')
       pollJob(job_id)
     } catch (e) {
@@ -233,7 +418,9 @@ export default function BrainrotStudio() {
         {/* ══ LEFT: builder ══════════════════════════════════════ */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
 
-          {/* 1. Script */}
+          <StageRail stage={stage} onJump={goToStage} stageDone={stageDone} />
+
+          {stage === 'spark' && (
           <Section n="1" title="The Script" tip="Hook hard. A story, a hot take, an argument.">
             <textarea
               value={script}
@@ -247,12 +434,24 @@ export default function BrainrotStudio() {
                 lineHeight: 1.5, outline: 'none',
               }}
             />
-            <div style={{ marginTop: 6, fontSize: '.72rem', color: T.mute, fontWeight: 600 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10, alignItems: 'center' }}>
+              <button onClick={() => setScript(pickTopic(script))} {...pressHandlers}
+                style={{ ...pill(T.yellow, { cursor: 'pointer', fontWeight: 900 }) }}>
+                🎲 Surprise me
+              </button>
+              {SPARK_TOPICS.slice(0, 5).map(t => (
+                <button key={t} onClick={() => setScript(t)}
+                  style={{ ...pill(T.paper2, { cursor: 'pointer' }) }}>{t}</button>
+              ))}
+            </div>
+            <div style={{ marginTop: 10, fontSize: '.72rem', color: T.mute, fontWeight: 600 }}>
               The AI writes each character fully in-character and paces it to your clip length.
             </div>
+            <StageNextButton label="Next: pick your cast" onClick={goNext} />
           </Section>
+          )}
 
-          {/* 2. Cast */}
+          {stage === 'cast' && (
           <Section n="2" title="Cast" tip="0–2 original characters. Voices auto-match each character.">
             <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
               {[0, 1, 2].map(n => (
@@ -264,6 +463,17 @@ export default function BrainrotStudio() {
               ))}
             </div>
 
+            {/* signature casts — saved pairs, one tap to reload */}
+            {signatureCasts.length > 0 && castCount === 2 && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                {signatureCasts.map(cast => (
+                  <SignatureCastChip key={cast.id} cast={cast} roster={roster}
+                    onLoad={() => loadSignatureCast(cast)}
+                    onDelete={() => removeSignatureCast(cast.id)} />
+                ))}
+              </div>
+            )}
+
             {/* picked character cards */}
             {picked.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
@@ -274,8 +484,23 @@ export default function BrainrotStudio() {
                     onVoice={(voiceId) => updatePicked(p.id, { voiceId })}
                     onEntry={(entry) => updatePicked(p.id, { entry })}
                     onExit={(exit) => updatePicked(p.id, { exit })}
+                    onScale={(scale) => updatePicked(p.id, { scale })}
+                    onRotation={(rotation) => updatePicked(p.id, { rotation })}
                     onPreview={playPreview} />
                 ))}
+                {chemistry && (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+                    <div style={{ flex: 1 }}><ChemistryBadge chemistry={chemistry} /></div>
+                    <button onClick={saveCurrentCast} disabled={isSavedPair || savingCast} {...pressHandlers}
+                      title={isSavedPair ? 'Already saved' : 'Save this pair as a signature cast'}
+                      style={{ ...pill(isSavedPair ? T.green + '22' : T.paper2, {
+                        cursor: isSavedPair ? 'default' : 'pointer', fontWeight: 800,
+                        color: isSavedPair ? T.green : T.ink, whiteSpace: 'nowrap',
+                      }) }}>
+                      {isSavedPair ? '✓ Saved' : savingCast ? 'Saving…' : '💾 Save cast'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -326,9 +551,11 @@ export default function BrainrotStudio() {
                 Pure narrator voice-over — no characters on screen, just captions over gameplay.
               </div>
             )}
+            <StageNextButton label="Next: pick a background" onClick={goNext} />
           </Section>
+          )}
 
-          {/* 3. Background */}
+          {stage === 'scene' && (
           <Section n="3" title="Gameplay Background" tip="The satisfying loop behind it all.">
             {clipsLib.length === 0 ? (
               <div style={{ fontSize: '.82rem', color: T.mute, fontWeight: 600 }}>
@@ -368,10 +595,13 @@ export default function BrainrotStudio() {
                 </div>
               </>
             )}
+            <StageNextButton label="Next: set the style" onClick={goNext} />
           </Section>
+          )}
 
-          {/* 4. Vibe */}
-          <Section n="4" title="Vibe" tip="Length & caption energy.">
+          {stage === 'style' && (
+          <>
+          <Section n="4" title="Style" tip="Length & caption energy.">
             <div style={{ fontSize: '.74rem', fontWeight: 800, color: T.mute, marginBottom: 8 }}>
               LENGTH · <span style={{ color: T.ink }}>{duration}s</span>
             </div>
@@ -401,6 +631,123 @@ export default function BrainrotStudio() {
               })}
             </div>
           </Section>
+
+          {/* 4b. Motion & Sound */}
+          <Section n="4" title="Motion & Sound" tip="How characters move, and what plays behind them.">
+            <div style={{ fontSize: '.74rem', fontWeight: 800, color: T.mute, marginBottom: 8 }}>ON-SCREEN TOGETHER?</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+              <button onClick={() => setMotionMode('turn_based')} {...pressHandlers}
+                style={{ ...btn(motionMode === 'turn_based' ? T.ink : T.paper2, motionMode === 'turn_based' ? '#fff' : T.ink),
+                  flex: 1, padding: '9px 10px', fontSize: '.8rem', textAlign: 'left' }}>
+                <div style={{ fontWeight: 900 }}>Turn-based</div>
+                <div style={{ fontSize: '.62rem', fontWeight: 600, opacity: .75 }}>Enters/exits per line — classic brainrot</div>
+              </button>
+              <button onClick={() => setMotionMode('always_on')} {...pressHandlers}
+                style={{ ...btn(motionMode === 'always_on' ? T.ink : T.paper2, motionMode === 'always_on' ? '#fff' : T.ink),
+                  flex: 1, padding: '9px 10px', fontSize: '.8rem', textAlign: 'left' }}>
+                <div style={{ fontWeight: 900 }}>Always on</div>
+                <div style={{ fontSize: '.62rem', fontWeight: 600, opacity: .75 }}>Both stay put the whole clip</div>
+              </button>
+            </div>
+
+            <div style={{ fontSize: '.74rem', fontWeight: 800, color: T.mute, marginBottom: 8 }}>BACKGROUND MUSIC</div>
+            {musicLib.length === 0 ? (
+              <div style={{ fontSize: '.76rem', color: T.mute, fontWeight: 600, marginBottom: 16 }}>
+                No music uploaded yet — an admin adds tracks in the library.
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                  <button onClick={() => setMusicId('')}
+                    style={{ ...pill(!musicId ? T.yellow : T.paper2), cursor: 'pointer' }}>None</button>
+                  {musicLib.map(m => (
+                    <button key={m.id} onClick={() => setMusicId(m.id)}
+                      style={{ ...pill(musicId === m.id ? T.yellow : T.paper2), cursor: 'pointer' }}>{m.name}</button>
+                  ))}
+                </div>
+                {musicId && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: '.68rem', fontWeight: 700, color: T.mute, marginBottom: 4 }}>
+                      Volume (ducks under dialogue automatically) · {Math.round(musicVolume * 100)}%
+                    </div>
+                    <input type="range" min={0.2} max={0.4} step={0.02} value={musicVolume}
+                      onChange={e => setMusicVolume(Number(e.target.value))}
+                      style={{ width: '100%', accentColor: T.red }} />
+                  </div>
+                )}
+              </>
+            )}
+
+            <div style={{ fontSize: '.74rem', fontWeight: 800, color: T.mute, marginBottom: 8 }}>SOUND EFFECTS</div>
+            {sfxLib.length === 0 ? (
+              <div style={{ fontSize: '.76rem', color: T.mute, fontWeight: 600 }}>
+                No SFX uploaded yet — an admin adds these in the library.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 10 }}>
+                <label style={{ flex: 1 }}>
+                  <span style={{ fontSize: '.62rem', fontWeight: 800, color: T.mute, textTransform: 'uppercase', letterSpacing: '.05em' }}>Intro stinger</span>
+                  <select value={introSfxId} onChange={e => setIntroSfxId(e.target.value)}
+                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 4,
+                      background: T.paper2, border: `2px solid ${T.ink}`, borderRadius: 8,
+                      padding: '7px 10px', fontSize: '.78rem', fontFamily: FONT, cursor: 'pointer' }}>
+                    <option value="">None</option>
+                    {sfxLib.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </label>
+                <label style={{ flex: 1 }}>
+                  <span style={{ fontSize: '.62rem', fontWeight: 800, color: T.mute, textTransform: 'uppercase', letterSpacing: '.05em' }}>Outro stinger</span>
+                  <select value={outroSfxId} onChange={e => setOutroSfxId(e.target.value)}
+                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 4,
+                      background: T.paper2, border: `2px solid ${T.ink}`, borderRadius: 8,
+                      padding: '7px 10px', fontSize: '.78rem', fontFamily: FONT, cursor: 'pointer' }}>
+                    <option value="">None</option>
+                    {sfxLib.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </label>
+              </div>
+            )}
+            <StageNextButton label="Next: review & generate" onClick={goNext} />
+          </Section>
+          </>
+          )}
+
+          {stage === 'review' && (
+          <Section n="5" title="Review" tip="Everything you've set, in one place — jump back to change anything.">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <ReviewRow label="Spark" done={stageDone.spark} onEdit={() => goToStage('spark')}>
+                {script.trim() ? `"${script.trim().slice(0, 80)}${script.trim().length > 80 ? '…' : ''}"` : 'No topic yet'}
+              </ReviewRow>
+              <ReviewRow label="Cast" done={stageDone.cast} onEdit={() => goToStage('cast')}>
+                {castCount === 0 ? 'Narrator only' :
+                  picked.length ? `${picked.map(p => p.name).join(' vs ')}${chemistry ? ` · ${chemistry.emoji} ${chemistry.label}` : ''}` :
+                  `0 of ${castCount} picked`}
+              </ReviewRow>
+              <ReviewRow label="Scene" done={stageDone.scene} onEdit={() => goToStage('scene')}>
+                {background ? `${background.category?.replace(/_/g, ' ') || 'Background'}${background.source_title ? ` — ${background.source_title}` : ''}` : 'No background yet'}
+              </ReviewRow>
+              <ReviewRow label="Style" done={stageDone.style} onEdit={() => goToStage('style')}>
+                {duration}s · {CAPTION_STYLES.find(c => c.id === captionStyle)?.label || captionStyle} captions · {motionMode === 'always_on' ? 'always on' : 'turn-based'}
+                {musicId ? ` · 🎵 ${musicLib.find(m => m.id === musicId)?.name || 'music'}` : ''}
+              </ReviewRow>
+            </div>
+
+            <div style={{ marginTop: 18, padding: '12px 14px', background: T.paper2, border: `2px dashed ${T.ink}44`, borderRadius: 10, fontSize: '.78rem', color: T.mute, fontWeight: 600 }}>
+              🪙 This uses 1 credit — only if the clip actually finishes. If anything fails while rendering, it's refunded automatically.
+            </div>
+
+            {problems.length > 0 && (
+              <div style={{ marginTop: 12, ...card({ padding: '10px 12px', background: '#fff4f4', borderColor: T.red }) }}>
+                <div style={{ fontSize: '.68rem', fontWeight: 900, color: T.redDark, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 5 }}>Still needed:</div>
+                {problems.map((p, i) => (
+                  <div key={i} style={{ fontSize: '.78rem', fontWeight: 700, color: T.ink, display: 'flex', gap: 6 }}>
+                    <span style={{ color: T.red }}>○</span>{p}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
+          )}
         </div>
 
         {/* ══ RIGHT: preview + generate (sticky) ═════════════════ */}
@@ -410,6 +757,7 @@ export default function BrainrotStudio() {
             characters={picked}
             captionStyle={captionStyle}
             onMoveCharacter={moveCharacter}
+            chemistry={chemistry}
           />
 
           {isActive(activeJob) ? (
@@ -455,6 +803,12 @@ export default function BrainrotStudio() {
 }
 
 function isActive(job) { return !!job && ACTIVE_STATUSES.includes(job.status) }
+
+// picks a random Spark topic, avoiding an immediate repeat of the current script
+function pickTopic(current) {
+  const pool = SPARK_TOPICS.filter(t => t !== current)
+  return pool[Math.floor(Math.random() * pool.length)] || SPARK_TOPICS[0]
+}
 
 // ── Header ────────────────────────────────────────────────────────
 function Header({ user, onLogout, navigate }) {
@@ -504,8 +858,111 @@ function Section({ n, title, tip, children }) {
   )
 }
 
+// ── Stage rail ────────────────────────────────────────────────────
+// Horizontal, always visible, every stage clickable regardless of
+// completion — a rail, not a gate. Checkmarks are informational (what's
+// left) not a lock (nothing here blocks navigation); only Generate itself,
+// in the sticky right column, is gated on `problems`.
+function StageRail({ stage, onJump, stageDone }) {
+  return (
+    <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+      {STAGES.map(s => {
+        const active = stage === s.id
+        const done = stageDone[s.id]
+        return (
+          <button key={s.id} onClick={() => onJump(s.id)} title={s.hint}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
+              cursor: 'pointer', padding: '8px 14px',
+              background: active ? T.ink : done ? '#eefaf0' : T.paper2,
+              color: active ? '#fff' : T.ink,
+              border: `2px solid ${T.ink}`, borderRadius: 999,
+              boxShadow: active ? sticker(3) : 'none',
+              fontFamily: FONT, fontWeight: 800, fontSize: '.8rem',
+              transition: 'all .12s',
+            }}>
+            <span>{s.icon}</span>
+            <span>{s.label}</span>
+            {done && !active && <span style={{ color: T.green, fontWeight: 900 }}>✓</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── "Next stage" convenience button ─────────────────────────────────
+// The rail supports jumping anywhere, but most first-time users will just
+// go in order — this keeps that path a single click without forcing it.
+function StageNextButton({ label, onClick }) {
+  return (
+    <button onClick={onClick} {...pressHandlers}
+      style={{ ...pill(T.ink, { color: '#fff', cursor: 'pointer', marginTop: 16, fontWeight: 800 }) }}>
+      {label} →
+    </button>
+  )
+}
+
+// ── Review row ────────────────────────────────────────────────────
+function ReviewRow({ label, done, onEdit, children }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+      background: T.paper2, border: `2px solid ${T.ink}`, borderRadius: 10 }}>
+      <span style={{ color: done ? T.green : T.mute, fontWeight: 900, fontSize: '.9rem', flexShrink: 0 }}>
+        {done ? '✓' : '○'}
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: '.62rem', fontWeight: 800, color: T.mute, textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
+        <div style={{ fontSize: '.82rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{children}</div>
+      </div>
+      <button onClick={onEdit} style={{ ...pill(T.paper, { cursor: 'pointer', padding: '4px 10px', fontSize: '.7rem', flexShrink: 0 }) }}>Edit</button>
+    </div>
+  )
+}
+
+// ── Chemistry badge ─────────────────────────────────────────────────
+function ChemistryBadge({ chemistry }) {
+  return (
+    <div style={{ ...card({ padding: '10px 14px', boxShadow: sticker(2) }),
+      display: 'flex', alignItems: 'center', gap: 10 }}>
+      <span style={{ fontSize: '1.3rem' }}>{chemistry.emoji}</span>
+      <div>
+        <div style={{ fontSize: '.82rem', fontWeight: 900 }}>{chemistry.label}</div>
+        <div style={{ fontSize: '.68rem', fontWeight: 600, color: T.mute }}>{chemistry.blurb}</div>
+      </div>
+    </div>
+  )
+}
+
+// ── Signature cast chip ──────────────────────────────────────────────
+function SignatureCastChip({ cast, roster, onLoad, onDelete }) {
+  const chars = cast.character_ids.map(id => roster.find(r => r.id === id)).filter(Boolean)
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+      background: T.paper2, border: `2px solid ${T.ink}`, borderRadius: 999, padding: '4px 6px 4px 4px' }}>
+      <button onClick={onLoad} title={`Load ${cast.label || 'this cast'}`}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+          background: 'none', border: 'none', padding: '2px 4px', fontFamily: FONT }}>
+        <div style={{ display: 'flex' }}>
+          {chars.map((c, i) => (
+            <img key={c.id} src={c.image_url} alt="" style={{
+              width: 22, height: 22, borderRadius: '50%', objectFit: 'cover',
+              border: `1.5px solid ${T.ink}`, background: '#e9e3d3',
+              marginLeft: i > 0 ? -8 : 0,
+            }} />
+          ))}
+        </div>
+        <span style={{ fontSize: '.72rem', fontWeight: 800 }}>{cast.label || 'Signature cast'}</span>
+      </button>
+      <button onClick={onDelete} title="Delete"
+        style={{ cursor: 'pointer', background: 'none', border: 'none', color: T.mute,
+          fontSize: '.7rem', fontWeight: 900, padding: '2px 6px' }}>✕</button>
+    </div>
+  )
+}
+
 // ── Picked character card ─────────────────────────────────────────
-function PickedCard({ p, motions, voices, onRemove, onVoice, onEntry, onExit, onPreview }) {
+function PickedCard({ p, motions, voices, onRemove, onVoice, onEntry, onExit, onPreview, onScale, onRotation }) {
   const selectStyle = {
     background: T.paper2, border: `2px solid ${T.ink}`, borderRadius: 8,
     padding: '5px 8px', fontSize: '.72rem', fontWeight: 700, fontFamily: FONT, cursor: 'pointer', width: '100%',
@@ -557,6 +1014,25 @@ function PickedCard({ p, motions, voices, onRemove, onVoice, onEntry, onExit, on
             <select value={p.exit} onChange={e => onExit(e.target.value)} style={selectStyle}>
               {motions.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
+          </label>
+        </div>
+        {/* scale / rotation */}
+        <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+          <label style={{ flex: 1 }}>
+            <span style={{ fontSize: '.56rem', fontWeight: 800, color: T.mute, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+              Size · {Math.round((p.scale ?? 1) * 100)}%
+            </span>
+            <input type="range" min={0.7} max={1.3} step={0.05} value={p.scale ?? 1}
+              onChange={e => onScale(Number(e.target.value))}
+              style={{ width: '100%', accentColor: T.red, display: 'block', marginTop: 2 }} />
+          </label>
+          <label style={{ flex: 1 }}>
+            <span style={{ fontSize: '.56rem', fontWeight: 800, color: T.mute, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+              Tilt · {p.rotation ?? 0}°
+            </span>
+            <input type="range" min={-15} max={15} step={1} value={p.rotation ?? 0}
+              onChange={e => onRotation(Number(e.target.value))}
+              style={{ width: '100%', accentColor: T.red, display: 'block', marginTop: 2 }} />
           </label>
         </div>
       </div>

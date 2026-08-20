@@ -17,6 +17,7 @@ export default function PreviewStage({
   characters,          // [{side, image_url, x, y, scale, rotation}]
   captionStyle = 'brainrot',
   onMoveCharacter,     // (side, x, y) => void
+  chemistry,           // {emoji, label} | null — see chemistry.js
 }) {
   const stageRef = useRef(null)
   const dragState = useRef(null)
@@ -118,6 +119,17 @@ export default function PreviewStage({
           fontSize: '.6rem', fontWeight: 700, padding: '3px 8px',
           borderRadius: 999, pointerEvents: 'none',
         }}>drag to reposition</div>
+      )}
+
+      {/* chemistry echo */}
+      {chemistry && (
+        <div style={{
+          position: 'absolute', top: 8, right: 8,
+          background: 'rgba(0,0,0,.6)', color: '#fff',
+          fontSize: '.6rem', fontWeight: 700, padding: '3px 8px',
+          borderRadius: 999, pointerEvents: 'none',
+          display: 'flex', alignItems: 'center', gap: 4,
+        }}><span>{chemistry.emoji}</span>{chemistry.label}</div>
       )}
     </div>
   )

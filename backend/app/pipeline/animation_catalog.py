@@ -22,11 +22,12 @@ class Motion:
 
 
 MOTIONS: list[Motion] = [
-    Motion("slide", "Slide",  "Slides in from the character's own side edge."),
-    Motion("rise",  "Rise Up", "Rises up from below the bottom edge."),
-    Motion("drop",  "Drop In", "Drops down from above the top edge."),
-    Motion("pop",   "Pop",    "Quick little pop into place."),
-    Motion("cut",   "Cut",    "Appears instantly, no travel."),
+    Motion("slide",  "Slide",  "Slides in from the character's own side edge."),
+    Motion("bounce", "Bounce", "Slides in from the side and overshoots before settling — springy."),
+    Motion("rise",   "Rise Up", "Rises up from below the bottom edge."),
+    Motion("drop",   "Drop In", "Drops down from above the top edge."),
+    Motion("pop",    "Pop",    "Quick little pop into place."),
+    Motion("cut",    "Cut",    "Appears instantly, no travel."),
 ]
 
 VALID_MOTIONS: set[str] = {m.id for m in MOTIONS}

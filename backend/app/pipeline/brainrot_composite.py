@@ -35,6 +35,24 @@ CANVAS_W, CANVAS_H = 1080, 1920
 SLIDE_RAMP_SECONDS = 0.28   # default travel time to move fully on/off screen
 POP_RAMP_SECONDS = 0.14     # faster ramp for the "pop" motion
 CUT_RAMP_SECONDS = 0.001    # effectively instant (no visible travel)
+BOUNCE_RAMP_SECONDS = 0.45  # slower — needs room for the overshoot to read
+
+# Idle sway (present but not currently speaking) vs talk-bob (actively
+# speaking this line) — both are small continuous Y-axis oscillations
+# layered on top of the character's held position, driven by `t` the same
+# way the entry/exit ramps are. Idle is a slow gentle "breathing" sway;
+# talk is snappier and always-positive (a nod, not a float) so a speaking
+# character visibly reads as animated rather than a frozen PNG.
+IDLE_SWAY_AMPLITUDE_PX = 6.0
+IDLE_SWAY_HZ = 0.6
+TALK_BOB_AMPLITUDE_PX = 14.0
+TALK_BOB_HZ = 3.2
+
+# Background music ducks to this fraction of its set volume while any
+# character is speaking, with a short fade at each edge so it's a duck,
+# not a click.
+MUSIC_DUCK_FACTOR = 0.35
+MUSIC_DUCK_RAMP_SECONDS = 0.15
 
 # canon.png assets are 896x1152 → height/width. Used to estimate the overlay's
 # pixel height (the scale filter uses -1, so exact height isn't known at build
@@ -87,26 +105,80 @@ def _base_crop_filter(input_label: str, out_label: str) -> str:
 
 def _motion_offset(
     motion_id: str, side: str, on_x: float, on_y: float, char_w: float, char_h: float,
-) -> tuple[float, float, float]:
-    """Resolve a motion id to (dx, dy, ramp_seconds): the offset added to the
-    character's on-screen (x, y) that parks it just off-canvas for that motion,
-    plus how long the travel ramp lasts. dx/dy are large enough to hide the
+) -> tuple[float, float, float, str]:
+    """Resolve a motion id to (dx, dy, ramp_seconds, ease): the offset added
+    to the character's on-screen (x, y) that parks it just off-canvas for
+    that motion, how long the travel ramp lasts, and which easing curve
+    _axis_expr should drive it with. dx/dy are large enough to hide the
     character fully; the exact magnitude only needs to clear the frame."""
     if motion_id == "rise":
         # Start/end below the bottom edge.
-        return 0.0, (CANVAS_H + 40) - on_y, SLIDE_RAMP_SECONDS
+        return 0.0, (CANVAS_H + 40) - on_y, SLIDE_RAMP_SECONDS, "ease"
     if motion_id == "drop":
         # Start/end above the top edge.
-        return 0.0, -(char_h + 40) - on_y, SLIDE_RAMP_SECONDS
+        return 0.0, -(char_h + 40) - on_y, SLIDE_RAMP_SECONDS, "ease"
     if motion_id == "pop":
         # Small quick nudge up into place — reads as a pop, not a full slide.
-        return 0.0, 90.0, POP_RAMP_SECONDS
+        return 0.0, 90.0, POP_RAMP_SECONDS, "ease"
     if motion_id == "cut":
-        # No travel — appears/disappears in place.
-        return 0.0, 0.0, CUT_RAMP_SECONDS
+        # No travel — appears/disappears in place. Easing is moot at this
+        # ramp length but "ease" is still numerically safe (see _ease()).
+        return 0.0, 0.0, CUT_RAMP_SECONDS, "ease"
+    if motion_id == "bounce":
+        # Off the character's own side edge, like slide, but flies past the
+        # landing point and settles back — a damped-spring overshoot rather
+        # than a straight glide. Needs a slower ramp for the overshoot to
+        # actually read on screen instead of looking like a glitch.
+        off_x = (-char_w - 40) if side == "left" else (CANVAS_W + 40)
+        return off_x - on_x, 0.0, BOUNCE_RAMP_SECONDS, "bounce"
     # "slide" (default): off the character's own side edge, horizontally.
     off_x = (-char_w - 40) if side == "left" else (CANVAS_W + 40)
-    return off_x - on_x, 0.0, SLIDE_RAMP_SECONDS
+    return off_x - on_x, 0.0, SLIDE_RAMP_SECONDS, "ease"
+
+
+def _ease_ramp(kind: str, t_expr: str, duration: float, start_val: float, end_val: float) -> str:
+    """One eased ramp from start_val to end_val over `duration`, as a
+    function of `t_expr` (an ffmpeg time expression, e.g. "t-1.200" —
+    always evaluates in [0, duration] because the caller only ever
+    substitutes this inside an if(between(...)) branch bounding that range).
+
+    "out"    — decelerates into place (1-(1-p)^3). Used for entries: the
+               character lands gently instead of snapping to a stop.
+    "in"     — accelerates away (p^3). Used for exits: picks up speed as it
+               leaves instead of drifting off at a constant rate.
+    "bounce" — damped spring overshoot (entry only, see _motion_offset)."""
+    p = f"(({t_expr})/{duration:.4f})"
+    diff = f"({end_val:.1f}-({start_val:.1f}))"
+    if kind == "bounce":
+        # Damped harmonic: overshoots past 1.0 once around p≈0.35 then
+        # settles to ~1.0 by p=1. exp()/cos() are standard ffmpeg eval funcs.
+        progress = f"(1-exp(-5*{p})*cos(2*PI*1.5*{p}))"
+    elif kind == "in":
+        progress = f"pow({p},3)"
+    else:  # "out" (default) — also correct (if slightly generous) for cut/pop
+        progress = f"(1-pow(1-{p},3))"
+    return f"({start_val:.1f}+{diff}*{progress})"
+
+
+def _presence_sway_expr(base_val: float, speak_windows: list[tuple[float, float]]) -> str:
+    """Y-axis micro-motion applied during the HELD portion of a presence
+    window (never during the entry/exit ramps themselves, which have their
+    own dedicated easing) — this is what turns a character from a frozen
+    PNG into something that reads as alive while it waits or talks.
+
+    Outside any speak_window: a slow, smooth breathing sway (plain sin).
+    Inside one (this character is the one actually talking right now): a
+    faster, always-downward-biased nod (abs(sin)) so a speaking character
+    visibly reads as more animated than one just standing there."""
+    idle = f"({base_val:.1f}+{IDLE_SWAY_AMPLITUDE_PX}*sin(2*PI*{IDLE_SWAY_HZ}*t))"
+    expr = idle
+    for start, end in reversed(speak_windows):
+        talk = (
+            f"({base_val:.1f}+{TALK_BOB_AMPLITUDE_PX}"
+            f"*abs(sin(2*PI*{TALK_BOB_HZ}*(t-{start:.3f}))))"
+        )
+        expr = f"if(between(t,{start:.3f},{end:.3f}),{talk},{expr})"
+    return expr
 
 
 def _axis_expr(
@@ -116,30 +188,43 @@ def _axis_expr(
     exit_end_val: float,
     ramp_in: float,
     ramp_out: float,
+    entry_ease: str = "ease",
+    exit_ease: str = "ease",
+    speak_windows: list[tuple[float, float]] | None = None,
 ) -> str:
     """Piecewise position expression for ONE axis (x or y).
 
-    Per window: ramp enter_start_val -> on_val over ramp_in, hold at on_val,
-    then ramp on_val -> exit_end_val over ramp_out. Outside a window the
-    character sits at enter_start_val (ready to re-enter) before/between
-    windows, and at exit_end_val after the final window — both off-canvas, so
-    the discontinuity between them is never visible. Built outside-in in the
-    same nested-if style as extractor.py's _zoom_expr()."""
+    Per window: ease enter_start_val -> on_val over ramp_in, hold at on_val
+    (with idle/talk sway layered in if speak_windows is given — Y-axis calls
+    only, see _character_overlay_filter), then ease on_val -> exit_end_val
+    over ramp_out. Outside a window the character sits at enter_start_val
+    (ready to re-enter) before/between windows, and at exit_end_val after the
+    final window — both off-canvas, so the discontinuity between them is
+    never visible. Built outside-in in the same nested-if style as
+    extractor.py's _zoom_expr()."""
+    hold_expr = (
+        _presence_sway_expr(on_val, speak_windows) if speak_windows is not None
+        else f"{on_val:.1f}"
+    )
     expr = f"{exit_end_val:.1f}"  # resting place after the last window
     for start, end in reversed(windows):
         ramp_in_end = start + ramp_in
         ramp_out_start = end - ramp_out
-        entry = (
-            f"({enter_start_val:.1f}+({on_val:.1f}-({enter_start_val:.1f}))"
-            f"*(t-{start:.3f})/{ramp_in})"
+        entry = _ease_ramp(
+            "bounce" if entry_ease == "bounce" else "out",
+            f"t-{start:.3f}", ramp_in, enter_start_val, on_val,
         )
-        exit_ = (
-            f"({on_val:.1f}+({exit_end_val:.1f}-({on_val:.1f}))"
-            f"*(t-{ramp_out_start:.3f})/{ramp_out})"
+        # "bounce" applied to an exit overshoots PAST exit_end_val before
+        # settling — harmless (and gives a nice anticipation wobble) since
+        # exit_end_val is always off-canvas, so the overshoot/settle both
+        # happen out of frame.
+        exit_ = _ease_ramp(
+            "bounce" if exit_ease == "bounce" else "in",
+            f"t-{ramp_out_start:.3f}", ramp_out, on_val, exit_end_val,
         )
         window_expr = (
             f"if(lt(t,{ramp_in_end:.3f}),{entry},"
-            f"if(lt(t,{ramp_out_start:.3f}),{on_val:.1f},{exit_}))"
+            f"if(lt(t,{ramp_out_start:.3f}),{hold_expr},{exit_}))"
         )
         expr = (
             f"if(lt(t,{start:.3f}),{enter_start_val:.1f},"
@@ -175,16 +260,28 @@ def _active_windows(lines: list[TimedLine], side: str, motion_mode: str, clip_du
     return windows
 
 
+def _speaking_windows(lines: list[TimedLine], side: str) -> list[tuple[float, float]]:
+    """(start, end) of every line `side` actually speaks — distinct from
+    _active_windows' presence windows. In turn_based mode these are nearly
+    the same thing (a presence window IS a run of this character's lines),
+    but in always_on mode presence spans the whole clip while speaking is
+    sparse inside it — this is what lets the idle-vs-talk sway in
+    _presence_sway_expr tell "on screen" apart from "talking right now"."""
+    return [(l.start, l.end) for l in lines if l.speaker == side]
+
+
 def _character_overlay_filter(
     char: CharacterPlacement,
     input_label: str,
     bg_label: str,
     out_label: str,
     windows: list[tuple[float, float]],
+    speak_windows: list[tuple[float, float]],
 ) -> str:
     """One [scale][overlay] pair for a single character, with independent
     entry and exit motions (see animation_catalog.py / _motion_offset) driven
-    on both axes by _axis_expr."""
+    on both axes by _axis_expr, plus idle/talk sway (Y-axis only — see
+    _presence_sway_expr) layered into the held portion of each window."""
     char_w = _even(CANVAS_W * _CHAR_BASE_WIDTH_FRAC * char.scale)
     char_h = char_w * _CHAR_ASPECT
     on_x = float(_even(char.x * CANVAS_W - char_w / 2))
@@ -200,16 +297,46 @@ def _character_overlay_filter(
             f"[{bg_label}][{input_label}_s]overlay=x={int(off_x)}:y={int(on_y)}[{out_label}]"
         )
 
-    entry_dx, entry_dy, entry_ramp = _motion_offset(char.entry, char.side, on_x, on_y, char_w, char_h)
-    exit_dx, exit_dy, exit_ramp = _motion_offset(char.exit, char.side, on_x, on_y, char_w, char_h)
+    entry_dx, entry_dy, entry_ramp, entry_ease = _motion_offset(char.entry, char.side, on_x, on_y, char_w, char_h)
+    exit_dx, exit_dy, exit_ramp, exit_ease = _motion_offset(char.exit, char.side, on_x, on_y, char_w, char_h)
 
-    x_expr = _axis_expr(windows, on_x, on_x + entry_dx, on_x + exit_dx, entry_ramp, exit_ramp)
-    y_expr = _axis_expr(windows, on_y, on_y + entry_dy, on_y + exit_dy, entry_ramp, exit_ramp)
+    x_expr = _axis_expr(
+        windows, on_x, on_x + entry_dx, on_x + exit_dx, entry_ramp, exit_ramp,
+        entry_ease, exit_ease,  # no sway on X — idle/talk motion is vertical only
+    )
+    y_expr = _axis_expr(
+        windows, on_y, on_y + entry_dy, on_y + exit_dy, entry_ramp, exit_ramp,
+        entry_ease, exit_ease, speak_windows,
+    )
 
     return (
         f"{rotate}scale={char_w}:-1[{input_label}_s];"
         f"[{bg_label}][{input_label}_s]overlay=x='{x_expr}':y='{y_expr}'[{out_label}]"
     )
+
+
+def _music_duck_expr(base_vol: float, lines: list[TimedLine]) -> str:
+    """Volume envelope for the music bed: holds at base_vol, dips to
+    MUSIC_DUCK_FACTOR*base_vol (with a short fade, not a hard cut) for the
+    duration of every dialogue line, then recovers. Same piecewise
+    ramp-hold-ramp technique as _axis_expr, applied to a scalar instead of
+    a position. Used with the `volume` filter's eval=frame so ffmpeg
+    re-evaluates it against the current `t` on every audio frame."""
+    duck_vol = base_vol * MUSIC_DUCK_FACTOR
+    ramp = MUSIC_DUCK_RAMP_SECONDS
+    expr = f"{base_vol:.3f}"
+    for line in reversed(lines):
+        s, e = line.start, line.end
+        duck_in_end = s + ramp
+        duck_out_start = max(s, e - ramp)
+        fade_in = f"({base_vol:.3f}+({duck_vol:.3f}-({base_vol:.3f}))*(t-{s:.3f})/{ramp:.3f})"
+        fade_out = f"({duck_vol:.3f}+({base_vol:.3f}-({duck_vol:.3f}))*(t-{duck_out_start:.3f})/{ramp:.3f})"
+        held = (
+            f"if(lt(t,{duck_in_end:.3f}),{fade_in},"
+            f"if(lt(t,{duck_out_start:.3f}),{duck_vol:.3f},{fade_out}))"
+        )
+        expr = f"if(between(t,{s:.3f},{e:.3f}),{held},{expr})"
+    return expr
 
 
 def _audio_mix_filter(lines: list[TimedLine], music_path: Path | None, music_volume: float,
@@ -231,18 +358,26 @@ def _audio_mix_filter(lines: list[TimedLine], music_path: Path | None, music_vol
     if music_path is not None:
         idx = input_index_map["music"]
         vol = max(0.2, min(0.4, music_volume))
-        parts.append(f"[{idx}:a]volume={vol}[a_music]")
+        # Genuinely ducked now (see _music_duck_expr) — dips under whichever
+        # character is talking instead of sitting at one flat level for the
+        # whole clip, which is what the old code (and its docstring, which
+        # overstated this) actually did.
+        duck_expr = _music_duck_expr(vol, lines)
+        parts.append(f"[{idx}:a]volume='{duck_expr}':eval=frame[a_music]")
         mix_inputs.append("[a_music]")
 
     if intro_sfx is not None:
         idx = input_index_map["intro_sfx"]
-        mix_inputs.append(f"[{idx}:a]")
+        # Light headroom — stinger assets are often mastered hotter than
+        # dialogue/TTS output and would otherwise overpower it at t=0.
+        parts.append(f"[{idx}:a]volume=0.8[a_intro]")
+        mix_inputs.append("[a_intro]")
 
     if outro_sfx is not None:
         idx = input_index_map["outro_sfx"]
         last_end = max((l.end for l in lines), default=0.0)
         delay_ms = int(last_end * 1000)
-        parts.append(f"[{idx}:a]adelay={delay_ms}|{delay_ms}[a_outro]")
+        parts.append(f"[{idx}:a]volume=0.8,adelay={delay_ms}|{delay_ms}[a_outro]")
         mix_inputs.append("[a_outro]")
 
     parts.append(f"{''.join(mix_inputs)}amix=inputs={len(mix_inputs)}:duration=longest:normalize=0[aout]")
@@ -298,8 +433,9 @@ async def render(
     for i, char in enumerate(characters):
         idx = input_index_map[f"char_{char.side}"]
         windows = _active_windows(lines, char.side, motion_mode, clip_duration)
+        speak_windows = _speaking_windows(lines, char.side)
         out_label = f"bg{i + 1}"
-        filter_parts.append(_character_overlay_filter(char, f"{idx}:v", bg_label, out_label, windows))
+        filter_parts.append(_character_overlay_filter(char, f"{idx}:v", bg_label, out_label, windows, speak_windows))
         bg_label = out_label
 
     audio_filter, audio_label = _audio_mix_filter(

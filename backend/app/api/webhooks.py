@@ -149,8 +149,22 @@ async def _handle_payment_succeeded(payload: dict) -> None:
     meta_plan = (payload.get("metadata") or {}).get("plan")
     if meta_plan in PLAN_LIMITS:
         plan_name = meta_plan
+    elif product_id in DODO_PLAN_MAP:
+        plan_name = DODO_PLAN_MAP[product_id]
     else:
-        plan_name = DODO_PLAN_MAP.get(product_id, _FALLBACK_PAID_PLAN)
+        # Neither the checkout-time metadata nor the product-id map resolved
+        # to a known plan. This is a real config bug (new Dodo product added
+        # without updating PRODUCT_IDS/DODO_PLAN_MAP) — a paid customer
+        # should never silently land on the lowest-tier default. Log loudly
+        # so this surfaces in alerts, and still grant the fallback so they
+        # aren't left with $0 entitlements after paying.
+        plan_name = _FALLBACK_PAID_PLAN
+        logger.error(
+            f"UNRESOLVED PAID PLAN — product_id={product_id!r}, "
+            f"metadata.plan={meta_plan!r}, email={payload.get('customer', {}).get('email', '')!r}. "
+            f"Granted fallback {_FALLBACK_PAID_PLAN!r}; add this product_id to DODO_PLAN_MAP or "
+            f"stamp metadata.plan at checkout to fix. Manual reconciliation likely needed."
+        )
 
     if not email:
         logger.error("Payment succeeded but no email in payload")
@@ -195,17 +209,26 @@ async def _handle_downgrade(payload: dict) -> None:
         return
 
     user_id = row["id"]
+    # Also reset credits_used / video_minutes_used, clamped to the new
+    # (lower) free-tier limits. Otherwise a paid user who'd already used
+    # e.g. 25 of 30 clips on starter_30 would land on free with
+    # credits_used=25 against credits_limit=2 → videos_remaining=0, fully
+    # locked out until the next monthly reset. Clamping preserves the
+    # intent (they've used their free-tier allowance this cycle) without
+    # the accidental hard lockout.
+    free_credits = get_credits_limit("free")
+    free_video_mins = get_video_minutes_limit("free")
     await db._execute(
         """
         UPDATE users
         SET plan                = 'free',
             credits_limit       = $1,
-            video_minutes_limit = $2
+            credits_used        = LEAST(credits_used, $1),
+            video_minutes_limit = $2,
+            video_minutes_used  = LEAST(video_minutes_used, $2)
         WHERE id = $3
         """,
-        get_credits_limit("free"),
-        get_video_minutes_limit("free"),
-        user_id,
+        free_credits, free_video_mins, user_id,
     )
 
     logger.info(f"Downgraded {email} → free plan")

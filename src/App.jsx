@@ -40,6 +40,13 @@ import Lab            from './pages/Lab'
 import Admin          from './pages/Admin'
 import AdminMarketingEditor from './pages/AdminMarketingEditor'
 import BrainrotStudio  from './pages/brainrot/BrainrotStudio'
+import BrainrotLanding from './pages/brainrot/BrainrotLanding'
+import BrainrotToolsIndex from './pages/brainrot/BrainrotToolsIndex'
+import BrainrotToolLanding from './pages/brainrot/BrainrotToolLanding'
+import BrainrotAlternativesIndex from './pages/brainrot/BrainrotAlternativesIndex'
+import BrainrotAlternativeLanding from './pages/brainrot/BrainrotAlternativeLanding'
+import BrainrotGuidesIndex from './pages/brainrot/BrainrotGuidesIndex'
+import BrainrotGuideArticle from './pages/brainrot/BrainrotGuideArticle'
 
 // SEO landing pages
 import ToolsIndex        from './pages/ToolsIndex'
@@ -195,7 +202,17 @@ export default function App() {
             <Route path="/youtube-shorts/lab"                   element={<ProtectedRoute><Lab /></ProtectedRoute>} />
 
             {/* ── Brainrot Clips Maker product ──────────────────── */}
-            <Route path="/brainrot"          element={<Navigate to="/brainrot/studio" replace />} />
+            <Route path="/brainrot"          element={<BrainrotLanding />} />
+
+            {/* Brainrot SEO pages */}
+            <Route path="/brainrot/tools"                element={<BrainrotToolsIndex />} />
+            <Route path="/brainrot/tools/:slug"           element={<BrainrotToolLanding />} />
+            <Route path="/brainrot/alternatives"          element={<BrainrotAlternativesIndex />} />
+            <Route path="/brainrot/alternatives/:slug"    element={<BrainrotAlternativeLanding />} />
+            <Route path="/brainrot/guides"                element={<BrainrotGuidesIndex />} />
+            <Route path="/brainrot/guides/:slug"          element={<BrainrotGuideArticle />} />
+
+            {/* Protected — user must be logged in */}
             <Route path="/brainrot/studio"   element={<ProtectedRoute><BrainrotStudio /></ProtectedRoute>} />
           </Routes>
         </BrowserRouter>

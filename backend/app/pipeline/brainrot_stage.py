@@ -12,9 +12,12 @@ Flow:
   5. brainrot_composite.render() — one ffmpeg pass
   6. Upload the finished clip, mark the job complete
 
-Phase 1 scope note: unlike ffmpeg_stage.py, this does not yet refund
-reserved credits on failure (see plan_limits.py / jobs.py:211-341 for the
-pattern to add once brainrot has its own credit cost model).
+Credits: a brainrot job reserves exactly 1 credit at submission time
+(POST /brainrot/jobs — see reserved_credits in the payload). If the job
+fails at either stage below, _fail_and_refund() releases it in full —
+same reserve/release primitive jobs.py + ffmpeg_stage.py use for YouTube
+Shorts, just without the partial-refund math since a brainrot job only
+ever produces one clip (all-or-nothing, not N-requested/M-delivered).
 """
 import asyncio
 import logging
@@ -56,10 +59,10 @@ async def run_brainrot_api_stage(job_id: str) -> None:
         )
     except asyncio.TimeoutError:
         logger.error(f"[{job_id}] Brainrot API stage timed out")
-        await db.fail_brainrot_job(job_id, "Script generation took too long.")
+        await _fail_and_refund(job_id, "Script generation took too long.")
     except Exception as exc:
         logger.exception(f"[{job_id}] Brainrot API stage failed: {exc}")
-        await db.fail_brainrot_job(job_id, _friendly_error(str(exc)))
+        await _fail_and_refund(job_id, _friendly_error(str(exc)))
 
 
 async def run_brainrot_ffmpeg_stage(job_id: str) -> None:
@@ -70,10 +73,35 @@ async def run_brainrot_ffmpeg_stage(job_id: str) -> None:
         )
     except asyncio.TimeoutError:
         logger.error(f"[{job_id}] Brainrot FFmpeg stage timed out")
-        await db.fail_brainrot_job(job_id, "Rendering took too long. Please try again with a shorter script.")
+        await _fail_and_refund(job_id, "Rendering took too long. Please try again with a shorter script.")
     except Exception as exc:
         logger.exception(f"[{job_id}] Brainrot FFmpeg stage failed: {exc}")
-        await db.fail_brainrot_job(job_id, _friendly_error(str(exc)))
+        await _fail_and_refund(job_id, _friendly_error(str(exc)))
+
+
+async def _fail_and_refund(job_id: str, message: str) -> None:
+    """Marks the job failed and refunds its reserved credit. Re-fetches the
+    job row rather than threading user_id/reserved_credits through every
+    call site, since a failure can originate deep inside the pipeline (TTS,
+    ffmpeg) with those values long out of scope — this stays correct no
+    matter which stage or which line inside it actually raised.
+
+    Safe to call once per job: the API stage and FFmpeg stage run strictly
+    sequentially (run_brainrot_stage / the watcher only dispatches the
+    FFmpeg stage after the API stage reaches 'api_done'), so a job can only
+    ever fail in one of them, never both — no double-refund risk."""
+    await db.fail_brainrot_job(job_id, message)
+    try:
+        row = await db.get_brainrot_job(job_id)
+        if not row:
+            return
+        payload = row.get("payload") or {}
+        reserved = payload.get("reserved_credits", 0)
+        if reserved > 0:
+            await db.release_credits(str(row["user_id"]), reserved)
+            logger.info(f"[{job_id}] Refunded {reserved} credit(s) after failure")
+    except Exception:
+        logger.exception(f"[{job_id}] Failed to refund credits after job failure — needs manual reconciliation")
 
 
 async def run_brainrot_stage(job_id: str) -> None:
@@ -228,12 +256,33 @@ async def _synthesize_timeline(
         voice = voice_right if line.speaker == "right" else voice_left
         voice_entry = voice_catalog.get_voice(provider, voice) if voice else None
         locale = voice_entry.locale if voice_entry else "en-US"
+        # One retry on transient TTS failure: providers occasionally 5xx or
+        # timeout under load, and re-running the whole job just to re-do a
+        # single failed line is wasteful (every other line's TTS cost has
+        # already been paid). Cost of a retry is one extra API call for
+        # that line; cost of NOT retrying is a full job failure + refund
+        # + user resubmit.
         async with sem:
-            audio_bytes, duration = await tts.synthesize(line.text, voice, provider, locale=locale)
+            last_exc = None
+            for attempt in range(2):
+                try:
+                    audio_bytes, duration = await tts.synthesize(line.text, voice, provider, locale=locale)
+                    break
+                except Exception as exc:
+                    last_exc = exc
+                    if attempt == 0:
+                        logger.warning(f"[{job_id}] TTS line {i} attempt 1 failed: {exc} — retrying")
+                        await asyncio.sleep(1.5)
+            else:
+                raise last_exc  # both attempts failed — propagate
         audio_path = tmp_dir / f"line_{i}.mp3"
         audio_path.write_bytes(audio_bytes)
         return duration, audio_path
 
+    # No return_exceptions — a genuine TTS failure (after retry) should abort
+    # the whole synthesis, since a clip missing a line reads as broken to
+    # the viewer. The failure then propagates to run_brainrot_api_stage's
+    # exception handler which refunds the reserved credit in full.
     results = await asyncio.gather(*(_synth_one(i, l) for i, l in enumerate(dialogue_lines)))
 
     from app.pipeline.uploader import upload_tts_audio

@@ -15,9 +15,9 @@ DodoPayments.Initialize({
 // clips / videoHours / maxVideoHours mirror backend/app/core/plan_limits.py — keep in sync.
 // unlimited:true renders "Unlimited" instead of the raw credit count.
 const TIERS = [
-  { clips: 30,   price: 19, label: '30 Shorts',  dodoId: 'starter_30', videoHours: 10,  maxVideoHours: 2 },
-  { clips: 100,  price: 39, label: '100 Shorts', dodoId: 'growth_100', videoHours: 30,  maxVideoHours: 3 },
-  { clips: null, price: 99, label: 'Unlimited',  dodoId: 'unlimited',  videoHours: 100, maxVideoHours: 6, unlimited: true },
+  { clips: 30,   price: 15, label: '30 Shorts', dodoId: 'starter_30', videoHours: 10,  maxVideoHours: 2 },
+  { clips: 80,   price: 39, label: '80 Shorts', dodoId: 'growth_100', videoHours: 30,  maxVideoHours: 3 },
+  { clips: null, price: 99, label: 'Unlimited', dodoId: 'unlimited',  videoHours: 100, maxVideoHours: 6, unlimited: true },
 ]
 
 const FREE_FEATURES = [

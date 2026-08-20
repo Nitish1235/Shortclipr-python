@@ -223,7 +223,27 @@ async def create_brainrot_job(body: CreateBrainrotJobRequest, current_user: Curr
             raise HTTPException(status_code=404, detail="Unknown outro_sfx_id")
         outro_sfx_url = asset["gcs_path"]
 
+    # Reserve 1 credit atomically (FOR UPDATE row lock — same primitive
+    # jobs.py uses, see reserve_credits() in db/supabase.py). Deliberately
+    # placed AFTER every validation step above so a bad character/gameplay/
+    # audio id 404s without ever touching the user's balance. A brainrot job
+    # always produces exactly one clip, so this is a flat reserve-1 rather
+    # than the variable clip_count YT-Shorts uses.
+    #
+    # The reservation is only ever kept if the clip actually finishes —
+    # brainrot_stage.py refunds it in full on failure at either stage
+    # (script generation, TTS, or FFmpeg render), and the insert below
+    # refunds it too if the job row itself fails to write. Net effect for
+    # the user: a credit is only ever truly spent on a clip that reached them.
+    reserved_credits = await db.reserve_credits(current_user.user_id, 1)
+    if reserved_credits < 1:
+        raise HTTPException(
+            status_code=402,
+            detail="Monthly brainrot clip limit reached for your plan. Resets next month — upgrade to continue.",
+        )
+
     payload = {
+        "reserved_credits": reserved_credits,
         "script_input": opts.script_input.strip(),
         "character_ids": [p["character_id"] for p in character_positions],
         "character_positions": character_positions,
@@ -245,7 +265,11 @@ async def create_brainrot_job(body: CreateBrainrotJobRequest, current_user: Curr
         "outro_sfx_url": outro_sfx_url,
     }
 
-    row = await db.insert_brainrot_job(current_user.user_id, payload)
+    try:
+        row = await db.insert_brainrot_job(current_user.user_id, payload)
+    except Exception:
+        await db.release_credits(current_user.user_id, reserved_credits)
+        raise
     job_id = str(row["job_id"])
 
     split_worker_mode = bool(settings.FFMPEG_WORKER_URLS.strip())
@@ -297,6 +321,60 @@ def _serialize_brainrot_job(row: dict) -> dict:
 @router.get("/characters")
 async def list_characters():
     return {"characters": await get_character_roster()}
+
+
+# ── Signature casts — saved character pairs ──────────────────────
+# Small, deliberately unopinionated: just "these two characters, in this
+# order." The studio re-resolves art/voices from the live roster on load
+# rather than storing a snapshot, so a saved cast never goes stale.
+
+MAX_SIGNATURE_CASTS = 12
+
+
+class SignatureCastCreate(BaseModel):
+    character_ids: list[str]
+    label: str | None = None
+
+    @field_validator("character_ids")
+    @classmethod
+    def validate_pair(cls, v: list[str]) -> list[str]:
+        if len(v) != 2:
+            raise ValueError("A signature cast needs exactly 2 characters")
+        return v
+
+
+@router.get("/signature-casts")
+async def list_signature_casts(current_user: CurrentUser):
+    rows = await db.list_signature_casts(current_user.user_id)
+    return {"casts": [_serialize_signature_cast(r) for r in rows]}
+
+
+@router.post("/signature-casts")
+async def create_signature_cast(body: SignatureCastCreate, current_user: CurrentUser):
+    for cid in body.character_ids:
+        if await get_character_by_id(cid) is None:
+            raise HTTPException(status_code=404, detail=f"Unknown character_id: {cid}")
+    if await db.count_signature_casts(current_user.user_id) >= MAX_SIGNATURE_CASTS:
+        raise HTTPException(status_code=400, detail=f"Limit of {MAX_SIGNATURE_CASTS} signature casts reached — delete one to save another")
+    row = await db.insert_signature_cast(current_user.user_id, body.character_ids, body.label)
+    return _serialize_signature_cast(row)
+
+
+@router.delete("/signature-casts/{cast_id}")
+async def delete_signature_cast(cast_id: str, current_user: CurrentUser):
+    deleted = await db.delete_signature_cast(cast_id, current_user.user_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Signature cast not found")
+    return {"deleted": True}
+
+
+def _serialize_signature_cast(row: dict) -> dict:
+    return {
+        "id": str(row["id"]),
+        "character_ids": row["character_ids"],
+        "label": row.get("label"),
+        "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+    }
 
 
 # ── GET /brainrot/gameplay-clips ─────────────────────────────────
@@ -599,7 +677,14 @@ async def admin_upload_gameplay(
                     break
                 tmp_file.write(chunk)
             tmp_file_path = Path(tmp_file.name)
-        blob.upload_from_filename(str(tmp_file_path))
+        # Off-loop upload — google-cloud-storage's upload_from_filename is
+        # blocking, and calling it directly here would freeze the entire
+        # FastAPI event loop for the duration of a multi-hundred-MB upload
+        # (every other in-flight request stalls). Matches the run_in_executor
+        # pattern used throughout app/pipeline/uploader.py.
+        await asyncio.get_running_loop().run_in_executor(
+            None, blob.upload_from_filename, str(tmp_file_path),
+        )
         tmp_file_path.unlink(missing_ok=True)
         stored_gcs_path = f"gs://{bucket_name}/{object_name}"
         initial_status = "created"

@@ -26,9 +26,15 @@ cap beyond the global default already enforced by JobOptions validators":
 #  Plan           $/mo   Shorts  Monthly hrs  Per-video max
 #  ─────────────────────────────────────────────────────────
 #  free             $0      2      30 min        30 min
-#  starter_30      $19     30    10 hrs (600)   2 hrs (120)
-#  growth_100      $39    100    30 hrs (1800)  3 hrs (180)
+#  starter_30      $15     30    10 hrs (600)   2 hrs (120)
+#  growth_100      $39     80    30 hrs (1800)  3 hrs (180)  ← key is legacy, real cap is 80
 #  unlimited       $99   ∞/999K 100 hrs (6000)  6 hrs (360)
+#
+#  Plan-key naming note: `growth_100` was originally 100 clips at $39;
+#  cap was lowered to 80 without renaming the key so existing subscribers'
+#  users.plan value still resolves correctly (asyncpg would fall through
+#  to `free` for an unknown key). The customer-facing label is set in
+#  src/components/Pricing.jsx and doesn't need to match this key.
 #  ── legacy slider tiers (kept for existing subscribers) ──
 #  starter_100     $10     75    5 hrs (300)    2 hrs (120)
 #  starter_250     $25    200   10 hrs (600)    2 hrs (120)
@@ -65,7 +71,7 @@ PLAN_LIMITS: dict[str, dict] = {
         "max_video_minutes":   120,   # 2 hrs max single video
     },
     "growth_100": {
-        "credits_limit":       100,
+        "credits_limit":       80,    # ← current cap (key retained for backwards compat)
         "video_minutes_limit": 1800,  # 30 hrs/month
         "max_video_minutes":   180,   # 3 hrs max single video
     },

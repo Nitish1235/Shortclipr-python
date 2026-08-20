@@ -349,6 +349,45 @@ async def fail_brainrot_job(job_id: str, error_message: str) -> None:
     )
 
 
+# ── Brainrot signature casts ─────────────────────────────────────
+# User-saved character pairs — see migration 013. Small, deliberately
+# unopinionated: no per-cast voice/position overrides, just "these two
+# characters, in this order" — the studio re-hydrates everything else
+# (art, default voice, entry motion) from the live roster on load.
+
+async def insert_signature_cast(user_id: str, character_ids: list[str], label: str | None) -> dict:
+    return await _fetchrow(
+        """
+        INSERT INTO brainrot_signature_casts (user_id, character_ids, label)
+        VALUES ($1, $2::text[], $3)
+        RETURNING id, user_id, character_ids, label, created_at
+        """,
+        user_id, character_ids, label,
+    )
+
+
+async def list_signature_casts(user_id: str) -> list[dict]:
+    return await _fetch(
+        "SELECT * FROM brainrot_signature_casts WHERE user_id=$1 ORDER BY created_at DESC",
+        user_id,
+    )
+
+
+async def count_signature_casts(user_id: str) -> int:
+    row = await _fetchrow(
+        "SELECT COUNT(*) AS n FROM brainrot_signature_casts WHERE user_id=$1", user_id,
+    )
+    return row["n"] if row else 0
+
+
+async def delete_signature_cast(cast_id: str, user_id: str) -> bool:
+    result = await _execute(
+        "DELETE FROM brainrot_signature_casts WHERE id=$1 AND user_id=$2",
+        cast_id, user_id,
+    )
+    return result.endswith(" 1")  # asyncpg returns "DELETE <n>"
+
+
 # ── Brainrot gameplay + audio library ───────────────────────────
 # Read-mostly lookup tables managed by the Phase 3 admin upload UI —
 # Phase 1 only needs the read side (job creation resolves ids to gcs_path).
