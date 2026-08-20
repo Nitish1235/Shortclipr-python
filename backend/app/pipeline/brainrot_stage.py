@@ -121,6 +121,12 @@ def _friendly_error(raw: str) -> str:
     r = (raw or "").lower()
     if "tts" in r or "unrealspeech" in r or "lemonfox" in r:
         return "Voice synthesis failed. Please try again."
+    # Character/gameplay/audio asset download failures (download_to_file in
+    # uploader.py, after its own 3 retries) — catch before the generic
+    # fallback so the user never sees a raw GCS URL or "404 Not Found"
+    # exception string, which the old fallback branch used to leak verbatim.
+    if "download failed" in r or "storage.googleapis.com" in r or "client error" in r or "404 not found" in r:
+        return "Couldn't load one of this clip's assets (character, gameplay, or audio). Please try again — if it keeps happening, contact support."
     if "ffmpeg" in r or "composite" in r:
         return "Rendering failed. Please try again, or contact support if it keeps happening."
     if "zero usable dialogue" in r:

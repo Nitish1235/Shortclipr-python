@@ -213,17 +213,45 @@ async def upload_gameplay_thumbnail(local_path: Path, source_id: str, clip_id: s
     )
 
 
+_DOWNLOAD_RETRIES = 3
+
+
 async def download_to_file(url: str, dest: Path) -> Path:
     """Stream-download a (public GCS) URL to a local file. Used by the
-    editor's re-render endpoint to fetch the raw clip back down."""
+    editor's re-render endpoint to fetch the raw clip back down, and by
+    brainrot_stage.py to pull character images / gameplay clips / audio
+    assets before compositing.
+
+    Retries 3x with exponential backoff (1s, 2s) — matches _upload_to_gcs's
+    retry count. A single transient GCS blip used to fail the whole
+    brainrot job (and every credit reserved for it) on one attempt; a 4xx
+    (e.g. a genuinely missing blob) still fails immediately since retrying
+    a 404 wastes time without ever succeeding."""
     import httpx
-    async with httpx.AsyncClient(timeout=60) as client:
-        async with client.stream("GET", url) as resp:
-            resp.raise_for_status()
-            with open(dest, "wb") as f:
-                async for chunk in resp.aiter_bytes():
-                    f.write(chunk)
-    return dest
+
+    last_exc: Exception | None = None
+    for attempt in range(1, _DOWNLOAD_RETRIES + 1):
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                async with client.stream("GET", url) as resp:
+                    resp.raise_for_status()
+                    with open(dest, "wb") as f:
+                        async for chunk in resp.aiter_bytes():
+                            f.write(chunk)
+            return dest
+        except httpx.HTTPStatusError as exc:
+            # 4xx/5xx with a real response — a 404 will never succeed on
+            # retry, so don't waste 3 attempts on a permanently-missing blob.
+            if exc.response is not None and exc.response.status_code < 500:
+                raise
+            last_exc = exc
+        except Exception as exc:
+            last_exc = exc
+        if attempt < _DOWNLOAD_RETRIES:
+            delay = 2 ** (attempt - 1)  # 1s, 2s
+            logger.warning(f"Download attempt {attempt} failed for {url} ({last_exc}); retrying in {delay}s")
+            await asyncio.sleep(delay)
+    raise RuntimeError(f"Download failed after {_DOWNLOAD_RETRIES} attempts: {url}") from last_exc
 
 
 async def delete_job_from_gcs(job_id: str, keep_clip_ids: list[str] | None = None) -> None:

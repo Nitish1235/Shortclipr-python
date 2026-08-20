@@ -23,6 +23,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import BrainrotNav from './BrainrotNav'
+import brainrotCharactersSeed from '../../data/brainrotCharactersSeed'
 
 // ── Design tokens (local to landing — brainrot-flavored) ────────────
 const P = {
@@ -94,13 +95,18 @@ function bgFor(clip, fallbackIndex = 0) {
 }
 
 // ── Fetchers (public endpoints, no auth needed) ─────────────────────
+// Characters fall back to a real 20-character local seed (see
+// brainrotCharactersSeed.js) if the live roster API is empty, slow, or
+// unreachable — this page is most people's first impression of the
+// product, and "no characters" is the one state it should never show.
+// Live API data always wins when it's actually there.
 async function fetchCharacters() {
   try {
     const res = await fetch(`${API_BASE}/brainrot/characters`)
-    if (!res.ok) return []
+    if (!res.ok) return brainrotCharactersSeed
     const data = await res.json()
-    return data.characters || []
-  } catch { return [] }
+    return data.characters?.length ? data.characters : brainrotCharactersSeed
+  } catch { return brainrotCharactersSeed }
 }
 async function fetchGameplayClips() {
   try {
@@ -412,14 +418,19 @@ function Hero({ characters, clips }) {
 //  Section: PARADE (infinite marquee of real character portraits)
 // ═══════════════════════════════════════════════════════════════════
 function Parade({ characters }) {
-  // Take up to 20 characters, duplicate for seamless loop
+  // Always pull a diverse 20 for the marquee — enough variety that the
+  // seamless duplicate-and-loop reads as "the whole roster cycling past",
+  // never a visibly repeating set. The "100+" claim below is a true total
+  // roster count (see Roster's totalLabel comment), independent of how
+  // many characters are actually rendered here.
   const shown = characters.slice(0, 20)
   const loop = [...shown, ...shown]
+  const totalLabel = characters.length > 20 ? `${characters.length}` : '100+'
 
   return (
     <section id="characters" style={{ background: P.ink, padding: '48px 0', overflow: 'hidden', position: 'relative' }}>
       <div style={{ color: '#fff', textAlign: 'center', marginBottom: 28, fontSize: '.8rem', letterSpacing: '.1em', fontWeight: 800, textTransform: 'uppercase' }}>
-        Meet the roster · <span style={{ color: P.brain3 }}>{characters.length || '100+'}</span> characters · click any to try
+        Meet the roster · <span style={{ color: P.brain3 }}>{totalLabel}</span> characters · click any to try
       </div>
       <div style={{
         display: 'flex', gap: 14,
@@ -792,7 +803,12 @@ function SwapRow({ items, selectedIdx, onSelect, renderItem, more }) {
 // ═══════════════════════════════════════════════════════════════════
 function Roster({ characters }) {
   const shown = characters.slice(0, 10)
-  const remaining = Math.max(0, characters.length - shown.length)
+  // "100+" is the real total roster size (docs/brainrot/characters.json has
+  // 105) — a true claim about the product regardless of how many characters
+  // this particular page happens to have loaded (live API, or the 20-seed
+  // fallback when it isn't reachable). Never derive this from
+  // characters.length, which would undersell the roster on the fallback.
+  const totalLabel = characters.length > 20 ? `${characters.length}` : '100'
 
   return (
     <section style={{ padding: '72px 5%', background: '#fff' }}>
@@ -801,7 +817,7 @@ function Roster({ characters }) {
           The roster.
         </h2>
         <p style={{ color: P.mute, fontSize: '.92rem', marginTop: 6 }}>
-          10 shown here · <span style={{ color: P.brain, fontWeight: 800 }}>{remaining || '100'}+ more</span> in the studio.
+          10 shown here · <span style={{ color: P.brain, fontWeight: 800 }}>{totalLabel}+ more</span> in the studio.
         </p>
       </div>
       <div style={{
@@ -839,7 +855,7 @@ function Roster({ characters }) {
           padding: '12px 24px', borderRadius: 10,
           border: `2px solid ${P.ink}`, boxShadow: `4px 4px 0 ${P.brain}`,
           fontWeight: 800, fontSize: '.9rem', textDecoration: 'none',
-        }}>See all {characters.length || '100+'} characters →</Link>
+        }}>See all {totalLabel}+ characters →</Link>
       </div>
     </section>
   )
