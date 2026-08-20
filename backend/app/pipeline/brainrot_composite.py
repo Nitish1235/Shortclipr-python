@@ -550,11 +550,17 @@ async def render(
         inputs += ["-i", str(outro_sfx)]
         next_idx += 1
 
+    # A single character never cycles — turn_based only makes sense when
+    # there's someone to swap in. With one character, any lead-in or
+    # trailing silence outside the dialogue window would flicker them
+    # off screen, so force always_on here instead.
+    effective_motion_mode = "always_on" if len(characters) <= 1 else motion_mode
+
     filter_parts = [_base_crop_filter("0:v", "bg0")]
     bg_label = "bg0"
     for i, char in enumerate(characters):
         idx = input_index_map[f"char_{char.side}"]
-        windows = _active_windows(lines, char.side, motion_mode, clip_duration)
+        windows = _active_windows(lines, char.side, effective_motion_mode, clip_duration)
         speak_windows = _speaking_windows(lines, char.side)
         out_label = f"bg{i + 1}"
         filter_parts.append(_character_overlay_filter(char, f"{idx}:v", bg_label, out_label, windows, speak_windows))

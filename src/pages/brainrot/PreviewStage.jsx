@@ -83,38 +83,37 @@ export default function PreviewStage({
   // everyone active and skips the loop entirely.
   const sides = characters.map(c => c.side)
   const sidesKey = sides.join(',')
-  const alwaysOn = motionMode === 'always_on'
+  // Single character never cycles — always visible, matching backend
+  // behavior (only one presence window spanning the clip).
+  // always_on with 2 chars: both stay visible, the "speaking" one
+  // gets a scale pulse (see render below).
+  const alwaysOn = motionMode === 'always_on' || sides.length <= 1
   const [activeSide, setActiveSide] = useState(sides[0] ?? null)
   const draggingRef = useRef(false)
 
-  // Keep activeSide valid as the cast changes (size, or which character
-  // occupies a side) — falls back to the first side rather than pointing
-  // at one that no longer exists. Adjusted during render (React's
-  // "state derived from props" pattern) rather than in an effect, so a
-  // cast change never flashes a stale/invalid activeSide for one frame.
   const [syncedSidesKey, setSyncedSidesKey] = useState(sidesKey)
   if (sidesKey !== syncedSidesKey) {
     setSyncedSidesKey(sidesKey)
     if (!sides.includes(activeSide)) setActiveSide(sides[0] ?? null)
   }
 
+  // In always_on mode with 2 characters, cycle activeSide to show
+  // which character is "speaking" — both stay visible but the active
+  // one gets a subtle scale bump (the same cue the backend uses).
+  // In turn_based mode, the cycle controls who's on screen.
   useEffect(() => {
-    if (alwaysOn || sides.length === 0) return
+    if (sides.length === 0) return
+    if (sides.length <= 1) return
     const id = setInterval(() => {
       if (!draggingRef.current) setActiveSide(current => nextActiveSide(sides, current))
     }, MOTION_LOOP_MS)
     return () => clearInterval(id)
-  }, [alwaysOn, sidesKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sidesKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Instant feedback: the moment a character's entry OR exit motion
-  // changes (picked in the Cast stage), show it right away instead of
-  // waiting for the loop to come back around. If that character is
-  // currently active, advance the turn (plays THEIR new exit motion,
-  // and the next character's entry); if they're not active, bring them
-  // on screen (plays their new entry motion).
+  // Instant feedback when a character's motion changes.
   const prevMotionRef = useRef({})
   useEffect(() => {
-    if (alwaysOn) return
+    if (sides.length <= 1) return
     characters.forEach(c => {
       const key = `${c.entry}:${c.exit}`
       const prev = prevMotionRef.current[c.side]
@@ -123,7 +122,7 @@ export default function PreviewStage({
       }
       prevMotionRef.current[c.side] = key
     })
-  }, [characters, alwaysOn]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [characters]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const onPointerDown = useCallback((e, side) => {
     draggingRef.current = true
@@ -203,18 +202,40 @@ export default function PreviewStage({
         const entryMotion = MOTION_PREVIEW[c.entry] || MOTION_PREVIEW.slide
         const exitMotion = MOTION_PREVIEW[c.exit] || MOTION_PREVIEW.slide
         const base = `translate(-50%,-50%) rotate(${c.rotation || 0}deg)`
-        const isActive = alwaysOn || c.side === activeSide
-        // Which motion currently governs this character's transition: their
-        // own entry curve while becoming active, their own exit curve while
-        // becoming (or staying) inactive.
-        const motion = isActive ? entryMotion : exitMotion
+        const isSpeaking = c.side === activeSide
         const x = c.x ?? (c.side === 'left' ? 0.25 : 0.75)
-        // Same rule as the backend (brainrot_composite.py's near_side): a
-        // side-anchored motion travels to/from whichever edge the character
-        // actually sits closest to on screen, not its "left"/"right"
-        // dialogue-slot label — so dragging a "left" character over toward
-        // the right edge flips which way it slides/bounces/snaps.
         const nearSide = x < 0.5 ? 'left' : 'right'
+
+        if (alwaysOn) {
+          // always_on (or single char): character is always visible.
+          // The "speaking" one gets a subtle scale bump (1.06x) matching
+          // the backend's NONE_SCALE_BOOST cue.
+          const speakScale = isSpeaking ? 1.06 : 1
+          return (
+            <img
+              key={c.side}
+              src={c.image_url}
+              alt=""
+              draggable={false}
+              onPointerDown={(e) => onPointerDown(e, c.side)}
+              style={{
+                position: 'absolute',
+                left: `${x * 100}%`,
+                top: `${(c.y ?? 0.78) * 100}%`,
+                width: w,
+                transform: `${base} scale(${speakScale})`,
+                opacity: 1,
+                transition: 'transform .2s ease-out',
+                cursor: 'grab',
+                filter: 'drop-shadow(0 4px 6px rgba(0,0,0,.4))',
+                touchAction: 'none',
+              }}
+            />
+          )
+        }
+
+        // turn_based: active character is on screen, others exit.
+        const motion = isSpeaking ? entryMotion : exitMotion
         return (
           <img
             key={c.side}
@@ -227,11 +248,11 @@ export default function PreviewStage({
               left: `${x * 100}%`,
               top: `${(c.y ?? 0.78) * 100}%`,
               width: w,
-              transform: isActive
+              transform: isSpeaking
                 ? (motion.activeScale ? `${base} scale(${motion.activeScale})` : base)
                 : `${base} ${motion.off(nearSide)}`,
-              opacity: !isActive && motion.fade ? 0 : 1,
-              transition: isActive && motion.activeScale
+              opacity: !isSpeaking && motion.fade ? 0 : 1,
+              transition: isSpeaking && motion.activeScale
                 ? `transform ${motion.activeDuration || motion.duration} ${motion.ease}`
                 : `transform ${motion.duration} ${motion.ease}, opacity ${motion.duration} ${motion.ease}`,
               cursor: 'grab',

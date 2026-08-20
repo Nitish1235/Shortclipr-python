@@ -9,6 +9,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { brainrotApi } from './brainrotApi'
 import { T, card, pill, btn, pressHandlers, FONT } from './brainrotTheme'
+import Logo from '../../components/Logo'
 import PreviewStage from './PreviewStage'
 import { getChemistry } from './chemistry'
 import {
@@ -418,7 +419,8 @@ export default function BrainrotStudio() {
     <div style={{ minHeight: '100vh', background: T.paper, fontFamily: FONT, color: T.ink }}>
 
       <Header user={user} onLogout={logout} navigate={navigate}
-        connectionOffline={anyOffline} onRetryConnection={retryFetches} />
+        connectionOffline={anyOffline} onRetryConnection={retryFetches}
+        libraryClips={libraryClips} />
 
       <ViewTabs view={view} onChange={setView}
         clipCount={libraryClips.length} renderingCount={renderingCount} />
@@ -554,6 +556,32 @@ export default function BrainrotStudio() {
                       </button>
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {castCount === 2 && picked.length === 2 && (
+              <div style={{ marginBottom: 20 }}>
+                <SubLabel>Motion mode</SubLabel>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                  {[
+                    { id: 'turn_based', title: 'Turn-based', sub: 'Swap per dialogue line' },
+                    { id: 'always_on',  title: 'Always on',  sub: 'Both stay on screen' },
+                  ].map(opt => {
+                    const on = motionMode === opt.id
+                    return (
+                      <button key={opt.id} onClick={() => setMotionMode(opt.id)}
+                        style={{
+                          cursor: 'pointer', textAlign: 'left', padding: '12px 14px',
+                          background: on ? T.ink : '#fff', color: on ? '#fff' : T.ink,
+                          border: `1px solid ${on ? T.ink : T.line}`,
+                          borderRadius: 10,
+                        }}>
+                        <div style={{ fontWeight: 500, fontSize: '.85rem' }}>{opt.title}</div>
+                        <div style={{ fontSize: '.72rem', opacity: .6, marginTop: 2 }}>{opt.sub}</div>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -815,30 +843,6 @@ export default function BrainrotStudio() {
 
             <StageDivider />
 
-            <SubLabel>Motion mode</SubLabel>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 24 }}>
-              {[
-                { id: 'turn_based', title: 'Turn-based', sub: 'Enters/exits per line' },
-                { id: 'always_on',  title: 'Always on',  sub: 'Both stay on screen' },
-              ].map(opt => {
-                const on = motionMode === opt.id
-                return (
-                  <button key={opt.id} onClick={() => setMotionMode(opt.id)}
-                    style={{
-                      cursor: 'pointer', textAlign: 'left', padding: '12px 14px',
-                      background: on ? T.ink : '#fff', color: on ? '#fff' : T.ink,
-                      border: `1px solid ${on ? T.ink : T.line}`,
-                      borderRadius: 10,
-                    }}>
-                    <div style={{ fontWeight: 500, fontSize: '.85rem' }}>{opt.title}</div>
-                    <div style={{ fontSize: '.72rem', opacity: .6, marginTop: 2 }}>{opt.sub}</div>
-                  </button>
-                )
-              })}
-            </div>
-
-            <StageDivider />
-
             <SubLabel>Background music</SubLabel>
             {musicLib.length === 0 ? (
               <StageFootnote>No tracks in the library yet.</StageFootnote>
@@ -929,7 +933,7 @@ export default function BrainrotStudio() {
               </CallsheetRow>
               <CallsheetRow label="Cast" done={stageDone.cast} onEdit={() => goToStage('cast')}>
                 {castCount === 0 ? 'Narrator only' :
-                  picked.length ? picked.map(p => p.name).join(' vs ') :
+                  picked.length ? `${picked.map(p => p.name).join(' vs ')}${castCount === 2 ? ` · ${motionMode === 'always_on' ? 'always on' : 'turn-based'}` : ''}` :
                   <em style={{ color: T.mute }}>{`0 of ${castCount} picked`}</em>}
               </CallsheetRow>
               <CallsheetRow label="Scene" done={stageDone.scene} onEdit={() => goToStage('scene')}>
@@ -937,7 +941,7 @@ export default function BrainrotStudio() {
                   <em style={{ color: T.mute }}>No backdrop yet</em>}
               </CallsheetRow>
               <CallsheetRow label="Style" done={stageDone.style} onEdit={() => goToStage('style')} last>
-                {duration}s · {CAPTION_STYLE_BY_ID[captionStyle]?.label || captionStyle} · {motionMode === 'always_on' ? 'always on' : 'turn-based'}
+                {duration}s · {CAPTION_STYLE_BY_ID[captionStyle]?.label || captionStyle}
                 {musicId ? ` · ${musicLib.find(m => m.id === musicId)?.name || 'music'}` : ''}
               </CallsheetRow>
             </div>
@@ -966,7 +970,7 @@ export default function BrainrotStudio() {
         </div>
 
         {/* ══ RIGHT: preview + generate (sticky) ═════════════════ */}
-        <div style={{ position: 'sticky', top: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ position: 'sticky', top: 156, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <PreviewStage
             background={background}
             characters={picked}
@@ -1030,52 +1034,109 @@ function pickTopic(current) {
   return pool[Math.floor(Math.random() * pool.length)] || SPARK_TOPICS[0]
 }
 
-function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection }) {
+function formatMinutes(mins) {
+  const n = Math.max(0, Math.round(Number(mins) || 0))
+  if (n < 60) return `${n}m`
+  const h = Math.floor(n / 60)
+  const m = n % 60
+  if (h >= 100) return `${h}h`
+  return m ? `${h}h ${m}m` : `${h}h`
+}
+
+function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection, libraryClips = [] }) {
   const initials = (user?.full_name || user?.email || 'U')[0].toUpperCase()
+
+  const renderingCount = libraryClips.filter(c => isActive(c)).length
+  const readyCount     = libraryClips.filter(c => c.status === 'complete').length
+  const failedCount    = libraryClips.filter(c => c.status === 'failed').length
+
+  const stats = [
+    { n: user?.credits_used || 0,                          l: 'Shorts made',  c: T.red },
+    { n: user?.videos_remaining ?? 0,                      l: 'Credits left', c: T.green },
+    { n: formatMinutes(user?.video_minutes_used),          l: 'Minutes used', c: T.red },
+    { n: formatMinutes(user?.video_minutes_remaining),     l: 'Minutes left', c: T.green },
+    { n: renderingCount,                                   l: 'Rendering',    c: '#f59e0b' },
+    { n: readyCount,                                       l: 'Ready',        c: T.blue },
+    { n: failedCount,                                      l: 'Failed',       c: T.mute },
+  ]
+
   return (
     <header style={{
-      position: 'sticky', top: 0, zIndex: 200, background: 'rgba(255,255,255,.92)',
-      backdropFilter: 'blur(12px)',
-      borderBottom: `1px solid ${T.line}`, padding: '12px 24px',
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      position: 'sticky', top: 0, zIndex: 200,
+      background: 'rgba(255,255,255,.92)', backdropFilter: 'blur(12px)',
+      borderBottom: `1px solid ${T.line}`,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 24, height: 24, borderRadius: 6, background: T.ink }} />
-        <span style={{ fontSize: '.95rem', fontWeight: 500, letterSpacing: '-.02em' }}>
-          Brainrot Studio
-        </span>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {connectionOffline && (
-          <button onClick={onRetryConnection}
-            title="Some data isn't reachable — click to retry"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-              background: '#fef2f2', border: `1px solid #fecaca`, borderRadius: 999,
-              padding: '4px 12px',
-              fontFamily: FONT, fontSize: '.75rem', fontWeight: 500, color: T.redDark,
-            }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.red,
-              display: 'inline-block', animation: 'br-pulse-dot 1.4s ease-in-out infinite' }} />
-            Reconnecting
-          </button>
-        )}
-        <Link to="/youtube-shorts/dashboard" style={{
-          fontFamily: FONT, fontSize: '.82rem', fontWeight: 500, color: T.mute,
-          textDecoration: 'none', padding: '6px 10px', borderRadius: 6,
-        }}>Shorts dashboard</Link>
-        <div style={{ width: 30, height: 30, borderRadius: '50%',
-          background: T.lineSoft,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: T.ink, fontWeight: 500, fontSize: '.78rem', overflow: 'hidden' }}>
-          {user?.avatar_url ? <img src={user.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials}
+      {/* Row 1 — brand + user chrome */}
+      <div style={{ padding: '10px 24px', display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between', gap: 12 }}>
+        <Link to="/brainrot" style={{ display: 'flex', alignItems: 'center', gap: 10,
+          textDecoration: 'none', color: T.ink }}>
+          <Logo size={26} />
+          <span style={{ fontSize: '.95rem', fontWeight: 600, letterSpacing: '-.02em' }}>
+            ShortClipr
+          </span>
+          <span style={{
+            fontSize: '.62rem', color: T.mute, letterSpacing: '.06em',
+            textTransform: 'uppercase', padding: '2px 7px', borderRadius: 4,
+            background: T.lineSoft, marginLeft: 2,
+          }}>Brainrot</span>
+        </Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {connectionOffline && (
+            <button onClick={onRetryConnection}
+              title="Some data isn't reachable — click to retry"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                background: '#fef2f2', border: `1px solid #fecaca`, borderRadius: 999,
+                padding: '4px 12px',
+                fontFamily: FONT, fontSize: '.75rem', fontWeight: 500, color: T.redDark,
+              }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.red,
+                display: 'inline-block', animation: 'br-pulse-dot 1.4s ease-in-out infinite' }} />
+              Reconnecting
+            </button>
+          )}
+          <div style={{ width: 30, height: 30, borderRadius: '50%',
+            background: T.lineSoft,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: T.ink, fontWeight: 500, fontSize: '.78rem', overflow: 'hidden' }}>
+            {user?.avatar_url ? <img src={user.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials}
+          </div>
+          <button onClick={onLogout} style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            fontFamily: FONT, fontSize: '.78rem', fontWeight: 500, color: T.mute,
+            padding: '4px 8px',
+          }}>Sign out</button>
         </div>
-        <button onClick={onLogout} style={{
-          background: 'transparent', border: 'none', cursor: 'pointer',
-          fontFamily: FONT, fontSize: '.78rem', fontWeight: 500, color: T.mute,
-          padding: '4px 8px',
-        }}>Sign out</button>
       </div>
+
+      {/* Row 2 — stats grid, same layout as YT-shorts Dashboard */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))`,
+        borderTop: `1px solid ${T.line}`,
+      }}>
+        {stats.map((s, i, arr) => (
+          <div key={i} style={{
+            padding: '8px 12px',
+            borderRight: i < arr.length - 1 ? `1px solid ${T.line}` : 'none',
+            display: 'flex', flexDirection: 'column', justifyContent: 'center',
+            minWidth: 0,
+          }}>
+            <div style={{
+              fontSize: '1.05rem', fontWeight: 700, letterSpacing: '-.04em',
+              color: s.c, lineHeight: 1.1,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>{s.n}</div>
+            <div style={{
+              fontSize: '.6rem', color: T.mute, textTransform: 'uppercase',
+              letterSpacing: '.08em', marginTop: 3,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>{s.l}</div>
+          </div>
+        ))}
+      </div>
+
       <style>{`
         @keyframes br-pulse-dot { 0%,100% { opacity: .4 } 50% { opacity: 1 } }
         @keyframes brSpin { to { transform: rotate(360deg) } }
@@ -1091,7 +1152,7 @@ function ViewTabs({ view, onChange, clipCount, renderingCount }) {
   ]
   return (
     <div style={{
-      position: 'sticky', top: 49, zIndex: 150,
+      position: 'sticky', top: 96, zIndex: 150,
       background: 'rgba(255,255,255,.92)', backdropFilter: 'blur(12px)',
       borderBottom: `1px solid ${T.line}`,
     }}>
