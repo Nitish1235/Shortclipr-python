@@ -129,7 +129,16 @@ function LandingPage() {
   )
 }
 
-function ProtectedRoute({ children }) {
+// `fallback` is where a logged-out visitor gets bounced to. Defaults to
+// /youtube-shorts since that's correct for every YT-Shorts protected route
+// (dashboard, clips, editor, lab, billing, admin) — but it must NOT be
+// hardcoded, because this same component also guards /brainrot/studio.
+// Without an explicit fallback there, a logged-out user clicking any
+// brainrot CTA ("Get started", "Make a clip", etc.) would land on the
+// YouTube-Shorts dashboard instead of back on the brainrot product they
+// were actually trying to use — see the /brainrot/studio route below,
+// which passes fallback="/brainrot".
+function ProtectedRoute({ children, fallback = '/youtube-shorts' }) {
   const { user, loading } = useAuth()
   if (loading) return (
     <div style={{
@@ -146,7 +155,7 @@ function ProtectedRoute({ children }) {
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
-  if (!user) return <Navigate to="/youtube-shorts" replace />
+  if (!user) return <Navigate to={fallback} replace />
   return children
 }
 
@@ -213,7 +222,7 @@ export default function App() {
             <Route path="/brainrot/guides/:slug"          element={<BrainrotGuideArticle />} />
 
             {/* Protected — user must be logged in */}
-            <Route path="/brainrot/studio"   element={<ProtectedRoute><BrainrotStudio /></ProtectedRoute>} />
+            <Route path="/brainrot/studio"   element={<ProtectedRoute fallback="/brainrot"><BrainrotStudio /></ProtectedRoute>} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

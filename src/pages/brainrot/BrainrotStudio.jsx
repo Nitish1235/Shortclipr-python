@@ -43,21 +43,34 @@ const PROVIDERS = [
 ]
 const ACTIVE_STATUSES = ['created', 'generating_script', 'synthesizing_voice', 'rendering']
 
-// The selection flow is a rail, not a wizard: every stage is reachable at
-// any time (click the rail), but each stage's content only renders when
-// active, so a first-time user sees ONE decision at a time instead of a
-// five-section wall of controls. The persistent preview (right column)
-// never depends on which stage is active — it always reflects the current
-// build, and Generate stays reachable from anywhere once requirements are
-// met, matching "jump anytime, render whenever ready" rather than gating
-// the render button behind reaching a final step.
+// Each stage is a distinct "room" in the studio — same underlying design
+// system, but its own accent color, editorial kicker label, and container
+// treatment so the user always knows where they are. The rail below is a
+// real progress spine (StageRail), not a row of interchangeable pills.
+//
+// accent: the one signature color that runs through only this stage's
+//         container (heading rule, active node in the rail, focused input
+//         underline). Kept inside the existing palette so nothing clashes.
+// kicker: the small caps-monospace label that sits above each stage's
+//         serif display heading — reads as a section marker in an editorial
+//         layout (Vogue TOC / annual-report chapter, not a form step).
+// title:  editorial noun-phrase headline for the stage (was just "Cast",
+//         now "Casting call" — same word, different job).
 const STAGES = [
-  { id: 'spark',  label: 'Spark',  icon: '💡', hint: 'What are they arguing about?' },
-  { id: 'cast',   label: 'Cast',   icon: '🎭', hint: 'Who\'s arguing?' },
-  { id: 'scene',  label: 'Scene',  icon: '🎮', hint: 'What\'s playing behind them?' },
-  { id: 'style',  label: 'Style',  icon: '🎨', hint: 'Length, captions, motion, sound.' },
-  { id: 'review', label: 'Review', icon: '✅', hint: 'Everything, at a glance.' },
+  { id: 'spark',  label: 'Spark',  icon: '💡', kicker: 'Chapter 01', title: 'The premise',     hint: 'What are they arguing about?',         accent: '#ffd23f' },
+  { id: 'cast',   label: 'Cast',   icon: '🎭', kicker: 'Chapter 02', title: 'Casting call',    hint: "Who's on screen?",                     accent: '#cf1322' },
+  { id: 'scene',  label: 'Scene',  icon: '🎮', kicker: 'Chapter 03', title: 'The backdrop',    hint: 'The satisfying loop behind it all.',   accent: '#2d6cdf' },
+  { id: 'style',  label: 'Style',  icon: '🎨', kicker: 'Chapter 04', title: 'Style & sound',   hint: 'Length, captions, motion, music.',     accent: '#1fa14e' },
+  { id: 'review', label: 'Review', icon: '✅', kicker: 'Chapter 05', title: 'Final callsheet', hint: 'Everything, at a glance.',             accent: '#161616' },
 ]
+const STAGE_BY_ID = Object.fromEntries(STAGES.map(s => [s.id, s]))
+
+// The one editorial display face used across every stage heading. Kept
+// as a CSS var-style constant rather than a JS import so we can serve it
+// from Google Fonts (which is CSP-allowed in the app) via a <link> in
+// index.html without shipping any @font-face bytes here.
+const FONT_DISPLAY = `'Fraunces', 'Iowan Old Style', Georgia, serif`
+const FONT_MONO = `ui-monospace, 'SF Mono', Menlo, Consolas, monospace`
 
 export default function BrainrotStudio() {
   const { user, logout } = useAuth()
@@ -68,7 +81,15 @@ export default function BrainrotStudio() {
   const [voices, setVoices]     = useState([])
   const [motions, setMotions]   = useState([])
   const [clipsLib, setClipsLib] = useState([])
-  const [refError, setRefError] = useState(null)
+  // Per-resource "did the last fetch succeed?" flags — replaces the old
+  // single `refError` string that used to fire a page-wide red banner with
+  // a developer message ("Is the backend running & bucket configured?").
+  // Now each affected section shows its own inline empty-state with a
+  // Retry button, and the header shows a subtle "offline" chip. Users
+  // never see the word "bucket" again.
+  const [rosterOnline, setRosterOnline] = useState(true)
+  const [clipsOnline,  setClipsOnline]  = useState(true)
+  const [refetchTick,  setRefetchTick]  = useState(0)  // bump to force a re-fetch
   const [signatureCasts, setSignatureCasts] = useState([])
   const [savingCast, setSavingCast] = useState(false)
   const [musicLib, setMusicLib] = useState([])
@@ -112,6 +133,11 @@ export default function BrainrotStudio() {
   const saveTimerRef = useRef(null)
 
   // ── Load reference data + history ───────────────────────────────
+  // Non-critical fetches (jobs, signature casts, audio assets) fail
+  // silently — their absence just means an empty list, no user-facing
+  // error. Critical fetches (characters, gameplay clips) update the
+  // per-resource online flag so the affected section can render its own
+  // inline empty-state with a Retry button — no more page-wide red banner.
   useEffect(() => {
     let alive = true
     Promise.allSettled([
@@ -125,11 +151,12 @@ export default function BrainrotStudio() {
       brainrotApi.audioAssets('sfx'),
     ]).then(([c, v, a, g, j, s, m, fx]) => {
       if (!alive) return
-      if (c.status === 'fulfilled') setRoster(c.value.characters || [])
-      else setRefError('Could not load characters. Is the backend running & bucket configured?')
+      if (c.status === 'fulfilled') { setRoster(c.value.characters || []); setRosterOnline(true) }
+      else setRosterOnline(false)
       if (v.status === 'fulfilled') setVoices(v.value.voices || [])
       if (a.status === 'fulfilled') setMotions(a.value.entry || [])
-      if (g.status === 'fulfilled') setClipsLib(g.value.clips || [])
+      if (g.status === 'fulfilled') { setClipsLib(g.value.clips || []); setClipsOnline(true) }
+      else setClipsOnline(false)
       if (j.status === 'fulfilled') setMyClips(j.value.jobs || [])
       if (s.status === 'fulfilled') setSignatureCasts(s.value.casts || [])
       if (m.status === 'fulfilled') setMusicLib(m.value.assets || [])
@@ -137,7 +164,7 @@ export default function BrainrotStudio() {
       setRefLoaded(true)
     })
     return () => { alive = false; if (pollRef.current) clearInterval(pollRef.current) }
-  }, [])
+  }, [refetchTick])
 
   // restore a saved draft once reference data is in (so characters/backgrounds
   // can be re-hydrated with fresh image URLs rather than stale cached ones)
@@ -397,356 +424,522 @@ export default function BrainrotStudio() {
     pollRef.current = setInterval(tick, 2500)
   }
 
+  // Connection state — quietly true when everything's fine, quietly
+  // encourages a retry when it isn't. No page-wide red banner.
+  const anyOffline = !rosterOnline || !clipsOnline
+  const retryFetches = () => setRefetchTick(t => t + 1)
+
   // ── Render ──────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: '100vh', background: T.paper, fontFamily: FONT, color: T.ink,
       backgroundImage: `radial-gradient(${T.ink}14 1px, transparent 1px)`, backgroundSize: '22px 22px' }}>
 
-      <Header user={user} onLogout={logout} navigate={navigate} />
-
-      {refError && (
-        <div style={{ maxWidth: 1180, margin: '14px auto 0', padding: '0 20px' }}>
-          <div style={{ ...card({ background: '#fff4f4', borderColor: T.red }), padding: '12px 16px', fontSize: '.85rem', fontWeight: 700, color: T.redDark }}>
-            ⚠ {refError}
-          </div>
-        </div>
-      )}
+      <Header user={user} onLogout={logout} navigate={navigate}
+        connectionOffline={anyOffline} onRetryConnection={retryFetches} />
 
       <div style={{ maxWidth: 1180, margin: '0 auto', padding: '22px 20px 80px',
         display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 340px', gap: 26, alignItems: 'start' }}>
 
         {/* ══ LEFT: builder ══════════════════════════════════════ */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
 
           <StageRail stage={stage} onJump={goToStage} stageDone={stageDone} />
 
           {stage === 'spark' && (
-          <Section n="1" title="The Script" tip="Hook hard. A story, a hot take, an argument.">
-            <textarea
-              value={script}
-              onChange={e => setScript(e.target.value)}
-              placeholder="e.g. My dad tried to fix the wifi and took down the whole street…"
-              rows={4}
-              style={{
-                width: '100%', resize: 'vertical', boxSizing: 'border-box',
-                background: T.paper2, border: `2px solid ${T.ink}`, borderRadius: 10,
-                padding: '12px 14px', fontSize: '.95rem', fontFamily: FONT, color: T.ink,
-                lineHeight: 1.5, outline: 'none',
-              }}
-            />
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10, alignItems: 'center' }}>
-              <button onClick={() => setScript(pickTopic(script))} {...pressHandlers}
-                style={{ ...pill(T.yellow, { cursor: 'pointer', fontWeight: 900 }) }}>
-                🎲 Surprise me
-              </button>
-              {SPARK_TOPICS.slice(0, 5).map(t => (
-                <button key={t} onClick={() => setScript(t)}
-                  style={{ ...pill(T.paper2, { cursor: 'pointer' }) }}>{t}</button>
-              ))}
+          <StageShell id="spark">
+            {/* A generous writing surface — feels like a manuscript page,
+                not a form field. Cream inner tint, hairline rule under the
+                text area that matches the stage accent. */}
+            <div style={{ position: 'relative' }}>
+              <textarea
+                value={script}
+                onChange={e => setScript(e.target.value)}
+                placeholder="A hot take. An argument. Something people would fight about in the comments."
+                rows={4}
+                style={{
+                  width: '100%', resize: 'vertical', boxSizing: 'border-box',
+                  background: '#fffdf5',
+                  border: `1.5px solid ${T.ink}22`,
+                  borderBottom: `3px solid ${STAGE_BY_ID.spark.accent}`,
+                  borderRadius: 12,
+                  padding: '18px 18px',
+                  fontSize: '1.05rem', fontFamily: FONT_DISPLAY, fontStyle: 'italic',
+                  color: T.ink, lineHeight: 1.55, outline: 'none',
+                }}
+              />
+              <div style={{ position: 'absolute', top: 10, right: 14, fontFamily: FONT_MONO,
+                fontSize: '.62rem', color: T.mute, letterSpacing: '.05em' }}>
+                {script.length}/280
+              </div>
             </div>
-            <div style={{ marginTop: 10, fontSize: '.72rem', color: T.mute, fontWeight: 600 }}>
-              The AI writes each character fully in-character and paces it to your clip length.
+
+            <div style={{ marginTop: 16 }}>
+              <SubLabel accent={STAGE_BY_ID.spark.accent}>Or try one that always lands</SubLabel>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button onClick={() => setScript(pickTopic(script))} {...pressHandlers}
+                  style={{ ...pill(STAGE_BY_ID.spark.accent, { cursor: 'pointer', fontWeight: 900 }) }}>
+                  🎲 Surprise me
+                </button>
+                {SPARK_TOPICS.slice(0, 6).map(t => (
+                  <button key={t} onClick={() => setScript(t)}
+                    style={{ ...pill('#fff', { cursor: 'pointer', border: `1.5px solid ${T.ink}33` }) }}>
+                    {t}
+                  </button>
+                ))}
+              </div>
             </div>
-            <StageNextButton label="Next: pick your cast" onClick={goNext} />
-          </Section>
+
+            <StageFootnote>
+              The AI writes each character fully in-character and paces the dialogue to
+              your chosen clip length. You'll be able to edit any line before rendering.
+            </StageFootnote>
+            <StageNextButton label="Next — casting call" onClick={goNext} accent={STAGE_BY_ID.cast.accent} />
+          </StageShell>
           )}
 
           {stage === 'cast' && (
-          <Section n="2" title="Cast" tip="0–2 original characters. Voices auto-match each character.">
-            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-              {[0, 1, 2].map(n => (
-                <button key={n} onClick={() => setCast(n)} {...pressHandlers}
-                  style={{ ...btn(castCount === n ? T.ink : T.paper2, castCount === n ? '#fff' : T.ink),
-                    flex: 1, padding: '9px 0', fontSize: '.85rem' }}>
-                  {n === 0 ? 'Narrator only' : `${n} character${n > 1 ? 's' : ''}`}
-                </button>
-              ))}
+          <StageShell id="cast">
+            <SubLabel accent={STAGE_BY_ID.cast.accent}>Cast size</SubLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 20 }}>
+              {[
+                { n: 0, title: 'Solo narrator',  sub: 'Voice only' },
+                { n: 1, title: 'Monologue',      sub: '1 character' },
+                { n: 2, title: 'Debate',         sub: '2 characters' },
+              ].map(opt => {
+                const on = castCount === opt.n
+                return (
+                  <button key={opt.n} onClick={() => setCast(opt.n)}
+                    style={{
+                      cursor: 'pointer', textAlign: 'left', padding: '10px 12px',
+                      background: on ? T.ink : '#fff',
+                      color: on ? '#fff' : T.ink,
+                      border: `1.5px solid ${on ? T.ink : T.ink + '33'}`,
+                      borderRadius: 10, transition: 'all .12s',
+                    }}>
+                    <div style={{ fontWeight: 800, fontSize: '.82rem' }}>{opt.title}</div>
+                    <div style={{ fontSize: '.64rem', opacity: .75, marginTop: 2 }}>{opt.sub}</div>
+                  </button>
+                )
+              })}
             </div>
 
-            {/* signature casts — saved pairs, one tap to reload */}
+            {/* signature casts — quick reload of a saved pair */}
             {signatureCasts.length > 0 && castCount === 2 && (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                {signatureCasts.map(cast => (
-                  <SignatureCastChip key={cast.id} cast={cast} roster={roster}
-                    onLoad={() => loadSignatureCast(cast)}
-                    onDelete={() => removeSignatureCast(cast.id)} />
-                ))}
+              <div style={{ marginBottom: 20 }}>
+                <SubLabel accent={STAGE_BY_ID.cast.accent}>Your signature casts</SubLabel>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {signatureCasts.map(cast => (
+                    <SignatureCastChip key={cast.id} cast={cast} roster={roster}
+                      onLoad={() => loadSignatureCast(cast)}
+                      onDelete={() => removeSignatureCast(cast.id)} />
+                  ))}
+                </div>
               </div>
             )}
 
             {/* picked character cards */}
             {picked.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-                {picked.map(p => (
-                  <PickedCard key={p.id} p={p} motions={motions}
-                    voices={voicesFor(p.gender)}
-                    onRemove={() => toggleCharacter(p)}
-                    onVoice={(voiceId) => updatePicked(p.id, { voiceId })}
-                    onEntry={(entry) => updatePicked(p.id, { entry })}
-                    onExit={(exit) => updatePicked(p.id, { exit })}
-                    onScale={(scale) => updatePicked(p.id, { scale })}
-                    onRotation={(rotation) => updatePicked(p.id, { rotation })}
-                    onPreview={playPreview} />
-                ))}
-                {chemistry && (
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
-                    <div style={{ flex: 1 }}><ChemistryBadge chemistry={chemistry} /></div>
-                    <button onClick={saveCurrentCast} disabled={isSavedPair || savingCast} {...pressHandlers}
-                      title={isSavedPair ? 'Already saved' : 'Save this pair as a signature cast'}
-                      style={{ ...pill(isSavedPair ? T.green + '22' : T.paper2, {
-                        cursor: isSavedPair ? 'default' : 'pointer', fontWeight: 800,
-                        color: isSavedPair ? T.green : T.ink, whiteSpace: 'nowrap',
-                      }) }}>
-                      {isSavedPair ? '✓ Saved' : savingCast ? 'Saving…' : '💾 Save cast'}
-                    </button>
-                  </div>
-                )}
+              <div style={{ marginBottom: 20 }}>
+                <SubLabel accent={STAGE_BY_ID.cast.accent}>On stage</SubLabel>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {picked.map(p => (
+                    <PickedCard key={p.id} p={p} motions={motions}
+                      voices={voicesFor(p.gender)}
+                      onRemove={() => toggleCharacter(p)}
+                      onVoice={(voiceId) => updatePicked(p.id, { voiceId })}
+                      onEntry={(entry) => updatePicked(p.id, { entry })}
+                      onExit={(exit) => updatePicked(p.id, { exit })}
+                      onScale={(scale) => updatePicked(p.id, { scale })}
+                      onRotation={(rotation) => updatePicked(p.id, { rotation })}
+                      onPreview={playPreview} />
+                  ))}
+                  {chemistry && (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+                      <div style={{ flex: 1 }}><ChemistryBadge chemistry={chemistry} /></div>
+                      <button onClick={saveCurrentCast} disabled={isSavedPair || savingCast}
+                        title={isSavedPair ? 'Already saved' : 'Save this pair as a signature cast'}
+                        style={{
+                          cursor: isSavedPair ? 'default' : 'pointer',
+                          background: '#fff',
+                          border: `1.5px solid ${isSavedPair ? T.green : T.ink + '33'}`,
+                          borderRadius: 10, padding: '0 14px',
+                          fontWeight: 800, fontSize: '.76rem',
+                          color: isSavedPair ? T.green : T.ink,
+                          whiteSpace: 'nowrap', fontFamily: FONT,
+                        }}>
+                        {isSavedPair ? '✓ Saved' : savingCast ? 'Saving…' : 'Save cast'}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
-            {castCount > 0 ? (
+            {castCount > 0 && !rosterOnline && roster.length === 0 ? (
+              <OfflineState
+                title="Character library isn't reachable right now"
+                sub="Nothing on your end — we'll retry automatically. Or trigger it manually below."
+                onRetry={retryFetches}
+              />
+            ) : castCount > 0 ? (
               <>
+                <SubLabel accent={STAGE_BY_ID.cast.accent}>Choose from {roster.length || '100+'} characters</SubLabel>
                 <input value={charSearch} onChange={e => setCharSearch(e.target.value)}
-                  placeholder={`Search ${roster.length} characters…`}
-                  style={{ width: '100%', boxSizing: 'border-box', marginBottom: 10,
-                    background: T.paper2, border: `2px solid ${T.ink}`, borderRadius: 999,
-                    padding: '8px 14px', fontSize: '.82rem', fontFamily: FONT, outline: 'none' }} />
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(84px,1fr))',
-                  gap: 8, maxHeight: 300, overflowY: 'auto', padding: 4 }}>
-                  {filteredRoster.map(ch => {
-                    const on = picked.some(p => p.id === ch.id)
-                    return (
-                      <button key={ch.id} onClick={() => toggleCharacter(ch)} title={`${ch.name} — ${ch.archetype}`}
-                        style={{ position: 'relative', cursor: 'pointer', padding: 5,
-                          background: on ? T.yellow : T.paper2,
-                          border: `2px solid ${T.ink}`, borderRadius: 10,
-                          boxShadow: on ? sticker(2) : 'none', transition: 'all .1s' }}>
-                        <div style={{ width: '100%', aspectRatio: '1', borderRadius: 6, overflow: 'hidden',
-                          background: '#e9e3d3', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-                          <img src={ch.image_url} alt={ch.name} loading="lazy"
-                            style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                        </div>
-                        <div style={{ fontSize: '.58rem', fontWeight: 800, marginTop: 3, lineHeight: 1.1,
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ch.name}</div>
-                        {on && <div style={{ position: 'absolute', top: -7, right: -7, width: 20, height: 20,
-                          borderRadius: '50%', background: T.red, color: '#fff', border: `2px solid ${T.ink}`,
-                          fontSize: '.7rem', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</div>}
-                      </button>
-                    )
-                  })}
+                  placeholder="Search by name, family, or archetype…"
+                  style={{ width: '100%', boxSizing: 'border-box', marginBottom: 12,
+                    background: '#fff', border: `1.5px solid ${T.ink}22`, borderRadius: 10,
+                    padding: '10px 14px', fontSize: '.86rem', fontFamily: FONT, outline: 'none' }} />
+                {/* Casting-board treatment: dark backdrop lets character art pop
+                    like a theatrical spotlight, distinct from the paper feel of
+                    every other stage. */}
+                <div style={{
+                  background: 'radial-gradient(circle at 50% 30%, #23202b 0%, #16141c 100%)',
+                  borderRadius: 12, padding: 10,
+                  boxShadow: `inset 0 2px 12px rgba(0,0,0,.4)`,
+                }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(84px,1fr))',
+                    gap: 8, maxHeight: 320, overflowY: 'auto', padding: 4 }}>
+                    {filteredRoster.map(ch => {
+                      const on = picked.some(p => p.id === ch.id)
+                      return (
+                        <button key={ch.id} onClick={() => toggleCharacter(ch)} title={`${ch.name} — ${ch.archetype}`}
+                          style={{ position: 'relative', cursor: 'pointer', padding: 4,
+                            background: on ? STAGE_BY_ID.cast.accent : 'rgba(255,255,255,.04)',
+                            border: on ? `2px solid ${STAGE_BY_ID.cast.accent}` : `1px solid rgba(255,255,255,.08)`,
+                            borderRadius: 10, transition: 'all .1s' }}>
+                          <div style={{ width: '100%', aspectRatio: '1', borderRadius: 6, overflow: 'hidden',
+                            background: 'rgba(0,0,0,.3)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+                            <img src={ch.image_url} alt={ch.name} loading="lazy"
+                              style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                          </div>
+                          <div style={{ fontSize: '.58rem', fontWeight: 800, marginTop: 4, lineHeight: 1.1,
+                            color: on ? T.ink : '#fff',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ch.name}</div>
+                          {on && <div style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18,
+                            borderRadius: '50%', background: T.ink, color: '#fff',
+                            fontSize: '.62rem', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</div>}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
                 {/* provider toggle */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
-                  <span style={{ fontSize: '.72rem', fontWeight: 800, color: T.mute }}>Voice engine:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 700, color: T.mute, letterSpacing: '.05em', textTransform: 'uppercase' }}>Voice engine</span>
                   {PROVIDERS.map(pr => (
                     <button key={pr.id} onClick={() => setProvider(pr.id)}
-                      style={{ ...pill(provider === pr.id ? T.yellow : T.paper2), cursor: 'pointer' }}>
+                      style={{
+                        cursor: 'pointer', padding: '5px 12px',
+                        background: provider === pr.id ? T.ink : '#fff',
+                        color: provider === pr.id ? '#fff' : T.ink,
+                        border: `1.5px solid ${T.ink}33`,
+                        borderRadius: 999, fontSize: '.72rem', fontWeight: 700,
+                      }}>
                       {pr.label}
                     </button>
                   ))}
                 </div>
               </>
             ) : (
-              <div style={{ fontSize: '.82rem', color: T.mute, fontWeight: 600, padding: '4px 2px' }}>
+              <StageFootnote>
                 Pure narrator voice-over — no characters on screen, just captions over gameplay.
-              </div>
+              </StageFootnote>
             )}
-            <StageNextButton label="Next: pick a background" onClick={goNext} />
-          </Section>
+            <StageNextButton label="Next — the backdrop" onClick={goNext} accent={STAGE_BY_ID.scene.accent} />
+          </StageShell>
           )}
 
           {stage === 'scene' && (
-          <Section n="3" title="Gameplay Background" tip="The satisfying loop behind it all.">
-            {clipsLib.length === 0 ? (
-              <div style={{ fontSize: '.82rem', color: T.mute, fontWeight: 600 }}>
-                No gameplay backgrounds uploaded yet. An admin adds these in the library.
-              </div>
+          <StageShell id="scene">
+            {!clipsOnline && clipsLib.length === 0 ? (
+              <OfflineState
+                title="Backdrop library isn't reachable right now"
+                sub="Not your fault. Retry, or come back to this step later."
+                onRetry={retryFetches}
+              />
+            ) : clipsLib.length === 0 ? (
+              <StageFootnote>
+                No backdrops uploaded to the library yet. An admin adds gameplay
+                clips through the internal library — check back once one lands.
+              </StageFootnote>
             ) : (
               <>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                <SubLabel accent={STAGE_BY_ID.scene.accent}>Category</SubLabel>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
                   {categories.map(cat => (
                     <button key={cat} onClick={() => setCategory(cat)}
-                      style={{ ...pill(category === cat ? T.yellow : T.paper2), cursor: 'pointer', textTransform: 'capitalize' }}>
+                      style={{
+                        cursor: 'pointer',
+                        background: category === cat ? T.ink : '#fff',
+                        color: category === cat ? '#fff' : T.ink,
+                        border: `1.5px solid ${T.ink}33`,
+                        borderRadius: 999, padding: '5px 12px',
+                        fontSize: '.72rem', fontWeight: 700, fontFamily: FONT,
+                        textTransform: 'capitalize',
+                      }}>
                       {cat.replace(/_/g, ' ')}
                     </button>
                   ))}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(96px,1fr))', gap: 8 }}>
-                  {visibleClips.map(clip => {
-                    const on = background?.id === clip.id
-                    return (
-                      <button key={clip.id} onClick={() => setBackground(clip)}
-                        style={{ cursor: 'pointer', padding: 4, background: on ? T.yellow : T.paper2,
-                          border: `2px solid ${T.ink}`, borderRadius: 10, boxShadow: on ? sticker(2) : 'none' }}>
-                        <div style={{ width: '100%', aspectRatio: '9/16', borderRadius: 6, overflow: 'hidden', background: '#000' }}>
-                          {clip.thumbnail_url
-                            ? <img src={clip.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: '.6rem', fontWeight: 700, textTransform: 'capitalize' }}>{clip.category}</div>}
-                        </div>
-                        {clip.source_title && (
-                          <div style={{ fontSize: '.54rem', fontWeight: 700, color: T.mute, marginTop: 3,
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {clip.source_title}
+                {/* Cinematic video-wall — dark inset frame lets the 9:16
+                    thumbnails read like an actual bank of screens in an
+                    editing suite, not a form's asset picker. */}
+                <div style={{
+                  background: '#0d0d10',
+                  border: `1.5px solid ${T.ink}33`,
+                  borderRadius: 12, padding: 10,
+                }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(96px,1fr))', gap: 6 }}>
+                    {visibleClips.map(clip => {
+                      const on = background?.id === clip.id
+                      return (
+                        <button key={clip.id} onClick={() => setBackground(clip)}
+                          style={{
+                            cursor: 'pointer', padding: 3,
+                            background: on ? STAGE_BY_ID.scene.accent : 'transparent',
+                            border: on ? `2px solid ${STAGE_BY_ID.scene.accent}` : `1px solid rgba(255,255,255,.06)`,
+                            borderRadius: 8, transition: 'all .12s',
+                          }}>
+                          <div style={{ width: '100%', aspectRatio: '9/16', borderRadius: 5, overflow: 'hidden',
+                            background: '#000', position: 'relative' }}>
+                            {clip.thumbnail_url
+                              ? <img src={clip.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  color: '#666', fontSize: '.58rem', fontWeight: 700, textTransform: 'capitalize' }}>{clip.category}</div>}
+                            {on && <div style={{ position: 'absolute', top: 4, right: 4,
+                              background: T.ink, color: '#fff', width: 16, height: 16, borderRadius: '50%',
+                              fontSize: '.58rem', fontWeight: 900,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</div>}
                           </div>
-                        )}
-                      </button>
-                    )
-                  })}
+                          {clip.source_title && (
+                            <div style={{ fontSize: '.52rem', fontWeight: 700,
+                              color: on ? T.ink : 'rgba(255,255,255,.6)',
+                              marginTop: 3, padding: '0 2px',
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {clip.source_title}
+                            </div>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
               </>
             )}
-            <StageNextButton label="Next: set the style" onClick={goNext} />
-          </Section>
+            <StageNextButton label="Next — style & sound" onClick={goNext} accent={STAGE_BY_ID.style.accent} />
+          </StageShell>
           )}
 
           {stage === 'style' && (
-          <>
-          <Section n="4" title="Style" tip="Length & caption energy.">
-            <div style={{ fontSize: '.74rem', fontWeight: 800, color: T.mute, marginBottom: 8 }}>
-              LENGTH · <span style={{ color: T.ink }}>{duration}s</span>
+          <StageShell id="style">
+            {/* Length — big monospace digit as the primary readout, slider
+                and preset chips as the two ways to change it. */}
+            <SubLabel accent={STAGE_BY_ID.style.accent}>Clip length</SubLabel>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 10 }}>
+              <span style={{ fontFamily: FONT_MONO, fontSize: '2.4rem', fontWeight: 700, letterSpacing: '-.03em', color: T.ink, lineHeight: 1 }}>
+                {duration}
+              </span>
+              <span style={{ fontFamily: FONT_MONO, fontSize: '.9rem', color: T.mute }}>seconds</span>
             </div>
             <input type="range" min={5} max={120} step={5} value={duration}
               onChange={e => setDuration(Number(e.target.value))}
-              style={{ width: '100%', accentColor: T.red }} />
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8, marginBottom: 18 }}>
+              style={{ width: '100%', accentColor: STAGE_BY_ID.style.accent }} />
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8, marginBottom: 24 }}>
               {DURATION_PRESETS.map(d => (
                 <button key={d} onClick={() => setDuration(d)}
-                  style={{ ...pill(duration === d ? T.yellow : T.paper2), cursor: 'pointer' }}>{d}s</button>
+                  style={{
+                    cursor: 'pointer',
+                    background: duration === d ? T.ink : '#fff',
+                    color: duration === d ? '#fff' : T.ink,
+                    border: `1.5px solid ${T.ink}33`,
+                    borderRadius: 999, padding: '4px 12px',
+                    fontFamily: FONT_MONO, fontSize: '.72rem', fontWeight: 700,
+                  }}>
+                  {d}s
+                </button>
               ))}
             </div>
 
-            <div style={{ fontSize: '.74rem', fontWeight: 800, color: T.mute, marginBottom: 8 }}>CAPTION STYLE</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8 }}>
+            <StageDivider />
+
+            <SubLabel accent={STAGE_BY_ID.style.accent}>Caption energy</SubLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8, marginBottom: 24 }}>
               {CAPTION_STYLES.map(cs => {
                 const on = captionStyle === cs.id
                 return (
                   <button key={cs.id} onClick={() => setCaption(cs.id)}
-                    style={{ cursor: 'pointer', textAlign: 'left', padding: '9px 12px',
-                      background: on ? T.ink : T.paper2, color: on ? '#fff' : T.ink,
-                      border: `2px solid ${T.ink}`, borderRadius: 10, boxShadow: on ? sticker(3) : 'none' }}>
-                    <div style={{ fontSize: '.86rem', fontWeight: 900 }}>{cs.label}</div>
-                    <div style={{ fontSize: '.66rem', fontWeight: 600, opacity: .7 }}>{cs.blurb}</div>
+                    style={{ cursor: 'pointer', textAlign: 'left', padding: '10px 12px',
+                      background: on ? T.ink : '#fff', color: on ? '#fff' : T.ink,
+                      border: on ? `1.5px solid ${T.ink}` : `1.5px solid ${T.ink}22`,
+                      borderRadius: 10, transition: 'all .12s' }}>
+                    <div style={{ fontSize: '.86rem', fontWeight: 800 }}>{cs.label}</div>
+                    <div style={{ fontSize: '.66rem', fontWeight: 500, opacity: .7, marginTop: 2 }}>{cs.blurb}</div>
                   </button>
                 )
               })}
             </div>
-          </Section>
 
-          {/* 4b. Motion & Sound */}
-          <Section n="4" title="Motion & Sound" tip="How characters move, and what plays behind them.">
-            <div style={{ fontSize: '.74rem', fontWeight: 800, color: T.mute, marginBottom: 8 }}>ON-SCREEN TOGETHER?</div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
-              <button onClick={() => setMotionMode('turn_based')} {...pressHandlers}
-                style={{ ...btn(motionMode === 'turn_based' ? T.ink : T.paper2, motionMode === 'turn_based' ? '#fff' : T.ink),
-                  flex: 1, padding: '9px 10px', fontSize: '.8rem', textAlign: 'left' }}>
-                <div style={{ fontWeight: 900 }}>Turn-based</div>
-                <div style={{ fontSize: '.62rem', fontWeight: 600, opacity: .75 }}>Enters/exits per line — classic brainrot</div>
+            <StageDivider />
+
+            <SubLabel accent={STAGE_BY_ID.style.accent}>Motion mode</SubLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 24 }}>
+              <button onClick={() => setMotionMode('turn_based')}
+                style={{
+                  cursor: 'pointer', textAlign: 'left', padding: '10px 12px',
+                  background: motionMode === 'turn_based' ? T.ink : '#fff',
+                  color: motionMode === 'turn_based' ? '#fff' : T.ink,
+                  border: motionMode === 'turn_based' ? `1.5px solid ${T.ink}` : `1.5px solid ${T.ink}22`,
+                  borderRadius: 10,
+                }}>
+                <div style={{ fontWeight: 800, fontSize: '.82rem' }}>Turn-based</div>
+                <div style={{ fontSize: '.64rem', fontWeight: 500, opacity: .75, marginTop: 2 }}>Enters/exits per line — classic brainrot</div>
               </button>
-              <button onClick={() => setMotionMode('always_on')} {...pressHandlers}
-                style={{ ...btn(motionMode === 'always_on' ? T.ink : T.paper2, motionMode === 'always_on' ? '#fff' : T.ink),
-                  flex: 1, padding: '9px 10px', fontSize: '.8rem', textAlign: 'left' }}>
-                <div style={{ fontWeight: 900 }}>Always on</div>
-                <div style={{ fontSize: '.62rem', fontWeight: 600, opacity: .75 }}>Both stay put the whole clip</div>
+              <button onClick={() => setMotionMode('always_on')}
+                style={{
+                  cursor: 'pointer', textAlign: 'left', padding: '10px 12px',
+                  background: motionMode === 'always_on' ? T.ink : '#fff',
+                  color: motionMode === 'always_on' ? '#fff' : T.ink,
+                  border: motionMode === 'always_on' ? `1.5px solid ${T.ink}` : `1.5px solid ${T.ink}22`,
+                  borderRadius: 10,
+                }}>
+                <div style={{ fontWeight: 800, fontSize: '.82rem' }}>Always on</div>
+                <div style={{ fontSize: '.64rem', fontWeight: 500, opacity: .75, marginTop: 2 }}>Both stay put the whole clip</div>
               </button>
             </div>
 
-            <div style={{ fontSize: '.74rem', fontWeight: 800, color: T.mute, marginBottom: 8 }}>BACKGROUND MUSIC</div>
+            <StageDivider />
+
+            <SubLabel accent={STAGE_BY_ID.style.accent}>Background music</SubLabel>
             {musicLib.length === 0 ? (
-              <div style={{ fontSize: '.76rem', color: T.mute, fontWeight: 600, marginBottom: 16 }}>
-                No music uploaded yet — an admin adds tracks in the library.
-              </div>
+              <StageFootnote>No tracks in the library yet — an admin adds these.</StageFootnote>
             ) : (
               <>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
                   <button onClick={() => setMusicId('')}
-                    style={{ ...pill(!musicId ? T.yellow : T.paper2), cursor: 'pointer' }}>None</button>
+                    style={{
+                      cursor: 'pointer', padding: '5px 12px',
+                      background: !musicId ? T.ink : '#fff',
+                      color: !musicId ? '#fff' : T.ink,
+                      border: `1.5px solid ${T.ink}33`,
+                      borderRadius: 999, fontSize: '.72rem', fontWeight: 700, fontFamily: FONT,
+                    }}>None</button>
                   {musicLib.map(m => (
                     <button key={m.id} onClick={() => setMusicId(m.id)}
-                      style={{ ...pill(musicId === m.id ? T.yellow : T.paper2), cursor: 'pointer' }}>{m.name}</button>
+                      style={{
+                        cursor: 'pointer', padding: '5px 12px',
+                        background: musicId === m.id ? T.ink : '#fff',
+                        color: musicId === m.id ? '#fff' : T.ink,
+                        border: `1.5px solid ${T.ink}33`,
+                        borderRadius: 999, fontSize: '.72rem', fontWeight: 700, fontFamily: FONT,
+                      }}>{m.name}</button>
                   ))}
                 </div>
                 {musicId && (
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: '.68rem', fontWeight: 700, color: T.mute, marginBottom: 4 }}>
-                      Volume (ducks under dialogue automatically) · {Math.round(musicVolume * 100)}%
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: FONT_MONO,
+                      fontSize: '.64rem', color: T.mute, marginBottom: 4 }}>
+                      <span>Volume · ducks under dialogue</span>
+                      <span>{Math.round(musicVolume * 100)}%</span>
                     </div>
                     <input type="range" min={0.2} max={0.4} step={0.02} value={musicVolume}
                       onChange={e => setMusicVolume(Number(e.target.value))}
-                      style={{ width: '100%', accentColor: T.red }} />
+                      style={{ width: '100%', accentColor: STAGE_BY_ID.style.accent }} />
                   </div>
                 )}
               </>
             )}
 
-            <div style={{ fontSize: '.74rem', fontWeight: 800, color: T.mute, marginBottom: 8 }}>SOUND EFFECTS</div>
-            {sfxLib.length === 0 ? (
-              <div style={{ fontSize: '.76rem', color: T.mute, fontWeight: 600 }}>
-                No SFX uploaded yet — an admin adds these in the library.
-              </div>
-            ) : (
-              <div style={{ display: 'flex', gap: 10 }}>
-                <label style={{ flex: 1 }}>
-                  <span style={{ fontSize: '.62rem', fontWeight: 800, color: T.mute, textTransform: 'uppercase', letterSpacing: '.05em' }}>Intro stinger</span>
-                  <select value={introSfxId} onChange={e => setIntroSfxId(e.target.value)}
-                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 4,
-                      background: T.paper2, border: `2px solid ${T.ink}`, borderRadius: 8,
-                      padding: '7px 10px', fontSize: '.78rem', fontFamily: FONT, cursor: 'pointer' }}>
-                    <option value="">None</option>
-                    {sfxLib.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </label>
-                <label style={{ flex: 1 }}>
-                  <span style={{ fontSize: '.62rem', fontWeight: 800, color: T.mute, textTransform: 'uppercase', letterSpacing: '.05em' }}>Outro stinger</span>
-                  <select value={outroSfxId} onChange={e => setOutroSfxId(e.target.value)}
-                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 4,
-                      background: T.paper2, border: `2px solid ${T.ink}`, borderRadius: 8,
-                      padding: '7px 10px', fontSize: '.78rem', fontFamily: FONT, cursor: 'pointer' }}>
-                    <option value="">None</option>
-                    {sfxLib.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </label>
-              </div>
+            {sfxLib.length > 0 && (
+              <>
+                <div style={{ height: 20 }} />
+                <SubLabel accent={STAGE_BY_ID.style.accent}>Sound effects</SubLabel>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <label style={{ flex: 1 }}>
+                    <span style={{ fontFamily: FONT_MONO, fontSize: '.62rem', color: T.mute, letterSpacing: '.05em', textTransform: 'uppercase' }}>Intro</span>
+                    <select value={introSfxId} onChange={e => setIntroSfxId(e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', marginTop: 4,
+                        background: '#fff', border: `1.5px solid ${T.ink}22`, borderRadius: 8,
+                        padding: '8px 10px', fontSize: '.78rem', fontFamily: FONT, cursor: 'pointer' }}>
+                      <option value="">None</option>
+                      {sfxLib.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </label>
+                  <label style={{ flex: 1 }}>
+                    <span style={{ fontFamily: FONT_MONO, fontSize: '.62rem', color: T.mute, letterSpacing: '.05em', textTransform: 'uppercase' }}>Outro</span>
+                    <select value={outroSfxId} onChange={e => setOutroSfxId(e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', marginTop: 4,
+                        background: '#fff', border: `1.5px solid ${T.ink}22`, borderRadius: 8,
+                        padding: '8px 10px', fontSize: '.78rem', fontFamily: FONT, cursor: 'pointer' }}>
+                      <option value="">None</option>
+                      {sfxLib.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </label>
+                </div>
+              </>
             )}
-            <StageNextButton label="Next: review & generate" onClick={goNext} />
-          </Section>
-          </>
+
+            <StageNextButton label="Next — final callsheet" onClick={goNext} accent={STAGE_BY_ID.review.accent} />
+          </StageShell>
           )}
 
           {stage === 'review' && (
-          <Section n="5" title="Review" tip="Everything you've set, in one place — jump back to change anything.">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <ReviewRow label="Spark" done={stageDone.spark} onEdit={() => goToStage('spark')}>
-                {script.trim() ? `"${script.trim().slice(0, 80)}${script.trim().length > 80 ? '…' : ''}"` : 'No topic yet'}
-              </ReviewRow>
-              <ReviewRow label="Cast" done={stageDone.cast} onEdit={() => goToStage('cast')}>
+          <StageShell id="review">
+            {/* Callsheet: monospace lines like a shot list / receipt.
+                No dashed borders, no big colored banners — quiet confidence. */}
+            <div style={{
+              border: `1.5px solid ${T.ink}`,
+              borderRadius: 12, overflow: 'hidden', background: '#fff',
+            }}>
+              <div style={{ background: T.ink, color: '#fff',
+                padding: '10px 14px', display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', fontFamily: FONT_MONO, fontSize: '.62rem',
+                letterSpacing: '.1em', textTransform: 'uppercase' }}>
+                <span>Callsheet · Brainrot Clip</span>
+                <span style={{ opacity: .6 }}>{problems.length === 0 ? 'READY' : `${problems.length} MISSING`}</span>
+              </div>
+              <CallsheetRow label="Premise" done={stageDone.spark} onEdit={() => goToStage('spark')}>
+                {script.trim() ? `"${script.trim().slice(0, 80)}${script.trim().length > 80 ? '…' : ''}"` : <em style={{ color: T.mute }}>No topic yet</em>}
+              </CallsheetRow>
+              <CallsheetRow label="Cast" done={stageDone.cast} onEdit={() => goToStage('cast')}>
                 {castCount === 0 ? 'Narrator only' :
                   picked.length ? `${picked.map(p => p.name).join(' vs ')}${chemistry ? ` · ${chemistry.emoji} ${chemistry.label}` : ''}` :
-                  `0 of ${castCount} picked`}
-              </ReviewRow>
-              <ReviewRow label="Scene" done={stageDone.scene} onEdit={() => goToStage('scene')}>
-                {background ? `${background.category?.replace(/_/g, ' ') || 'Background'}${background.source_title ? ` — ${background.source_title}` : ''}` : 'No background yet'}
-              </ReviewRow>
-              <ReviewRow label="Style" done={stageDone.style} onEdit={() => goToStage('style')}>
-                {duration}s · {CAPTION_STYLES.find(c => c.id === captionStyle)?.label || captionStyle} captions · {motionMode === 'always_on' ? 'always on' : 'turn-based'}
-                {musicId ? ` · 🎵 ${musicLib.find(m => m.id === musicId)?.name || 'music'}` : ''}
-              </ReviewRow>
+                  <em style={{ color: T.mute }}>{`0 of ${castCount} picked`}</em>}
+              </CallsheetRow>
+              <CallsheetRow label="Backdrop" done={stageDone.scene} onEdit={() => goToStage('scene')}>
+                {background ? `${background.category?.replace(/_/g, ' ') || 'Background'}${background.source_title ? ` — ${background.source_title}` : ''}` :
+                  <em style={{ color: T.mute }}>No backdrop yet</em>}
+              </CallsheetRow>
+              <CallsheetRow label="Style" done={stageDone.style} onEdit={() => goToStage('style')} last>
+                {duration}s · {CAPTION_STYLES.find(c => c.id === captionStyle)?.label || captionStyle} · {motionMode === 'always_on' ? 'always on' : 'turn-based'}
+                {musicId ? ` · music: ${musicLib.find(m => m.id === musicId)?.name || 'on'}` : ''}
+              </CallsheetRow>
             </div>
 
-            <div style={{ marginTop: 18, padding: '12px 14px', background: T.paper2, border: `2px dashed ${T.ink}44`, borderRadius: 10, fontSize: '.78rem', color: T.mute, fontWeight: 600 }}>
-              🪙 This uses 1 credit — only if the clip actually finishes. If anything fails while rendering, it's refunded automatically.
+            <div style={{ marginTop: 18, display: 'flex', gap: 10, alignItems: 'flex-start',
+              padding: '12px 14px', background: '#fffdf5',
+              borderLeft: `3px solid ${STAGE_BY_ID.review.accent}`, borderRadius: 6 }}>
+              <div style={{ fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 700,
+                color: T.mute, letterSpacing: '.06em', flexShrink: 0, paddingTop: 2 }}>COST</div>
+              <div style={{ fontSize: '.8rem', color: T.ink, lineHeight: 1.5 }}>
+                <strong>1 credit</strong> — charged only when the clip finishes rendering.
+                If anything fails on our end, it's refunded automatically.
+              </div>
             </div>
 
             {problems.length > 0 && (
-              <div style={{ marginTop: 12, ...card({ padding: '10px 12px', background: '#fff4f4', borderColor: T.red }) }}>
-                <div style={{ fontSize: '.68rem', fontWeight: 900, color: T.redDark, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 5 }}>Still needed:</div>
+              <div style={{ marginTop: 12, padding: '10px 14px',
+                background: '#fff8f8', borderLeft: `3px solid ${T.red}`, borderRadius: 6 }}>
+                <div style={{ fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 700,
+                  color: T.redDark, letterSpacing: '.06em', marginBottom: 6 }}>NEEDS ATTENTION</div>
                 {problems.map((p, i) => (
-                  <div key={i} style={{ fontSize: '.78rem', fontWeight: 700, color: T.ink, display: 'flex', gap: 6 }}>
-                    <span style={{ color: T.red }}>○</span>{p}
+                  <div key={i} style={{ fontSize: '.8rem', fontWeight: 600, color: T.ink,
+                    display: 'flex', gap: 8, marginBottom: 2 }}>
+                    <span style={{ color: T.red, fontWeight: 900 }}>·</span>{p}
                   </div>
                 ))}
               </div>
             )}
-          </Section>
+          </StageShell>
           )}
         </div>
 
@@ -772,11 +965,16 @@ export default function BrainrotStudio() {
                 {submitting ? 'Starting…' : '⚡ Generate Brainrot Clip'}
               </button>
               {problems.length > 0 && (
-                <div style={{ ...card({ padding: '10px 12px' }) }}>
-                  <div style={{ fontSize: '.68rem', fontWeight: 900, color: T.mute, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 5 }}>To generate:</div>
+                <div style={{ padding: '10px 14px', background: '#fffdf7',
+                  border: `1px solid ${T.ink}18`, borderRadius: 10 }}>
+                  <div style={{ fontFamily: FONT_MONO, fontSize: '.6rem', fontWeight: 700,
+                    color: T.mute, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+                    Still needed
+                  </div>
                   {problems.map((p, i) => (
-                    <div key={i} style={{ fontSize: '.78rem', fontWeight: 700, color: T.ink, display: 'flex', gap: 6 }}>
-                      <span style={{ color: T.red }}>○</span>{p}
+                    <div key={i} style={{ fontSize: '.78rem', fontWeight: 600, color: T.ink,
+                      display: 'flex', gap: 7, marginBottom: 2 }}>
+                      <span style={{ color: T.red, fontWeight: 900 }}>·</span>{p}
                     </div>
                   ))}
                 </div>
@@ -811,111 +1009,326 @@ function pickTopic(current) {
 }
 
 // ── Header ────────────────────────────────────────────────────────
-function Header({ user, onLogout, navigate }) {
+// ── Header ────────────────────────────────────────────────────────
+// Clean, quiet, editorial. Accepts an optional connection-offline chip
+// that replaces the old page-wide red banner — see anyOffline logic in
+// the main component.
+function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection }) {
   const initials = (user?.full_name || user?.email || 'U')[0].toUpperCase()
   return (
-    <header style={{ position: 'sticky', top: 0, zIndex: 200, background: T.paper2,
-      borderBottom: `2.5px solid ${T.ink}`, padding: '12px 20px',
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <span style={{ fontSize: '1.5rem', transform: 'rotate(-8deg)', display: 'inline-block' }}>🧠</span>
+    <header style={{
+      position: 'sticky', top: 0, zIndex: 200, background: 'rgba(251,246,234,.92)',
+      backdropFilter: 'blur(10px)',
+      borderBottom: `1px solid ${T.ink}22`, padding: '14px 24px',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: '1.35rem' }}>🧠</span>
           <div>
-            <div style={{ fontSize: '1.05rem', fontWeight: 900, lineHeight: 1, letterSpacing: '-.01em' }}>
-              Brainrot <span style={{ color: T.red }}>Studio</span>
+            <div style={{ fontFamily: FONT_DISPLAY, fontSize: '1.15rem', fontWeight: 700, lineHeight: 1, letterSpacing: '-.02em' }}>
+              Brainrot <span style={{ fontStyle: 'italic', color: T.red }}>Studio</span>
             </div>
-            <div style={{ fontSize: '.58rem', fontWeight: 700, color: T.mute, textTransform: 'uppercase', letterSpacing: '.1em' }}>by ShortClipr</div>
+            <div style={{ fontFamily: FONT_MONO, fontSize: '.58rem', fontWeight: 500, color: T.mute,
+              textTransform: 'uppercase', letterSpacing: '.14em', marginTop: 2 }}>
+              by ShortClipr
+            </div>
           </div>
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Link to="/youtube-shorts/dashboard" style={{ ...pill(T.paper2), textDecoration: 'none', cursor: 'pointer' }}>
-          ← Shorts dashboard
-        </Link>
-        <div style={{ width: 34, height: 34, borderRadius: '50%', background: T.red, border: `2px solid ${T.ink}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: '.85rem' }}>
-          {user?.avatar_url ? <img src={user.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : initials}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {connectionOffline && (
+          <button onClick={onRetryConnection}
+            title="Some data isn't reachable — click to retry"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+              background: 'rgba(255,210,63,.18)',
+              border: `1px solid rgba(207,19,34,.35)`, borderRadius: 999,
+              padding: '4px 12px 4px 10px',
+              fontFamily: FONT, fontSize: '.72rem', fontWeight: 600, color: T.ink,
+            }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.red,
+              display: 'inline-block', animation: 'br-pulse-dot 1.4s ease-in-out infinite' }} />
+            Reconnecting
+          </button>
+        )}
+        <Link to="/youtube-shorts/dashboard" style={{
+          fontFamily: FONT, fontSize: '.78rem', fontWeight: 600, color: T.mute,
+          textDecoration: 'none', padding: '6px 10px', borderRadius: 6,
+        }}>← Shorts dashboard</Link>
+        <div style={{ width: 32, height: 32, borderRadius: '50%',
+          background: T.ink, border: `1px solid ${T.ink}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#fff', fontWeight: 700, fontSize: '.78rem', overflow: 'hidden' }}>
+          {user?.avatar_url ? <img src={user.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials}
         </div>
-        <button onClick={onLogout} style={{ ...pill(T.paper2), cursor: 'pointer' }}>Sign out</button>
+        <button onClick={onLogout} style={{
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          fontFamily: FONT, fontSize: '.75rem', fontWeight: 600, color: T.mute,
+          padding: '4px 8px',
+        }}>Sign out</button>
       </div>
+      <style>{`@keyframes br-pulse-dot { 0%,100% { opacity: .4 } 50% { opacity: 1 } }`}</style>
     </header>
   )
 }
 
-// ── Section wrapper ───────────────────────────────────────────────
-function Section({ n, title, tip, children }) {
+// ── StageShell — one per stage, gives each its own visual identity ──
+// A stage's outer container isn't a generic sticker card anymore. It's a
+// spacious editorial page-fragment with a colored accent rail on the left
+// (the stage's signature accent), a monospace kicker label ("Chapter 02"),
+// and a serif display heading. Same container across all stages so the
+// system reads as coherent; the accent color and heading text are what
+// give each stage its own room.
+function StageShell({ id, children }) {
+  const meta = STAGE_BY_ID[id]
   return (
-    <section style={{ ...card({ padding: '18px 18px 20px' }) }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
-        <span style={{ width: 26, height: 26, flexShrink: 0, background: T.yellow, border: `2px solid ${T.ink}`,
-          borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          fontWeight: 900, fontSize: '.82rem', transform: 'rotate(-5deg)' }}>{n}</span>
-        <h2 style={{ margin: 0, fontSize: '1.12rem', fontWeight: 900, letterSpacing: '-.01em' }}>{title}</h2>
+    <section style={{
+      background: '#fffdf7',
+      borderRadius: 16,
+      border: `1px solid ${T.ink}18`,
+      boxShadow: `0 1px 0 ${T.ink}08, 0 12px 40px -20px ${T.ink}22`,
+      overflow: 'hidden',
+      position: 'relative',
+    }}>
+      {/* Accent rail — the one bit of stage-specific color on the shell */}
+      <div style={{
+        position: 'absolute', left: 0, top: 0, bottom: 0, width: 4,
+        background: meta.accent,
+      }} />
+      <div style={{ padding: '26px 28px 28px 32px' }}>
+        <div style={{
+          fontFamily: FONT_MONO, fontSize: '.65rem', fontWeight: 600,
+          color: T.mute, letterSpacing: '.14em', textTransform: 'uppercase',
+          marginBottom: 4,
+        }}>
+          {meta.kicker} · {meta.label}
+        </div>
+        <h2 style={{
+          margin: '0 0 6px', fontFamily: FONT_DISPLAY, fontWeight: 600,
+          fontSize: 'clamp(1.5rem, 2.2vw, 1.85rem)', letterSpacing: '-.02em',
+          color: T.ink, lineHeight: 1.05,
+        }}>
+          {meta.title}
+        </h2>
+        <p style={{
+          margin: '0 0 22px', fontSize: '.86rem', color: T.mute,
+          lineHeight: 1.5, maxWidth: '52ch',
+        }}>
+          {meta.hint}
+        </p>
+        {children}
       </div>
-      {tip && <div style={{ fontSize: '.74rem', color: T.mute, fontWeight: 600, margin: '0 0 14px 36px' }}>{tip}</div>}
-      <div style={{ marginLeft: 0 }}>{children}</div>
     </section>
   )
 }
 
-// ── Stage rail ────────────────────────────────────────────────────
-// Horizontal, always visible, every stage clickable regardless of
-// completion — a rail, not a gate. Checkmarks are informational (what's
-// left) not a lock (nothing here blocks navigation); only Generate itself,
-// in the sticky right column, is gated on `problems`.
-function StageRail({ stage, onJump, stageDone }) {
+// ── SubLabel — the small monospace section marker inside a StageShell ──
+function SubLabel({ children, accent }) {
   return (
-    <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
-      {STAGES.map(s => {
-        const active = stage === s.id
-        const done = stageDone[s.id]
-        return (
-          <button key={s.id} onClick={() => onJump(s.id)} title={s.hint}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
-              cursor: 'pointer', padding: '8px 14px',
-              background: active ? T.ink : done ? '#eefaf0' : T.paper2,
-              color: active ? '#fff' : T.ink,
-              border: `2px solid ${T.ink}`, borderRadius: 999,
-              boxShadow: active ? sticker(3) : 'none',
-              fontFamily: FONT, fontWeight: 800, fontSize: '.8rem',
-              transition: 'all .12s',
-            }}>
-            <span>{s.icon}</span>
-            <span>{s.label}</span>
-            {done && !active && <span style={{ color: T.green, fontWeight: 900 }}>✓</span>}
-          </button>
-        )
-      })}
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: 8,
+      fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 700,
+      color: T.mute, letterSpacing: '.08em', textTransform: 'uppercase',
+      marginBottom: 10,
+    }}>
+      {accent && <span style={{ width: 8, height: 8, background: accent, borderRadius: 2 }} />}
+      {children}
     </div>
   )
 }
 
-// ── "Next stage" convenience button ─────────────────────────────────
-// The rail supports jumping anywhere, but most first-time users will just
-// go in order — this keeps that path a single click without forcing it.
-function StageNextButton({ label, onClick }) {
+// ── StageDivider — hair-thin rule between sub-groups inside a shell ──
+function StageDivider() {
+  return <div style={{ height: 1, background: `${T.ink}12`, margin: '2px 0 20px' }} />
+}
+
+// ── StageFootnote — small muted explanatory copy at the bottom ──
+function StageFootnote({ children }) {
   return (
-    <button onClick={onClick} {...pressHandlers}
-      style={{ ...pill(T.ink, { color: '#fff', cursor: 'pointer', marginTop: 16, fontWeight: 800 }) }}>
-      {label} →
+    <p style={{
+      margin: '14px 0 0', fontSize: '.76rem', color: T.mute,
+      lineHeight: 1.55, fontStyle: 'italic',
+    }}>
+      {children}
+    </p>
+  )
+}
+
+// ── StageNextButton — quiet forward affordance, not a chunky primary ──
+// The rail supports jumping anywhere; this is just the linear "keep going"
+// path a first-time user naturally follows. Restraint here matters —
+// the real primary CTA is Generate in the right column.
+function StageNextButton({ label, onClick, accent = T.red }) {
+  return (
+    <button onClick={onClick}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        marginTop: 26, cursor: 'pointer',
+        background: 'transparent', border: 'none',
+        fontFamily: FONT, fontSize: '.82rem', fontWeight: 700, color: T.ink,
+        padding: '4px 0', letterSpacing: '-.01em',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.color = accent }}
+      onMouseLeave={e => { e.currentTarget.style.color = T.ink }}
+    >
+      {label} <span style={{ transition: 'transform .12s', display: 'inline-block' }}>→</span>
     </button>
   )
 }
 
-// ── Review row ────────────────────────────────────────────────────
-function ReviewRow({ label, done, onEdit, children }) {
+// ── CallsheetRow — one line in the Review stage's callsheet ──
+// Monospace treatment, thin rules, no dashed borders. Reads as a shot
+// list / receipt / manifest — quiet confidence, not a form.
+function CallsheetRow({ label, done, onEdit, children, last }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-      background: T.paper2, border: `2px solid ${T.ink}`, borderRadius: 10 }}>
-      <span style={{ color: done ? T.green : T.mute, fontWeight: 900, fontSize: '.9rem', flexShrink: 0 }}>
-        {done ? '✓' : '○'}
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: '.62rem', fontWeight: 800, color: T.mute, textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
-        <div style={{ fontSize: '.82rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{children}</div>
+    <div style={{
+      display: 'grid', gridTemplateColumns: '90px 1fr 60px', gap: 12, alignItems: 'center',
+      padding: '12px 14px',
+      borderBottom: last ? 'none' : `1px solid ${T.ink}12`,
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 700,
+        color: done ? T.ink : T.mute,
+        letterSpacing: '.08em', textTransform: 'uppercase',
+      }}>
+        <span style={{ color: done ? T.green : T.ink + '55', fontFamily: FONT }}>
+          {done ? '●' : '○'}
+        </span>
+        {label}
       </div>
-      <button onClick={onEdit} style={{ ...pill(T.paper, { cursor: 'pointer', padding: '4px 10px', fontSize: '.7rem', flexShrink: 0 }) }}>Edit</button>
+      <div style={{ fontSize: '.86rem', color: T.ink, overflow: 'hidden',
+        textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {children}
+      </div>
+      <button onClick={onEdit}
+        style={{
+          justifySelf: 'end', cursor: 'pointer',
+          background: 'transparent', border: 'none',
+          fontFamily: FONT_MONO, fontSize: '.62rem', fontWeight: 700,
+          color: T.mute, letterSpacing: '.08em', textTransform: 'uppercase',
+          padding: '4px 6px',
+        }}
+        onMouseEnter={e => e.currentTarget.style.color = T.ink}
+        onMouseLeave={e => e.currentTarget.style.color = T.mute}
+      >Edit</button>
+    </div>
+  )
+}
+
+// ── OfflineState — inline "resource unreachable" empty state ──
+// Replaces the old page-wide red banner. Lives inside the affected
+// section, so a user only sees it in the context that actually needs the
+// missing data. Retry button, no scary jargon, no "bucket configured?"
+function OfflineState({ title, sub, onRetry }) {
+  const [retrying, setRetrying] = useState(false)
+  const handleRetry = async () => {
+    setRetrying(true)
+    onRetry?.()
+    setTimeout(() => setRetrying(false), 800)
+  }
+  return (
+    <div style={{
+      textAlign: 'center', padding: '32px 20px',
+      background: '#fffdf5',
+      border: `1px dashed ${T.ink}33`,
+      borderRadius: 12,
+    }}>
+      <div style={{ fontSize: '1.8rem', marginBottom: 10, opacity: .35 }}>⚡</div>
+      <div style={{ fontFamily: FONT_DISPLAY, fontSize: '1rem', fontWeight: 600,
+        color: T.ink, marginBottom: 6, letterSpacing: '-.01em' }}>
+        {title}
+      </div>
+      {sub && (
+        <div style={{ fontSize: '.78rem', color: T.mute, lineHeight: 1.5,
+          maxWidth: '38ch', margin: '0 auto 16px' }}>
+          {sub}
+        </div>
+      )}
+      <button onClick={handleRetry} disabled={retrying}
+        style={{
+          cursor: retrying ? 'default' : 'pointer',
+          background: T.ink, color: '#fff',
+          border: 'none', borderRadius: 8, padding: '8px 18px',
+          fontFamily: FONT, fontSize: '.78rem', fontWeight: 700,
+          opacity: retrying ? .6 : 1,
+        }}>
+        {retrying ? 'Retrying…' : 'Retry'}
+      </button>
+    </div>
+  )
+}
+
+// ── StageRail — a real progress spine, not a row of pills ──
+// Horizontal, always visible, every stage clickable — same navigation
+// contract as before. What changed: it now reads as a *progression* —
+// numbered nodes on a shared spine, connectors between them filled dark
+// where done, muted where remaining, current stage sized larger with
+// its own accent color as the spot of emphasis. Feels like a printed
+// table of contents, not a form's step indicator.
+function StageRail({ stage, onJump, stageDone }) {
+  const activeIdx = STAGES.findIndex(s => s.id === stage)
+  return (
+    <div style={{
+      background: '#fffdf7',
+      border: `1px solid ${T.ink}12`,
+      borderRadius: 14,
+      padding: '18px 22px',
+      boxShadow: `0 1px 0 ${T.ink}05`,
+    }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${STAGES.length}, 1fr)`,
+        alignItems: 'flex-start',
+        position: 'relative',
+        gap: 4,
+      }}>
+        {/* Connector line — sits behind the nodes */}
+        <div style={{
+          position: 'absolute', left: '10%', right: '10%', top: 14, height: 1,
+          background: `linear-gradient(to right, ${T.ink} 0%, ${T.ink} ${(activeIdx / (STAGES.length - 1)) * 100}%, ${T.ink}22 ${(activeIdx / (STAGES.length - 1)) * 100}%, ${T.ink}22 100%)`,
+          zIndex: 0,
+        }} />
+        {STAGES.map((s, i) => {
+          const active = stage === s.id
+          const done = stageDone[s.id]
+          const isPast = i < activeIdx
+          return (
+            <button key={s.id} onClick={() => onJump(s.id)} title={s.hint}
+              style={{
+                cursor: 'pointer', background: 'transparent', border: 'none',
+                padding: 0, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', gap: 8, position: 'relative', zIndex: 1,
+                fontFamily: FONT,
+              }}>
+              <div style={{
+                width: active ? 32 : 28, height: active ? 32 : 28,
+                borderRadius: '50%',
+                background: active ? s.accent : done || isPast ? T.ink : '#fffdf7',
+                border: `1.5px solid ${active || done || isPast ? T.ink : T.ink + '44'}`,
+                color: active ? (s.accent === '#ffd23f' ? T.ink : '#fff') : done || isPast ? '#fff' : T.mute,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: active ? '.78rem' : '.7rem', fontWeight: 700,
+                fontFamily: FONT_MONO,
+                transition: 'all .18s ease',
+                boxShadow: active ? `0 4px 12px ${s.accent}55` : 'none',
+              }}>
+                {done && !active ? '✓' : String(i + 1).padStart(2, '0')}
+              </div>
+              <div style={{
+                fontSize: active ? '.75rem' : '.7rem',
+                fontWeight: active ? 700 : 500,
+                color: active ? T.ink : done || isPast ? T.ink : T.mute,
+                letterSpacing: '-.01em',
+                transition: 'all .18s ease',
+              }}>
+                {s.label}
+              </div>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

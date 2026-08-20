@@ -59,7 +59,16 @@ export function AuthProvider({ children }) {
   const logout = () => {
     localStorage.removeItem('sc_token')
     setUser(null)
-    window.location.href = '/youtube-shorts' // Force hard redirect home to clear all state safely
+    // Force hard redirect home to clear all state safely — but "home" has
+    // to mean whichever product the user was actually in. This is shared
+    // across both products (brainrot's Sign Out button and BrainrotStudio's
+    // header both call this same logout()), so a hardcoded '/youtube-shorts'
+    // here bounced every brainrot user to the wrong product on sign-out —
+    // the same bug class as ProtectedRoute's fallback in App.jsx. Read the
+    // path at call time (still on the original page, before the redirect)
+    // rather than threading a destination prop through every caller.
+    const isBrainrot = window.location.pathname.startsWith('/brainrot')
+    window.location.href = isBrainrot ? '/brainrot' : '/youtube-shorts'
   }
 
   return (
