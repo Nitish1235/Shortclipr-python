@@ -25,12 +25,6 @@ const SPARK_TOPICS = [
 ]
 
 const DURATION_PRESETS = [15, 30, 45, 60, 90, 120]
-// User-facing labels intentionally neutral — the underlying TTS provider ids
-// (see tts.py) stay the same over the wire but aren't named in the UI.
-const PROVIDERS = [
-  { id: 'unrealspeech', label: 'Voice A' },
-  { id: 'lemonfox',     label: 'Voice B' },
-]
 const ACTIVE_STATUSES = ['created', 'generating_script', 'synthesizing_voice', 'rendering']
 
 const STAGES = [
@@ -637,21 +631,6 @@ export default function BrainrotStudio() {
                       )
                     })}
                   </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
-                  <span style={{ fontSize: '.75rem', color: T.mute }}>Voice engine</span>
-                  {PROVIDERS.map(pr => (
-                    <button key={pr.id} onClick={() => setProvider(pr.id)}
-                      style={{
-                        cursor: 'pointer', padding: '5px 12px',
-                        background: provider === pr.id ? T.ink : '#fff',
-                        color: provider === pr.id ? '#fff' : T.ink,
-                        border: `1px solid ${provider === pr.id ? T.ink : T.line}`,
-                        borderRadius: 999, fontSize: '.75rem', fontWeight: 500,
-                      }}>
-                      {pr.label}
-                    </button>
-                  ))}
                 </div>
               </>
             ) : (
