@@ -422,14 +422,18 @@ export default function BrainrotStudio() {
         connectionOffline={anyOffline} onRetryConnection={retryFetches}
         libraryClips={libraryClips} />
 
-      <ViewTabs view={view} onChange={setView}
-        clipCount={libraryClips.filter(c => c.status !== 'failed').length}
-        renderingCount={renderingCount} />
+      <div className="br-shell" style={{ maxWidth: 1360, margin: '0 auto', padding: '20px 24px 0',
+        display: 'flex', gap: 24, alignItems: 'flex-start' }}>
 
+        <StudioSideNav view={view} onChange={setView}
+          clipCount={libraryClips.filter(c => c.status !== 'failed').length}
+          renderingCount={renderingCount} />
+
+        <div style={{ flex: 1, minWidth: 0 }}>
       {view === 'clips' ? (
         <ClipsLibrary clips={libraryClips} onCreate={() => setView('create')} />
       ) : (
-      <div className="br-studio-grid" style={{ maxWidth: 1140, margin: '0 auto', padding: '28px 24px 80px',
+      <div className="br-studio-grid" style={{ padding: '8px 0 80px',
         display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 32, alignItems: 'start' }}>
 
         {/* ══ LEFT: builder ══════════════════════════════════════ */}
@@ -972,7 +976,7 @@ export default function BrainrotStudio() {
         </div>
 
         {/* ══ RIGHT: preview + generate (sticky) ═════════════════ */}
-        <div className="br-studio-preview" style={{ position: 'sticky', top: 156, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div className="br-studio-preview" style={{ position: 'sticky', top: 112, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <PreviewStage
             background={background}
             characters={picked}
@@ -1014,6 +1018,8 @@ export default function BrainrotStudio() {
         </div>
       </div>
       )}
+        </div>
+      </div>
 
       {toast && (
         <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 999,
@@ -1139,9 +1145,13 @@ function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection
         @media (max-width: 900px) {
           .br-studio-grid { grid-template-columns: 1fr !important; gap: 20px !important; }
           .br-studio-preview { position: static !important; top: auto !important; }
+          .br-shell { flex-direction: column !important; gap: 16px !important; padding-top: 14px !important; }
+          .br-sidenav { position: sticky !important; top: 96px !important; width: 100% !important;
+            flex-direction: row !important; z-index: 140; }
+          .br-sidenav button { flex: 1 !important; justify-content: center !important; }
         }
         @media (max-width: 640px) {
-          .br-studio-headrow, .br-studio-tabsrow, .br-studio-grid { padding-left: 16px !important; padding-right: 16px !important; }
+          .br-studio-headrow, .br-shell { padding-left: 16px !important; padding-right: 16px !important; }
           .br-studio-tag { display: none; }
         }
       `}</style>
@@ -1149,51 +1159,72 @@ function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection
   )
 }
 
-function ViewTabs({ view, onChange, clipCount, renderingCount }) {
-  const TABS = [
-    { id: 'create', label: 'Create' },
-    { id: 'clips',  label: 'My clips', count: clipCount },
+const SIDENAV_ICON = {
+  create: (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+      <path d="M8 1l1.4 4.6L14 7l-4.6 1.4L8 13l-1.4-4.6L2 7l4.6-1.4L8 1z" fill="currentColor" opacity=".85"/>
+    </svg>
+  ),
+  clips: (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+      <rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+      <line x1="1" y1="6.5" x2="15" y2="6.5" stroke="currentColor" strokeWidth="1.1"/>
+      <rect x="3.5" y="8.5" width="3" height="2" rx=".5" fill="currentColor" opacity=".7"/>
+      <rect x="8" y="8.5" width="4.5" height="2" rx=".5" fill="currentColor" opacity=".4"/>
+    </svg>
+  ),
+}
+
+// Left-side nav — Create / My clips. Sticky column on desktop, collapses to
+// a horizontal bar (same buttons, same active styling) on mobile via the
+// .br-sidenav / .br-shell media rules in Header's <style> block.
+function StudioSideNav({ view, onChange, clipCount, renderingCount }) {
+  const ITEMS = [
+    { id: 'create', label: 'Create',   icon: SIDENAV_ICON.create },
+    { id: 'clips',  label: 'My clips', icon: SIDENAV_ICON.clips, count: clipCount },
   ]
   return (
-    <div style={{
-      position: 'sticky', top: 96, zIndex: 150,
-      background: 'rgba(255,255,255,.92)', backdropFilter: 'blur(12px)',
-      borderBottom: `1px solid ${T.line}`,
+    <nav className="br-sidenav" style={{
+      position: 'sticky', top: 96, flexShrink: 0, width: 192,
+      display: 'flex', flexDirection: 'column', gap: 2,
+      background: '#fff', border: `1px solid ${T.line}`, borderRadius: 12, padding: 6,
     }}>
-      <div className="br-studio-tabsrow" style={{ maxWidth: 1140, margin: '0 auto', padding: '0 24px',
-        display: 'flex', gap: 4 }}>
-        {TABS.map(t => {
-          const on = view === t.id
-          return (
-            <button key={t.id} onClick={() => onChange(t.id)}
-              style={{
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-                padding: '12px 16px', fontFamily: FONT, fontSize: '.85rem', fontWeight: 500,
-                color: on ? T.ink : T.mute,
-                background: 'transparent', border: 'none',
-                borderBottom: `2px solid ${on ? T.ink : 'transparent'}`,
-                transition: 'all .12s',
-              }}>
-              {t.label}
-              {typeof t.count === 'number' && t.count > 0 && (
-                <span style={{
-                  fontSize: '.7rem', fontWeight: 500,
-                  color: on ? '#fff' : T.mute,
-                  background: on ? T.ink : T.lineSoft,
-                  borderRadius: 999, padding: '1px 7px', minWidth: 16, textAlign: 'center',
-                }}>{t.count}</span>
-              )}
-              {t.id === 'clips' && renderingCount > 0 && (
-                <span title={`${renderingCount} rendering`} style={{
-                  width: 6, height: 6, borderRadius: '50%', background: T.red,
-                  animation: 'br-pulse-dot 1.4s ease-in-out infinite',
-                }} />
-              )}
-            </button>
-          )
-        })}
-      </div>
-    </div>
+      {ITEMS.map(it => {
+        const on = view === it.id
+        return (
+          <button key={it.id} onClick={() => onChange(it.id)}
+            style={{
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9,
+              padding: '10px 12px', borderRadius: 8, border: 'none', textAlign: 'left',
+              background: on ? T.ink : 'transparent',
+              color: on ? '#fff' : T.mute,
+              fontFamily: FONT, fontSize: '.85rem', fontWeight: 500,
+              transition: 'all .12s',
+            }}
+            onMouseEnter={e => { if (!on) e.currentTarget.style.background = T.lineSoft }}
+            onMouseLeave={e => { if (!on) e.currentTarget.style.background = 'transparent' }}
+          >
+            <span style={{ flexShrink: 0, display: 'flex', opacity: on ? 1 : .7 }}>{it.icon}</span>
+            <span style={{ flex: 1 }}>{it.label}</span>
+            {it.id === 'clips' && renderingCount > 0 && (
+              <span title={`${renderingCount} rendering`} style={{
+                width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                background: on ? '#fff' : T.red,
+                animation: 'br-pulse-dot 1.4s ease-in-out infinite',
+              }} />
+            )}
+            {typeof it.count === 'number' && it.count > 0 && (
+              <span style={{
+                fontSize: '.7rem', fontWeight: 500, flexShrink: 0,
+                color: on ? '#fff' : T.mute,
+                background: on ? 'rgba(255,255,255,.18)' : T.lineSoft,
+                borderRadius: 999, padding: '1px 7px', minWidth: 16, textAlign: 'center',
+              }}>{it.count}</span>
+            )}
+          </button>
+        )
+      })}
+    </nav>
   )
 }
 
@@ -1594,7 +1625,7 @@ function ClipsLibrary({ clips, onCreate }) {
   }, [shownClips, filter])
 
   return (
-    <div style={{ maxWidth: 1180, margin: '0 auto', padding: '26px 20px 80px' }}>
+    <div style={{ padding: '8px 0 80px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
         <div>
