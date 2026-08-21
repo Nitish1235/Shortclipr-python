@@ -91,6 +91,9 @@ async def google_auth(body: GoogleAuthRequest):
                 "plan": user.get("plan", "free"),
                 "credits_used": user.get("credits_used", 0),
                 "credits_limit": user.get("credits_limit", 1),
+                "brainrot_plan": user.get("brainrot_plan", "free"),
+                "brainrot_credits_used": user.get("brainrot_credits_used", 0),
+                "brainrot_credits_limit": user.get("brainrot_credits_limit", 2),
                 "has_submitted_feedback": await db.has_submitted_feedback(user_id),
             },
         )
@@ -111,6 +114,8 @@ async def get_me(current_user: CurrentUser):
     credits_limit = int(user.get("credits_limit", 1) or 1)
     vm_used       = int(user.get("video_minutes_used",  0) or 0)
     vm_limit      = int(user.get("video_minutes_limit", 30) or 30)
+    br_used       = int(user.get("brainrot_credits_used",  0) or 0)
+    br_limit      = int(user.get("brainrot_credits_limit", 2) or 2)
 
     return {
         "user_id":    str(user["id"]),
@@ -126,5 +131,10 @@ async def get_me(current_user: CurrentUser):
         "video_minutes_used":      vm_used,
         "video_minutes_limit":     vm_limit,
         "video_minutes_remaining": max(0, vm_limit - vm_used),
+        # Brainrot quota — fully separate plan/pool from the above (migration 016)
+        "brainrot_plan":               user.get("brainrot_plan", "free"),
+        "brainrot_credits_used":       br_used,
+        "brainrot_credits_limit":      br_limit,
+        "brainrot_credits_remaining":  max(0, br_limit - br_used),
         "has_submitted_feedback": await db.has_submitted_feedback(str(user["id"])),
     }

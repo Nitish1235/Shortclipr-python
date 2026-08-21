@@ -11,7 +11,6 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../../context/AuthContext'
-import { brainrotApi } from './brainrotApi'
 
 const BRAIN = '#a855f7'
 const INK = '#0f0f0f'
@@ -19,13 +18,6 @@ const INK = '#0f0f0f'
 export default function BrainrotNav() {
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  // Brainrot-specific clip count (from /brainrot/jobs), NOT the shared credit
-  // balance — the header used to show `user.videos_remaining` which is the
-  // cross-product pool, indistinguishable from YT-Shorts. This is a display
-  // separation only; the underlying credit pool is intentionally shared
-  // (see backend/app/api/webhooks.py, and the "Works on both products" copy
-  // on the pricing tiers).
-  const [brainrotClipCount, setBrainrotClipCount] = useState(null)
   const { user, loginWithGoogleToken, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
@@ -40,15 +32,6 @@ export default function BrainrotNav() {
   }, [])
 
   useEffect(() => { setMenuOpen(false) }, [location.pathname])
-
-  useEffect(() => {
-    if (!user) { setBrainrotClipCount(null); return }
-    let alive = true
-    brainrotApi.listJobs()
-      .then(d => { if (alive) setBrainrotClipCount((d.jobs || []).filter(j => j.status !== 'failed').length) })
-      .catch(() => { if (alive) setBrainrotClipCount(null) })
-    return () => { alive = false }
-  }, [user])
 
   const links = isApp ? [] : isLanding ? [
     { label: 'Characters', href: '#characters' },
@@ -136,7 +119,7 @@ export default function BrainrotNav() {
                 borderRadius: 8, padding: '6px 12px',
                 fontSize: '.78rem', fontWeight: 700, color: BRAIN,
               }}>
-                🧠 {brainrotClipCount ?? '–'} clip{brainrotClipCount === 1 ? '' : 's'}
+                🧠 {user.brainrot_credits_remaining ?? '–'} credits
               </div>
               {!isApp && (
                 <Link to="/brainrot/studio" style={{

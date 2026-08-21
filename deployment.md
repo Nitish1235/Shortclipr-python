@@ -167,6 +167,7 @@ The plan → quota table lives in `backend/app/core/plan_limits.py` — that's t
    - `INNERTUBE_API_KEY`, `INNERTUBE_API_BASE`
    - `PROXYSELLER_USER` (Secret), `PROXYSELLER_PASS` (Secret), `PROXYSELLER_PROXIES` — residential proxy for DASH downloads
    - `DODO_PAYMENTS_API_KEY` (Secret), `DODO_PAYMENTS_WEBHOOK_SECRET` (Secret), and all five product IDs: `DODO_PRODUCT_STARTER_100/250` + `DODO_PRODUCT_PRO_500/1000/2000`
+   - `DODO_API_BASE` — **easy to miss**: defaults to `https://test.dodopayments.com` (sandbox) if unset, even with a real live API key and real product IDs set. Set explicitly to `https://live.dodopayments.com` for real payments to actually process.
    - `MAX_CONCURRENT_CLIPS`, `MAX_CONCURRENT_JOBS_PER_USER`
    - **Worker dispatch** — set these to activate split-worker mode (leave empty for single-service in-process mode):
      - `API_WORKER_URLS` — comma-separated URLs of the deployed API worker services

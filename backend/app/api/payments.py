@@ -81,6 +81,48 @@ async def create_checkout_session(body: CheckoutRequest, current_user: CurrentUs
     return {"checkout_url": checkout_url, "plan": plan}
 
 
+# ── Brainrot — fully separate product/checkout from the tiers above ─
+BRAINROT_PRODUCT_IDS: dict[str, str] = {
+    "starter":   settings.DODO_PRODUCT_BRAINROT_STARTER,    # $15 — 30 brainrot clips/mo
+    "growth":    settings.DODO_PRODUCT_BRAINROT_GROWTH,     # $39 — 80 brainrot clips/mo
+    "unlimited": settings.DODO_PRODUCT_BRAINROT_UNLIMITED,  # $99 — unlimited brainrot clips/mo
+}
+
+
+@router.post("/brainrot/checkout-session")
+async def create_brainrot_checkout_session(body: CheckoutRequest, current_user: CurrentUser):
+    """
+    Same flow as /checkout-session but for a Brainrot plan — separate
+    product map, separate metadata.product marker so webhooks.py credits
+    the brainrot_plan/brainrot_credits_* columns instead of plan/credits_*.
+    """
+    plan = body.plan.lower()
+
+    if plan not in BRAINROT_PRODUCT_IDS:
+        raise HTTPException(status_code=422, detail=f"Unknown brainrot plan: {plan}")
+
+    product_id = BRAINROT_PRODUCT_IDS[plan]
+    if not product_id:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Product not configured for '{plan}'. Contact support.",
+        )
+
+    checkout_url = await _create_dodo_checkout_session(
+        product_id=product_id,
+        user_email=current_user.email,
+        success_url="https://shortclipr.com/brainrot/studio",
+        cancel_url="https://shortclipr.com/brainrot#pricing",
+        metadata={
+            "user_id": current_user.user_id,
+            "plan": plan,
+            "product": "brainrot",
+        },
+    )
+
+    return {"checkout_url": checkout_url, "plan": plan}
+
+
 async def _create_dodo_checkout_session(
     product_id: str,
     user_email: str,

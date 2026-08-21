@@ -937,25 +937,26 @@ function Roster({ characters }) {
 //  Section: PRICING
 // ═══════════════════════════════════════════════════════════════════
 function Pricing() {
-  // Mirrors src/components/Pricing.jsx (YT-Shorts landing) and Billing.jsx —
-  // one shared credit balance across both products. Keep in sync with
-  // backend/app/core/plan_limits.py.
+  // Brainrot's own plan/pricing — independent of YT-Shorts (separate Dodo
+  // Payments product, separate credit pool: users.brainrot_plan /
+  // brainrot_credits_*, migration 016). Keep in sync with
+  // backend/app/core/brainrot_plan_limits.py.
   const tiers = [
     { name: 'Free',      price: '$0',  unit: 'forever', shadowColor: P.brain, featured: false,
-      items: ['2 clips / month', '720p, watermarked', 'All 100+ characters', 'Works on both products'], cta: 'Start free' },
+      items: ['2 clips / month', '720p, watermarked', 'All 100+ characters', 'No credit card required'], cta: 'Start free' },
     { name: 'Starter',   price: '$15', unit: '/ mo',    shadowColor: P.brain, featured: false,
-      items: ['30 clips / month', '1080p, no watermark', 'All 100+ characters', 'Works on both products'], cta: 'Get Starter' },
+      items: ['30 clips / month', '1080p, no watermark', 'All 100+ characters', 'Cancel anytime'], cta: 'Get Starter' },
     { name: 'Growth',    price: '$39', unit: '/ mo',    shadowColor: P.brain2, featured: true,
-      items: ['80 clips / month', '1080p, no watermark', 'Priority render queue', 'Works on both products'], cta: 'Get Growth' },
+      items: ['80 clips / month', '1080p, no watermark', 'Priority render queue', 'Cancel anytime'], cta: 'Get Growth' },
     { name: 'Unlimited', price: '$99', unit: '/ mo',    shadowColor: P.brain, featured: false,
-      items: ['Unlimited clips', '1080p, no watermark', 'Fastest render queue', 'Works on both products'], cta: 'Go Unlimited' },
+      items: ['Unlimited clips', '1080p, no watermark', 'Fastest render queue', 'Cancel anytime'], cta: 'Go Unlimited' },
   ]
 
   return (
     <section id="pricing" style={{ padding: '72px 5%', background: P.brainTint }}>
       <div style={{ textAlign: 'center', marginBottom: 36 }}>
         <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.2rem)', fontWeight: 900, letterSpacing: '-.02em' }}>
-          Credits work across <span style={{ color: P.brain }}>both</span> products.
+          Simple pricing, <span style={{ color: P.brain }}>just for brainrot</span>.
         </h2>
       </div>
       <div className="br-pricing-grid" style={{
@@ -988,7 +989,7 @@ function Pricing() {
                 </li>
               ))}
             </ul>
-            <Link to="/brainrot/studio" style={{
+            <Link to={t.name === 'Free' ? '/brainrot/studio' : '/brainrot/billing'} style={{
               display: 'block', textAlign: 'center', textDecoration: 'none',
               marginTop: 18,
               background: t.featured ? P.brain : P.ink, color: '#fff',
@@ -1016,7 +1017,7 @@ function FAQ() {
     { q: 'Can I edit caption timing?',
       a: 'Not currently — captions are auto-generated word-by-word from the TTS timestamps. Style + color + position are all configurable though.' },
     { q: 'Do I share credits with YouTube Shorts?',
-      a: 'Yes. One credit balance, one billing tier, both products.' },
+      a: 'No — Brainrot is its own plan and its own clip allowance, billed separately from YouTube Shorts. Subscribing to one doesn’t affect the other.' },
     { q: 'Refund policy?',
       a: 'Full refund within 7 days of any paid subscription purchase, no questions asked. Free tier obviously has nothing to refund.' },
   ]
