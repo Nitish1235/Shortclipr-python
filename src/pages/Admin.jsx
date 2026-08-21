@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import Logo from '../components/Logo'
 // TODO: replace with real import once brainrot is deployed:
 import BrainrotAdminPanel from './brainrot/BrainrotAdminPanel'
+import AdminTikTokAccounts, { AddToTikTokAccountButton } from './AdminTikTokAccounts'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
@@ -270,6 +271,18 @@ function JobClips({ jobId, onAddToShowcase, onAddToLibrary }) {
             >
               {addedLibrary.has(c.id || c.clip_id) ? '✓ Added to Library' : '+ Add to Library'}
             </button>
+            <AddToTikTokAccountButton
+              size="small"
+              clip={{
+                source: 'ytshorts',
+                job_id: jobId,
+                clip_id: c.clip_id || c.id,
+                title: c.title || 'ShortClipr Clip',
+                video_url: c.video_url,
+                thumbnail_url: c.thumbnail_url || '',
+                likes: c.viral_score ? `${c.viral_score}%` : '',
+              }}
+            />
           </div>
         </div>
       ))}
@@ -877,9 +890,21 @@ function BrainrotJobsPanel() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                   {statusBadge(job.status)}
                   {job.status === 'complete' && job.output_url && (
-                    <a href={job.output_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.78rem', color: '#cf1322', fontWeight: 600 }}>
-                      ▶ Watch
-                    </a>
+                    <>
+                      <a href={job.output_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.78rem', color: '#cf1322', fontWeight: 600 }}>
+                        ▶ Watch
+                      </a>
+                      <AddToTikTokAccountButton
+                        clip={{
+                          source: 'brainrot',
+                          job_id: job.job_id,
+                          clip_id: '',
+                          title: job.script_input || 'Brainrot Clip',
+                          video_url: job.output_url,
+                          thumbnail_url: '',
+                        }}
+                      />
+                    </>
                   )}
                 </div>
               </div>
@@ -1044,6 +1069,7 @@ export default function Admin() {
             { key: 'generate', label: '⚡ Generate' },
             { key: 'testlab', label: '🧪 Test Lab' },
             { key: 'brainrot', label: '🧠 Brainrot' },
+            { key: 'tiktok', label: '🎵 TikTok' },
             { key: 'email', label: '📧 Email' },
           ].map(t => (
             <button key={t.key} onClick={() => setTab(t.key)} style={tabStyle(tab === t.key)}>
@@ -1296,6 +1322,11 @@ export default function Admin() {
         {/* ── Brainrot tab ── */}
         {tab === 'brainrot' && (
           <BrainrotAdminPanel showToast={showToast} />
+        )}
+
+        {/* ── TikTok mock accounts tab ── */}
+        {tab === 'tiktok' && (
+          <AdminTikTokAccounts />
         )}
 
         {/* ── Test Lab tab ── */}

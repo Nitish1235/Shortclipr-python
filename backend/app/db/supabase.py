@@ -679,6 +679,87 @@ async def consume_feedback_reward(feedback_id: str, clip_id: str) -> None:
     )
 
 
+# ── Fake TikTok account mockups (migration 015) ────────────────
+# Admin-only tool for staging generated clips (from either product) into
+# mock TikTok profiles rendered in the admin panel. See admin_tiktok.py.
+
+async def create_tiktok_account(
+    handle: str, display_name: str, bio: str, avatar_url: str, verified: bool = False,
+) -> dict:
+    return await _fetchrow(
+        """
+        INSERT INTO fake_tiktok_accounts (handle, display_name, bio, avatar_url, verified)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING *
+        """,
+        handle, display_name, bio, avatar_url, verified,
+    )
+
+
+async def list_tiktok_accounts() -> list[dict]:
+    return await _fetch(
+        """
+        SELECT a.*, COUNT(c.id) AS clip_count
+        FROM fake_tiktok_accounts a
+        LEFT JOIN fake_tiktok_account_clips c ON c.account_id = a.id
+        GROUP BY a.id
+        ORDER BY a.created_at DESC
+        """
+    )
+
+
+async def get_tiktok_account(account_id: str) -> dict | None:
+    return await _fetchrow("SELECT * FROM fake_tiktok_accounts WHERE id = $1", account_id)
+
+
+async def update_tiktok_account(
+    account_id: str, handle: str, display_name: str, bio: str, avatar_url: str,
+    followers: str, following: str, likes: str, verified: bool,
+) -> dict | None:
+    return await _fetchrow(
+        """
+        UPDATE fake_tiktok_accounts
+        SET handle=$2, display_name=$3, bio=$4, avatar_url=$5,
+            followers=$6, following=$7, likes=$8, verified=$9, updated_at=now()
+        WHERE id=$1
+        RETURNING *
+        """,
+        account_id, handle, display_name, bio, avatar_url,
+        followers, following, likes, verified,
+    )
+
+
+async def delete_tiktok_account(account_id: str) -> None:
+    """Cascades to fake_tiktok_account_clips via FK — see migration 015."""
+    await _execute("DELETE FROM fake_tiktok_accounts WHERE id = $1", account_id)
+
+
+async def add_tiktok_account_clip(
+    account_id: str, source: str, job_id: str, clip_id: str | None, title: str,
+    video_url: str, thumbnail_url: str, caption: str, likes: str, comments: str,
+) -> dict:
+    return await _fetchrow(
+        """
+        INSERT INTO fake_tiktok_account_clips
+            (account_id, source, job_id, clip_id, title, video_url, thumbnail_url, caption, likes, comments)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING *
+        """,
+        account_id, source, job_id, clip_id, title, video_url, thumbnail_url, caption, likes, comments,
+    )
+
+
+async def list_tiktok_account_clips(account_id: str) -> list[dict]:
+    return await _fetch(
+        "SELECT * FROM fake_tiktok_account_clips WHERE account_id = $1 ORDER BY added_at DESC",
+        account_id,
+    )
+
+
+async def delete_tiktok_account_clip(clip_row_id: str) -> None:
+    await _execute("DELETE FROM fake_tiktok_account_clips WHERE id = $1", clip_row_id)
+
+
 # ── User operations ───────────────────────────────────────────
 
 async def get_user(user_id: str) -> dict | None:
