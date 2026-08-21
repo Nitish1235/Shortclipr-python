@@ -96,11 +96,11 @@ function VoicesSection({ notify }) {
     if (!running && timer.current) { clearInterval(timer.current); timer.current = null; load() }
   }, [status, load])
 
-  const generate = async () => {
+  const generate = async (missingOnly) => {
     setBusy(true)
     try {
-      await send('/brainrot/admin/voices/generate')
-      notify('Voice sample generation started', 'success')
+      await send(`/brainrot/admin/voices/generate${missingOnly ? '?missing_only=true' : ''}`)
+      notify(missingOnly ? 'Generating missing voice samples…' : 'Voice sample generation started', 'success')
       setTimeout(load, 800)
     } catch (e) { notify(e.message, 'error') } finally { setBusy(false) }
   }
@@ -108,6 +108,7 @@ function VoicesSection({ notify }) {
   const gen = status?.generating
   const pct = gen?.total ? Math.round(((gen.done + gen.failed) / gen.total) * 100) : 0
   const have = status ? `${status.with_samples}/${status.total_voices}` : '…'
+  const missingCount = status ? status.total_voices - status.with_samples : 0
 
   return (
     <div style={cardS}>
@@ -116,8 +117,13 @@ function VoicesSection({ notify }) {
         <span style={{ fontSize: '.82rem', fontWeight: 700 }}>
           {have} voices have samples
         </span>
-        <button style={{ ...btnRed, opacity: busy || gen?.running ? .6 : 1 }} disabled={busy || gen?.running} onClick={generate}>
-          {gen?.running ? 'Generating…' : '⚡ Generate all voice samples'}
+        {missingCount > 0 && (
+          <button style={{ ...btnRed, opacity: busy || gen?.running ? .6 : 1 }} disabled={busy || gen?.running} onClick={() => generate(true)}>
+            {gen?.running ? 'Generating…' : `🎯 Generate ${missingCount} missing`}
+          </button>
+        )}
+        <button style={{ ...btnGhost, opacity: busy || gen?.running ? .6 : 1 }} disabled={busy || gen?.running} onClick={() => generate(false)}>
+          {gen?.running ? 'Generating…' : '⚡ Regenerate all voice samples'}
         </button>
         <button style={btnGhost} onClick={load}>🔄 Refresh</button>
       </div>

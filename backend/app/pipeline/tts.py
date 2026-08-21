@@ -40,8 +40,8 @@ LEMONFOX_SPEECH_URL = "https://api.lemonfox.ai/v1/audio/speech"
 # Default voices per provider/locale. UnrealSpeech only ships US English
 # voices (see voice_catalog.py) — en-GB requests fall back to en-US there.
 DEFAULT_VOICES = {
-    "unrealspeech": {"en-US": "Scarlett", "en-GB": "Scarlett"},
-    "lemonfox":     {"en-US": "sarah",    "en-GB": "alice"},
+    "unrealspeech": {"en-US": "Charlotte", "en-GB": "Charlotte"},
+    "lemonfox":     {"en-US": "sarah",     "en-GB": "alice"},
 }
 
 

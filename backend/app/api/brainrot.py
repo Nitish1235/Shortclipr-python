@@ -529,15 +529,28 @@ _voice_gen: dict = {"running": False, "total": 0, "done": 0, "failed": 0}
 # ── POST /brainrot/admin/voices/generate ────────────────────────
 
 @router.post("/admin/voices/generate", status_code=202)
-async def admin_generate_voice_samples(current_user: CurrentUser):
-    """Admin: auto-generate a preview sample for every voice in the catalog.
-    Runs in background — each voice gets a short TTS clip uploaded to GCS."""
+async def admin_generate_voice_samples(current_user: CurrentUser, missing_only: bool = False):
+    """Admin: auto-generate a preview sample for every voice in the catalog
+    (or, with missing_only=true, just the ones that don't have a sample yet —
+    e.g. after fixing a few broken voice_ids, no need to re-pay for TTS on
+    the ones that already worked). Runs in background — each voice gets a
+    short TTS clip uploaded to GCS."""
     _require_admin(current_user)
     if _voice_gen["running"]:
         raise HTTPException(status_code=409, detail="Voice generation already running")
 
-    asyncio.create_task(_generate_all_voice_samples(), name="voice-sample-gen")
-    return {"status": "started", "total_voices": len(list_voices())}
+    target_voices = await _voices_to_generate(missing_only)
+    asyncio.create_task(_generate_all_voice_samples(target_voices), name="voice-sample-gen")
+    return {"status": "started", "total_voices": len(target_voices)}
+
+
+async def _voices_to_generate(missing_only: bool) -> list:
+    all_voices = list_voices()
+    if not missing_only:
+        return all_voices
+    samples = await db.list_voice_samples()
+    have = {(s["provider"], s["voice_id"]) for s in samples}
+    return [v for v in all_voices if (v.provider, v.voice_id) not in have]
 
 
 @router.get("/admin/voices/status")
@@ -554,11 +567,11 @@ async def admin_voice_status(current_user: CurrentUser):
     }
 
 
-async def _generate_all_voice_samples() -> None:
+async def _generate_all_voice_samples(target_voices: list | None = None) -> None:
     from app.pipeline.tts import synthesize
     from app.pipeline.uploader import upload_voice_sample
 
-    all_voices = list_voices()
+    all_voices = target_voices if target_voices is not None else list_voices()
     _voice_gen.update({"running": True, "total": len(all_voices), "done": 0, "failed": 0})
     logger.info(f"Starting voice sample generation for {len(all_voices)} voices")
 

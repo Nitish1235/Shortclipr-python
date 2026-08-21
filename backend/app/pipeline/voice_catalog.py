@@ -20,11 +20,18 @@ class Voice:
 
 VOICES: list[Voice] = [
     # ── UnrealSpeech (5 voices, English only) ────────────────────
-    Voice("Dan",      "unrealspeech", "en-US", "Dan",      "male"),
-    Voice("Will",     "unrealspeech", "en-US", "Will",     "male"),
-    Voice("Scarlett", "unrealspeech", "en-US", "Scarlett",  "female"),
-    Voice("Liv",      "unrealspeech", "en-US", "Liv",      "female"),
-    Voice("Amy",      "unrealspeech", "en-US", "Amy",      "female"),
+    # Previous voice_ids (Dan/Will/Scarlett/Liv/Amy) were removed/renamed by
+    # UnrealSpeech at some point — every one now 400s with "Invalid VoiceId"
+    # (see the admin voice-sample-generation logs). Replaced with 5 from
+    # their current allowed list. Gender tags are inferred from the name —
+    # UnrealSpeech's error response lists valid IDs but not genders — so
+    # worth a listen via the admin "Generate voice samples" tool after
+    # deploying to confirm they sound right, not just that they're accepted.
+    Voice("Ethan",     "unrealspeech", "en-US", "Ethan",     "male"),
+    Voice("Daniel",    "unrealspeech", "en-US", "Daniel",    "male"),
+    Voice("Charlotte", "unrealspeech", "en-US", "Charlotte", "female"),
+    Voice("Emily",     "unrealspeech", "en-US", "Emily",     "female"),
+    Voice("Amelia",    "unrealspeech", "en-US", "Amelia",    "female"),
 
     # ── Lemonfox — English US ────────────────────────────────────
     Voice("heart",    "lemonfox", "en-US", "Heart",    "female"),
@@ -71,9 +78,9 @@ SAMPLE_TEXT = "Hey, what's up? This is how I sound when I'm talking in your brai
 # never has both sides sounding identical.
 DEFAULT_VOICES_BY_GENDER: dict[str, dict[str, list[str]]] = {
     "unrealspeech": {
-        "male":    ["Dan", "Will"],
-        "female":  ["Scarlett", "Amy", "Liv"],
-        "neutral": ["Will", "Scarlett"],
+        "male":    ["Ethan", "Daniel"],
+        "female":  ["Charlotte", "Emily", "Amelia"],
+        "neutral": ["Daniel", "Charlotte"],
     },
     "lemonfox": {
         "male":    ["michael", "eric", "liam", "onyx", "fenrir"],
