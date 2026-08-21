@@ -174,6 +174,21 @@ function LiveStage({
       overflow: 'hidden',
       ...bg,
     }}>
+      {/* Real gameplay footage, autoplaying — bg (thumbnail/CSS gradient) stays
+          as the underlying style so it still shows if the clip has no video
+          file yet or the video fails to load. */}
+      {clip?.gcs_path && (
+        <video
+          src={clip.gcs_path}
+          autoPlay muted loop playsInline preload="metadata"
+          style={{
+            position: 'absolute', inset: 0,
+            width: '100%', height: '100%', objectFit: 'cover',
+            zIndex: 1,
+          }}
+        />
+      )}
+
       {/* CRT scanline overlay for that "video" feel */}
       <div style={{
         position: 'absolute', inset: 0,
