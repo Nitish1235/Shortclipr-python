@@ -7,13 +7,16 @@ import AppLayout from '../components/AppLayout'
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 // DodoPayments is already initialized in Pricing.jsx at bundle load time — do NOT call Initialize() again here
 
-// clips / videoHours / maxVideoHours mirror backend/app/core/plan_limits.py — keep in sync.
-// Same 3-tier structure as src/components/Pricing.jsx (public landing) so a logged-in
-// user viewing /billing sees the same prices they'd have paid on the landing page.
+// clips / videoHours / maxVideoHours mirror backend/app/core/plan_limits.py — keep in
+// sync. Same 5-tier "legacy slider" structure as src/components/Pricing.jsx (public
+// landing) — the only tiers with real Dodo products actually created — so a logged-in
+// user viewing /billing sees the same prices/plans they'd see on the landing page.
 const PLANS = [
-  { id: 'starter_30',  name: 'Starter',    price: 15, clips: 30,   videoHours: 10,  maxVideoHours: 2, badge: null,           perks: ['30 shorts/mo', '10 hrs of video/mo (2 hrs max per video)', 'HD 1080p vertical', 'All caption styles', 'Priority queue'] },
-  { id: 'growth_100',  name: 'Growth',     price: 39, clips: 80,   videoHours: 30,  maxVideoHours: 3, badge: 'Most Popular', perks: ['80 shorts/mo', '30 hrs of video/mo (3 hrs max per video)', 'Everything in Starter', 'Faster processing queue', 'Batch download'] },
-  { id: 'unlimited',   name: 'Unlimited',  price: 99, clips: null, videoHours: 100, maxVideoHours: 6, badge: null,           perks: ['Unlimited shorts', '100 hrs of video/mo (6 hrs max per video)', 'Everything in Growth', 'Fastest priority queue', 'Dedicated support'] },
+  { id: 'starter_100', name: 'Starter',  price: 10,  clips: 75,   videoHours: 5,  maxVideoHours: 2, badge: null,           perks: ['75 shorts/mo', '5 hrs of video/mo (2 hrs max per video)', 'HD 1080p vertical', 'All caption styles'] },
+  { id: 'starter_250', name: 'Starter',  price: 25,  clips: 200,  videoHours: 10, maxVideoHours: 2, badge: null,           perks: ['200 shorts/mo', '10 hrs of video/mo (2 hrs max per video)', 'HD 1080p vertical', 'All caption styles', 'Priority queue'] },
+  { id: 'pro_500',     name: 'Pro',      price: 45,  clips: 400,  videoHours: 18, maxVideoHours: 3, badge: 'Most Popular', perks: ['400 shorts/mo', '18 hrs of video/mo (3 hrs max per video)', 'Everything in Starter', 'Faster processing queue', 'Batch download'] },
+  { id: 'pro_1000',    name: 'Pro',      price: 79,  clips: 800,  videoHours: 35, maxVideoHours: 3, badge: null,           perks: ['800 shorts/mo', '35 hrs of video/mo (3 hrs max per video)', 'Everything in Pro', 'Faster processing queue', 'Batch download'] },
+  { id: 'pro_2000',    name: 'Max',      price: 145, clips: 1500, videoHours: 60, maxVideoHours: 3, badge: null,           perks: ['1500 shorts/mo', '60 hrs of video/mo (3 hrs max per video)', 'Everything in Pro', 'Fastest priority queue', 'Dedicated support'] },
 ]
 
 const FEATURES = [
@@ -217,7 +220,7 @@ export default function Billing() {
                     }}>{plan.badge}</div>
                   )}
                   <div style={{ fontSize: '.82rem', fontWeight: 700, color: '#111', marginBottom: 2 }}>{plan.name}</div>
-                  <div style={{ fontSize: '.7rem', color: '#9ca3af', marginBottom: 2 }}>{plan.clips == null ? 'Unlimited shorts' : `${plan.clips.toLocaleString()} shorts/mo`}</div>
+                  <div style={{ fontSize: '.7rem', color: '#9ca3af', marginBottom: 2 }}>{plan.clips.toLocaleString()} shorts/mo</div>
                   <div style={{ fontSize: '.68rem', color: '#9ca3af', marginBottom: 1 }}>{plan.videoHours}h of video per month</div>
                   <div style={{ fontSize: '.68rem', color: '#9ca3af', marginBottom: 10 }}>({plan.maxVideoHours}h max per single video)</div>
                   <div style={{ marginBottom: 14 }}>

@@ -12,12 +12,19 @@ DodoPayments.Initialize({
   },
 })
 
-// clips / videoHours / maxVideoHours mirror backend/app/core/plan_limits.py — keep in sync.
-// unlimited:true renders "Unlimited" instead of the raw credit count.
+// clips / videoHours / maxVideoHours mirror backend/app/core/plan_limits.py — keep in
+// sync. These are the "legacy slider" tiers — the only ones with real Dodo products
+// actually created (app.dodopayments.com → Products); the old starter_30/growth_100/
+// unlimited ids referenced products that were never made. `clips` intentionally does
+// NOT match the number in the plan key (e.g. starter_100 grants 75, not 100) — that
+// gap is a deliberate margin cut made after the original numbers shipped; this shows
+// what a checkout actually grants today, not the stale sticker number.
 const TIERS = [
-  { clips: 30,   price: 15, label: '30 Shorts', dodoId: 'starter_30', videoHours: 10,  maxVideoHours: 2 },
-  { clips: 80,   price: 39, label: '80 Shorts', dodoId: 'growth_100', videoHours: 30,  maxVideoHours: 3 },
-  { clips: null, price: 99, label: 'Unlimited', dodoId: 'unlimited',  videoHours: 100, maxVideoHours: 6, unlimited: true },
+  { clips: 75,   price: 10,  label: '75 Shorts',   dodoId: 'starter_100', videoHours: 5,  maxVideoHours: 2, family: 'Starter' },
+  { clips: 200,  price: 25,  label: '200 Shorts',  dodoId: 'starter_250', videoHours: 10, maxVideoHours: 2, family: 'Starter' },
+  { clips: 400,  price: 45,  label: '400 Shorts',  dodoId: 'pro_500',     videoHours: 18, maxVideoHours: 3, family: 'Pro' },
+  { clips: 800,  price: 79,  label: '800 Shorts',  dodoId: 'pro_1000',    videoHours: 35, maxVideoHours: 3, family: 'Pro' },
+  { clips: 1500, price: 145, label: '1500 Shorts', dodoId: 'pro_2000',    videoHours: 60, maxVideoHours: 3, family: 'Max' },
 ]
 
 const FREE_FEATURES = [
@@ -32,7 +39,7 @@ const FREE_FEATURES = [
 
 function getFeatures(tier) {
   return [
-    tier.unlimited ? 'Unlimited shorts/month' : `${tier.clips} shorts/month`,
+    `${tier.clips} shorts/month`,
     `${tier.videoHours} hrs of video per month (${tier.maxVideoHours} hrs max per single video)`,
     'All formats: 30s / 60s / 90s',
     '1080p — Zero Watermark',
@@ -47,7 +54,7 @@ function getFeatures(tier) {
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
 export default function Pricing() {
-  const [tierIdx, setTierIdx]     = useState(1)
+  const [tierIdx, setTierIdx]     = useState(2)
   const [loading, setLoading]     = useState(false)
   const [freeLoading, setFreeLoading] = useState(false)
   const [error,   setError]         = useState('')
@@ -66,7 +73,7 @@ export default function Pricing() {
       const res = await fetch(`${API_BASE}/payments/checkout-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ plan: tier.dodoId, period: 'monthly' }), // starter_30 | growth_100 | unlimited
+        body: JSON.stringify({ plan: tier.dodoId, period: 'monthly' }), // starter_100 | starter_250 | pro_500 | pro_1000 | pro_2000
       })
       if (!res.ok) {
         const e = await res.json().catch(() => ({}))
@@ -166,7 +173,7 @@ export default function Pricing() {
               padding:'4px 16px', borderRadius:'100px', textTransform:'uppercase', letterSpacing:'0.08em',
             }}>Most popular</div>
 
-            <div style={{ fontSize:'0.8rem', fontWeight:700, color:'#cf1322', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'8px' }}>Pro plan</div>
+            <div style={{ fontSize:'0.8rem', fontWeight:700, color:'#cf1322', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'8px' }}>{tier.family} plan</div>
 
             {/* Price display */}
             <div style={{ marginBottom:'16px' }}>
@@ -174,7 +181,7 @@ export default function Pricing() {
                 ${tier.price}<span style={{ fontSize:'1rem', color:'#aaa', fontWeight:400 }}>/mo</span>
               </div>
               <div style={{ fontSize:'0.8rem', color:'#cf1322', fontWeight:600, marginTop:'4px' }}>
-                {tier.unlimited ? `${tier.label} · unlimited shorts` : `${tier.label} · $${(tier.price / tier.clips).toFixed(3)}/short`}
+                {tier.label} · ${(tier.price / tier.clips).toFixed(3)}/short
               </div>
             </div>
 

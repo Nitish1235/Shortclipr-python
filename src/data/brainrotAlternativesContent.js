@@ -19,7 +19,7 @@ const brainrotAlternativesContent = {
       { feature: 'TTS voice variety',       us: 'Per-character voices', them: '5 generic voices' },
       { feature: 'Caption customization',   us: 'Custom colors',       them: 'White only' },
       { feature: 'Render speed',            us: '< 60 seconds',        them: '2-3 minutes' },
-      { feature: 'Free plan',               us: '3 clips/month',       them: '1 clip/day' },
+      { feature: 'Free plan',               us: '2 clips/month',       them: '1 clip/day' },
     ],
     why: [
       { title: 'Curated characters, not AI-generated', desc: 'Every character has hand-designed canonical art in a consistent style — not random AI faces that look different every time. Viewers recognize the characters, which is half the appeal.' },
@@ -30,7 +30,7 @@ const brainrotAlternativesContent = {
     faqs: [
       { q: 'How does ShortClipr\'s character roster compare to Jokester AI?', a: 'ShortClipr has 100+ characters with canonical art and per-character voices, vs Jokester AI\'s roughly 30 templates with AI-generated art and 5 generic voices.' },
       { q: 'Is ShortClipr faster than Jokester AI?', a: 'Yes — ShortClipr renders clips in under 60 seconds on cloud GPUs. Jokester AI typically takes 2-3 minutes per clip.' },
-      { q: 'Does ShortClipr have a free plan?', a: 'Yes — 3 clips per month with a small watermark. Jokester AI offers 1 free clip per day but with more limited customization.' },
+      { q: 'Does ShortClipr have a free plan?', a: 'Yes — 2 clips per month with a small watermark. Jokester AI offers 1 free clip per day but with more limited customization.' },
       { q: 'Can I switch from Jokester AI to ShortClipr easily?', a: 'Yes — there\'s no migration needed. Sign up, pick your characters and topic, and start making clips immediately.' },
     ],
   },
@@ -67,7 +67,7 @@ const brainrotAlternativesContent = {
       { q: 'What does ShortClipr do that Clips.AI doesn\'t?', a: 'AI dialogue generation (type a topic, get a script), 100+ characters (vs ~15), 6+ gameplay categories (vs 2), live preview, and sub-60-second renders.' },
       { q: 'Is Clips.AI better for non-brainrot content?', a: 'If you primarily need long-form-to-short-form clipping, both tools work. But for brainrot specifically, ShortClipr\'s dedicated product is significantly deeper.' },
       { q: 'Can I use both tools?', a: 'Of course — ShortClipr also has a YouTube Shorts product for repurposing long-form videos. You might use ShortClipr for both use cases.' },
-      { q: 'Is ShortClipr more expensive?', a: 'Pricing is comparable. ShortClipr\'s free plan gives 3 brainrot clips per month; paid plans start at $19/mo for 50 clips.' },
+      { q: 'Is ShortClipr more expensive?', a: 'Pricing is comparable. ShortClipr\'s free plan gives 2 brainrot clips per month; paid plans start at $10/mo for 75 clips.' },
     ],
   },
 
@@ -100,7 +100,7 @@ const brainrotAlternativesContent = {
       { title: 'Consistent character art', desc: 'RotMaker\'s character art varies in quality and style. ShortClipr uses professionally designed canonical PNGs in a consistent art style.' },
     ],
     faqs: [
-      { q: 'Is RotMaker free?', a: 'RotMaker has a limited free tier. ShortClipr\'s free plan gives 3 clips per month — enough to compare quality and see which tool you prefer.' },
+      { q: 'Is RotMaker free?', a: 'RotMaker has a limited free tier. ShortClipr\'s free plan gives 2 clips per month — enough to compare quality and see which tool you prefer.' },
       { q: 'Does ShortClipr have more characters than RotMaker?', a: 'Yes — 100+ characters vs RotMaker\'s roughly 40, all with canonical art and individual voices.' },
       { q: 'Which renders faster?', a: 'ShortClipr typically renders in under 60 seconds; RotMaker averages 1-2 minutes. Both are fast enough for practical use, but ShortClipr is noticeably quicker for batch production.' },
       { q: 'Can I move my scripts from RotMaker?', a: 'There\'s no direct import, but you can paste any script into ShortClipr\'s editor. Or skip scripts entirely — type a topic and let the AI generate one.' },
@@ -126,7 +126,7 @@ const brainrotAlternativesContent = {
       { feature: 'AI dialogue',            us: '✅ Yes',              them: '❌ Manual' },
       { feature: 'Gameplay categories',     us: '6+',                  them: '3' },
       { feature: 'Live preview',            us: '✅ Yes',              them: '❌ No' },
-      { feature: 'Watermark-free plan',     us: 'Creator ($19)',       them: 'Premium ($15)' },
+      { feature: 'Watermark-free plan',     us: 'Starter ($10)',       them: 'Premium ($15)' },
       { feature: 'Caption colors',          us: 'Custom hex',          them: 'Yellow only' },
     ],
     why: [
@@ -137,8 +137,8 @@ const brainrotAlternativesContent = {
     ],
     faqs: [
       { q: 'Is BrainrotGen really only 720p?', a: 'As of our last check, yes — BrainrotGen renders at 720×1280. ShortClipr renders at 1080×1920, which is the native resolution for TikTok and Reels.' },
-      { q: 'Is ShortClipr more expensive than BrainrotGen?', a: 'ShortClipr\'s watermark-free Creator plan is $19/mo vs BrainrotGen\'s $15/mo premium — a $4 difference for 1080p output, 5× the characters, and AI dialogue generation.' },
-      { q: 'Can I try ShortClipr before paying?', a: 'Yes — 3 free clips per month with a small watermark. Compare the output quality side-by-side with BrainrotGen before committing.' },
+      { q: 'Is ShortClipr more expensive than BrainrotGen?', a: 'No — ShortClipr\'s watermark-free Starter plan is $10/mo vs BrainrotGen\'s $15/mo premium, and still gets you 1080p output, 5× the characters, and AI dialogue generation.' },
+      { q: 'Can I try ShortClipr before paying?', a: 'Yes — 2 free clips per month with a small watermark. Compare the output quality side-by-side with BrainrotGen before committing.' },
       { q: 'Does ShortClipr have the same characters as BrainrotGen?', a: 'ShortClipr\'s roster of 100+ characters overlaps with some popular ones but includes many more — plus each character has unique canonical art and a matched AI voice.' },
     ],
   },
@@ -163,7 +163,7 @@ const brainrotAlternativesContent = {
       { feature: 'Per-character voices',    us: '✅ Yes',              them: '❌ 4 voices' },
       { feature: 'Live preview',            us: '✅ Yes',              them: 'Thumbnail only' },
       { feature: 'Render quality',          us: '1080p',               them: '1080p' },
-      { feature: 'Price',                   us: 'From $19/mo',         them: 'From $12/mo' },
+      { feature: 'Price',                   us: 'From $10/mo',         them: 'From $12/mo' },
     ],
     why: [
       { title: 'Specialization beats generalization', desc: 'MemeClip covers reaction videos, text-on-screen, and various meme formats. ShortClipr pours all its engineering into the brainrot character debate format — and it shows in the details.' },
@@ -172,7 +172,7 @@ const brainrotAlternativesContent = {
       { title: 'Characters that sound different', desc: 'MemeClip offers 4 voice options for all characters. ShortClipr gives each of 100+ characters their own unique voice — the clips sound like actual conversations.' },
     ],
     faqs: [
-      { q: 'Is MemeClip cheaper than ShortClipr?', a: 'MemeClip starts at $12/mo vs ShortClipr\'s $19/mo — but MemeClip is a general meme tool, while ShortClipr is a specialized brainrot studio. If brainrot clips are your focus, the $7 difference buys significantly better output.' },
+      { q: 'Is MemeClip cheaper than ShortClipr?', a: 'No — ShortClipr actually starts lower, at $10/mo vs MemeClip\'s $12/mo, and MemeClip is a general meme tool while ShortClipr is a specialized brainrot studio built for this exact format.' },
       { q: 'Can MemeClip do what ShortClipr does?', a: 'MemeClip can create character clips, but without AI dialogue, per-character voices, curated gameplay, or a live preview — the features that make brainrot clips engaging.' },
       { q: 'Should I use MemeClip for non-brainrot meme content?', a: 'MemeClip is a reasonable choice for other meme formats. ShortClipr is specifically better for the character debate/brainrot format.' },
       { q: 'Does ShortClipr plan to add other meme formats?', a: 'ShortClipr focuses on what it does best. The brainrot studio is a dedicated product alongside the YouTube Shorts repurposing product — each specialized for its format.' },
@@ -199,7 +199,7 @@ const brainrotAlternativesContent = {
       { feature: 'Live preview',            us: '✅ Full preview',     them: '❌ No' },
       { feature: 'Render speed',            us: '< 60 seconds',        them: '1-3 minutes' },
       { feature: 'Output resolution',       us: '1080p',               them: '1080p' },
-      { feature: 'Free plan',               us: '3 clips/month',       them: '2 clips/month' },
+      { feature: 'Free plan',               us: '2 clips/month',       them: '2 clips/month' },
     ],
     why: [
       { title: '4× the character roster', desc: '100+ characters vs ~25. A bigger roster means more variety in your feed and less overlap with other creators using the same tool.' },
@@ -209,7 +209,7 @@ const brainrotAlternativesContent = {
     ],
     faqs: [
       { q: 'Is ViralClips easier to use than ShortClipr?', a: 'Both are straightforward — type a topic, pick characters, render. ShortClipr adds a live preview step that takes a few seconds but saves wasted renders.' },
-      { q: 'Does ShortClipr cost more?', a: 'Pricing is comparable. ShortClipr\'s free plan gives 3 clips/month vs ViralClips\' 2; paid plans start at similar price points.' },
+      { q: 'Does ShortClipr cost more?', a: 'Pricing is comparable. ShortClipr\'s free plan gives 2 clips/month, same as ViralClips; paid plans start at similar price points.' },
       { q: 'Can I use both tools?', a: 'Sure — many creators test both and stick with whichever produces better output for their niche. ShortClipr\'s free plan is enough to compare.' },
       { q: 'Which tool is better for daily posting?', a: 'ShortClipr — faster renders, more characters (less repetition), and AI dialogue generation mean you can produce 3-5 unique clips per day without burning out on scripting.' },
     ],

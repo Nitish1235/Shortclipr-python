@@ -82,7 +82,7 @@ export default function Terms() {
             <h2>5. Subscription Plans &amp; Billing</h2>
             <h3>5.1 Plan Structure</h3>
             <ul>
-              <li><strong>Free:</strong> 3 shorts per month, no credit card required</li>
+              <li><strong>Free:</strong> 2 shorts per month, no credit card required</li>
               <li><strong>Starter (from $10/month):</strong> 75–200 shorts per month</li>
               <li><strong>Pro (from $45/month):</strong> 400–1,500 shorts per month</li>
             </ul>

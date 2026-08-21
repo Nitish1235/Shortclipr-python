@@ -21,7 +21,7 @@ export default function BrainrotToolLanding() {
       operatingSystem: 'Web',
       url: `${SITE}${path}`,
       description: data.metaDescription,
-      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD', description: 'Free plan — 3 brainrot clips/month' },
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD', description: 'Free plan — 2 brainrot clips/month' },
     },
     {
       '@context': 'https://schema.org',

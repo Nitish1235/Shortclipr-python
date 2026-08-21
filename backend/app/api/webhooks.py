@@ -26,29 +26,26 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # Maps the product_id field Dodo sends in webhooks → our internal plan name.
-# Dodo sends the dodoId string (set when creating checkout in payments.py).
+# Dodo sends the REAL product id (a "pdt_..." string from the Dodo
+# dashboard), NOT a friendly slug — this is only ever consulted as a
+# fallback (see _handle_payment_succeeded below), since the primary path
+# resolves the plan from metadata.plan, stamped at checkout time in
+# payments.py. Keep these in sync with DODO_PRODUCT_* in .env / config.py.
 DODO_PLAN_MAP = {
-    # Current pricing tiers
-    "starter_30":   "starter_30",
-    "growth_100":   "growth_100",
-    "unlimited":    "unlimited",
-    # Legacy slider tiers
-    "starter_100":  "starter_100",
-    "starter_250":  "starter_250",
-    "pro_500":      "pro_500",
-    "pro_1000":     "pro_1000",
-    "pro_2000":     "pro_2000",
-    # Legacy plan names (kept for backward compat with old subscriptions)
-    "starter_monthly": "starter",
-    "starter_annual":  "starter",
-    "pro_monthly":     "pro",
-    "pro_annual":      "pro",
+    # Legacy slider tiers — real Dodo product IDs (app.dodopayments.com → Products)
+    "pdt_0NgeHduLpMYA9bXMHQopz": "starter_100",   # Shortclipr Starter — $10
+    "pdt_0NgeHuMEjTGZ5NT8y6n0M": "starter_250",   # Shortclipr Starter — $25
+    "pdt_0NgeITaaybng8nbFGGQVJ": "pro_500",       # Shortclipr Pro — $45
+    "pdt_0NgeIeZ1xzG2zp0LrON1E": "pro_1000",      # Shortclipr Pro — $79
+    "pdt_0NgeIyALtdIRfRW1CrXc1": "pro_2000",      # Shortclipr Max — $145
+    # Current pricing tiers — no Dodo product created yet, add here once one exists
 }
 
 # Successful payment with an unresolvable plan → grant the lowest paid tier
 # rather than free (they DID pay). Only hit if both metadata.plan and the
-# product_id map miss.
-_FALLBACK_PAID_PLAN = "starter_30"
+# product_id map miss. starter_30 has no real Dodo product (see PRODUCT_IDS
+# in payments.py) — starter_100 is the cheapest tier that's actually for sale.
+_FALLBACK_PAID_PLAN = "starter_100"
 
 
 @router.post("/dodo")
