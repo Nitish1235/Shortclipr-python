@@ -25,9 +25,11 @@ const SPARK_TOPICS = [
 ]
 
 const DURATION_PRESETS = [15, 30, 45, 60, 90, 120]
+// User-facing labels intentionally neutral — the underlying TTS provider ids
+// (see tts.py) stay the same over the wire but aren't named in the UI.
 const PROVIDERS = [
-  { id: 'unrealspeech', label: 'UnrealSpeech' },
-  { id: 'lemonfox',     label: 'Lemonfox' },
+  { id: 'unrealspeech', label: 'Voice A' },
+  { id: 'lemonfox',     label: 'Voice B' },
 ]
 const ACTIVE_STATUSES = ['created', 'generating_script', 'synthesizing_voice', 'rendering']
 
@@ -425,7 +427,7 @@ export default function BrainrotStudio() {
       <div className="br-shell" style={{ maxWidth: 1360, margin: '0 auto', padding: '20px 24px 0',
         display: 'flex', gap: 24, alignItems: 'flex-start' }}>
 
-        <StudioSideNav view={view} onChange={setView}
+        <StudioSideNav view={view} onChange={setView} user={user}
           clipCount={libraryClips.filter(c => c.status !== 'failed').length}
           renderingCount={renderingCount} />
 
@@ -1148,7 +1150,8 @@ function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection
           .br-shell { flex-direction: column !important; gap: 16px !important; padding-top: 14px !important; }
           .br-sidenav { position: sticky !important; top: 96px !important; width: 100% !important;
             flex-direction: row !important; z-index: 140; }
-          .br-sidenav button { flex: 1 !important; justify-content: center !important; }
+          .br-sidenav button, .br-sidenav a { flex: 1 !important; justify-content: center !important; }
+          .br-sidenav > div { display: none !important; }
         }
         @media (max-width: 640px) {
           .br-studio-headrow, .br-shell { padding-left: 16px !important; padding-right: 16px !important; }
@@ -1173,16 +1176,37 @@ const SIDENAV_ICON = {
       <rect x="8" y="8.5" width="4.5" height="2" rx=".5" fill="currentColor" opacity=".4"/>
     </svg>
   ),
+  billing: (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+      <rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+      <line x1="1" y1="7" x2="15" y2="7" stroke="currentColor" strokeWidth="1.4"/>
+      <rect x="3" y="9.5" width="3" height="1.5" rx=".4" fill="currentColor" opacity=".6"/>
+    </svg>
+  ),
 }
 
-// Left-side nav — Create / My clips. Sticky column on desktop, collapses to
-// a horizontal bar (same buttons, same active styling) on mobile via the
-// .br-sidenav / .br-shell media rules in Header's <style> block.
-function StudioSideNav({ view, onChange, clipCount, renderingCount }) {
+// Left-side nav — Create / My clips, plus a Billing link. Credits/plan are
+// one shared pool across YT-Shorts and Brainrot, so this opens the same
+// /billing page as the YT-Shorts dashboard rather than a brainrot-only one.
+// Sticky column on desktop, collapses to a horizontal bar (same items, same
+// active styling) on mobile via the .br-sidenav / .br-shell media rules in
+// Header's <style> block.
+function StudioSideNav({ view, onChange, clipCount, renderingCount, user }) {
   const ITEMS = [
     { id: 'create', label: 'Create',   icon: SIDENAV_ICON.create },
     { id: 'clips',  label: 'My clips', icon: SIDENAV_ICON.clips, count: clipCount },
   ]
+  const itemStyle = (on) => ({
+    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9,
+    padding: '10px 12px', borderRadius: 8, border: 'none', textAlign: 'left',
+    background: on ? T.ink : 'transparent',
+    color: on ? '#fff' : T.mute,
+    fontFamily: FONT, fontSize: '.85rem', fontWeight: 500,
+    transition: 'all .12s', textDecoration: 'none',
+  })
+  const hoverOn = e => { e.currentTarget.style.background = T.lineSoft }
+  const hoverOff = e => { e.currentTarget.style.background = 'transparent' }
+
   return (
     <nav className="br-sidenav" style={{
       position: 'sticky', top: 96, flexShrink: 0, width: 192,
@@ -1193,16 +1217,9 @@ function StudioSideNav({ view, onChange, clipCount, renderingCount }) {
         const on = view === it.id
         return (
           <button key={it.id} onClick={() => onChange(it.id)}
-            style={{
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9,
-              padding: '10px 12px', borderRadius: 8, border: 'none', textAlign: 'left',
-              background: on ? T.ink : 'transparent',
-              color: on ? '#fff' : T.mute,
-              fontFamily: FONT, fontSize: '.85rem', fontWeight: 500,
-              transition: 'all .12s',
-            }}
-            onMouseEnter={e => { if (!on) e.currentTarget.style.background = T.lineSoft }}
-            onMouseLeave={e => { if (!on) e.currentTarget.style.background = 'transparent' }}
+            style={itemStyle(on)}
+            onMouseEnter={e => { if (!on) hoverOn(e) }}
+            onMouseLeave={e => { if (!on) hoverOff(e) }}
           >
             <span style={{ flexShrink: 0, display: 'flex', opacity: on ? 1 : .7 }}>{it.icon}</span>
             <span style={{ flex: 1 }}>{it.label}</span>
@@ -1224,6 +1241,20 @@ function StudioSideNav({ view, onChange, clipCount, renderingCount }) {
           </button>
         )
       })}
+
+      <div style={{ height: 1, background: T.lineSoft, margin: '4px 4px' }} />
+
+      <Link to="/billing" style={itemStyle(false)}
+        onMouseEnter={hoverOn} onMouseLeave={hoverOff}
+      >
+        <span style={{ flexShrink: 0, display: 'flex', opacity: .7 }}>{SIDENAV_ICON.billing}</span>
+        <span style={{ flex: 1 }}>Billing</span>
+        <span style={{
+          fontSize: '.68rem', fontWeight: 500, flexShrink: 0, textTransform: 'capitalize',
+          color: T.mute, background: T.lineSoft,
+          borderRadius: 999, padding: '1px 8px',
+        }}>{user?.plan || 'free'}</span>
+      </Link>
     </nav>
   )
 }

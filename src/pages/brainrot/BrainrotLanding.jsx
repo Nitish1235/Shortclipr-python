@@ -1012,7 +1012,7 @@ function FAQ() {
     { q: 'Where does the gameplay footage come from?',
       a: 'We maintain a curated library of admin-uploaded gameplay recordings (Minecraft, Subway Surfers, GTA, more). Every one is trimmed, split into ≤120s clips, and reframed to 9:16 before it hits your picker.' },
     { q: 'Are the voices AI or real?',
-      a: 'AI TTS via UnrealSpeech + Lemonfox providers — dozens of voices, previewable in the studio. Each character has a gender-matched auto-picked voice, and you can override per side.' },
+      a: 'AI TTS — dozens of voices, previewable in the studio. Each character has a gender-matched auto-picked voice, and you can override per side.' },
     { q: 'Can I edit caption timing?',
       a: 'Not currently — captions are auto-generated word-by-word from the TTS timestamps. Style + color + position are all configurable though.' },
     { q: 'Do I share credits with YouTube Shorts?',
