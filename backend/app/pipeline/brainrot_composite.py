@@ -375,8 +375,15 @@ def _character_overlay_filter(
     comments where those are built, below."""
     char_w = _even(CANVAS_W * _CHAR_BASE_WIDTH_FRAC * char.scale)
     char_h = char_w * _CHAR_ASPECT
+    # x AND y are both center-point coordinates on the frontend (PreviewStage.jsx
+    # positions with CSS left/top at x*100%,y*100% then translate(-50%,-50%) to
+    # center on that point) — both need the same center-to-top-left conversion
+    # ffmpeg's overlay filter expects. Only x used to do this; y was placing the
+    # character's TOP edge at y*CANVAS_H instead of its center, pushing anyone
+    # positioned in the normal 0.75-0.95 "standing near the bottom" range mostly
+    # or entirely below the visible frame.
     on_x = float(_even(char.x * CANVAS_W - char_w / 2))
-    on_y = float(_even(char.y * CANVAS_H))
+    on_y = float(_even(char.y * CANVAS_H - char_h / 2))
 
     # Which edge a side-anchored motion (slide/bounce/swoop/snap, and the
     # off-canvas park below) travels to/from is driven by where the
