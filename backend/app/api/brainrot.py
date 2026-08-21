@@ -7,6 +7,7 @@ GET  /brainrot/jobs               — list user's jobs
 GET  /brainrot/characters         — the 105-character roster (from GCS, see brainrot_characters.py)
 GET  /brainrot/gameplay-clips     — selectable gameplay backgrounds (optional ?category=)
 GET  /brainrot/audio-assets       — music/SFX library (optional ?type=music|sfx)
+GET  /brainrot/admin/jobs         — admin: brainrot jobs across all users (parallel to /admin/jobs)
 
 Same dispatch-mode split as jobs.py: split-worker mode (FFMPEG_WORKER_URLS
 configured) inserts as 'created' and relies on the watcher's poll loop
@@ -464,6 +465,50 @@ def _require_admin(current_user: CurrentUser) -> None:
     from app.api.admin import is_admin
     if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
+
+
+# ── GET /brainrot/admin/jobs — history across all users ─────────
+# Parallel to admin.py's GET /admin/jobs, but against brainrot_jobs — the two
+# tables' payload shapes diverge too much to share one query/serializer.
+
+def _serialize_admin_brainrot_job(row: dict) -> dict:
+    payload = row.get("payload") or {}
+    return {
+        "job_id": str(row["job_id"]),
+        "user_email": row.get("user_email"),
+        "user_name": row.get("user_name"),
+        "status": row["status"],
+        "progress": row.get("progress"),
+        "current_step": row.get("current_step"),
+        "output_url": row.get("output_url"),
+        "error_message": row.get("error_message"),
+        "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+        "script_input": payload.get("script_input"),
+        "character_count": len(payload.get("character_ids") or []),
+        "duration_seconds": payload.get("duration_seconds"),
+        "caption_style": payload.get("caption_style"),
+        "tts_provider": payload.get("tts_provider"),
+    }
+
+
+@router.get("/admin/jobs")
+async def admin_list_brainrot_jobs(current_user: CurrentUser):
+    """Admin: list brainrot jobs across all users."""
+    _require_admin(current_user)
+    try:
+        rows = await db._fetch(
+            """
+            SELECT j.*, u.email as user_email, u.full_name as user_name
+            FROM brainrot_jobs j
+            LEFT JOIN users u ON j.user_id = u.id
+            ORDER BY j.created_at DESC
+            LIMIT 100
+            """
+        )
+        return {"jobs": [_serialize_admin_brainrot_job(dict(r)) for r in rows]}
+    except Exception as e:
+        logger.error(f"Admin list brainrot jobs failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 _AUDIO_CONTENT_TYPES = {

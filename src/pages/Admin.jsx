@@ -794,6 +794,103 @@ function ShortCard({ clip, label }) {
   )
 }
 
+// ── Brainrot jobs history — parallel to the YT-Shorts "All Jobs" list,
+// kept as its own tab since the two job shapes don't overlap (script/cast/
+// gameplay vs. source video/clip count) ─────────────────────────
+const BRAINROT_STATUS_COLORS = {
+  complete: ['#16a34a', '#f0fdf4'],
+  failed: ['#dc2626', '#fef2f2'],
+  created: ['#ca8a04', '#fefce8'],
+  generating_script: ['#7c3aed', '#f5f3ff'],
+  synthesizing_voice: ['#7c3aed', '#f5f3ff'],
+  rendering: ['#7c3aed', '#f5f3ff'],
+  api_done: ['#7c3aed', '#f5f3ff'],
+}
+
+function BrainrotJobsPanel() {
+  const [jobs, setJobs] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  const fetchJobs = async () => {
+    setLoading(true)
+    try {
+      const r = await authFetch('/brainrot/admin/jobs')
+      const d = await r.json()
+      setJobs(d.jobs || [])
+    } catch { setJobs([]) }
+    setLoading(false)
+  }
+
+  useEffect(() => { fetchJobs() }, [])
+
+  const statusBadge = (status) => {
+    const [color, bg] = BRAINROT_STATUS_COLORS[status] || ['#666', '#f4f4f4']
+    return <span style={{ ...badge(color, bg), textTransform: 'capitalize' }}>{(status || '').replace(/_/g, ' ')}</span>
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+        <div>
+          <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111' }}>Brainrot Jobs</h2>
+          <p style={{ fontSize: '0.78rem', color: '#999', marginTop: '2px' }}>
+            Every brainrot clip generated, across all users.
+          </p>
+        </div>
+        <button onClick={fetchJobs} style={{ ...btnOutline, fontSize: '0.75rem', padding: '6px 12px' }}>
+          🔄 Refresh
+        </button>
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#aaa', padding: '20px' }}>
+          <div style={{ width: '18px', height: '18px', border: '2px solid #fecaca', borderTopColor: '#cf1322', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          Loading jobs…
+        </div>
+      ) : !jobs.length ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#aaa' }}>
+          <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🧠</div>
+          <p>No brainrot jobs found.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {jobs.map(job => (
+            <div key={job.job_id} style={{ ...card }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111', marginBottom: '3px' }}>
+                    {job.script_input
+                      ? (job.script_input.length > 90 ? job.script_input.slice(0, 90) + '…' : job.script_input)
+                      : <em style={{ color: '#aaa', fontWeight: 400 }}>No topic recorded</em>}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#999' }}>
+                    {job.user_email || 'unknown user'} · {new Date(job.created_at).toLocaleString()} · {job.character_count} character{job.character_count === 1 ? '' : 's'}
+                    {job.duration_seconds ? ` · ${job.duration_seconds}s` : ''}
+                    {job.tts_provider ? ` · ${job.tts_provider}` : ''}
+                  </div>
+                  {job.status === 'failed' && job.error_message && (
+                    <div style={{ fontSize: '0.72rem', color: '#dc2626', marginTop: '4px' }}>
+                      {job.error_message}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  {statusBadge(job.status)}
+                  {job.status === 'complete' && job.output_url && (
+                    <a href={job.output_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.78rem', color: '#cf1322', fontWeight: 600 }}>
+                      ▶ Watch
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main Admin Page ────────────────────────────────────────────
 
 export default function Admin() {
@@ -801,6 +898,7 @@ export default function Admin() {
   const navigate = useNavigate()
 
   const [tab, setTab] = useState('showcase') // showcase | jobs | generate
+  const [jobsSubTab, setJobsSubTab] = useState('ytshorts') // ytshorts | brainrot — which job history is shown in the Jobs tab
   const [jobs, setJobs] = useState([])
   const [showcase, setShowcase] = useState([])
   const [library, setLibrary] = useState([])
@@ -1032,6 +1130,36 @@ export default function Admin() {
         {/* ── Jobs tab ── */}
         {tab === 'jobs' && (
           <div>
+            {/* YT-Shorts / Brainrot sub-tabs — the two job tables don't share a
+                shape (source video + clip count vs. script + cast + gameplay),
+                so history is split rather than merged into one mixed list. */}
+            <div style={{
+              display: 'flex', gap: '4px', background: '#f4f4f4',
+              borderRadius: '8px', padding: '3px', width: 'fit-content',
+              marginBottom: '16px',
+            }}>
+              {[
+                { key: 'ytshorts', label: '🎬 YT-Shorts' },
+                { key: 'brainrot', label: '🧠 Brainrot' },
+              ].map(st => (
+                <button key={st.key} onClick={() => setJobsSubTab(st.key)}
+                  style={{
+                    padding: '7px 14px', fontWeight: 700, fontSize: '0.78rem',
+                    background: jobsSubTab === st.key ? '#fff' : 'transparent',
+                    color: jobsSubTab === st.key ? '#111' : '#888',
+                    border: 'none', borderRadius: '6px', cursor: 'pointer',
+                    boxShadow: jobsSubTab === st.key ? '0 1px 3px rgba(0,0,0,.12)' : 'none',
+                    transition: 'all 0.15s',
+                  }}>
+                  {st.label}
+                </button>
+              ))}
+            </div>
+
+            {jobsSubTab === 'brainrot' ? (
+              <BrainrotJobsPanel />
+            ) : (
+              <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
               <div>
                 <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111' }}>All Jobs</h2>
@@ -1104,6 +1232,8 @@ export default function Admin() {
                   </div>
                 ))}
               </div>
+            )}
+              </>
             )}
           </div>
         )}
