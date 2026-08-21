@@ -31,7 +31,6 @@ import PaymentSuccess from './pages/PaymentSuccess'
 import Dashboard      from './pages/Dashboard'
 import ClipsHistory   from './pages/ClipsHistory'
 import Billing        from './pages/Billing'
-import BrainrotBilling from './pages/brainrot/BrainrotBilling'
 import Changelog      from './pages/Changelog'
 import PressKit       from './pages/PressKit'
 import Careers        from './pages/Careers'
@@ -224,7 +223,6 @@ export default function App() {
 
             {/* Protected — user must be logged in */}
             <Route path="/brainrot/studio"   element={<ProtectedRoute fallback="/brainrot"><BrainrotStudio /></ProtectedRoute>} />
-            <Route path="/brainrot/billing"  element={<ProtectedRoute fallback="/brainrot"><BrainrotBilling /></ProtectedRoute>} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

@@ -231,21 +231,19 @@ async def create_brainrot_job(body: CreateBrainrotJobRequest, current_user: Curr
             raise HTTPException(status_code=404, detail="Unknown outro_sfx_id")
         outro_sfx_url = asset["gcs_path"]
 
-    # Reserve 1 brainrot credit atomically (FOR UPDATE row lock — same
-    # primitive jobs.py uses for YT-Shorts, but against the fully separate
-    # brainrot_credits_used/brainrot_credits_limit pool — see
-    # reserve_brainrot_credits() in db/supabase.py and migration 016).
-    # Deliberately placed AFTER every validation step above so a bad
-    # character/gameplay/audio id 404s without ever touching the user's
-    # balance. A brainrot job always produces exactly one clip, so this is
-    # a flat reserve-1 rather than the variable clip_count YT-Shorts uses.
+    # Reserve 1 credit atomically (FOR UPDATE row lock — same primitive
+    # jobs.py uses, see reserve_credits() in db/supabase.py). Deliberately
+    # placed AFTER every validation step above so a bad character/gameplay/
+    # audio id 404s without ever touching the user's balance. A brainrot job
+    # always produces exactly one clip, so this is a flat reserve-1 rather
+    # than the variable clip_count YT-Shorts uses.
     #
     # The reservation is only ever kept if the clip actually finishes —
     # brainrot_stage.py refunds it in full on failure at either stage
     # (script generation, TTS, or FFmpeg render), and the insert below
     # refunds it too if the job row itself fails to write. Net effect for
     # the user: a credit is only ever truly spent on a clip that reached them.
-    reserved_credits = await db.reserve_brainrot_credits(current_user.user_id, 1)
+    reserved_credits = await db.reserve_credits(current_user.user_id, 1)
     if reserved_credits < 1:
         raise HTTPException(
             status_code=402,
@@ -279,7 +277,7 @@ async def create_brainrot_job(body: CreateBrainrotJobRequest, current_user: Curr
     try:
         row = await db.insert_brainrot_job(current_user.user_id, payload)
     except Exception:
-        await db.release_brainrot_credits(current_user.user_id, reserved_credits)
+        await db.release_credits(current_user.user_id, reserved_credits)
         raise
     job_id = str(row["job_id"])
 

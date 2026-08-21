@@ -98,7 +98,7 @@ async def _fail_and_refund(job_id: str, message: str) -> None:
         payload = row.get("payload") or {}
         reserved = payload.get("reserved_credits", 0)
         if reserved > 0:
-            await db.release_brainrot_credits(str(row["user_id"]), reserved)
+            await db.release_credits(str(row["user_id"]), reserved)
             logger.info(f"[{job_id}] Refunded {reserved} credit(s) after failure")
     except Exception:
         logger.exception(f"[{job_id}] Failed to refund credits after job failure — needs manual reconciliation")

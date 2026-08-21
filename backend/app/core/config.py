@@ -100,13 +100,6 @@ class Settings(BaseSettings):
     DODO_PRODUCT_PRO_500: str = ""       # $45  — 500 shorts
     DODO_PRODUCT_PRO_1000: str = ""      # $79  — 1000 shorts
     DODO_PRODUCT_PRO_2000: str = ""      # $145 — 2000 shorts
-    # ── Brainrot — fully separate product from the tiers above ─
-    # Empty until real products are created in the Dodo dashboard; a
-    # checkout for a plan with no ID here returns 503 "not configured"
-    # (see payments.py) rather than silently charging the wrong product.
-    DODO_PRODUCT_BRAINROT_STARTER: str = ""    # $15 — 30 brainrot clips/mo
-    DODO_PRODUCT_BRAINROT_GROWTH: str = ""     # $39 — 80 brainrot clips/mo
-    DODO_PRODUCT_BRAINROT_UNLIMITED: str = ""  # $99 — unlimited brainrot clips/mo
 
     # ── Worker / Pipeline ─────────────────────────────────────
     MAX_CONCURRENT_CLIPS: int = 10          # asyncio semaphore for cheap -c copy extraction

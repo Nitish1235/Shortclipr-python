@@ -19,7 +19,6 @@ from fastapi import APIRouter, HTTPException, Request, status
 
 from app.core.config import get_settings
 from app.core.plan_limits import PLAN_LIMITS, get_credits_limit, get_video_minutes_limit
-from app.core.brainrot_plan_limits import BRAINROT_PLAN_LIMITS, get_brainrot_credits_limit
 from app.db import supabase as db
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -51,17 +50,6 @@ DODO_PLAN_MAP = {
 # product_id map miss.
 _FALLBACK_PAID_PLAN = "starter_30"
 
-# Brainrot product_id → plan map, parallel to DODO_PLAN_MAP above. Brainrot
-# checkout (payments.py's /brainrot/checkout-session) always stamps
-# metadata.plan directly with a BRAINROT_PLAN_LIMITS key, so this is really
-# only a fallback for webhook events that don't carry metadata.
-DODO_BRAINROT_PLAN_MAP = {
-    "starter": "starter",
-    "growth": "growth",
-    "unlimited": "unlimited",
-}
-_FALLBACK_PAID_BRAINROT_PLAN = "starter"
-
 
 @router.post("/dodo")
 async def dodo_webhook(request: Request):
@@ -88,11 +76,6 @@ async def dodo_webhook(request: Request):
 
     logger.info(f"Dodo webhook: {event_type}")
 
-    # metadata.product distinguishes which app this purchase is for — stamped
-    # at checkout time (see payments.py: /checkout-session for YT-Shorts vs.
-    # /brainrot/checkout-session for Brainrot, which sets product="brainrot").
-    is_brainrot = (payload.get("metadata") or {}).get("product") == "brainrot"
-
     # Subscription activated (first payment) or plan changed or renewed → upgrade/reset
     if event_type in (
         "payment.succeeded",
@@ -100,19 +83,13 @@ async def dodo_webhook(request: Request):
         "subscription.renewed",
         "subscription.plan_changed",
     ):
-        if is_brainrot:
-            await _handle_brainrot_payment_succeeded(payload)
-        else:
-            await _handle_payment_succeeded(payload)
+        await _handle_payment_succeeded(payload)
     elif event_type in (
         "payment.refunded",
         "subscription.cancelled",
         "subscription.expired",
     ):
-        if is_brainrot:
-            await _handle_brainrot_downgrade(payload)
-        else:
-            await _handle_downgrade(payload)
+        await _handle_downgrade(payload)
     elif event_type == "subscription.on_hold":
         logger.warning(f"Subscription on hold: {payload.get('subscription_id', '')}")
     else:
@@ -255,77 +232,3 @@ async def _handle_downgrade(payload: dict) -> None:
     )
 
     logger.info(f"Downgraded {email} → free plan")
-
-
-# ── Brainrot — mirrors the two handlers above, fully separate pool ──
-
-async def _handle_brainrot_payment_succeeded(payload: dict) -> None:
-    email      = payload.get("customer", {}).get("email", "")
-    product_id = payload.get("product_id", "")
-
-    meta_plan = (payload.get("metadata") or {}).get("plan")
-    if meta_plan in BRAINROT_PLAN_LIMITS:
-        plan_name = meta_plan
-    elif product_id in DODO_BRAINROT_PLAN_MAP:
-        plan_name = DODO_BRAINROT_PLAN_MAP[product_id]
-    else:
-        plan_name = _FALLBACK_PAID_BRAINROT_PLAN
-        logger.error(
-            f"UNRESOLVED PAID BRAINROT PLAN — product_id={product_id!r}, "
-            f"metadata.plan={meta_plan!r}, email={payload.get('customer', {}).get('email', '')!r}. "
-            f"Granted fallback {_FALLBACK_PAID_BRAINROT_PLAN!r}; add this product_id to "
-            f"DODO_BRAINROT_PLAN_MAP or stamp metadata.plan at checkout to fix. "
-            f"Manual reconciliation likely needed."
-        )
-
-    if not email:
-        logger.error("Brainrot payment succeeded but no email in payload")
-        return
-
-    row = await db._fetchrow("SELECT id FROM users WHERE email=$1", email)
-    if not row:
-        logger.error(f"No user found for email: {email}")
-        return
-
-    user_id     = row["id"]
-    new_credits = get_brainrot_credits_limit(plan_name)
-
-    await db._execute(
-        """
-        UPDATE users
-        SET brainrot_plan             = $1,
-            brainrot_credits_limit    = $2,
-            brainrot_credits_used     = 0,
-            brainrot_credits_reset_at = date_trunc('month', NOW())
-        WHERE id = $3
-        """,
-        plan_name, new_credits, user_id,
-    )
-
-    logger.info(f"Upgraded {email} → brainrot:{plan_name} (credits: {new_credits})")
-
-
-async def _handle_brainrot_downgrade(payload: dict) -> None:
-    email = payload.get("customer", {}).get("email", "")
-    if not email:
-        return
-
-    row = await db._fetchrow("SELECT id FROM users WHERE email=$1", email)
-    if not row:
-        return
-
-    user_id = row["id"]
-    # Same clamp-rather-than-lockout reasoning as _handle_downgrade() above.
-    free_credits = get_brainrot_credits_limit("free")
-    await db._execute(
-        """
-        UPDATE users
-        SET brainrot_plan          = 'free',
-            brainrot_credits_limit = $1,
-            brainrot_credits_used  = LEAST(brainrot_credits_used, $1)
-        WHERE id = $2
-        """,
-        free_credits, user_id,
-    )
-
-    logger.info(f"Downgraded {email} → brainrot free plan")
