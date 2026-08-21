@@ -46,6 +46,108 @@ function nextActiveSide(sides, current) {
   return sides[(idx + 1) % sides.length]
 }
 
+function parseDurationMs(s) {
+  const n = parseFloat(s)
+  return s.endsWith('ms') ? n : n * 1000
+}
+
+// One character overlay. Uses a phase state machine so the entry and exit
+// animations REALLY play distinctly when the user picks two different
+// motions. Previously the CSS transition just animated from wherever
+// the character happened to be — so an exit=pop followed by entry=slide
+// re-popped back in with slide's easing curve instead of sliding.
+//
+// Phases (turn_based / two chars):
+//   entering — moving from entry-off → base with entry timing
+//   active   — held at base
+//   exiting  — moving from base → exit-off with exit timing
+//   waiting  — held at entry-off (ready to play the entry animation next)
+// On the very first render the character starts either in 'active' (if
+// it's their turn) or 'waiting' (their entry off-position, invisible /
+// off-canvas, primed for their next turn).
+//
+// always_on mode skips the phase machine entirely — both characters stay
+// visible with a subtle scale bump on whichever one is "speaking" now.
+function CharacterOverlay({ c, isSpeaking, alwaysOn, isSpeakingInAlwaysOn, onPointerDown }) {
+  const entryMotion = MOTION_PREVIEW[c.entry] || MOTION_PREVIEW.slide
+  const exitMotion = MOTION_PREVIEW[c.exit] || MOTION_PREVIEW.slide
+  const x = c.x ?? (c.side === 'left' ? 0.25 : 0.75)
+  const y = c.y ?? 0.78
+  const nearSide = x < 0.5 ? 'left' : 'right'
+  const base = `translate(-50%,-50%) rotate(${c.rotation || 0}deg)`
+  const w = `${42 * (c.scale || 1)}%`
+
+  const [phase, setPhase] = useState(alwaysOn ? 'active' : (isSpeaking ? 'active' : 'waiting'))
+  const prevSpeakingRef = useRef(isSpeaking)
+
+  useEffect(() => {
+    if (alwaysOn) return
+    const prev = prevSpeakingRef.current
+    prevSpeakingRef.current = isSpeaking
+    if (isSpeaking && !prev) {
+      setPhase('entering')
+      const t = setTimeout(() => setPhase('active'), parseDurationMs(entryMotion.duration))
+      return () => clearTimeout(t)
+    }
+    if (!isSpeaking && prev) {
+      setPhase('exiting')
+      // After the exit finishes, snap invisibly to entry-off so the NEXT
+      // entry starts from the entry motion's own off-position rather than
+      // wherever exit happened to end. That's what makes entry vs exit
+      // read as genuinely different motions.
+      const t = setTimeout(() => setPhase('waiting'), parseDurationMs(exitMotion.duration))
+      return () => clearTimeout(t)
+    }
+  }, [isSpeaking, alwaysOn, entryMotion.duration, exitMotion.duration])
+
+  let transform, opacity, transition
+  if (alwaysOn) {
+    const speakScale = isSpeakingInAlwaysOn ? 1.06 : 1
+    transform = `${base} scale(${speakScale})`
+    opacity = 1
+    transition = 'transform .2s ease-out'
+  } else if (phase === 'active') {
+    transform = base
+    opacity = 1
+    transition = `transform ${entryMotion.duration} ${entryMotion.ease}, opacity ${entryMotion.duration} ${entryMotion.ease}`
+  } else if (phase === 'entering') {
+    transform = base
+    opacity = 1
+    transition = `transform ${entryMotion.duration} ${entryMotion.ease}, opacity ${entryMotion.duration} ${entryMotion.ease}`
+  } else if (phase === 'exiting') {
+    transform = `${base} ${exitMotion.off(nearSide)}`
+    opacity = exitMotion.fade ? 0 : 1
+    transition = `transform ${exitMotion.duration} ${exitMotion.ease}, opacity ${exitMotion.duration} ${exitMotion.ease}`
+  } else {
+    // waiting: park at entry-off with no transition so the snap after exit
+    // is instant (and invisible — the character is off-canvas or faded).
+    transform = `${base} ${entryMotion.off(nearSide)}`
+    opacity = entryMotion.fade ? 0 : 1
+    transition = 'none'
+  }
+
+  return (
+    <img
+      src={c.image_url}
+      alt=""
+      draggable={false}
+      onPointerDown={onPointerDown}
+      style={{
+        position: 'absolute',
+        left: `${x * 100}%`,
+        top: `${y * 100}%`,
+        width: w,
+        transform,
+        opacity,
+        transition,
+        cursor: 'grab',
+        filter: 'drop-shadow(0 4px 6px rgba(0,0,0,.4))',
+        touchAction: 'none',
+      }}
+    />
+  )
+}
+
 // One sample line per style so the preview reads naturally at that style's
 // energy level, rather than one generic phrase force-fit into every look.
 const SAMPLE_TEXT = {
@@ -191,77 +293,16 @@ export default function PreviewStage({
         </div>
       )}
 
-      {/* characters — active one (whoever's "turn" it is, or everyone in
-          always_on mode) is shown at rest; everyone else sits in their OWN
-          exit motion's off-canvas shape, ready to swap in via their OWN
-          entry motion. Entry and exit are genuinely different curves now —
-          previously exit was never visualized at all, which is why every
-          motion looked the same regardless of what you picked. */}
-      {characters.map((c) => {
-        const w = `${42 * (c.scale || 1)}%`
-        const entryMotion = MOTION_PREVIEW[c.entry] || MOTION_PREVIEW.slide
-        const exitMotion = MOTION_PREVIEW[c.exit] || MOTION_PREVIEW.slide
-        const base = `translate(-50%,-50%) rotate(${c.rotation || 0}deg)`
-        const isSpeaking = c.side === activeSide
-        const x = c.x ?? (c.side === 'left' ? 0.25 : 0.75)
-        const nearSide = x < 0.5 ? 'left' : 'right'
-
-        if (alwaysOn) {
-          // always_on (or single char): character is always visible.
-          // The "speaking" one gets a subtle scale bump (1.06x) matching
-          // the backend's NONE_SCALE_BOOST cue.
-          const speakScale = isSpeaking ? 1.06 : 1
-          return (
-            <img
-              key={c.side}
-              src={c.image_url}
-              alt=""
-              draggable={false}
-              onPointerDown={(e) => onPointerDown(e, c.side)}
-              style={{
-                position: 'absolute',
-                left: `${x * 100}%`,
-                top: `${(c.y ?? 0.78) * 100}%`,
-                width: w,
-                transform: `${base} scale(${speakScale})`,
-                opacity: 1,
-                transition: 'transform .2s ease-out',
-                cursor: 'grab',
-                filter: 'drop-shadow(0 4px 6px rgba(0,0,0,.4))',
-                touchAction: 'none',
-              }}
-            />
-          )
-        }
-
-        // turn_based: active character is on screen, others exit.
-        const motion = isSpeaking ? entryMotion : exitMotion
-        return (
-          <img
-            key={c.side}
-            src={c.image_url}
-            alt=""
-            draggable={false}
-            onPointerDown={(e) => onPointerDown(e, c.side)}
-            style={{
-              position: 'absolute',
-              left: `${x * 100}%`,
-              top: `${(c.y ?? 0.78) * 100}%`,
-              width: w,
-              transform: isSpeaking
-                ? (motion.activeScale ? `${base} scale(${motion.activeScale})` : base)
-                : `${base} ${motion.off(nearSide)}`,
-              opacity: !isSpeaking && motion.fade ? 0 : 1,
-              transition: isSpeaking && motion.activeScale
-                ? `transform ${motion.activeDuration || motion.duration} ${motion.ease}`
-                : `transform ${motion.duration} ${motion.ease}, opacity ${motion.duration} ${motion.ease}`,
-              cursor: 'grab',
-              filter: 'drop-shadow(0 4px 6px rgba(0,0,0,.4))',
-              touchAction: 'none',
-            }}
-          />
-        )
-      })}
+      {characters.map((c) => (
+        <CharacterOverlay
+          key={c.side}
+          c={c}
+          isSpeaking={alwaysOn || c.side === activeSide}
+          alwaysOn={alwaysOn}
+          isSpeakingInAlwaysOn={alwaysOn && c.side === activeSide}
+          onPointerDown={(e) => onPointerDown(e, c.side)}
+        />
+      ))}
 
       {/* caption preview — CSS approximation of the real ffmpeg/ASS burn-in,
           see captionStyles.js. Keyed on style+color so the animation

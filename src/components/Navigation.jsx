@@ -6,6 +6,7 @@ import Logo from './Logo'
 
 export default function Navigation() {
   const [scrolled, setScrolled]     = useState(false)
+  const [menuOpen, setMenuOpen]     = useState(false)
   const { user, loginWithGoogleToken, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
@@ -16,6 +17,8 @@ export default function Navigation() {
     window.addEventListener('scroll', fn)
     return () => window.removeEventListener('scroll', fn)
   }, [])
+
+  useEffect(() => { setMenuOpen(false) }, [location.pathname])
 
   const navLinks = isApp ? [] : [
     { label: 'How it works', href: '/youtube-shorts#how-it-works' },
@@ -68,7 +71,7 @@ export default function Navigation() {
         boxShadow: scrolled ? '6px 6px 0 #cf1322' : '4px 4px 0 #cf1322',
         maxWidth: '1100px', margin: '0 auto',
         transition: 'box-shadow 0.2s',
-        gap: '16px',
+        gap: '16px', position: 'relative',
       }}>
 
         {/* Logo */}
@@ -79,9 +82,9 @@ export default function Navigation() {
           </span>
         </Link>
 
-        {/* Center links */}
+        {/* Center links — desktop only */}
         {navLinks.length > 0 && (
-          <ul style={{ display:'flex', gap:'2px', listStyle:'none', flex:1, justifyContent:'center' }}>
+          <ul className="sc-nav-desktop" style={{ display:'flex', gap:'2px', listStyle:'none', flex:1, justifyContent:'center' }}>
             {navLinks.map(({ label, href }) => (
               <li key={href}>
                 <a href={href}
@@ -99,8 +102,8 @@ export default function Navigation() {
           </ul>
         )}
 
-        {/* Right: auth */}
-        <div style={{ display:'flex', alignItems:'center', gap:'8px', flexShrink:0 }}>
+        {/* Right: auth — desktop only */}
+        <div className="sc-nav-desktop" style={{ display:'flex', alignItems:'center', gap:'8px', flexShrink:0 }}>
           {user ? (
             <>
               <div style={{
@@ -156,7 +159,64 @@ export default function Navigation() {
             </>
           )}
         </div>
+
+        {/* Mobile hamburger toggle — hidden on desktop */}
+        <button
+          className="sc-nav-toggle"
+          onClick={() => setMenuOpen(v => !v)}
+          aria-label="Menu" aria-expanded={menuOpen}
+          style={{
+            display: 'none', flexShrink: 0,
+            width: 38, height: 38, alignItems: 'center', justifyContent: 'center',
+            background: menuOpen ? '#cf1322' : '#f4f4f4', color: menuOpen ? '#fff' : '#111',
+            border: `1.5px solid ${menuOpen ? '#cf1322' : '#e5e5e5'}`,
+            borderRadius: 8, cursor: 'pointer', fontSize: '1.05rem',
+          }}
+        >{menuOpen ? '✕' : '☰'}</button>
+
+        {/* Mobile dropdown — Home + sign in/out only */}
+        {menuOpen && (
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 8px)', right: 0, left: 0,
+            background: '#fff', border: '2px solid #111', borderRadius: 12,
+            boxShadow: '4px 4px 0 #cf1322', padding: 8,
+            display: 'flex', flexDirection: 'column', gap: 2, zIndex: 250,
+          }}>
+            <a href="/youtube-shorts"
+              onClick={(e) => { setMenuOpen(false); handleNavClick(e, '/youtube-shorts') }}
+              style={{
+                color: '#111', fontSize: '.9rem', fontWeight: 700,
+                padding: '12px 14px', borderRadius: 8, textDecoration: 'none', display: 'block',
+              }}>Home</a>
+            {user ? (
+              <button onClick={() => { setMenuOpen(false); logout() }} style={{
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                textAlign: 'left', color: '#999', fontSize: '.9rem', fontWeight: 700,
+                padding: '12px 14px', borderRadius: 8,
+              }}>Sign out</button>
+            ) : (
+              <div style={{ padding: '8px 14px 4px' }}>
+                <GoogleLogin
+                  onSuccess={async cr => {
+                    const ok = await loginWithGoogleToken(cr.credential)
+                    setMenuOpen(false)
+                    if (ok) window.location.href = '/youtube-shorts/dashboard'
+                  }}
+                  onError={() => {}}
+                  theme="outline" shape="rectangular" text="signin_with" size="medium"
+                />
+              </div>
+            )}
+          </div>
+        )}
       </nav>
+
+      <style>{`
+        @media (max-width: 768px) {
+          .sc-nav-desktop { display: none !important; }
+          .sc-nav-toggle { display: inline-flex !important; }
+        }
+      `}</style>
     </div>
   )
 }

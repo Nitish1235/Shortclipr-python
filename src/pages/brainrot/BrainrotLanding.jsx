@@ -364,7 +364,7 @@ function Hero({ characters, clips }) {
         WebkitMaskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%)',
         maskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%)',
       }}/>
-      <div style={{
+      <div className="br-hero-inner" style={{
         position: 'relative', zIndex: 1,
         display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 40,
         alignItems: 'center', maxWidth: 1080, margin: '0 auto',
@@ -543,7 +543,7 @@ function HowItWorks() {
           From blank topic → uploaded to TikTok. In about 60 seconds.
         </p>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, maxWidth: 1000, margin: '0 auto' }}>
+      <div className="br-steps" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, maxWidth: 1000, margin: '0 auto' }}>
         {steps.map(s => (
           <div key={s.n} style={{
             background: '#fff', border: `2px solid ${P.ink}`, borderRadius: 14,
@@ -699,7 +699,7 @@ function ClipWall({ characters, clips }) {
           Each preview uses different characters, different gameplay, different dialogue.
         </p>
       </div>
-      <div style={{
+      <div className="br-wall-cards" style={{
         display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 28,
         maxWidth: 900, margin: '0 auto', justifyItems: 'center',
       }}>
@@ -757,7 +757,7 @@ function Builder({ characters, clips }) {
           Build your clip →
         </h2>
       </div>
-      <div style={{
+      <div className="br-builder-grid" style={{
         display: 'grid', gridTemplateColumns: '1fr 240px', gap: 30,
         alignItems: 'center', maxWidth: 800, margin: '0 auto',
       }}>
@@ -958,7 +958,7 @@ function Pricing() {
           Credits work across <span style={{ color: P.brain }}>both</span> products.
         </h2>
       </div>
-      <div style={{
+      <div className="br-pricing-grid" style={{
         display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 18,
         maxWidth: 1040, margin: '0 auto',
       }}>

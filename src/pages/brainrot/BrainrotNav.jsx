@@ -17,6 +17,7 @@ const INK = '#0f0f0f'
 
 export default function BrainrotNav() {
   const [scrolled, setScrolled] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const { user, loginWithGoogleToken, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
@@ -29,6 +30,8 @@ export default function BrainrotNav() {
     window.addEventListener('scroll', fn)
     return () => window.removeEventListener('scroll', fn)
   }, [])
+
+  useEffect(() => { setMenuOpen(false) }, [location.pathname])
 
   const links = isApp ? [] : isLanding ? [
     { label: 'Characters', href: '#characters' },
@@ -67,7 +70,7 @@ export default function BrainrotNav() {
         boxShadow: scrolled ? `6px 6px 0 ${BRAIN}` : `4px 4px 0 ${BRAIN}`,
         maxWidth: 1100, margin: '0 auto',
         transition: 'box-shadow 0.2s',
-        gap: 16,
+        gap: 16, position: 'relative',
       }}>
         {/* Logo */}
         <Link to="/brainrot" style={{
@@ -85,9 +88,9 @@ export default function BrainrotNav() {
           </span>
         </Link>
 
-        {/* Center links */}
+        {/* Center links — desktop only */}
         {links.length > 0 && (
-          <ul style={{ display: 'flex', gap: 2, listStyle: 'none', flex: 1, justifyContent: 'center', margin: 0, padding: 0 }}>
+          <ul className="br-nav-desktop" style={{ display: 'flex', gap: 2, listStyle: 'none', flex: 1, justifyContent: 'center', margin: 0, padding: 0 }}>
             {links.map(({ label, href, external }) => (
               <li key={href}>
                 <a
@@ -107,8 +110,8 @@ export default function BrainrotNav() {
           </ul>
         )}
 
-        {/* Right: auth */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        {/* Right: auth — desktop only */}
+        <div className="br-nav-desktop" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           {user ? (
             <>
               <div style={{
@@ -164,7 +167,62 @@ export default function BrainrotNav() {
             </>
           )}
         </div>
+
+        {/* Mobile hamburger toggle — hidden on desktop */}
+        <button
+          className="br-nav-toggle"
+          onClick={() => setMenuOpen(v => !v)}
+          aria-label="Menu" aria-expanded={menuOpen}
+          style={{
+            display: 'none', flexShrink: 0,
+            width: 38, height: 38, alignItems: 'center', justifyContent: 'center',
+            background: menuOpen ? BRAIN : '#f4f4f4', color: menuOpen ? '#fff' : INK,
+            border: `1.5px solid ${menuOpen ? BRAIN : '#e5e5e5'}`,
+            borderRadius: 8, cursor: 'pointer', fontSize: '1.05rem',
+          }}
+        >{menuOpen ? '✕' : '☰'}</button>
+
+        {/* Mobile dropdown — Home + sign in/out only */}
+        {menuOpen && (
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 8px)', right: 0, left: 0,
+            background: '#fff', border: `2px solid ${INK}`, borderRadius: 12,
+            boxShadow: `4px 4px 0 ${BRAIN}`, padding: 8,
+            display: 'flex', flexDirection: 'column', gap: 2, zIndex: 250,
+          }}>
+            <Link to="/brainrot" onClick={() => setMenuOpen(false)} style={{
+              color: INK, fontSize: '.9rem', fontWeight: 700,
+              padding: '12px 14px', borderRadius: 8, textDecoration: 'none',
+            }}>Home</Link>
+            {user ? (
+              <button onClick={() => { setMenuOpen(false); logout() }} style={{
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                textAlign: 'left', color: '#999', fontSize: '.9rem', fontWeight: 700,
+                padding: '12px 14px', borderRadius: 8,
+              }}>Sign out</button>
+            ) : (
+              <div style={{ padding: '8px 14px 4px' }}>
+                <GoogleLogin
+                  onSuccess={async cr => {
+                    const ok = await loginWithGoogleToken(cr.credential)
+                    setMenuOpen(false)
+                    if (ok) navigate('/brainrot/studio')
+                  }}
+                  onError={() => {}}
+                  theme="outline" shape="rectangular" text="signin_with" size="medium"
+                />
+              </div>
+            )}
+          </div>
+        )}
       </nav>
+
+      <style>{`
+        @media (max-width: 768px) {
+          .br-nav-desktop { display: none !important; }
+          .br-nav-toggle { display: inline-flex !important; }
+        }
+      `}</style>
     </div>
   )
 }

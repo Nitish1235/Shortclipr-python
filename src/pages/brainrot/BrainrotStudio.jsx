@@ -33,8 +33,8 @@ const ACTIVE_STATUSES = ['created', 'generating_script', 'synthesizing_voice', '
 
 const STAGES = [
   { id: 'spark',  label: 'Script',     title: 'Script',       hint: 'What are they arguing about?' },
-  { id: 'cast',   label: 'Cast',       title: 'Cast',         hint: "Who's on screen?" },
   { id: 'scene',  label: 'Scene',      title: 'Scene',        hint: 'Pick a gameplay background.' },
+  { id: 'cast',   label: 'Cast',       title: 'Cast',         hint: "Who's on screen?" },
   { id: 'style',  label: 'Style',      title: 'Style',        hint: 'Length, captions, motion, music.' },
   { id: 'review', label: 'Review',     title: 'Review',       hint: 'Everything at a glance.' },
 ]
@@ -423,12 +423,13 @@ export default function BrainrotStudio() {
         libraryClips={libraryClips} />
 
       <ViewTabs view={view} onChange={setView}
-        clipCount={libraryClips.length} renderingCount={renderingCount} />
+        clipCount={libraryClips.filter(c => c.status !== 'failed').length}
+        renderingCount={renderingCount} />
 
       {view === 'clips' ? (
         <ClipsLibrary clips={libraryClips} onCreate={() => setView('create')} />
       ) : (
-      <div style={{ maxWidth: 1140, margin: '0 auto', padding: '28px 24px 80px',
+      <div className="br-studio-grid" style={{ maxWidth: 1140, margin: '0 auto', padding: '28px 24px 80px',
         display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 32, alignItems: 'start' }}>
 
         {/* ══ LEFT: builder ══════════════════════════════════════ */}
@@ -480,7 +481,7 @@ export default function BrainrotStudio() {
               The AI writes each character fully in-character and paces the dialogue to
               your chosen clip length.
             </StageFootnote>
-            <StageNextButton label="Next: Cast" onClick={goNext} />
+            <StageNextButton label="Next: Scene" onClick={goNext} />
           </StageShell>
           )}
 
@@ -652,7 +653,7 @@ export default function BrainrotStudio() {
                 Pure narrator voice-over — no characters on screen, just captions over gameplay.
               </StageFootnote>
             )}
-            <StageNextButton label="Next: Scene" onClick={goNext} />
+            <StageNextButton label="Next: Style" onClick={goNext} />
           </StageShell>
           )}
 
@@ -701,7 +702,79 @@ export default function BrainrotStudio() {
                 </div>
               </>
             )}
-            <StageNextButton label="Next: Style" onClick={goNext} />
+
+            <StageDivider />
+
+            <SubLabel>Background music</SubLabel>
+            {musicLib.length === 0 ? (
+              <StageFootnote>No tracks in the library yet.</StageFootnote>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                  <button onClick={() => setMusicId('')}
+                    style={{
+                      cursor: 'pointer', padding: '5px 14px',
+                      background: !musicId ? T.ink : '#fff',
+                      color: !musicId ? '#fff' : T.ink,
+                      border: `1px solid ${!musicId ? T.ink : T.line}`,
+                      borderRadius: 999, fontSize: '.75rem', fontWeight: 500, fontFamily: FONT,
+                    }}>None</button>
+                  {musicLib.map(m => (
+                    <button key={m.id} onClick={() => setMusicId(m.id)}
+                      style={{
+                        cursor: 'pointer', padding: '5px 14px',
+                        background: musicId === m.id ? T.ink : '#fff',
+                        color: musicId === m.id ? '#fff' : T.ink,
+                        border: `1px solid ${musicId === m.id ? T.ink : T.line}`,
+                        borderRadius: 999, fontSize: '.75rem', fontWeight: 500, fontFamily: FONT,
+                      }}>{m.name}</button>
+                  ))}
+                </div>
+                {musicId && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between',
+                      fontSize: '.75rem', color: T.mute, marginBottom: 4 }}>
+                      <span>Volume</span>
+                      <span>{Math.round(musicVolume * 100)}%</span>
+                    </div>
+                    <input type="range" min={0.2} max={0.4} step={0.02} value={musicVolume}
+                      onChange={e => setMusicVolume(Number(e.target.value))}
+                      style={{ width: '100%', accentColor: T.ink }} />
+                  </div>
+                )}
+              </>
+            )}
+
+            {sfxLib.length > 0 && (
+              <>
+                <div style={{ height: 20 }} />
+                <SubLabel>Sound effects</SubLabel>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <label style={{ flex: 1 }}>
+                    <span style={{ fontSize: '.72rem', color: T.mute, textTransform: 'uppercase' }}>Intro</span>
+                    <select value={introSfxId} onChange={e => setIntroSfxId(e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', marginTop: 4,
+                        background: '#fff', border: `1px solid ${T.line}`, borderRadius: 8,
+                        padding: '8px 10px', fontSize: '.82rem', fontFamily: FONT, cursor: 'pointer' }}>
+                      <option value="">None</option>
+                      {sfxLib.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </label>
+                  <label style={{ flex: 1 }}>
+                    <span style={{ fontSize: '.72rem', color: T.mute, textTransform: 'uppercase' }}>Outro</span>
+                    <select value={outroSfxId} onChange={e => setOutroSfxId(e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', marginTop: 4,
+                        background: '#fff', border: `1px solid ${T.line}`, borderRadius: 8,
+                        padding: '8px 10px', fontSize: '.82rem', fontFamily: FONT, cursor: 'pointer' }}>
+                      <option value="">None</option>
+                      {sfxLib.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </label>
+                </div>
+              </>
+            )}
+
+            <StageNextButton label="Next: Cast" onClick={goNext} />
           </StageShell>
           )}
 
@@ -841,77 +914,6 @@ export default function BrainrotStudio() {
               Drag the caption on the preview to reposition. Burned in at this exact spot when rendered.
             </StageFootnote>
 
-            <StageDivider />
-
-            <SubLabel>Background music</SubLabel>
-            {musicLib.length === 0 ? (
-              <StageFootnote>No tracks in the library yet.</StageFootnote>
-            ) : (
-              <>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                  <button onClick={() => setMusicId('')}
-                    style={{
-                      cursor: 'pointer', padding: '5px 14px',
-                      background: !musicId ? T.ink : '#fff',
-                      color: !musicId ? '#fff' : T.ink,
-                      border: `1px solid ${!musicId ? T.ink : T.line}`,
-                      borderRadius: 999, fontSize: '.75rem', fontWeight: 500, fontFamily: FONT,
-                    }}>None</button>
-                  {musicLib.map(m => (
-                    <button key={m.id} onClick={() => setMusicId(m.id)}
-                      style={{
-                        cursor: 'pointer', padding: '5px 14px',
-                        background: musicId === m.id ? T.ink : '#fff',
-                        color: musicId === m.id ? '#fff' : T.ink,
-                        border: `1px solid ${musicId === m.id ? T.ink : T.line}`,
-                        borderRadius: 999, fontSize: '.75rem', fontWeight: 500, fontFamily: FONT,
-                      }}>{m.name}</button>
-                  ))}
-                </div>
-                {musicId && (
-                  <div style={{ marginBottom: 8 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between',
-                      fontSize: '.75rem', color: T.mute, marginBottom: 4 }}>
-                      <span>Volume</span>
-                      <span>{Math.round(musicVolume * 100)}%</span>
-                    </div>
-                    <input type="range" min={0.2} max={0.4} step={0.02} value={musicVolume}
-                      onChange={e => setMusicVolume(Number(e.target.value))}
-                      style={{ width: '100%', accentColor: T.ink }} />
-                  </div>
-                )}
-              </>
-            )}
-
-            {sfxLib.length > 0 && (
-              <>
-                <div style={{ height: 20 }} />
-                <SubLabel>Sound effects</SubLabel>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <label style={{ flex: 1 }}>
-                    <span style={{ fontSize: '.72rem', color: T.mute, textTransform: 'uppercase' }}>Intro</span>
-                    <select value={introSfxId} onChange={e => setIntroSfxId(e.target.value)}
-                      style={{ width: '100%', boxSizing: 'border-box', marginTop: 4,
-                        background: '#fff', border: `1px solid ${T.line}`, borderRadius: 8,
-                        padding: '8px 10px', fontSize: '.82rem', fontFamily: FONT, cursor: 'pointer' }}>
-                      <option value="">None</option>
-                      {sfxLib.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </label>
-                  <label style={{ flex: 1 }}>
-                    <span style={{ fontSize: '.72rem', color: T.mute, textTransform: 'uppercase' }}>Outro</span>
-                    <select value={outroSfxId} onChange={e => setOutroSfxId(e.target.value)}
-                      style={{ width: '100%', boxSizing: 'border-box', marginTop: 4,
-                        background: '#fff', border: `1px solid ${T.line}`, borderRadius: 8,
-                        padding: '8px 10px', fontSize: '.82rem', fontFamily: FONT, cursor: 'pointer' }}>
-                      <option value="">None</option>
-                      {sfxLib.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </label>
-                </div>
-              </>
-            )}
-
             <StageNextButton label="Next: Review" onClick={goNext} />
           </StageShell>
           )}
@@ -931,18 +933,18 @@ export default function BrainrotStudio() {
               <CallsheetRow label="Script" done={stageDone.spark} onEdit={() => goToStage('spark')}>
                 {script.trim() ? `"${script.trim().slice(0, 80)}${script.trim().length > 80 ? '...' : ''}"` : <em style={{ color: T.mute }}>No topic yet</em>}
               </CallsheetRow>
+              <CallsheetRow label="Scene" done={stageDone.scene} onEdit={() => goToStage('scene')}>
+                {background ? `${background.category?.replace(/_/g, ' ') || 'Background'}${background.source_title ? ` — ${background.source_title}` : ''}` :
+                  <em style={{ color: T.mute }}>No backdrop yet</em>}
+                {musicId ? ` · ${musicLib.find(m => m.id === musicId)?.name || 'music'}` : ''}
+              </CallsheetRow>
               <CallsheetRow label="Cast" done={stageDone.cast} onEdit={() => goToStage('cast')}>
                 {castCount === 0 ? 'Narrator only' :
                   picked.length ? `${picked.map(p => p.name).join(' vs ')}${castCount === 2 ? ` · ${motionMode === 'always_on' ? 'always on' : 'turn-based'}` : ''}` :
                   <em style={{ color: T.mute }}>{`0 of ${castCount} picked`}</em>}
               </CallsheetRow>
-              <CallsheetRow label="Scene" done={stageDone.scene} onEdit={() => goToStage('scene')}>
-                {background ? `${background.category?.replace(/_/g, ' ') || 'Background'}${background.source_title ? ` — ${background.source_title}` : ''}` :
-                  <em style={{ color: T.mute }}>No backdrop yet</em>}
-              </CallsheetRow>
               <CallsheetRow label="Style" done={stageDone.style} onEdit={() => goToStage('style')} last>
                 {duration}s · {CAPTION_STYLE_BY_ID[captionStyle]?.label || captionStyle}
-                {musicId ? ` · ${musicLib.find(m => m.id === musicId)?.name || 'music'}` : ''}
               </CallsheetRow>
             </div>
 
@@ -970,7 +972,7 @@ export default function BrainrotStudio() {
         </div>
 
         {/* ══ RIGHT: preview + generate (sticky) ═════════════════ */}
-        <div style={{ position: 'sticky', top: 156, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div className="br-studio-preview" style={{ position: 'sticky', top: 156, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <PreviewStage
             background={background}
             characters={picked}
@@ -1038,22 +1040,20 @@ function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection
   const initials = (user?.full_name || user?.email || 'U')[0].toUpperCase()
 
   // Brainrot-only stats — derived from this user's brainrot jobs alone.
-  // (Backend credits are currently shared with the YT-shorts pool, but the
-  // header should read cleanly as a brainrot dashboard, so we count clips
-  // straight from libraryClips instead of surfacing the shared user.credits_*
-  // fields.)
-  const totalCount     = libraryClips.length
-  const readyCount     = libraryClips.filter(c => c.status === 'complete').length
-  const renderingCount = libraryClips.filter(c => isActive(c)).length
-  const failedCount    = libraryClips.filter(c => c.status === 'failed').length
-  const queuedCount    = libraryClips.filter(c => c.status === 'created').length
+  // Failed clips are excluded from every count (and from the library
+  // below) so a stuck/errored run never lingers as a distraction on the
+  // dashboard.
+  const visibleClips   = libraryClips.filter(c => c.status !== 'failed')
+  const totalCount     = visibleClips.length
+  const readyCount     = visibleClips.filter(c => c.status === 'complete').length
+  const renderingCount = visibleClips.filter(c => isActive(c)).length
+  const queuedCount    = visibleClips.filter(c => c.status === 'created').length
 
   const stats = [
     { n: totalCount,     l: 'Clips made', c: T.ink },
     { n: readyCount,     l: 'Ready',      c: T.green },
     { n: renderingCount, l: 'Rendering',  c: '#f59e0b' },
     { n: queuedCount,    l: 'Queued',     c: T.blue },
-    { n: failedCount,    l: 'Failed',     c: failedCount > 0 ? T.red : T.mute },
   ]
 
   return (
@@ -1063,7 +1063,7 @@ function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection
       borderBottom: `1px solid ${T.line}`,
     }}>
       {/* Row 1 — brand + user chrome */}
-      <div style={{ padding: '10px 24px', display: 'flex', alignItems: 'center',
+      <div className="br-studio-headrow" style={{ padding: '10px 24px', display: 'flex', alignItems: 'center',
         justifyContent: 'space-between', gap: 12 }}>
         <Link to="/brainrot" style={{ display: 'flex', alignItems: 'center', gap: 10,
           textDecoration: 'none', color: T.ink }}>
@@ -1071,7 +1071,7 @@ function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection
           <span style={{ fontSize: '.95rem', fontWeight: 600, letterSpacing: '-.02em' }}>
             ShortClipr
           </span>
-          <span style={{
+          <span className="br-studio-tag" style={{
             fontSize: '.62rem', color: T.mute, letterSpacing: '.06em',
             textTransform: 'uppercase', padding: '2px 7px', borderRadius: 4,
             background: T.lineSoft, marginLeft: 2,
@@ -1136,6 +1136,14 @@ function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection
       <style>{`
         @keyframes br-pulse-dot { 0%,100% { opacity: .4 } 50% { opacity: 1 } }
         @keyframes brSpin { to { transform: rotate(360deg) } }
+        @media (max-width: 900px) {
+          .br-studio-grid { grid-template-columns: 1fr !important; gap: 20px !important; }
+          .br-studio-preview { position: static !important; top: auto !important; }
+        }
+        @media (max-width: 640px) {
+          .br-studio-headrow, .br-studio-tabsrow, .br-studio-grid { padding-left: 16px !important; padding-right: 16px !important; }
+          .br-studio-tag { display: none; }
+        }
       `}</style>
     </header>
   )
@@ -1152,7 +1160,7 @@ function ViewTabs({ view, onChange, clipCount, renderingCount }) {
       background: 'rgba(255,255,255,.92)', backdropFilter: 'blur(12px)',
       borderBottom: `1px solid ${T.line}`,
     }}>
-      <div style={{ maxWidth: 1140, margin: '0 auto', padding: '0 24px',
+      <div className="br-studio-tabsrow" style={{ maxWidth: 1140, margin: '0 auto', padding: '0 24px',
         display: 'flex', gap: 4 }}>
         {TABS.map(t => {
           const on = view === t.id
@@ -1564,24 +1572,26 @@ const LIBRARY_FILTERS = [
   { id: 'all',      label: 'All' },
   { id: 'active',   label: 'Rendering' },
   { id: 'complete', label: 'Ready' },
-  { id: 'failed',   label: 'Failed' },
 ]
 
 function ClipsLibrary({ clips, onCreate }) {
   const [filter, setFilter] = useState('all')
 
+  // Failed clips never surface in the library — hide them from every
+  // filter's count and from the visible list.
+  const shownClips = useMemo(() => clips.filter(c => c.status !== 'failed'), [clips])
+
   const counts = useMemo(() => ({
-    all: clips.length,
-    active: clips.filter(c => isActive(c)).length,
-    complete: clips.filter(c => c.status === 'complete').length,
-    failed: clips.filter(c => c.status === 'failed').length,
-  }), [clips])
+    all: shownClips.length,
+    active: shownClips.filter(c => isActive(c)).length,
+    complete: shownClips.filter(c => c.status === 'complete').length,
+  }), [shownClips])
 
   const visible = useMemo(() => {
-    if (filter === 'all') return clips
-    if (filter === 'active') return clips.filter(c => isActive(c))
-    return clips.filter(c => c.status === filter)
-  }, [clips, filter])
+    if (filter === 'all') return shownClips
+    if (filter === 'active') return shownClips.filter(c => isActive(c))
+    return shownClips.filter(c => c.status === filter)
+  }, [shownClips, filter])
 
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto', padding: '26px 20px 80px' }}>
@@ -1602,7 +1612,7 @@ function ClipsLibrary({ clips, onCreate }) {
         </button>
       </div>
 
-      {clips.length > 0 && (
+      {shownClips.length > 0 && (
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 20 }}>
           {LIBRARY_FILTERS.map(f => {
             const on = filter === f.id
@@ -1628,7 +1638,7 @@ function ClipsLibrary({ clips, onCreate }) {
         </div>
       )}
 
-      {clips.length === 0 ? (
+      {shownClips.length === 0 ? (
         <div style={{
           textAlign: 'center', padding: '64px 20px',
           background: T.paper2, border: `1px solid ${T.line}`, borderRadius: 12,
