@@ -921,6 +921,72 @@ async def release_credits(user_id: str, amount: int) -> None:
     )
 
 
+# ── Brainrot credits — fully separate pool from the functions above ─
+# Same atomic reserve/release contract as reserve_credits()/release_credits(),
+# just against brainrot_credits_used/brainrot_credits_limit/
+# brainrot_credits_reset_at (migration 016) instead of the YT-Shorts columns.
+# Brainrot always reserves exactly 1 (one credit = one clip — see
+# POST /brainrot/jobs), but this still takes `requested` for symmetry with
+# the YT-Shorts version and in case that ever changes.
+
+async def _maybe_reset_brainrot_monthly(user_id: str) -> None:
+    user = await get_user(user_id)
+    if not user:
+        return
+    now = _now()
+    reset_at = user.get("brainrot_credits_reset_at")
+    needs_reset = (
+        reset_at is None
+        or reset_at.year < now.year
+        or (reset_at.year == now.year and reset_at.month < now.month)
+    )
+    if needs_reset:
+        await _execute(
+            """
+            UPDATE users
+            SET brainrot_credits_used     = 0,
+                brainrot_credits_reset_at = date_trunc('month', NOW())
+            WHERE id = $1
+            """,
+            user_id,
+        )
+
+
+async def reserve_brainrot_credits(user_id: str, requested: int) -> int:
+    """Atomically reserve up to `requested` brainrot credits — see
+    reserve_credits() above for why this needs to be atomic (FOR UPDATE)."""
+    if requested <= 0:
+        return 0
+    await _maybe_reset_brainrot_monthly(user_id)
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT brainrot_credits_used, brainrot_credits_limit FROM users WHERE id=$1 FOR UPDATE",
+                user_id,
+            )
+            if not row:
+                return 0
+            remaining = row["brainrot_credits_limit"] - row["brainrot_credits_used"]
+            reserve = max(0, min(requested, remaining))
+            if reserve > 0:
+                await conn.execute(
+                    "UPDATE users SET brainrot_credits_used = brainrot_credits_used + $2 WHERE id=$1",
+                    user_id, reserve,
+                )
+            return reserve
+
+
+async def release_brainrot_credits(user_id: str, amount: int) -> None:
+    """Refund `amount` previously-reserved brainrot credits."""
+    if amount <= 0:
+        return
+    await _execute(
+        "UPDATE users SET brainrot_credits_used = GREATEST(0, brainrot_credits_used - $2) WHERE id=$1",
+        user_id, amount,
+    )
+
+
 async def reserve_video_minutes(
     user_id: str,
     duration_seconds: int,

@@ -1185,12 +1185,12 @@ const SIDENAV_ICON = {
   ),
 }
 
-// Left-side nav — Create / My clips, plus a Billing link. Credits/plan are
-// one shared pool across YT-Shorts and Brainrot, so this opens the same
-// /billing page as the YT-Shorts dashboard rather than a brainrot-only one.
-// Sticky column on desktop, collapses to a horizontal bar (same items, same
-// active styling) on mobile via the .br-sidenav / .br-shell media rules in
-// Header's <style> block.
+// Left-side nav — Create / My clips, plus a Billing link. Brainrot has its
+// own plan/credits pool (brainrot_plan / brainrot_credits_*, migration 016)
+// fully separate from YT-Shorts, so this opens /brainrot/billing — its own
+// page, not the shared /billing. Sticky column on desktop, collapses to a
+// horizontal bar (same items, same active styling) on mobile via the
+// .br-sidenav / .br-shell media rules in Header's <style> block.
 function StudioSideNav({ view, onChange, clipCount, renderingCount, user }) {
   const ITEMS = [
     { id: 'create', label: 'Create',   icon: SIDENAV_ICON.create },
@@ -1244,7 +1244,7 @@ function StudioSideNav({ view, onChange, clipCount, renderingCount, user }) {
 
       <div style={{ height: 1, background: T.lineSoft, margin: '4px 4px' }} />
 
-      <Link to="/billing" style={itemStyle(false)}
+      <Link to="/brainrot/billing" style={itemStyle(false)}
         onMouseEnter={hoverOn} onMouseLeave={hoverOff}
       >
         <span style={{ flexShrink: 0, display: 'flex', opacity: .7 }}>{SIDENAV_ICON.billing}</span>
@@ -1253,7 +1253,7 @@ function StudioSideNav({ view, onChange, clipCount, renderingCount, user }) {
           fontSize: '.68rem', fontWeight: 500, flexShrink: 0, textTransform: 'capitalize',
           color: T.mute, background: T.lineSoft,
           borderRadius: 999, padding: '1px 8px',
-        }}>{user?.plan || 'free'}</span>
+        }}>{user?.brainrot_plan || 'free'}</span>
       </Link>
     </nav>
   )

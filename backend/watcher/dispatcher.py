@@ -378,7 +378,7 @@ async def _refund_brainrot_job(pool: asyncpg.Pool, job_id: str) -> None:
     reserved = int(row["reserved"] or 0)
     if reserved > 0:
         await pool.execute(
-            "UPDATE users SET credits_used = GREATEST(0, credits_used - $2) WHERE id = $1",
+            "UPDATE users SET brainrot_credits_used = GREATEST(0, brainrot_credits_used - $2) WHERE id = $1",
             str(row["user_id"]), reserved,
         )
         logger.info(f"[brainrot:{job_id}] Refunded {reserved} credit(s) to {row['user_id']}")
