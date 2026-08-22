@@ -274,6 +274,35 @@ def _side_profiles(payload: dict) -> tuple[dict | None, dict | None]:
     return left, right
 
 
+def _resolve_distinct_voices(payload: dict, provider: str) -> tuple[str, str]:
+    """voice_left/voice_right straight from the payload — but POST /brainrot/jobs's
+    auto-assign (gender-matched, slot-rotated) only runs at job-creation time,
+    so if either side is still empty here, or both happen to already be the
+    identical voice_id (an explicit user pick, or a stale duplicate default),
+    this is the last chance to fix it before TTS actually runs. Without this,
+    an empty voice on both sides falls through to tts.py's single flat
+    DEFAULT_VOICES entry and both characters render with the exact same
+    voice — the "same voice for both characters" bug."""
+    voice_left = payload.get("voice_left", "")
+    voice_right = payload.get("voice_right", "")
+    gender_by_side = {p.get("side"): p.get("gender", "neutral") for p in payload.get("character_positions", [])}
+    has_right = "right" in gender_by_side
+
+    if not voice_left:
+        voice_left = voice_catalog.default_voice_for(provider, gender_by_side.get("left", "neutral"), slot=0)
+    if not voice_right and has_right:
+        voice_right = voice_catalog.default_voice_for(provider, gender_by_side["right"], slot=1)
+
+    if has_right and voice_right and voice_right == voice_left:
+        gender = gender_by_side.get("right", "neutral")
+        candidates = [v.voice_id for v in voice_catalog.list_voices(provider) if v.voice_id != voice_left]
+        same_gender = [vid for vid in candidates if voice_catalog.get_voice(provider, vid).gender == gender]
+        if same_gender or candidates:
+            voice_right = (same_gender or candidates)[0]
+
+    return voice_left, voice_right
+
+
 async def _synthesize_timeline(
     job_id: str, dialogue_lines: list, payload: dict, tmp_dir: Path,
 ) -> list[composite.TimedLine]:
@@ -281,8 +310,7 @@ async def _synthesize_timeline(
     line N starts the instant line N-1's audio ends. This gives exact
     start/end timestamps straight from real audio duration, no interpolation."""
     provider = payload.get("tts_provider", "unrealspeech")
-    voice_left = payload.get("voice_left", "")
-    voice_right = payload.get("voice_right", "")
+    voice_left, voice_right = _resolve_distinct_voices(payload, provider)
     sem = asyncio.Semaphore(TTS_CONCURRENCY)
 
     async def _synth_one(i: int, line):

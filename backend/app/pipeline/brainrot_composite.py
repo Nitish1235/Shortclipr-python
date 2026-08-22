@@ -27,7 +27,11 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.pipeline.captions import Caption, build_ass_content
+from app.pipeline.captions import (
+    _ASS_HEADER, _BASE_STYLES, _BUILDERS, _resolve_slider_pos, _style_line,
+    Caption, COLOR_COMBOS, DEFAULT_COLOR as _CAPTIONS_DEFAULT_COLOR,
+)  # noqa: F401 — Caption's dataclass is used below; the rest are captions.py's
+   # internal building blocks, reused (not modified) for _dual_speaker_ass_content
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +59,43 @@ NONE_SCALE_RAMP_SECONDS = 0.18
 # character visibly reads as animated rather than a frozen PNG.
 IDLE_SWAY_AMPLITUDE_PX = 6.0
 IDLE_SWAY_HZ = 0.6
-TALK_BOB_AMPLITUDE_PX = 14.0
-TALK_BOB_HZ = 3.2
+TALK_BOB_AMPLITUDE_PX = 10.0
+TALK_BOB_HZ = 1.7
 
 # Background music ducks to this fraction of its set volume while any
 # character is speaking, with a short fade at each edge so it's a duck,
 # not a click.
 MUSIC_DUCK_FACTOR = 0.35
 MUSIC_DUCK_RAMP_SECONDS = 0.15
+
+# Caption font — brainrot never exposes a font picker, so this is the one
+# fixed choice for every clip. "anton" (ultra-condensed bold display) reads
+# as a proper punchy brainrot/meme caption instead of captions.py's generic
+# "default" (Liberation Sans), which is what every brainrot clip was
+# silently rendering with before this.
+CAPTION_FONT = "anton"
+
+# Right-speaker caption colour, keyed by the user's chosen caption_color —
+# gives each side of a two-character argument its own caption colour so
+# they're visually distinguishable at a glance, without adding a second
+# "caption color" picker to the UI. Reuses captions.py's existing combo
+# catalog (see COLOR_COMBOS) rather than inventing new colours, and each
+# pairing was picked to read as intentionally different, not clashing.
+_RIGHT_CAPTION_COLOR: dict[str, str] = {
+    "yellow_black":        "electric_blue_white",
+    "white_black":         "hot_pink_black",
+    "black_white":         "red_white",
+    "butter_yellow":       "ice_blue",
+    "hot_pink_black":      "cyan_dark",
+    "electric_blue_white": "yellow_black",
+    "pure_white":          "gold_premium",
+    "gold_premium":        "pure_white",
+    "ice_blue":            "orange_dark",
+    "green_dark":          "hot_pink_black",
+    "orange_dark":         "electric_blue_white",
+    "cyan_dark":           "orange_dark",
+    "red_white":           "electric_blue_white",
+}
 
 # canon.png assets are 896x1152 → height/width. Used to estimate the overlay's
 # pixel height (the scale filter uses -1, so exact height isn't known at build
@@ -94,7 +127,7 @@ class CharacterPlacement:
     exit: str = "slide"    # exit motion id
 
 
-_CHAR_BASE_WIDTH_FRAC = 0.42  # a scale=1.0 character is ~42% of canvas width
+_CHAR_BASE_WIDTH_FRAC = 0.47  # a scale=1.0 character is ~47% of canvas width
 
 
 def _even(n: float) -> int:
@@ -512,6 +545,46 @@ def _audio_mix_filter(lines: list[TimedLine], music_path: Path | None, music_vol
     return ";".join(parts), "aout"
 
 
+def _dual_speaker_ass_content(
+    lines: list[TimedLine], style: str, color: str, caption_y: float,
+) -> str:
+    """Builds one .ass document with the LEFT/narrator speaker's lines in
+    `color` and the RIGHT speaker's lines in that color's paired alternate
+    (see _RIGHT_CAPTION_COLOR) — two characters' captions read as visually
+    distinct instead of one flat colour for the whole argument.
+
+    captions.py's public build_ass_content() only takes one flat caption
+    list + one colour, with no speaker concept, and touching it to add one
+    would ripple through all 16 style builders in a file the main YouTube
+    Shorts pipeline also depends on. Instead this calls captions.py's own
+    internal building blocks (_style_line/_BUILDERS/_ASS_HEADER — the exact
+    same code every style already renders through) once per speaker, at two
+    different colours, and merges the results into one .ass — same visual
+    system, captions.py itself untouched. Coupled to those internals by
+    name, so a captions.py refactor that renames them would need this
+    function updated too."""
+    x, y, alignment = _resolve_slider_pos(caption_y)
+    style_key = style if style in _BASE_STYLES else "minimal"
+    color_key = color if color in COLOR_COMBOS else _CAPTIONS_DEFAULT_COLOR
+    right_color_key = _RIGHT_CAPTION_COLOR.get(color_key, color_key)
+    build = _BUILDERS.get(style_key, _BUILDERS["minimal"])
+
+    left_caps  = [Caption(start=l.start, end=l.end, text=l.text) for l in lines if l.speaker != "right"]
+    right_caps = [Caption(start=l.start, end=l.end, text=l.text) for l in lines if l.speaker == "right"]
+
+    style_lines = [_style_line(style_key, color_key, alignment, CAPTION_FONT)]
+    events = build(left_caps, x, y, 3)
+
+    if right_caps:
+        style_lines.append(
+            _style_line(style_key, right_color_key, alignment, CAPTION_FONT)
+            .replace("Style: Default,", "Style: Right,", 1)
+        )
+        events += [e.replace(",Default,,", ",Right,,", 1) for e in build(right_caps, x, y, 3)]
+
+    return _ASS_HEADER.format(style_lines="\n".join(style_lines), events="\n".join(events))
+
+
 async def render(
     gameplay_clip_path: Path,
     lines: list[TimedLine],
@@ -578,8 +651,7 @@ async def render(
     )
     filter_parts.append(audio_filter)
 
-    captions = [Caption(start=l.start, end=l.end, text=l.text) for l in lines]
-    ass_content = build_ass_content(captions, style=caption_style, color=caption_color, caption_y=caption_y)
+    ass_content = _dual_speaker_ass_content(lines, caption_style, caption_color, caption_y)
     with tempfile.NamedTemporaryFile(suffix=".ass", mode="w", encoding="utf-8", delete=False) as f:
         f.write(ass_content)
         ass_path = f.name

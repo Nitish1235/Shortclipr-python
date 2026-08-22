@@ -75,7 +75,7 @@ function CharacterOverlay({ c, isSpeaking, alwaysOn, isSpeakingInAlwaysOn, onPoi
   const y = c.y ?? 0.78
   const nearSide = x < 0.5 ? 'left' : 'right'
   const base = `translate(-50%,-50%) rotate(${c.rotation || 0}deg)`
-  const w = `${42 * (c.scale || 1)}%`
+  const w = `${47 * (c.scale || 1)}%`
 
   const [phase, setPhase] = useState(alwaysOn ? 'active' : (isSpeaking ? 'active' : 'waiting'))
   const prevSpeakingRef = useRef(isSpeaking)
