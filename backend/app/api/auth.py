@@ -15,6 +15,7 @@ import traceback
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
+from passlib.context import CryptContext
 from pydantic import BaseModel
 
 from app.api.deps import (
@@ -24,6 +25,8 @@ from app.api.deps import (
 )
 from app.core.plan_limits import get_credits_limit, get_video_minutes_limit
 from app.db import supabase as db
+
+_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -102,6 +105,87 @@ async def google_auth(body: GoogleAuthRequest):
     except Exception as exc:
         logger.error("[/auth/google] Unhandled error:\n%s", traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Internal server error: {exc}")
+
+
+class EmailLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class SetPasswordRequest(BaseModel):
+    password: str
+
+
+def _build_user_response(user: dict, token: str) -> AuthResponse:
+    user_id = str(user["id"])
+    return AuthResponse(
+        access_token=token,
+        user={
+            "user_id": user_id,
+            "email": str(user["email"]),
+            "full_name": user.get("full_name", "") or "",
+            "avatar_url": user.get("avatar_url", "") or "",
+            "plan": user.get("plan", "free"),
+            "credits_used": user.get("credits_used", 0),
+            "credits_limit": user.get("credits_limit", 1),
+            "brainrot_plan": user.get("brainrot_plan", "free"),
+            "brainrot_credits_used": user.get("brainrot_credits_used", 0),
+            "brainrot_credits_limit": user.get("brainrot_credits_limit", 2),
+        },
+    )
+
+
+@router.post("/email-login", response_model=AuthResponse)
+async def email_login(body: EmailLoginRequest):
+    """
+    Sign in with email + password.
+    Only works for Google OAuth users who have previously set a password
+    via POST /auth/set-password.
+    """
+    email = body.email.strip().lower()
+    if not email or not body.password:
+        raise HTTPException(status_code=400, detail="Email and password are required.")
+
+    user = await db.get_user_by_email(email)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+
+    stored_hash = user.get("password_hash")
+    if not stored_hash:
+        raise HTTPException(
+            status_code=401,
+            detail="No password set for this account. Sign in with Google, then go to Settings → Set Password.",
+        )
+
+    if not _pwd.verify(body.password, stored_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+
+    token = create_access_token({
+        "sub": str(user["id"]),
+        "email": str(user["email"]),
+        "plan": user.get("plan", "free"),
+    })
+    return _build_user_response(dict(user), token)
+
+
+@router.post("/set-password")
+async def set_password(body: SetPasswordRequest, current_user: CurrentUser):
+    """
+    Set or update the password for the currently authenticated user.
+    Requires the user to already be authenticated (Google OAuth JWT).
+    Password must be at least 8 characters.
+    """
+    pw = body.password
+    if not pw or len(pw) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
+
+    hashed = _pwd.hash(pw)
+    await db._execute(
+        "UPDATE users SET password_hash=$1, updated_at=NOW() WHERE id=$2",
+        hashed,
+        current_user.user_id,
+    )
+    return {"ok": True, "message": "Password set successfully."}
 
 
 @router.get("/me")

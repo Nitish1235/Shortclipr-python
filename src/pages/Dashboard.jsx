@@ -91,6 +91,10 @@ export default function Dashboard() {
   const [publishingYT, setPublishingYT] = useState(new Set())
   const [publishedTT, setPublishedTT] = useState(new Set())
   const [publishingTT, setPublishingTT] = useState(new Set())
+  // Per-clip topic + hashtags (optional, used when publishing)
+  const [clipMeta, setClipMeta] = useState({}) // { [clipId]: { topic: '', hashtags: '' } }
+  const updateClipMeta = (clipId, field, value) =>
+    setClipMeta(prev => ({ ...prev, [clipId]: { ...(prev[clipId] || {}), [field]: value } }))
 
   // Modals / toasts
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
@@ -149,7 +153,7 @@ export default function Dashboard() {
     const params = new URLSearchParams(location.search)
     const statusParam = params.get('status')
 
-    if (statusParam === 'social_connected') {
+    if (statusParam === 'youtube_connected' || statusParam === 'social_connected') {
       localStorage.setItem('yt_connected', 'true')
       setYtConnected(true)
       showToast('YouTube connected successfully!')
@@ -346,13 +350,7 @@ export default function Dashboard() {
     for (const clip of sel) { doDownload(clip.clip_id || clip.id); await new Promise(r => setTimeout(r, 600)) }
   }
 
-  // ── YouTube + TikTok publishing — TEMPORARILY DISABLED ──────────
-  // Neither platform has granted official approval yet (YouTube API
-  // audit / TikTok Content Posting API review both pending). Stubbed to
-  // a "coming soon" toast below; full original implementation kept
-  // commented out so re-enabling later is just deleting the stubs and
-  // uncommenting this block.
-  /*
+  // ── YouTube + TikTok publishing ───────────────────────────────────
   const handleConnectYouTube = async () => {
     try {
       const token = localStorage.getItem('sc_token')
@@ -369,6 +367,8 @@ export default function Dashboard() {
     if (!requirePlan('Publish to YouTube')) return
     if (!ytConnected) { handleConnectYouTube(); return }
     const clipId = clip.clip_id || clip.id
+    const meta = clipMeta[clipId] || {}
+    const hashtags = (meta.hashtags || '').split(/[\s,#]+/).filter(Boolean)
     setPublishingYT(prev => new Set([...prev, clipId]))
     try {
       const token = localStorage.getItem('sc_token')
@@ -377,7 +377,8 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           clips: [{ clip_id: clipId, video_url: clip.video_url,
-            title: currentJob?.video_title || 'Short Clip', description: '', tags: [] }]
+            title: clip.top_title || currentJob?.video_title || 'Short Clip',
+            description: meta.topic || '', tags: hashtags }]
         })
       })
       const data = await res.json()
@@ -407,8 +408,14 @@ export default function Dashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          clips: sel.map(c => ({ clip_id: c.clip_id || c.id, video_url: c.video_url,
-            title: currentJob?.video_title || 'Short Clip', description: '', tags: [] }))
+          clips: sel.map(c => {
+            const cId = c.clip_id || c.id
+            const meta = clipMeta[cId] || {}
+            const hashtags = (meta.hashtags || '').split(/[\s,#]+/).filter(Boolean)
+            return { clip_id: cId, video_url: c.video_url,
+              title: c.top_title || currentJob?.video_title || 'Short Clip',
+              description: meta.topic || '', tags: hashtags }
+          })
         })
       })
       if (res.ok) {
@@ -440,6 +447,10 @@ export default function Dashboard() {
     if (!requirePlan('Publish to TikTok')) return
     if (!ttConnected) { handleConnectTikTok(); return }
     const clipId = clip.clip_id || clip.id
+    const meta = clipMeta[clipId] || {}
+    const hashStr = meta.hashtags ? ' ' + meta.hashtags.trim() : ''
+    const baseTitle = clip.top_title || currentJob?.video_title || 'Short Clip'
+    const titleStr = baseTitle.slice(0, 150 - hashStr.length) + hashStr
     setPublishingTT(prev => new Set([...prev, clipId]))
     try {
       const token = localStorage.getItem('sc_token')
@@ -447,8 +458,7 @@ export default function Dashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          clips: [{ clip_id: clipId, video_url: clip.video_url,
-            title: currentJob?.video_title || 'Short Clip' }]
+          clips: [{ clip_id: clipId, video_url: clip.video_url, title: titleStr }]
         })
       })
       const data = await res.json()
@@ -479,8 +489,14 @@ export default function Dashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          clips: sel.map(c => ({ clip_id: c.clip_id || c.id, video_url: c.video_url,
-            title: currentJob?.video_title || 'Short Clip' }))
+          clips: sel.map(c => {
+            const cId = c.clip_id || c.id
+            const meta = clipMeta[cId] || {}
+            const hashStr = meta.hashtags ? ' ' + meta.hashtags.trim() : ''
+            const base = c.top_title || currentJob?.video_title || 'Short Clip'
+            return { clip_id: cId, video_url: c.video_url,
+              title: base.slice(0, 150 - hashStr.length) + hashStr }
+          })
         })
       })
       if (res.ok) {
@@ -492,13 +508,6 @@ export default function Dashboard() {
     } catch { showToast('TikTok bulk publish failed', 'error') }
     setPublishingTT(new Set())
   }
-  */
-  const handleConnectYouTube = () => showToast('YouTube publishing is coming soon!', 'info')
-  const handlePublishYT = (e) => { e.stopPropagation(); showToast('YouTube publishing is coming soon!', 'info') }
-  const handleBulkPublishYT = () => showToast('YouTube publishing is coming soon!', 'info')
-  const handleConnectTikTok = () => showToast('TikTok publishing is coming soon!', 'info')
-  const handlePublishTT = (e) => { e.stopPropagation(); showToast('TikTok publishing is coming soon!', 'info') }
-  const handleBulkPublishTT = () => showToast('TikTok publishing is coming soon!', 'info')
 
   // ── Modal ──────────────────────────────────────────────────────
   const openModal = (idx) => { setModalIdx(idx); setModalOpen(true) }
@@ -572,17 +581,15 @@ export default function Dashboard() {
                     Connected
                   </div>
                 ) : (
-                  // Connect flow disabled — YouTube API audit pending. See
-                  // handleConnectYouTube stub above for the original code.
-                  <div title="YouTube publishing — coming soon" style={{
+                  <button onClick={handleConnectYouTube} style={{
                     display:'flex', alignItems:'center', gap:'6px',
                     padding:'5px 12px', borderRadius:'8px',
-                    border:'1px dashed #e5e7eb', background:'#f9fafb',
-                    fontSize:'.72rem', fontWeight:700, color:'#9ca3af',
-                    cursor:'default', opacity:0.7,
+                    border:'1px solid #fca5a5', background:'#fff5f5',
+                    fontSize:'.72rem', fontWeight:700, color:'#dc2626',
+                    cursor:'pointer',
                   }}>
-                    <YTLogo size={14} /> YouTube — Coming Soon
-                  </div>
+                    <YTLogo size={14} /> Connect YouTube
+                  </button>
                 )}
                 {ttConnected ? (
                   <div style={{
@@ -596,18 +603,15 @@ export default function Dashboard() {
                     Connected
                   </div>
                 ) : (
-                  // Connect flow disabled — TikTok Content Posting API audit
-                  // pending. See handleConnectTikTok stub above for the
-                  // original code.
-                  <div title="TikTok publishing — coming soon" style={{
+                  <button onClick={handleConnectTikTok} style={{
                     display:'flex', alignItems:'center', gap:'6px',
                     padding:'5px 12px', borderRadius:'8px',
-                    border:'1px dashed #e5e7eb', background:'#f9fafb',
-                    fontSize:'.72rem', fontWeight:700, color:'#9ca3af',
-                    cursor:'default', opacity:0.7,
+                    border:'1px solid #e9d5ff', background:'#faf5ff',
+                    fontSize:'.72rem', fontWeight:700, color:'#7c3aed',
+                    cursor:'pointer',
                   }}>
-                    <TTLogo size={14} /> TikTok — Coming Soon
-                  </div>
+                    <TTLogo size={14} /> Connect TikTok
+                  </button>
                 )}
               </div>
 
@@ -1073,34 +1077,38 @@ export default function Dashboard() {
 
                           {/* Action buttons row */}
                           <div style={{ display:'flex', gap:4 }}>
-                            {/* Post-to-YouTube/TikTok disabled — pending platform
-                                approval. Original buttons called handlePublishYT/TT
-                                (now stubbed above) — restore by swapping these two
-                                divs back for the commented-out buttons in git history. */}
-                            <div
-                              title="YouTube publishing — coming soon"
+                            <button
+                              onClick={e => handlePublishYT(e, clip)}
+                              disabled={ytPubbing || ytDone}
+                              title={ytDone ? 'Published to YouTube' : ytConnected ? 'Publish to YouTube Shorts' : 'Connect YouTube to publish'}
                               style={{
                                 flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:3,
                                 padding:'5px 4px', borderRadius:7, fontSize:'.6rem', fontWeight:700,
-                                border:'1px dashed #e5e7eb', background:'#f9fafb',
-                                color:'#9ca3af', cursor:'default',
+                                border: ytDone ? '1px solid #bbf7d0' : '1px solid #fca5a5',
+                                background: ytDone ? '#f0fdf4' : '#fff5f5',
+                                color: ytDone ? '#16a34a' : '#dc2626',
+                                cursor: (ytPubbing || ytDone) ? 'default' : 'pointer',
+                                opacity: ytPubbing ? 0.7 : 1,
                               }}
                             >
-                              <YTLogo size={10} />
-                              Soon
-                            </div>
-                            <div
-                              title="TikTok publishing — coming soon"
+                              <YTLogo size={10} />{ytPubbing ? '…' : ytDone ? ' ✓' : ''}
+                            </button>
+                            <button
+                              onClick={e => handlePublishTT(e, clip)}
+                              disabled={ttPubbing || ttDone}
+                              title={ttDone ? 'Published to TikTok' : ttConnected ? 'Publish to TikTok' : 'Connect TikTok to publish'}
                               style={{
                                 flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:3,
                                 padding:'5px 4px', borderRadius:7, fontSize:'.6rem', fontWeight:700,
-                                border:'1px dashed #e5e7eb', background:'#f9fafb',
-                                color:'#9ca3af', cursor:'default',
+                                border: ttDone ? '1px solid #d8b4fe' : '1px solid #e9d5ff',
+                                background: ttDone ? '#faf5ff' : '#fdf4ff',
+                                color: ttDone ? '#7c3aed' : '#9333ea',
+                                cursor: (ttPubbing || ttDone) ? 'default' : 'pointer',
+                                opacity: ttPubbing ? 0.7 : 1,
                               }}
                             >
-                              <TTLogo size={10} />
-                              Soon
-                            </div>
+                              <TTLogo size={10} />{ttPubbing ? '…' : ttDone ? ' ✓' : ''}
+                            </button>
                             <button
                               onClick={e => handleSingleDownload(e, clip)}
                               title={isPaid ? 'Download MP4' : canFreeDownload(clip) ? 'Download free (feedback reward)' : 'Upgrade to download'}
@@ -1140,22 +1148,20 @@ export default function Dashboard() {
             background: isPaid ? '#111' : '#cf1322', color:'#fff', border:'none',
             borderRadius:7, padding:'7px 16px', fontWeight:700, fontSize:'.76rem', cursor:'pointer',
           }}>{isPaid ? '⬇ Download' : '💳 Upgrade to Download'}</button>
-          {/* Bulk publish disabled — pending platform approval. Originals
-              called handleBulkPublishYT/TT (now stubbed above). */}
-          <div title="YouTube publishing — coming soon" style={{
+          <button onClick={handleBulkPublishYT} style={{
             display:'flex', alignItems:'center', gap:7,
-            background:'#f3f4f6', color:'#9ca3af', border:'1px dashed #d1d5db',
-            borderRadius:7, padding:'7px 16px', fontWeight:700, fontSize:'.76rem', cursor:'default',
+            background:'#fff5f5', color:'#dc2626', border:'1px solid #fca5a5',
+            borderRadius:7, padding:'7px 16px', fontWeight:700, fontSize:'.76rem', cursor:'pointer',
           }}>
-            <YTLogo size={14} /> YouTube — Coming Soon
-          </div>
-          <div title="TikTok publishing — coming soon" style={{
+            <YTLogo size={14} /> YouTube
+          </button>
+          <button onClick={handleBulkPublishTT} style={{
             display:'flex', alignItems:'center', gap:7,
-            background:'#f3f4f6', color:'#9ca3af', border:'1px dashed #d1d5db',
-            borderRadius:7, padding:'7px 16px', fontWeight:700, fontSize:'.76rem', cursor:'default',
+            background:'#faf5ff', color:'#7c3aed', border:'1px solid #e9d5ff',
+            borderRadius:7, padding:'7px 16px', fontWeight:700, fontSize:'.76rem', cursor:'pointer',
           }}>
-            <TTLogo size={14} /> TikTok — Coming Soon
-          </div>
+            <TTLogo size={14} /> TikTok
+          </button>
           <div style={{ width:1, height:20, background:'#e5e7eb' }}/>
           <button onClick={() => setSelectedClipIds(new Set())} style={{
             background:'none', border:'none', color:'#6b7280', cursor:'pointer', fontSize:'.76rem',
@@ -1272,6 +1278,43 @@ export default function Dashboard() {
                   </div>
                 )}
 
+                {/* Topic & Hashtags — optional per-clip info used when publishing */}
+                <div style={{ border:'1px solid #e5e7eb', borderRadius:10, padding:'11px 13px' }}>
+                  <div style={{ fontSize:'.62rem', textTransform:'uppercase', letterSpacing:'.1em', fontWeight:700, color:'#9ca3af', marginBottom:8 }}>
+                    Topic & Hashtags <span style={{ textTransform:'none', letterSpacing:'normal', fontWeight:400 }}>(optional — used when publishing)</span>
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
+                    <div>
+                      <label style={{ fontSize:'.7rem', fontWeight:600, color:'#374151', display:'block', marginBottom:3 }}>Topic / Description</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. How to grow on YouTube in 2025"
+                        value={clipMeta[modalClipId]?.topic || ''}
+                        onChange={e => updateClipMeta(modalClipId, 'topic', e.target.value)}
+                        style={{
+                          width:'100%', padding:'6px 10px', borderRadius:6,
+                          border:'1px solid #e5e7eb', fontSize:'.76rem', outline:'none',
+                          boxSizing:'border-box',
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize:'.7rem', fontWeight:600, color:'#374151', display:'block', marginBottom:3 }}>Hashtags</label>
+                      <input
+                        type="text"
+                        placeholder="#shorts #viral #youtube"
+                        value={clipMeta[modalClipId]?.hashtags || ''}
+                        onChange={e => updateClipMeta(modalClipId, 'hashtags', e.target.value)}
+                        style={{
+                          width:'100%', padding:'6px 10px', borderRadius:6,
+                          border:'1px solid #e5e7eb', fontSize:'.76rem', outline:'none',
+                          boxSizing:'border-box',
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 {/* YouTube publish section */}
                 <div style={{ border:'1px solid #e5e7eb', borderRadius:10, overflow:'hidden' }}>
                   <div style={{ padding:'9px 13px', background:'#fafafa', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', gap:8 }}>
@@ -1285,18 +1328,34 @@ export default function Dashboard() {
                       {ytConnected ? '● Connected' : 'Not connected'}
                     </span>
                   </div>
-                  {/* Publish/Connect disabled — YouTube API audit pending.
-                      Original conditional (published/connected/connect)
-                      logic + handlePublishYT/handleConnectYouTube calls kept
-                      as stubs above for a quick revert later. */}
-                  <div style={{ padding:'11px 13px', display:'flex', alignItems:'center', gap:8 }}>
-                    <span style={{ fontSize:'.74rem', color:'#6b7280', flex:1 }}>
-                      YouTube publishing is coming soon
-                    </span>
-                    <span style={{
-                      padding:'7px 16px', borderRadius:7, fontSize:'.75rem', fontWeight:700,
-                      background:'#f3f4f6', color:'#9ca3af', border:'1px dashed #d1d5db',
-                    }}>Coming Soon</span>
+                  <div style={{ padding:'11px 13px' }}>
+                    {publishedYT.has(modalClipId) ? (
+                      <div style={{ fontSize:'.74rem', color:'#16a34a', fontWeight:600 }}>✓ Published to YouTube Shorts</div>
+                    ) : ytConnected ? (
+                      <button
+                        onClick={e => handlePublishYT(e, modalClip)}
+                        disabled={publishingYT.has(modalClipId)}
+                        style={{
+                          width:'100%', padding:'7px 16px', borderRadius:7, fontSize:'.75rem', fontWeight:700,
+                          background: publishingYT.has(modalClipId) ? '#f3f4f6' : '#fff5f5',
+                          color: publishingYT.has(modalClipId) ? '#9ca3af' : '#dc2626',
+                          border: `1px solid ${publishingYT.has(modalClipId) ? '#d1d5db' : '#fca5a5'}`,
+                          cursor: publishingYT.has(modalClipId) ? 'default' : 'pointer',
+                        }}
+                      >
+                        {publishingYT.has(modalClipId) ? 'Uploading…' : 'Publish to YouTube Shorts'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleConnectYouTube}
+                        style={{
+                          width:'100%', padding:'7px 16px', borderRadius:7, fontSize:'.75rem', fontWeight:700,
+                          background:'#fff5f5', color:'#dc2626', border:'1px solid #fca5a5', cursor:'pointer',
+                        }}
+                      >
+                        Connect YouTube
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1313,19 +1372,34 @@ export default function Dashboard() {
                       {ttConnected ? '● Connected' : 'Not connected'}
                     </span>
                   </div>
-                  {/* Publish/Connect disabled — TikTok Content Posting API
-                      audit pending. Original conditional (published/
-                      connected/connect) logic + handlePublishTT/
-                      handleConnectTikTok calls kept as stubs above for a
-                      quick revert later. */}
-                  <div style={{ padding:'11px 13px', display:'flex', alignItems:'center', gap:8 }}>
-                    <span style={{ fontSize:'.74rem', color:'#6b7280', flex:1 }}>
-                      TikTok publishing is coming soon
-                    </span>
-                    <span style={{
-                      padding:'7px 16px', borderRadius:7, fontSize:'.75rem', fontWeight:700,
-                      background:'#f3f4f6', color:'#9ca3af', border:'1px dashed #d1d5db',
-                    }}>Coming Soon</span>
+                  <div style={{ padding:'11px 13px' }}>
+                    {publishedTT.has(modalClipId) ? (
+                      <div style={{ fontSize:'.74rem', color:'#7c3aed', fontWeight:600 }}>✓ Queued on TikTok</div>
+                    ) : ttConnected ? (
+                      <button
+                        onClick={e => handlePublishTT(e, modalClip)}
+                        disabled={publishingTT.has(modalClipId)}
+                        style={{
+                          width:'100%', padding:'7px 16px', borderRadius:7, fontSize:'.75rem', fontWeight:700,
+                          background: publishingTT.has(modalClipId) ? '#f3f4f6' : '#faf5ff',
+                          color: publishingTT.has(modalClipId) ? '#9ca3af' : '#7c3aed',
+                          border: `1px solid ${publishingTT.has(modalClipId) ? '#d1d5db' : '#e9d5ff'}`,
+                          cursor: publishingTT.has(modalClipId) ? 'default' : 'pointer',
+                        }}
+                      >
+                        {publishingTT.has(modalClipId) ? 'Uploading…' : 'Publish to TikTok'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleConnectTikTok}
+                        style={{
+                          width:'100%', padding:'7px 16px', borderRadius:7, fontSize:'.75rem', fontWeight:700,
+                          background:'#faf5ff', color:'#7c3aed', border:'1px solid #e9d5ff', cursor:'pointer',
+                        }}
+                      >
+                        Connect TikTok
+                      </button>
+                    )}
                   </div>
                 </div>
 

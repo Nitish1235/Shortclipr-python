@@ -56,6 +56,26 @@ export function AuthProvider({ children }) {
     }
   }
 
+  const loginWithEmailPassword = async (email, password) => {
+    try {
+      setLoading(true)
+      const res = await fetch(`${API_BASE}/auth/email-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      const data = await res.json()
+      if (!res.ok) return { ok: false, error: data.detail || 'Sign in failed.' }
+      localStorage.setItem('sc_token', data.access_token)
+      setUser(data.user)
+      return { ok: true }
+    } catch {
+      return { ok: false, error: 'Network error — please try again.' }
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const logout = () => {
     localStorage.removeItem('sc_token')
     setUser(null)
@@ -72,7 +92,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, loginWithGoogleToken, logout, fetchUser }}>
+    <AuthContext.Provider value={{ user, loading, loginWithGoogleToken, loginWithEmailPassword, logout, fetchUser }}>
       {children}
     </AuthContext.Provider>
   )

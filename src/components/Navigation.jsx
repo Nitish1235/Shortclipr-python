@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { GoogleLogin } from '@react-oauth/google'
 import Logo from './Logo'
 
 export default function Navigation() {
   const [scrolled, setScrolled]     = useState(false)
   const [menuOpen, setMenuOpen]     = useState(false)
-  const { user, loginWithGoogleToken, logout } = useAuth()
+  const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const isApp = ['/youtube-shorts/dashboard','/youtube-shorts/editor','/youtube-shorts/lab'].some(p => location.pathname.startsWith(p))
@@ -134,16 +133,15 @@ export default function Navigation() {
             </>
           ) : (
             <>
-              <div style={{ border:'1.5px solid #e5e5e5', borderRadius:'8px', overflow:'hidden', display:'inline-flex' }}>
-                <GoogleLogin
-                  onSuccess={async cr => {
-                    const ok = await loginWithGoogleToken(cr.credential)
-                    if (ok) window.location.href = '/youtube-shorts/dashboard'
-                  }}
-                  onError={() => {}}
-                  theme="outline" shape="rectangular" text="signin_with" size="medium"
-                />
-              </div>
+              <Link to="/youtube-shorts/login" style={{
+                color:'#333', fontSize:'0.82rem', fontWeight:700,
+                padding:'8px 14px', borderRadius:'8px', border:'1.5px solid #e5e5e5',
+                background:'#fff', textDecoration:'none',
+                transition:'border-color 0.15s, color 0.15s',
+              }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor='#cf1322'; e.currentTarget.style.color='#cf1322' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor='#e5e5e5'; e.currentTarget.style.color='#333' }}
+              >Sign in</Link>
               <a href="/youtube-shorts"
                 onClick={(e) => handleNavClick(e, '/youtube-shorts')}
                 style={{
@@ -152,6 +150,7 @@ export default function Navigation() {
                   fontSize:'0.82rem', fontWeight:700,
                   border:'2px solid #111', boxShadow:'2px 2px 0 #111',
                   transition:'transform 0.1s, box-shadow 0.1s', display:'inline-block',
+                  textDecoration:'none',
                 }}
                 onMouseEnter={e => { e.currentTarget.style.transform='translate(-1px,-1px)'; e.currentTarget.style.boxShadow='3px 3px 0 #111' }}
                 onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='2px 2px 0 #111' }}
@@ -195,17 +194,14 @@ export default function Navigation() {
                 padding: '12px 14px', borderRadius: 8,
               }}>Sign out</button>
             ) : (
-              <div style={{ padding: '8px 14px 4px' }}>
-                <GoogleLogin
-                  onSuccess={async cr => {
-                    const ok = await loginWithGoogleToken(cr.credential)
-                    setMenuOpen(false)
-                    if (ok) window.location.href = '/youtube-shorts/dashboard'
-                  }}
-                  onError={() => {}}
-                  theme="outline" shape="rectangular" text="signin_with" size="medium"
-                />
-              </div>
+              <Link
+                to="/youtube-shorts/login"
+                onClick={() => setMenuOpen(false)}
+                style={{
+                  display: 'block', color: '#cf1322', fontSize: '.9rem', fontWeight: 700,
+                  padding: '12px 14px', borderRadius: 8, textDecoration: 'none',
+                }}
+              >Sign in →</Link>
             )}
           </div>
         )}

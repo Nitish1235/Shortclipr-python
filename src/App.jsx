@@ -29,6 +29,7 @@ import Contact        from './pages/Contact'
 import About          from './pages/About'
 import PaymentSuccess from './pages/PaymentSuccess'
 import Dashboard      from './pages/Dashboard'
+import Login          from './pages/Login'
 import ClipsHistory   from './pages/ClipsHistory'
 import Billing        from './pages/Billing'
 import BrainrotBilling from './pages/brainrot/BrainrotBilling'
@@ -196,6 +197,7 @@ export default function App() {
 
             {/* ── YouTube Shorts product ────────────────────────── */}
             <Route path="/youtube-shorts"                      element={<LandingPage />} />
+            <Route path="/youtube-shorts/login"                element={<Login />} />
 
             {/* SEO programmatic landing pages */}
             <Route path="/youtube-shorts/tools"                 element={<ToolsIndex />} />
