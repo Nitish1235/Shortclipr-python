@@ -21,9 +21,9 @@ DodoPayments.Initialize({
 // what a checkout actually grants today, not the stale sticker number.
 const TIERS = [
   { clips: 75,   price: 10,  label: '75 Shorts',   dodoId: 'starter_100', videoHours: 5,  maxVideoHours: 2, family: 'Starter' },
-  { clips: 200,  price: 25,  label: '200 Shorts',  dodoId: 'starter_250', videoHours: 10, maxVideoHours: 2, family: 'Starter' },
+  { clips: 200,  price: 25,  label: '200 Shorts',  dodoId: 'starter_250', videoHours: 10, maxVideoHours: 2, family: 'Starter Plus' },
   { clips: 400,  price: 45,  label: '400 Shorts',  dodoId: 'pro_500',     videoHours: 18, maxVideoHours: 3, family: 'Pro' },
-  { clips: 800,  price: 79,  label: '800 Shorts',  dodoId: 'pro_1000',    videoHours: 35, maxVideoHours: 3, family: 'Pro' },
+  { clips: 800,  price: 79,  label: '800 Shorts',  dodoId: 'pro_1000',    videoHours: 35, maxVideoHours: 3, family: 'Pro Plus' },
   { clips: 1500, price: 145, label: '1500 Shorts', dodoId: 'pro_2000',    videoHours: 60, maxVideoHours: 3, family: 'Max' },
 ]
 

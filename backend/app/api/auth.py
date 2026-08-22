@@ -14,8 +14,9 @@ import logging
 import traceback
 from datetime import datetime, timezone
 
+import bcrypt as _bcrypt_lib
+
 from fastapi import APIRouter, HTTPException
-from passlib.context import CryptContext
 from pydantic import BaseModel
 
 from app.api.deps import (
@@ -26,7 +27,11 @@ from app.api.deps import (
 from app.core.plan_limits import get_credits_limit, get_video_minutes_limit
 from app.db import supabase as db
 
-_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def _hash_pw(password: str) -> str:
+    return _bcrypt_lib.hashpw(password.encode(), _bcrypt_lib.gensalt()).decode()
+
+def _verify_pw(password: str, hashed: str) -> bool:
+    return _bcrypt_lib.checkpw(password.encode(), hashed.encode())
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -157,7 +162,7 @@ async def email_login(body: EmailLoginRequest):
             detail="No password set for this account. Sign in with Google, then go to Settings → Set Password.",
         )
 
-    if not _pwd.verify(body.password, stored_hash):
+    if not _verify_pw(body.password, stored_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
     token = create_access_token({
@@ -179,7 +184,7 @@ async def set_password(body: SetPasswordRequest, current_user: CurrentUser):
     if not pw or len(pw) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
 
-    hashed = _pwd.hash(pw)
+    hashed = _hash_pw(pw)
     await db._execute(
         "UPDATE users SET password_hash=$1, updated_at=NOW() WHERE id=$2",
         hashed,

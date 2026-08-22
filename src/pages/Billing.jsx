@@ -13,9 +13,9 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 // user viewing /billing sees the same prices/plans they'd see on the landing page.
 const PLANS = [
   { id: 'starter_100', name: 'Starter',  price: 10,  clips: 75,   videoHours: 5,  maxVideoHours: 2, badge: null,           perks: ['75 shorts/mo', '5 hrs of video/mo (2 hrs max per video)', 'HD 1080p vertical', 'All caption styles'] },
-  { id: 'starter_250', name: 'Starter',  price: 25,  clips: 200,  videoHours: 10, maxVideoHours: 2, badge: null,           perks: ['200 shorts/mo', '10 hrs of video/mo (2 hrs max per video)', 'HD 1080p vertical', 'All caption styles', 'Priority queue'] },
+  { id: 'starter_250', name: 'Starter Plus', price: 25,  clips: 200,  videoHours: 10, maxVideoHours: 2, badge: null,           perks: ['200 shorts/mo', '10 hrs of video/mo (2 hrs max per video)', 'HD 1080p vertical', 'All caption styles', 'Priority queue'] },
   { id: 'pro_500',     name: 'Pro',      price: 45,  clips: 400,  videoHours: 18, maxVideoHours: 3, badge: 'Most Popular', perks: ['400 shorts/mo', '18 hrs of video/mo (3 hrs max per video)', 'Everything in Starter', 'Faster processing queue', 'Batch download'] },
-  { id: 'pro_1000',    name: 'Pro',      price: 79,  clips: 800,  videoHours: 35, maxVideoHours: 3, badge: null,           perks: ['800 shorts/mo', '35 hrs of video/mo (3 hrs max per video)', 'Everything in Pro', 'Faster processing queue', 'Batch download'] },
+  { id: 'pro_1000',    name: 'Pro Plus',  price: 79,  clips: 800,  videoHours: 35, maxVideoHours: 3, badge: null,           perks: ['800 shorts/mo', '35 hrs of video/mo (3 hrs max per video)', 'Everything in Pro', 'Faster processing queue', 'Batch download'] },
   { id: 'pro_2000',    name: 'Max',      price: 145, clips: 1500, videoHours: 60, maxVideoHours: 3, badge: null,           perks: ['1500 shorts/mo', '60 hrs of video/mo (3 hrs max per video)', 'Everything in Pro', 'Fastest priority queue', 'Dedicated support'] },
 ]
 
