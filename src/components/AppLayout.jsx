@@ -190,10 +190,6 @@ export default function AppLayout({ children }) {
       .catch(() => {})
   }, [])
 
-  // Connect flows disabled — YouTube API audit / TikTok Content Posting
-  // API review both pending official approval. Originals kept below,
-  // commented out, for a quick revert once approved.
-  /*
   const connectYT = async () => {
     try {
       const token = localStorage.getItem('sc_token')
@@ -209,9 +205,6 @@ export default function AppLayout({ children }) {
       if (r.ok) { const d = await r.json(); window.location.href = d.url }
     } catch {}
   }
-  */
-  const connectYT = () => {}
-  const connectTT = () => {}
 
   const disconnect = async (platform) => {
     try {
@@ -306,7 +299,6 @@ export default function AppLayout({ children }) {
               connected={ytConn}
               onConnect={connectYT}
               onDisconnect={() => disconnect('youtube')}
-              comingSoon
             />
             <SocialRow
               icon={<TTLogo size={13} />}
@@ -314,7 +306,6 @@ export default function AppLayout({ children }) {
               connected={ttConn}
               onConnect={connectTT}
               onDisconnect={() => disconnect('tiktok')}
-              comingSoon
             />
           </div>
 
