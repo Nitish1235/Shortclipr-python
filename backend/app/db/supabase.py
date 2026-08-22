@@ -306,6 +306,14 @@ async def update_brainrot_job_progress(
     logger.info(f"Brainrot job {job_id} → {progress}% [{current_step}]")
 
 
+async def touch_brainrot_job(job_id: str) -> None:
+    """Bumps updated_at only — no status/progress change. Called periodically
+    while a long-running FFmpeg-stage step (asset downloads, the ffmpeg
+    subprocess) is genuinely still alive, so the watcher's stuck-job
+    reconciler doesn't mistake a slow-but-working job for a dead one."""
+    await _execute("UPDATE brainrot_jobs SET updated_at=$1 WHERE job_id=$2", _now(), job_id)
+
+
 async def set_brainrot_scene_plan(job_id: str, scene_plan: list[dict]) -> None:
     await _execute(
         "UPDATE brainrot_jobs SET scene_plan=$1::jsonb, updated_at=$2 WHERE job_id=$3",

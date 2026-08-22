@@ -860,8 +860,10 @@ async def reconcile_stuck(pool: asyncpg.Pool) -> int:
         FROM brainrot_jobs
         WHERE (status IN ('created', 'generating_script', 'synthesizing_voice')
                AND updated_at < NOW() - ($1 || ' minutes')::interval)
-           OR (status IN ('api_done', 'rendering')
+           OR (status = 'api_done'
                AND updated_at < NOW() - ($1::int * 3 || ' minutes')::interval)
+           OR (status = 'rendering'
+               AND updated_at < NOW() - ($1 || ' minutes')::interval)
     """, str(minutes))
 
     for job in stuck_brainrot:

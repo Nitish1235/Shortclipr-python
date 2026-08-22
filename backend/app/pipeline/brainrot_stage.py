@@ -24,7 +24,7 @@ import logging
 import tempfile
 import time
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from app.db import supabase as db
@@ -36,6 +36,22 @@ logger = logging.getLogger(__name__)
 
 BRAINROT_STAGE_TIMEOUT_SECONDS = 1500  # 25 minutes, same ceiling as ffmpeg_stage.py
 TTS_CONCURRENCY = 5
+HEARTBEAT_INTERVAL_SECONDS = 20
+
+
+async def _heartbeat(job_id: str) -> None:
+    """Keeps updated_at fresh while the FFmpeg stage is running. A hard
+    process death (e.g. an OOM kill during the ffmpeg subprocess) bypasses
+    every try/except in this module — SIGKILL, not a raisable exception —
+    so without this the job's updated_at freezes at whatever it was when
+    the crash happened, and the watcher's stuck-job reconciler has no way
+    to tell "still working" from "already dead" except by staleness."""
+    while True:
+        await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
+        try:
+            await db.touch_brainrot_job(job_id)
+        except Exception:
+            logger.exception(f"[{job_id}] heartbeat update failed")
 
 
 @asynccontextmanager
@@ -170,6 +186,16 @@ async def _execute_brainrot_api_stage(job_id: str) -> None:
 
 
 async def _execute_brainrot_ffmpeg_stage(job_id: str) -> None:
+    heartbeat_task = asyncio.create_task(_heartbeat(job_id))
+    try:
+        await _run_brainrot_ffmpeg_stage(job_id)
+    finally:
+        heartbeat_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await heartbeat_task
+
+
+async def _run_brainrot_ffmpeg_stage(job_id: str) -> None:
     row = await db.get_brainrot_job(job_id)
     if not row:
         raise RuntimeError(f"Brainrot job {job_id} not found")
