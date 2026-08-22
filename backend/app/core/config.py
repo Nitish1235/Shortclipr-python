@@ -125,8 +125,13 @@ class Settings(BaseSettings):
 
     # Brainrot jobs don't touch YouTube/proxies, so the IP-pinning constraint
     # above doesn't apply — cap is purely about not overloading the shared
-    # ffmpeg-worker pool with one user's concurrent renders.
-    MAX_CONCURRENT_BRAINROT_JOBS_PER_USER: int = 2
+    # ffmpeg-worker pool with one user's concurrent renders. One at a time —
+    # each job already burns a GPT call + TTS for every line + an ffmpeg pass.
+    MAX_CONCURRENT_BRAINROT_JOBS_PER_USER: int = 1
+
+    # Hourly ceiling on job creation regardless of concurrency — stops a user
+    # from queuing up a burst of jobs back-to-back as each prior one finishes.
+    MAX_BRAINROT_JOBS_PER_HOUR: int = 5
 
     # ── Worker dispatch (optional second Cloud Run services) ───
     # Two operating modes:

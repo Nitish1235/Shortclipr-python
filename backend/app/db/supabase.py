@@ -444,6 +444,18 @@ async def get_audio_asset(asset_id: str) -> dict | None:
     )
 
 
+async def get_audio_asset_by_category(asset_type: str, category: str) -> dict | None:
+    """Motion-linked entry/exit stinger lookup — admin uploads one 'sfx'
+    asset per motion id (category='slide', 'bounce', etc., see
+    animation_catalog.MOTIONS) via the existing Music & SFX admin form, no
+    new admin UI needed. Case-insensitive since category is free-typed."""
+    return await _fetchrow(
+        "SELECT * FROM brainrot_audio_assets WHERE asset_type=$1 AND lower(category)=lower($2) "
+        "ORDER BY created_at DESC LIMIT 1",
+        asset_type, category,
+    )
+
+
 async def list_audio_assets(asset_type: str | None = None) -> list[dict]:
     if asset_type:
         return await _fetch(
@@ -840,6 +852,18 @@ async def count_active_brainrot_jobs(user_id: str) -> int:
            WHERE user_id=$1
              AND status NOT IN ('complete', 'failed')""",
         user_id,
+    )
+    return int(row["cnt"]) if row else 0
+
+
+async def count_recent_brainrot_jobs(user_id: str, since: datetime) -> int:
+    """Gates MAX_BRAINROT_JOBS_PER_HOUR in app/api/brainrot.py — every job
+    created since `since`, regardless of outcome (a failed/refunded job still
+    burned a GPT call + TTS + an ffmpeg pass, so it counts against the hourly
+    ceiling same as a successful one)."""
+    row = await _fetchrow(
+        "SELECT COUNT(*) AS cnt FROM brainrot_jobs WHERE user_id=$1 AND created_at >= $2",
+        user_id, since,
     )
     return int(row["cnt"]) if row else 0
 

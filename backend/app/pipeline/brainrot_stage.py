@@ -222,6 +222,8 @@ async def _run_brainrot_ffmpeg_stage(job_id: str) -> None:
         # audio runs longer than estimated.
         clip_duration = (timed_lines[-1].end if timed_lines else 0.0) or payload.get("duration_seconds", 30)
 
+        motion_mode = payload.get("motion_mode", "turn_based")
+
         async with _step(job_id, "fetch_assets"):
             await db.update_brainrot_job_progress(job_id, 50, "Downloading assets...", status="rendering")
             characters = await _fetch_characters(payload, tmp_dir)
@@ -229,6 +231,11 @@ async def _run_brainrot_ffmpeg_stage(job_id: str) -> None:
             music_path = await _fetch_optional_asset(payload.get("music_url"), tmp_dir, "music")
             intro_sfx_path = await _fetch_optional_asset(payload.get("intro_sfx_url"), tmp_dir, "intro_sfx")
             outro_sfx_path = await _fetch_optional_asset(payload.get("outro_sfx_url"), tmp_dir, "outro_sfx")
+            entry_motion, exit_motion = composite.resolve_entry_exit_motions(
+                timed_lines, characters, motion_mode, clip_duration,
+            )
+            entry_sfx_path = await _fetch_motion_sfx(entry_motion, tmp_dir, "entry_sfx")
+            exit_sfx_path = await _fetch_motion_sfx(exit_motion, tmp_dir, "exit_sfx")
 
         async with _step(job_id, "composite_render"):
             await db.update_brainrot_job_progress(job_id, 60, "Rendering clip...", status="rendering")
@@ -237,7 +244,7 @@ async def _run_brainrot_ffmpeg_stage(job_id: str) -> None:
                 gameplay_clip_path=gameplay_path,
                 lines=timed_lines,
                 characters=characters,
-                motion_mode=payload.get("motion_mode", "turn_based"),
+                motion_mode=motion_mode,
                 clip_duration=clip_duration,
                 caption_style=payload.get("caption_style", "brainrot"),
                 caption_color=payload.get("caption_color", "yellow_black"),
@@ -247,6 +254,8 @@ async def _run_brainrot_ffmpeg_stage(job_id: str) -> None:
                 music_volume=payload.get("music_volume", 0.3),
                 intro_sfx=intro_sfx_path,
                 outro_sfx=outro_sfx_path,
+                entry_sfx=entry_sfx_path,
+                exit_sfx=exit_sfx_path,
             )
 
         async with _step(job_id, "upload"):
@@ -390,3 +399,21 @@ async def _fetch_optional_asset(asset_url: str | None, tmp_dir: Path, name: str)
     local_path = tmp_dir / f"{name}.mp3"
     await download_to_file(asset_url, local_path)
     return local_path
+
+
+async def _fetch_motion_sfx(motion_id: str | None, tmp_dir: Path, name: str) -> Path | None:
+    """Entry/exit one-shot stinger, resolved from whichever character's own
+    entry/exit motion pick opens/closes the clip (see
+    composite.resolve_entry_exit_motions) — no separate picker in the
+    Studio UI. Admin uploads one 'sfx' asset per motion id (category=
+    'slide', 'bounce', etc. — see animation_catalog.MOTIONS) via the
+    existing Music & SFX admin form. None if no motion resolved (e.g. a
+    0-character narrator clip), or no asset uploaded yet for that motion —
+    the clip just renders without that stinger, same as an unset
+    intro_sfx/outro_sfx."""
+    if not motion_id:
+        return None
+    asset = await db.get_audio_asset_by_category("sfx", motion_id)
+    if not asset:
+        return None
+    return await _fetch_optional_asset(asset["gcs_path"], tmp_dir, name)

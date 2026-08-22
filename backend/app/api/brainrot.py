@@ -20,6 +20,7 @@ import asyncio
 import logging
 import tempfile
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
@@ -164,7 +165,14 @@ async def create_brainrot_job(body: CreateBrainrotJobRequest, current_user: Curr
     if active >= settings.MAX_CONCURRENT_BRAINROT_JOBS_PER_USER:
         raise HTTPException(
             status_code=429,
-            detail=f"You already have {active} brainrot clip(s) in progress. Wait for one to finish first.",
+            detail="You already have a brainrot clip generating. Wait for it to finish before starting another.",
+        )
+
+    recent = await db.count_recent_brainrot_jobs(current_user.user_id, datetime.now(timezone.utc) - timedelta(hours=1))
+    if recent >= settings.MAX_BRAINROT_JOBS_PER_HOUR:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Only {settings.MAX_BRAINROT_JOBS_PER_HOUR} brainrot clips allowed per hour. Try again in a bit.",
         )
 
     # Resolve character ids -> canon image URLs. Enforces "sides are locked at

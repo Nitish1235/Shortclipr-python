@@ -371,6 +371,7 @@ export default function BrainrotStudio() {
       if (draftKey) { try { localStorage.removeItem(draftKey) } catch { /* ignore */ } }
       showToast('Cooking your brainrot clip… 🍳', 'ok')
       pollJob(job_id)
+      setView('clips')
     } catch (e) {
       showToast(e.message || 'Failed to start', 'err')
     } finally {

@@ -390,6 +390,35 @@ def _speaking_windows(lines: list[TimedLine], side: str) -> list[tuple[float, fl
     return [(l.start, l.end) for l in lines if l.speaker == side]
 
 
+def resolve_entry_exit_motions(
+    lines: list[TimedLine], characters: list[CharacterPlacement], motion_mode: str, clip_duration: float,
+) -> tuple[str | None, str | None]:
+    """Which character appears first and which disappears last, by their own
+    entry/exit motion pick — used by brainrot_stage.py to look up the
+    one-shot "clip open"/"clip close" SFX (see get_audio_asset_by_category,
+    category=motion id) BEFORE calling render(). The sound plays once for
+    the whole clip, tied to whichever character actually opens/closes it,
+    not once per turn-based swap. (None, None) when there are no characters,
+    or none of them ever get an active window (shouldn't happen in
+    practice, but _character_overlay_filter treats a windowless character as
+    parked off-canvas the whole clip, so treat it the same way here)."""
+    if not characters:
+        return None, None
+    effective_motion_mode = "always_on" if len(characters) <= 1 else motion_mode
+    first_entry: tuple[float, str] | None = None   # (window_start, motion_id)
+    last_exit: tuple[float, str] | None = None      # (window_end, motion_id)
+    for char in characters:
+        windows = _active_windows(lines, char.side, effective_motion_mode, clip_duration)
+        if not windows:
+            continue
+        start, end = windows[0][0], windows[-1][1]
+        if first_entry is None or start < first_entry[0]:
+            first_entry = (start, char.entry)
+        if last_exit is None or end > last_exit[0]:
+            last_exit = (end, char.exit)
+    return (first_entry[1] if first_entry else None), (last_exit[1] if last_exit else None)
+
+
 def _character_overlay_filter(
     char: CharacterPlacement,
     input_label: str,
@@ -502,6 +531,8 @@ def _music_duck_expr(base_vol: float, lines: list[TimedLine]) -> str:
 
 def _audio_mix_filter(lines: list[TimedLine], music_path: Path | None, music_volume: float,
                        intro_sfx: Path | None, outro_sfx: Path | None,
+                       entry_sfx: Path | None, entry_sfx_at: float,
+                       exit_sfx: Path | None, exit_sfx_at: float,
                        input_index_map: dict[str, int]) -> tuple[str, str]:
     """Builds the audio filter_complex fragment: delays each TTS line to its
     timeline position, mixes in ducked background music and optional
@@ -540,6 +571,21 @@ def _audio_mix_filter(lines: list[TimedLine], music_path: Path | None, music_vol
         delay_ms = int(last_end * 1000)
         parts.append(f"[{idx}:a]volume=0.8,adelay={delay_ms}|{delay_ms}[a_outro]")
         mix_inputs.append("[a_outro]")
+
+    # Motion-linked one-shot stingers — plays once for the whole clip, tied
+    # to whichever character's own entry/exit motion opens/closes it (see
+    # resolve_entry_exit_motions), not once per turn-based swap.
+    if entry_sfx is not None:
+        idx = input_index_map["entry_sfx"]
+        delay_ms = max(0, int(entry_sfx_at * 1000))
+        parts.append(f"[{idx}:a]volume=0.8,adelay={delay_ms}|{delay_ms}[a_entry]")
+        mix_inputs.append("[a_entry]")
+
+    if exit_sfx is not None:
+        idx = input_index_map["exit_sfx"]
+        delay_ms = max(0, int(exit_sfx_at * 1000))
+        parts.append(f"[{idx}:a]volume=0.8,adelay={delay_ms}|{delay_ms}[a_exit]")
+        mix_inputs.append("[a_exit]")
 
     parts.append(f"{''.join(mix_inputs)}amix=inputs={len(mix_inputs)}:duration=longest:normalize=0[aout]")
     return ";".join(parts), "aout"
@@ -599,6 +645,8 @@ async def render(
     music_volume: float = 0.3,
     intro_sfx: Path | None = None,
     outro_sfx: Path | None = None,
+    entry_sfx: Path | None = None,
+    exit_sfx: Path | None = None,
 ) -> Path:
     """Composite gameplay background + character overlays + mixed audio +
     burned-in captions into one MP4. Single ffmpeg invocation."""
@@ -629,6 +677,14 @@ async def render(
         input_index_map["outro_sfx"] = next_idx
         inputs += ["-i", str(outro_sfx)]
         next_idx += 1
+    if entry_sfx is not None:
+        input_index_map["entry_sfx"] = next_idx
+        inputs += ["-i", str(entry_sfx)]
+        next_idx += 1
+    if exit_sfx is not None:
+        input_index_map["exit_sfx"] = next_idx
+        inputs += ["-i", str(exit_sfx)]
+        next_idx += 1
 
     # A single character never cycles — turn_based only makes sense when
     # there's someone to swap in. With one character, any lead-in or
@@ -638,6 +694,8 @@ async def render(
 
     filter_parts = [_base_crop_filter("0:v", "bg0")]
     bg_label = "bg0"
+    earliest_entry: float | None = None
+    latest_exit: float | None = None
     for i, char in enumerate(characters):
         idx = input_index_map[f"char_{char.side}"]
         windows = _active_windows(lines, char.side, effective_motion_mode, clip_duration)
@@ -645,9 +703,21 @@ async def render(
         out_label = f"bg{i + 1}"
         filter_parts.append(_character_overlay_filter(char, f"{idx}:v", bg_label, out_label, windows, speak_windows))
         bg_label = out_label
+        # Same "who opens/closes the clip" resolution as resolve_entry_exit_
+        # motions (which already picked entry_sfx/exit_sfx before this call
+        # based on this exact same windows logic) — here it's just the
+        # timestamp half, reusing the windows already computed above.
+        if windows:
+            if earliest_entry is None or windows[0][0] < earliest_entry:
+                earliest_entry = windows[0][0]
+            if latest_exit is None or windows[-1][1] > latest_exit:
+                latest_exit = windows[-1][1]
+    entry_sfx_at = earliest_entry if earliest_entry is not None else 0.0
+    exit_sfx_at = latest_exit if latest_exit is not None else clip_duration
 
     audio_filter, audio_label = _audio_mix_filter(
-        lines, music_path, music_volume, intro_sfx, outro_sfx, input_index_map,
+        lines, music_path, music_volume, intro_sfx, outro_sfx,
+        entry_sfx, entry_sfx_at, exit_sfx, exit_sfx_at, input_index_map,
     )
     filter_parts.append(audio_filter)
 
