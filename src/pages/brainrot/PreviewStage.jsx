@@ -255,6 +255,7 @@ export default function PreviewStage({
   return (
     <div
       ref={stageRef}
+      className="br-preview-stage"
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       style={{

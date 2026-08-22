@@ -1127,6 +1127,7 @@ function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection
         @media (max-width: 900px) {
           .br-studio-grid { grid-template-columns: 1fr !important; gap: 20px !important; }
           .br-studio-preview { position: static !important; top: auto !important; }
+          .br-preview-stage { max-width: 260px !important; margin: 0 auto !important; }
           .br-shell { flex-direction: column !important; gap: 16px !important; padding-top: 14px !important; }
           .br-sidenav { position: sticky !important; top: 96px !important; width: 100% !important;
             flex-direction: row !important; z-index: 140; }
