@@ -30,6 +30,7 @@ import About          from './pages/About'
 import PaymentSuccess from './pages/PaymentSuccess'
 import Dashboard      from './pages/Dashboard'
 import Login          from './pages/Login'
+import Settings       from './pages/Settings'
 import ClipsHistory   from './pages/ClipsHistory'
 import Billing        from './pages/Billing'
 import BrainrotBilling from './pages/brainrot/BrainrotBilling'
@@ -212,6 +213,7 @@ export default function App() {
             <Route path="/youtube-shorts/clips"                 element={<ProtectedRoute><ClipsHistory /></ProtectedRoute>} />
             <Route path="/youtube-shorts/editor/:jobId/:clipId" element={<ProtectedRoute><Editor /></ProtectedRoute>} />
             <Route path="/youtube-shorts/lab"                   element={<ProtectedRoute><Lab /></ProtectedRoute>} />
+            <Route path="/youtube-shorts/settings"              element={<ProtectedRoute><Settings /></ProtectedRoute>} />
 
             {/* ── Brainrot Clips Maker product ──────────────────── */}
             <Route path="/brainrot"          element={<BrainrotLanding />} />
