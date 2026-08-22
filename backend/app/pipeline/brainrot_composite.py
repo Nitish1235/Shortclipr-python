@@ -127,7 +127,7 @@ class CharacterPlacement:
     exit: str = "slide"    # exit motion id
 
 
-_CHAR_BASE_WIDTH_FRAC = 0.47  # a scale=1.0 character is ~47% of canvas width
+_CHAR_BASE_WIDTH_FRAC = 0.60  # a scale=1.0 character is ~60% of canvas width
 
 
 def _even(n: float) -> int:

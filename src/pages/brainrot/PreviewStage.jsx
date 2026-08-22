@@ -71,11 +71,11 @@ function parseDurationMs(s) {
 function CharacterOverlay({ c, isSpeaking, alwaysOn, isSpeakingInAlwaysOn, onPointerDown }) {
   const entryMotion = MOTION_PREVIEW[c.entry] || MOTION_PREVIEW.slide
   const exitMotion = MOTION_PREVIEW[c.exit] || MOTION_PREVIEW.slide
-  const x = c.x ?? (c.side === 'left' ? 0.25 : 0.75)
+  const x = c.x ?? (c.side === 'left' ? 0.17 : 0.83)
   const y = c.y ?? 0.78
   const nearSide = x < 0.5 ? 'left' : 'right'
   const base = `translate(-50%,-50%) rotate(${c.rotation || 0}deg)`
-  const w = `${47 * (c.scale || 1)}%`
+  const w = `${60 * (c.scale || 1)}%`
 
   const [phase, setPhase] = useState(alwaysOn ? 'active' : (isSpeaking ? 'active' : 'waiting'))
   const prevSpeakingRef = useRef(isSpeaking)

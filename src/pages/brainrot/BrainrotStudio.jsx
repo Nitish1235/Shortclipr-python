@@ -239,13 +239,13 @@ export default function BrainrotStudio() {
       const entry = motions[0]?.id || 'slide'
       return reflow([...prev, {
         ...ch, side, voiceId: '', entry, exit: entry,
-        x: side === 'left' ? 0.26 : 0.74, y: 0.76, scale: 1, rotation: 0,
+        x: side === 'left' ? 0.17 : 0.83, y: 0.76, scale: 1, rotation: 0,
       }])
     })
   }
 
   // keep sides consistent (first = left, second = right)
-  const reflow = (arr) => arr.map((p, i) => ({ ...p, side: i === 0 ? 'left' : 'right', x: p.x ?? (i === 0 ? 0.26 : 0.74) }))
+  const reflow = (arr) => arr.map((p, i) => ({ ...p, side: i === 0 ? 'left' : 'right', x: p.x ?? (i === 0 ? 0.17 : 0.83) }))
 
   const updatePicked = (id, patch) =>
     setPicked(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p))
@@ -263,7 +263,7 @@ export default function BrainrotStudio() {
     setCastCount(2)
     setPicked(resolved.map((ch, i) => ({
       ...ch, side: i === 0 ? 'left' : 'right', voiceId: '', entry, exit: entry,
-      x: i === 0 ? 0.26 : 0.74, y: 0.76, scale: 1, rotation: 0,
+      x: i === 0 ? 0.17 : 0.83, y: 0.76, scale: 1, rotation: 0,
     })))
     showToast(`Loaded ${cast.label || 'signature cast'}`, 'ok')
   }
