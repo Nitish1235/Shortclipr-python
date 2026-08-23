@@ -97,6 +97,29 @@ export default function BrainrotGuideArticle() {
         <article className="seo-section seo-prose">
           <p className="seo-prose-lead">{data.intro}</p>
 
+          {data.formula && (
+            <div className="seo-formula" role="img" aria-label={data.formula.alt || 'The clip formula, illustrated'}>
+              {data.formula.items.map((it, i) => (
+                <div key={i} style={{ display: 'contents' }}>
+                  <div className="seo-formula-item">
+                    <div className="seo-formula-thumb">
+                      {it.type === 'char'
+                        ? <img src={`/brainrot-characters/${it.id}.webp`} alt={it.label} loading="lazy" />
+                        : <span aria-hidden="true">{it.icon}</span>}
+                    </div>
+                    <span className="seo-formula-label">{it.label}</span>
+                  </div>
+                  {i < data.formula.items.length - 1 && <span className="seo-formula-op" aria-hidden="true">+</span>}
+                </div>
+              ))}
+              <span className="seo-formula-op" aria-hidden="true">=</span>
+              <div className="seo-formula-result">
+                <div className="seo-formula-thumb"><span aria-hidden="true">{data.formula.result.icon}</span></div>
+                <span className="seo-formula-label">{data.formula.result.label}</span>
+              </div>
+            </div>
+          )}
+
           {data.sections.map(sec => (
             <div key={sec.h2}>
               <h2>{sec.h2}</h2>

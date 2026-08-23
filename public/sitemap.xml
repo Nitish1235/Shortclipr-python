@@ -146,6 +146,18 @@
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
+  <url>
+    <loc>https://shortclipr.com/brainrot/guides/best-brainrot-character-combos</loc>
+    <lastmod>2026-08-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://shortclipr.com/brainrot/guides/brainrot-clip-ideas</loc>
+    <lastmod>2026-08-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
 
   <!-- ── Static marketing pages ─────────────────────────────────────── -->
   <url>

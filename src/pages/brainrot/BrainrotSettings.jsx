@@ -50,6 +50,7 @@ export default function BrainrotSettings() {
   }
 
   return (
+    <>
     <div style={{ minHeight: '100vh', background: '#faf5ff', fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif' }}>
       <BrainrotNav />
 
@@ -190,6 +191,7 @@ export default function BrainrotSettings() {
         .br-account-grid { grid-template-columns: 1fr !important; }
       }
     `}</style>
+    </>
   )
 }
 
