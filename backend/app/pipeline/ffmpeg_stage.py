@@ -518,11 +518,13 @@ async def _dash_download_with_refresh(
     last = (stream_url, audio_url, user_agent, ps_proxy_0)
 
     # ── Attempt 1: cached URLs + Proxy-Seller (pool IP #0) ──
-    # Skip when the URL is IP-bound: the cached URL was resolved via proxy-cheap
-    # (bound to that IP), so Proxy-Seller's different exit IP gets a guaranteed
-    # 403 — no point spending 5s to confirm it.
+    # Skip when the URL is IP-bound (YouTube now binds all CDN URLs to the
+    # exit IP that resolved them). The cached URL was resolved via proxy-cheap
+    # in the API stage — its exit IP will never match Proxy-Seller, so this
+    # attempt would 403 unconditionally. Detect and skip it to go straight
+    # to attempt 2 (re-resolve + download via the same Proxy-Seller IP).
     if url_is_ip_bound(stream_url):
-        logger.info(f"[{job_id}] Cached URL is IP-bound — skipping attempt 1 (would 403)")
+        logger.info(f"[{job_id}] Cached URL is IP-bound — skipping attempt 1, going to re-resolve")
     else:
         try:
             return await download_all_clips_parallel(
