@@ -137,15 +137,33 @@ def _make_yt_flow():
 
 
 @router.get("/auth/youtube")
-async def youtube_auth_init(current_user: CurrentUser):
+async def youtube_auth_init(current_user: CurrentUser, product: str = "youtube-shorts"):
     """Return Google OAuth URL for YouTube Upload consent."""
     flow = _make_yt_flow()
+    state = f"{current_user.user_id}|{product}"
     auth_url, _ = flow.authorization_url(
         access_type="offline",
         prompt="consent",
-        state=current_user.user_id,
+        state=state,
     )
     return {"url": auth_url}
+
+
+def _parse_state(state: str) -> tuple[str, str]:
+    """Parse state into (user_id, product). product defaults to 'youtube-shorts'."""
+    if "|" in state:
+        user_id, product = state.split("|", 1)
+        return user_id.strip(), product.strip()
+    return state.strip(), "youtube-shorts"
+
+
+def _studio_url(product: str, status: str, reason: str = "") -> str:
+    """Return the frontend redirect URL for the given product and status."""
+    base = "/brainrot/studio" if product == "brainrot" else "/youtube-shorts/dashboard"
+    url = f"{settings.FRONTEND_URL}{base}?status={status}"
+    if reason:
+        url += f"&reason={reason}"
+    return url
 
 
 @router.get("/auth/youtube/callback")
@@ -154,7 +172,7 @@ async def youtube_auth_callback(code: str, state: str):
     Google redirects here after consent.
     Exchanges code for tokens and stores the refresh token.
     """
-    user_id = state
+    user_id, product = _parse_state(state)
 
     def _fetch_token_sync() -> dict:
         import os
@@ -175,15 +193,13 @@ async def youtube_auth_callback(code: str, state: str):
         token_data = await loop.run_in_executor(None, _fetch_token_sync)
     except Exception as exc:
         logger.error(f"YouTube OAuth token exchange failed: {type(exc).__name__}: {exc}")
-        return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/youtube-shorts/dashboard?status=youtube_error&reason=token_exchange_failed"
-        )
+        return RedirectResponse(url=_studio_url(product, "youtube_error", "token_exchange_failed"))
 
     tokens = await _get_social_tokens(user_id)
     tokens["youtube"] = token_data
     await _save_social_tokens(user_id, tokens)
 
-    return RedirectResponse(url=f"{settings.FRONTEND_URL}/youtube-shorts/dashboard?status=youtube_connected")
+    return RedirectResponse(url=_studio_url(product, "youtube_connected"))
 
 
 @router.post("/publish/youtube")
@@ -265,7 +281,7 @@ async def _upload_one_yt(item: PublishItem, yt_tokens: dict) -> dict:
 # ══════════════════════════════════════════════════════════════════
 
 @router.get("/auth/tiktok")
-async def tiktok_auth_init(current_user: CurrentUser):
+async def tiktok_auth_init(current_user: CurrentUser, product: str = "youtube-shorts"):
     """
     Returns TikTok OAuth v2 authorization URL.
 
@@ -282,8 +298,7 @@ async def tiktok_auth_init(current_user: CurrentUser):
             detail="TikTok integration is not configured yet. Add TIKTOK_CLIENT_KEY to .env",
         )
 
-    # CSRF state: user_id + random nonce (nonce discarded — user_id carried in state)
-    state = f"{current_user.user_id}"
+    state = f"{current_user.user_id}|{product}"
 
     params = (
         f"?client_key={settings.TIKTOK_CLIENT_KEY.strip()}"
@@ -301,13 +316,11 @@ async def tiktok_auth_callback(code: str, state: str, error: str = None):
     TikTok redirects here after user grants consent.
     Exchanges authorization code for access + refresh tokens, stores them.
     """
-    if error:
-        logger.warning(f"TikTok OAuth error from user {state}: {error}")
-        return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/youtube-shorts/dashboard?status=tiktok_error&reason={error}"
-        )
+    user_id, product = _parse_state(state)
 
-    user_id = state
+    if error:
+        logger.warning(f"TikTok OAuth error from user {user_id}: {error}")
+        return RedirectResponse(url=_studio_url(product, "tiktok_error", error))
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -334,9 +347,7 @@ async def tiktok_auth_callback(code: str, state: str, error: str = None):
         err = data.get("error", {})
         err_msg = err.get("message", data.get("message", "unknown")) if isinstance(err, dict) else str(err)
         logger.error(f"TikTok token error for user {user_id}: {err_msg} — raw: {data}")
-        return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/youtube-shorts/dashboard?status=tiktok_error&reason={err_msg}"
-        )
+        return RedirectResponse(url=_studio_url(product, "tiktok_error", err_msg))
 
     tiktok_token = {
         "access_token":       td["access_token"],
@@ -353,7 +364,7 @@ async def tiktok_auth_callback(code: str, state: str, error: str = None):
     await _save_social_tokens(user_id, tokens)
 
     logger.info(f"TikTok connected for user {user_id} (open_id={tiktok_token['open_id']})")
-    return RedirectResponse(url=f"{settings.FRONTEND_URL}/youtube-shorts/dashboard?status=tiktok_connected")
+    return RedirectResponse(url=_studio_url(product, "tiktok_connected"))
 
 
 async def _tiktok_refresh_token(user_id: str, tt_tokens: dict) -> dict:

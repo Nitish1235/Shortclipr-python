@@ -5,7 +5,7 @@
 // right = sticky 9:16 preview + Generate, tabs for create/clips.
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { brainrotApi } from './brainrotApi'
 import { T, card, pill, btn, pressHandlers, FONT } from './brainrotTheme'
@@ -36,9 +36,12 @@ const STAGES = [
 ]
 const STAGE_BY_ID = Object.fromEntries(STAGES.map(s => [s.id, s]))
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+
 export default function BrainrotStudio() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   // ── Reference data ──────────────────────────────────────────────
   const [roster, setRoster]     = useState([])
@@ -83,6 +86,14 @@ export default function BrainrotStudio() {
   const [musicVolume, setMusicVolume] = useState(0.3)
   const [introSfxId, setIntroSfxId] = useState('')
   const [outroSfxId, setOutroSfxId] = useState('')
+
+  // ── Social connectivity ──────────────────────────────────────────
+  const [ytConnected, setYtConnected] = useState(false)
+  const [ttConnected, setTtConnected] = useState(false)
+  const [publishedYT,  setPublishedYT]  = useState(new Set())
+  const [publishingYT, setPublishingYT] = useState(new Set())
+  const [publishedTT,  setPublishedTT]  = useState(new Set())
+  const [publishingTT, setPublishingTT] = useState(new Set())
 
   // ── Job state ───────────────────────────────────────────────────
   const [submitting, setSubmitting] = useState(false)
@@ -194,6 +205,114 @@ export default function BrainrotStudio() {
     return () => clearTimeout(saveTimerRef.current)
   }, [script, captionStyle, captionColor, captionY, duration, provider, category, background, picked, draftKey,
       motionMode, musicId, musicVolume, introSfxId, outroSfxId])
+
+  // ── Social connect: detect callback URL params + verify server state ──
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const statusParam = params.get('status')
+    if (statusParam === 'youtube_connected') {
+      localStorage.setItem('yt_connected', 'true'); setYtConnected(true)
+      showToast('YouTube connected!', 'ok')
+      window.history.replaceState({}, '', '/brainrot/studio')
+    } else if (statusParam === 'tiktok_connected') {
+      localStorage.setItem('tt_connected', 'true'); setTtConnected(true)
+      showToast('TikTok connected!', 'ok')
+      window.history.replaceState({}, '', '/brainrot/studio')
+    } else if (statusParam === 'youtube_error' || statusParam === 'tiktok_error') {
+      const reason = params.get('reason') || 'unknown'
+      showToast(`Connect failed: ${reason}`, 'err')
+      window.history.replaceState({}, '', '/brainrot/studio')
+    } else {
+      setYtConnected(localStorage.getItem('yt_connected') === 'true')
+      setTtConnected(localStorage.getItem('tt_connected') === 'true')
+    }
+    const token = localStorage.getItem('sc_token')
+    if (token) {
+      fetch(`${API_BASE}/social/status`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (!d) return
+          setYtConnected(d.youtube); if (!d.youtube) localStorage.removeItem('yt_connected')
+          setTtConnected(d.tiktok);  if (!d.tiktok)  localStorage.removeItem('tt_connected')
+        }).catch(() => {})
+    }
+  }, []) // eslint-disable-line
+
+  const connectYT = async () => {
+    try {
+      const token = localStorage.getItem('sc_token')
+      const r = await fetch(`${API_BASE}/social/auth/youtube?product=brainrot`, { headers: { Authorization: `Bearer ${token}` } })
+      if (r.ok) { const d = await r.json(); window.location.href = d.url }
+      else showToast('Could not start YouTube connect', 'err')
+    } catch { showToast('Network error', 'err') }
+  }
+
+  const connectTT = async () => {
+    try {
+      const token = localStorage.getItem('sc_token')
+      const r = await fetch(`${API_BASE}/social/auth/tiktok?product=brainrot`, { headers: { Authorization: `Bearer ${token}` } })
+      if (r.ok) { const d = await r.json(); window.location.href = d.url }
+      else { const d = await r.json(); showToast(d.detail || 'Could not start TikTok connect', 'err') }
+    } catch { showToast('Network error', 'err') }
+  }
+
+  const disconnectSocial = async (platform) => {
+    try {
+      const token = localStorage.getItem('sc_token')
+      await fetch(`${API_BASE}/social/disconnect/${platform}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+      if (platform === 'youtube') { setYtConnected(false); localStorage.removeItem('yt_connected') }
+      else { setTtConnected(false); localStorage.removeItem('tt_connected') }
+    } catch { showToast('Disconnect failed', 'err') }
+  }
+
+  const publishYT = async (job) => {
+    if (!ytConnected) { connectYT(); return }
+    const jobId = job.job_id
+    setPublishingYT(prev => new Set([...prev, jobId]))
+    try {
+      const token = localStorage.getItem('sc_token')
+      const title = (job.script_input || 'Brainrot Clip').slice(0, 100)
+      const res = await fetch(`${API_BASE}/social/publish/youtube`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ clips: [{ clip_id: jobId, video_url: job.output_url, title, description: '', tags: [] }] }),
+      })
+      const data = await res.json()
+      if (res.ok && data.results?.[0]?.status === 'success') {
+        setPublishedYT(prev => new Set([...prev, jobId])); showToast('Published to YouTube Shorts! 🎉', 'ok')
+      } else if (res.status === 400 && data.detail?.includes('not connected')) {
+        localStorage.removeItem('yt_connected'); setYtConnected(false); connectYT()
+      } else {
+        showToast(data.results?.[0]?.error || 'YouTube publish failed', 'err')
+      }
+    } catch { showToast('YouTube publish failed', 'err') }
+    setPublishingYT(prev => { const n = new Set(prev); n.delete(jobId); return n })
+  }
+
+  const publishTT = async (job) => {
+    if (!ttConnected) { connectTT(); return }
+    const jobId = job.job_id
+    setPublishingTT(prev => new Set([...prev, jobId]))
+    try {
+      const token = localStorage.getItem('sc_token')
+      const title = (job.script_input || 'Brainrot Clip').slice(0, 150)
+      const res = await fetch(`${API_BASE}/social/publish/tiktok`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ clips: [{ clip_id: jobId, video_url: job.output_url, title }] }),
+      })
+      const data = await res.json()
+      const result = data.results?.[0]
+      if (res.ok && result?.status === 'success') {
+        setPublishedTT(prev => new Set([...prev, jobId])); showToast('Queued on TikTok! Appears in ~1 min 🔥', 'ok')
+      } else if (res.status === 400 && data.detail?.includes('not connected')) {
+        localStorage.removeItem('tt_connected'); setTtConnected(false); connectTT()
+      } else {
+        showToast(result?.error || data.detail || 'TikTok publish failed', 'err')
+      }
+    } catch { showToast('TikTok publish failed', 'err') }
+    setPublishingTT(prev => { const n = new Set(prev); n.delete(jobId); return n })
+  }
 
   const showToast = (msg, type = 'info') => {
     setToast({ msg, type }); setTimeout(() => setToast(null), 3200)
@@ -428,7 +547,13 @@ export default function BrainrotStudio() {
 
         <div style={{ flex: 1, minWidth: 0 }}>
       {view === 'clips' ? (
-        <ClipsLibrary clips={libraryClips} onCreate={() => setView('create')} />
+        <ClipsLibrary clips={libraryClips} onCreate={() => setView('create')}
+          ytConnected={ytConnected} ttConnected={ttConnected}
+          publishedYT={publishedYT} publishingYT={publishingYT}
+          publishedTT={publishedTT} publishingTT={publishingTT}
+          onPublishYT={publishYT} onPublishTT={publishTT}
+          onConnectYT={connectYT} onConnectTT={connectTT}
+          onDisconnect={disconnectSocial} />
       ) : (
       <div className="br-studio-grid" style={{ padding: '8px 0 80px',
         display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 32, alignItems: 'start' }}>
@@ -1617,7 +1742,7 @@ const LIBRARY_FILTERS = [
   { id: 'complete', label: 'Ready' },
 ]
 
-function ClipsLibrary({ clips, onCreate }) {
+function ClipsLibrary({ clips, onCreate, ytConnected, ttConnected, publishedYT, publishingYT, publishedTT, publishingTT, onPublishYT, onPublishTT, onConnectYT, onConnectTT, onDisconnect }) {
   const [filter, setFilter] = useState('all')
 
   // Failed clips never surface in the library — hide them from every
@@ -1703,22 +1828,34 @@ function ClipsLibrary({ clips, onCreate }) {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 16 }}>
-          {visible.map(job => <ClipCard key={job.job_id} job={job} />)}
+          {visible.map(job => (
+            <ClipCard key={job.job_id} job={job}
+              ytConnected={ytConnected} ttConnected={ttConnected}
+              publishedYT={publishedYT} publishingYT={publishingYT}
+              publishedTT={publishedTT} publishingTT={publishingTT}
+              onPublishYT={onPublishYT} onPublishTT={onPublishTT} />
+          ))}
         </div>
       )}
     </div>
   )
 }
 
-function ClipCard({ job }) {
+function ClipCard({ job, ytConnected, ttConnected, publishedYT, publishingYT, publishedTT, publishingTT, onPublishYT, onPublishTT }) {
   const meta = STATUS_META[job.status] || STATUS_META.created
+  const jid = job.job_id
+  const isComplete = job.status === 'complete' && job.output_url
+  const ytDone = publishedYT?.has(jid)
+  const ttDone = publishedTT?.has(jid)
+  const ytBusy = publishingYT?.has(jid)
+  const ttBusy = publishingTT?.has(jid)
   return (
     <div style={{ ...card({ padding: 8 }), transition: 'border-color .15s' }}
       onMouseEnter={e => { e.currentTarget.style.borderColor = T.ink }}
       onMouseLeave={e => { e.currentTarget.style.borderColor = T.line }}>
       <div style={{ position: 'relative', width: '100%', aspectRatio: '9/16', borderRadius: 8, overflow: 'hidden',
         background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {job.status === 'complete' && job.output_url ? (
+        {isComplete ? (
           <video src={job.output_url} controls playsInline preload="metadata"
             style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : job.status === 'failed' ? (
@@ -1749,7 +1886,7 @@ function ClipCard({ job }) {
         <span style={{ fontSize: '.72rem', fontWeight: 500, color: T.mute }}>
           {job.created_at ? new Date(job.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}
         </span>
-        {job.status === 'complete' && job.output_url && (
+        {isComplete && (
           <a href={job.output_url} target="_blank" rel="noopener noreferrer"
             title="Open full size"
             style={{ fontSize: '.72rem', fontWeight: 500, color: T.ink, textDecoration: 'none' }}>
@@ -1757,6 +1894,57 @@ function ClipCard({ job }) {
           </a>
         )}
       </div>
+      {isComplete && (
+        <div style={{ display: 'flex', gap: 5, padding: '4px 4px 2px' }}>
+          {/* YouTube publish */}
+          <button
+            onClick={() => onPublishYT && onPublishYT(job)}
+            disabled={ytDone || ytBusy}
+            title={ytDone ? 'Published to YouTube' : ytConnected ? 'Publish to YouTube Shorts' : 'Connect YouTube'}
+            style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+              padding: '6px 4px', borderRadius: 7, border: '1.5px solid',
+              borderColor: ytDone ? '#16a34a' : '#e5e5e5',
+              background: ytDone ? '#f0fdf4' : '#fff',
+              color: ytDone ? '#16a34a' : '#333',
+              fontSize: '.65rem', fontWeight: 600, cursor: ytDone ? 'default' : 'pointer',
+              fontFamily: FONT,
+            }}>
+            {ytBusy ? (
+              <span style={{ display: 'inline-block', width: 10, height: 10, border: '1.5px solid #ccc', borderTopColor: '#333', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
+            ) : ytDone ? '✓ YT' : (
+              <>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                {ytConnected ? 'YT' : 'YT+'}
+              </>
+            )}
+          </button>
+          {/* TikTok publish */}
+          <button
+            onClick={() => onPublishTT && onPublishTT(job)}
+            disabled={ttDone || ttBusy}
+            title={ttDone ? 'Published to TikTok' : ttConnected ? 'Publish to TikTok' : 'Connect TikTok'}
+            style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+              padding: '6px 4px', borderRadius: 7, border: '1.5px solid',
+              borderColor: ttDone ? '#16a34a' : '#e5e5e5',
+              background: ttDone ? '#f0fdf4' : '#fff',
+              color: ttDone ? '#16a34a' : '#333',
+              fontSize: '.65rem', fontWeight: 600, cursor: ttDone ? 'default' : 'pointer',
+              fontFamily: FONT,
+            }}>
+            {ttBusy ? (
+              <span style={{ display: 'inline-block', width: 10, height: 10, border: '1.5px solid #ccc', borderTopColor: '#333', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
+            ) : ttDone ? '✓ TT' : (
+              <>
+                <svg width="10" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.26 6.26 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.94a8.17 8.17 0 0 0 4.78 1.52V7.01a4.85 4.85 0 0 1-1.01-.32z"/></svg>
+                {ttConnected ? 'TT' : 'TT+'}
+              </>
+            )}
+          </button>
+        </div>
+      )}
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 }
