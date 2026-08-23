@@ -9,7 +9,6 @@
 
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../../context/AuthContext'
 
 const BRAIN = '#a855f7'
@@ -18,7 +17,7 @@ const INK = '#0f0f0f'
 export default function BrainrotNav() {
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const { user, loginWithGoogleToken, logout } = useAuth()
+  const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -44,7 +43,6 @@ export default function BrainrotNav() {
     { label: 'Tools', href: '/brainrot/tools', external: true },
     { label: 'Compare', href: '/brainrot/alternatives', external: true },
     { label: 'Guides', href: '/brainrot/guides', external: true },
-    { label: '← YT Shorts', href: '/youtube-shorts', external: true },
   ]
 
   const handleLinkClick = (e, href, external) => {
@@ -143,16 +141,15 @@ export default function BrainrotNav() {
             </>
           ) : (
             <>
-              <div style={{ border: '1.5px solid #e5e5e5', borderRadius: 8, overflow: 'hidden', display: 'inline-flex' }}>
-                <GoogleLogin
-                  onSuccess={async cr => {
-                    const ok = await loginWithGoogleToken(cr.credential)
-                    if (ok) navigate('/brainrot/studio')
-                  }}
-                  onError={() => {}}
-                  theme="outline" shape="rectangular" text="signin_with" size="medium"
-                />
-              </div>
+              <Link to="/brainrot/login" style={{
+                color: '#333', fontSize: '.82rem', fontWeight: 700,
+                padding: '8px 14px', borderRadius: 8, border: '1.5px solid #e5e5e5',
+                background: '#fff', textDecoration: 'none',
+                transition: 'border-color 0.15s, color 0.15s',
+              }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = BRAIN; e.currentTarget.style.color = BRAIN }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e5e5'; e.currentTarget.style.color = '#333' }}
+              >Sign in</Link>
               <Link to="/brainrot/studio" style={{
                 background: BRAIN, color: '#fff',
                 padding: '10px 20px', borderRadius: 8,
@@ -201,17 +198,14 @@ export default function BrainrotNav() {
                 padding: '12px 14px', borderRadius: 8,
               }}>Sign out</button>
             ) : (
-              <div style={{ padding: '8px 14px 4px' }}>
-                <GoogleLogin
-                  onSuccess={async cr => {
-                    const ok = await loginWithGoogleToken(cr.credential)
-                    setMenuOpen(false)
-                    if (ok) navigate('/brainrot/studio')
-                  }}
-                  onError={() => {}}
-                  theme="outline" shape="rectangular" text="signin_with" size="medium"
-                />
-              </div>
+              <Link
+                to="/brainrot/login"
+                onClick={() => setMenuOpen(false)}
+                style={{
+                  display: 'block', color: BRAIN, fontSize: '.9rem', fontWeight: 700,
+                  padding: '12px 14px', borderRadius: 8, textDecoration: 'none',
+                }}
+              >Sign in →</Link>
             )}
           </div>
         )}
