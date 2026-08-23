@@ -18,6 +18,7 @@ URLs) runs the stage in-process via asyncio.create_task, same as jobs.py.
 """
 import asyncio
 import logging
+import random
 import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -648,6 +649,190 @@ async def _generate_all_voice_samples(target_voices: list | None = None) -> None
     finally:
         _voice_gen["running"] = False
         logger.info(f"Voice sample generation complete: {_voice_gen['done']} ok, {_voice_gen['failed']} failed")
+
+
+# ── Bulk generation ────────────────────────────────────────────
+# Admin gives a list of topics (one per line); the system casts 2 random
+# characters per topic from a curated human/humanoid pool, auto-assigns
+# voices the same way a normal job does, picks a random approved gameplay
+# background, and renders them one at a time — sequential by design (not
+# fanned out in parallel) both because that's what was asked for and
+# because it avoids the CPU contention between concurrent renders that's
+# been the root cause of slow/failing renders elsewhere in this pipeline
+# (see _ACTIVE_RENDERS_ON_INSTANCE in brainrot_stage.py). Reuses the same
+# insert_brainrot_job + dispatch path as a normal job, attributed to the
+# admin's own account — including normal credit consumption. Deliberately
+# does NOT go through create_brainrot_job's per-user rate-limit checks
+# (MAX_CONCURRENT_BRAINROT_JOBS_PER_USER / MAX_BRAINROT_JOBS_PER_HOUR) —
+# those exist to stop regular-user abuse, not to throttle an admin
+# batch tool that already self-paces by running strictly one at a time.
+
+# Human/humanoid characters only — no literal animals (Animals family) and
+# no non-human creatures (Gremlins/Hybrids-in-name-only aside, SciFi
+# aliens/robots) — with 3 forest-flavored fantasy humanoids (elf/bog
+# witch/fairy) mixed in per the "include foresty humans" ask. Edit this
+# list directly to change the pool; nothing else needs to change.
+BULK_CHARACTER_POOL: list[str] = [
+    # Corporate (10)
+    "brent-callahan", "deb-from-hr", "todd-synergy", "marcy-mulch", "intern-greg",
+    "sharon-quill", "reginald-cost", "chip-vandergraff", "doreen-sludge", "beige",
+    # Household (10)
+    "dougie-blunt", "marla-blunt", "kip-blunt", "tanner-blunt", "nana-ratchet",
+    "uncle-sherm", "bev-nettles", "chad-pemberton", "grill-hutch", "trisha-vane",
+    # Street (10)
+    "tito-ramirez", "big-marv", "slick-dime", "ms-yolanda", "two-phone-tommy",
+    "reseller-ray", "dj-kettle", "curb", "auntie-fern", "rico-static",
+    # Period (7 of 10 — trimmed to make room for the 3 forest picks below)
+    "bartholomew-crumb", "agnes-grim", "duke-pomp", "clyde-barrelhouse",
+    "wilhelmina-frost", "cowboy-jed", "mordecai-blackrot",
+    # Fantasy — forest-flavored humanoids only (elf/bog witch/fairy), not
+    # the barbarian/dwarf/goblin/etc. rest of that family
+    "elowen-mistvale", "puddle", "thistle",
+]
+
+# In-memory progress for the (single-flight) bulk generator — same pattern
+# as _voice_gen above.
+_bulk_gen: dict = {"running": False, "total": 0, "done": 0, "failed": 0, "current_topic": ""}
+
+
+class BulkCreateRequest(BaseModel):
+    topics: list[str]
+
+
+@router.post("/admin/bulk-create", status_code=202)
+async def admin_bulk_create(body: BulkCreateRequest, current_user: CurrentUser):
+    """Admin: queue a list of topics for sequential, one-at-a-time brainrot
+    generation. Each topic becomes its own job — 2 random characters from
+    BULK_CHARACTER_POOL, auto-assigned voices, a random selected gameplay
+    background, sensible defaults everywhere else (turn_based motion,
+    slide entry/exit, default caption style)."""
+    _require_admin(current_user)
+    if _bulk_gen["running"]:
+        raise HTTPException(status_code=409, detail="Bulk generation already running")
+
+    topics = [t.strip() for t in body.topics if t.strip()]
+    if not topics:
+        raise HTTPException(status_code=400, detail="No topics given")
+
+    asyncio.create_task(_run_bulk_generation(topics, current_user.user_id), name="brainrot-bulk-gen")
+    return {"status": "started", "total": len(topics)}
+
+
+@router.get("/admin/bulk-create/status")
+async def admin_bulk_create_status(current_user: CurrentUser):
+    _require_admin(current_user)
+    return _bulk_gen
+
+
+async def _run_bulk_generation(topics: list[str], user_id: str) -> None:
+    _bulk_gen.update({"running": True, "total": len(topics), "done": 0, "failed": 0, "current_topic": ""})
+    logger.info(f"[bulk] starting {len(topics)} topics")
+    try:
+        gameplay_clips = await db.list_gameplay_clips(None, status="selected")
+        roster = {c["id"]: c for c in await get_character_roster()}
+        pool = [cid for cid in BULK_CHARACTER_POOL if cid in roster]
+
+        for topic in topics:
+            _bulk_gen["current_topic"] = topic
+            try:
+                job_id = await _create_bulk_job(topic, user_id, roster, pool, gameplay_clips)
+                final = await _wait_for_job_terminal(job_id)
+                if final and final["status"] == "complete":
+                    _bulk_gen["done"] += 1
+                    logger.info(f"[bulk] {topic!r} -> {job_id} complete")
+                else:
+                    _bulk_gen["failed"] += 1
+                    reason = final.get("error_message") if final else "job row missing"
+                    logger.warning(f"[bulk] {topic!r} -> {job_id} did not complete: {reason}")
+            except Exception as exc:
+                _bulk_gen["failed"] += 1
+                logger.exception(f"[bulk] {topic!r} failed to create/run: {exc}")
+    finally:
+        _bulk_gen["running"] = False
+        _bulk_gen["current_topic"] = ""
+        logger.info(f"[bulk] done: {_bulk_gen['done']} ok, {_bulk_gen['failed']} failed")
+
+
+async def _wait_for_job_terminal(job_id: str, poll_seconds: float = 5.0) -> dict | None:
+    """Blocks until the job reaches complete/failed — this is what makes
+    the bulk run genuinely sequential (one render actually finishing
+    before the next one starts), not just "dispatched one at a time"."""
+    while True:
+        job = await db.get_brainrot_job(job_id)
+        if not job or job["status"] in ("complete", "failed"):
+            return job
+        await asyncio.sleep(poll_seconds)
+
+
+async def _create_bulk_job(
+    topic: str, user_id: str, roster: dict, pool: list[str], gameplay_clips: list[dict],
+) -> str:
+    if len(pool) < 2:
+        raise RuntimeError("Bulk character pool has fewer than 2 valid characters")
+    if not gameplay_clips:
+        raise RuntimeError("No selected gameplay clips available to pick a background from")
+
+    left_id, right_id = random.sample(pool, 2)
+    left, right = roster[left_id], roster[right_id]
+    gameplay_clip = random.choice(gameplay_clips)
+
+    def _profile(character: dict, side: str) -> dict:
+        return {
+            "character_id": character["id"], "side": side,
+            "x": 0.17 if side == "left" else 0.83, "y": 0.76, "scale": 1.0, "rotation": 0.0,
+            "entry": "slide", "exit": "slide",
+            "image_url": character["image_url"],
+            "gender": character.get("gender", "neutral"),
+            "name": character.get("name", ""),
+            "archetype": character.get("archetype", ""),
+            "role": character.get("role", ""),
+            "voice": character.get("voice", ""),
+        }
+
+    character_positions = [_profile(left, "left"), _profile(right, "right")]
+    voice_left = default_voice_for_gender(left.get("gender", "neutral"), slot=0).voice_id
+    voice_right = default_voice_for_gender(right.get("gender", "neutral"), slot=1).voice_id
+
+    reserved_credits = await db.reserve_brainrot_credits(user_id, 1)
+    if reserved_credits < 1:
+        raise RuntimeError("Admin account is out of brainrot credits for this month")
+
+    payload = {
+        "reserved_credits": reserved_credits,
+        "script_input": topic,
+        "character_ids": [left_id, right_id],
+        "character_positions": character_positions,
+        "gameplay_clip_id": str(gameplay_clip["id"]),
+        "gameplay_clip_url": gameplay_clip["gcs_path"],
+        "duration_seconds": 30,
+        "caption_style": DEFAULT_CAPTION_STYLE,
+        "caption_color": DEFAULT_CAPTION_COLOR,
+        "caption_y": DEFAULT_CAPTION_Y,
+        "voice_left": voice_left,
+        "voice_right": voice_right,
+        "motion_mode": "turn_based",
+        "music_asset_id": None,
+        "music_volume": 0.3,
+        "music_url": None,
+        "post_title": "",
+        "post_hashtags": [],
+    }
+
+    try:
+        row = await db.insert_brainrot_job(user_id, payload)
+    except Exception:
+        await db.release_brainrot_credits(user_id, reserved_credits)
+        raise
+    job_id = str(row["job_id"])
+
+    split_worker_mode = bool(settings.FFMPEG_WORKER_URLS.strip())
+    if split_worker_mode:
+        logger.info(f"[bulk:{job_id}] queued for watcher poll pickup")
+    else:
+        asyncio.create_task(run_brainrot_stage(job_id), name=f"brainrot-bulk-{job_id[:8]}")
+        logger.info(f"[bulk:{job_id}] running in-process (single-service mode)")
+
+    return job_id
 
 
 # ── Audio library (music / SFX) ─────────────────────────────────

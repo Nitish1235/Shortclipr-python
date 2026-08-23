@@ -69,10 +69,79 @@ export default function BrainrotAdminPanel({ showToast }) {
           Voice previews, music/SFX, and gameplay backgrounds that power the Brainrot Studio.
         </p>
       </div>
+      <BulkCreateSection notify={notify} />
       <VoicesSection notify={notify} />
       <AudioSection notify={notify} />
       <GameplaySection notify={notify} />
       <ClipsSection notify={notify} />
+    </div>
+  )
+}
+
+// ── Bulk create ──────────────────────────────────────────────────
+// One topic per line. Each becomes its own clip — 2 random characters from
+// a curated human/humanoid pool, auto-assigned voices, random background —
+// rendered strictly one at a time (see backend admin_bulk_create).
+function BulkCreateSection({ notify }) {
+  const [topics, setTopics] = useState('')
+  const [status, setStatus] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const timer = useRef(null)
+
+  const load = useCallback(async () => {
+    try { setStatus(await getJSON('/brainrot/admin/bulk-create/status')) } catch { /* */ }
+  }, [])
+
+  useEffect(() => { load(); return () => clearInterval(timer.current) }, [load])
+
+  useEffect(() => {
+    const running = status?.running
+    if (running && !timer.current) timer.current = setInterval(load, 3000)
+    if (!running && timer.current) { clearInterval(timer.current); timer.current = null; load() }
+  }, [status, load])
+
+  const start = async () => {
+    const list = topics.split('\n').map(t => t.trim()).filter(Boolean)
+    if (!list.length) return notify('Add at least one topic', 'error')
+    setBusy(true)
+    try {
+      await send('/brainrot/admin/bulk-create', { json: { topics: list } })
+      notify(`Queued ${list.length} topic${list.length === 1 ? '' : 's'}`, 'success')
+      setTopics('')
+      setTimeout(load, 500)
+    } catch (e) { notify(e.message, 'error') } finally { setBusy(false) }
+  }
+
+  const running = status?.running
+  const pct = running && status.total ? Math.round(((status.done + status.failed) / status.total) * 100) : 0
+
+  return (
+    <div style={cardS}>
+      <SectionHead icon="🎬" title="Bulk create"
+        sub="One topic per line — casts 2 random characters + voices per clip, renders one at a time." />
+      <textarea
+        value={topics}
+        onChange={e => setTopics(e.target.value)}
+        disabled={running}
+        placeholder={'A corporate woman with a good sense of humor, talking gibberish...\nTwo roommates arguing about the thermostat...'}
+        rows={6}
+        style={{ ...inputS, marginTop: 12, resize: 'vertical', fontFamily: 'inherit', opacity: running ? .6 : 1 }}
+      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
+        <button style={{ ...btnRed, opacity: busy || running ? .6 : 1 }} disabled={busy || running} onClick={start}>
+          {running ? 'Running…' : busy ? 'Starting…' : '▶ Start bulk generation'}
+        </button>
+        <button style={btnGhost} onClick={load}>🔄 Refresh</button>
+      </div>
+      {status && (status.running || status.total > 0) && (
+        <div style={{ marginTop: 14 }}>
+          <Bar pct={pct} />
+          <div style={{ fontSize: '.72rem', color: C.mute, marginTop: 5 }}>
+            {status.done + status.failed}/{status.total} done{status.failed ? ` · ${status.failed} failed` : ''}
+            {running && status.current_topic ? ` · now: "${status.current_topic}"` : ''}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
