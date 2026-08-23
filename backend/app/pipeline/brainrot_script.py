@@ -202,6 +202,48 @@ async def generate_scene_plan(
     return lines
 
 
+async def generate_post_meta(dialogue_lines: list[DialogueLine]) -> dict:
+    """
+    Post title + hashtags for YT/TikTok, generated from the ACTUAL finished
+    dialogue — never from the raw topic/idea that seeded it. The model sees
+    what the characters really say, so the title reflects the specific
+    joke/beat that ended up in the clip rather than a generic paraphrase of
+    the input topic. This is a separate, read-only pass over the already-
+    written lines — it never feeds back into or alters the dialogue itself.
+    """
+    if not dialogue_lines:
+        return {"title": "", "hashtags": []}
+
+    transcript = "\n".join(f"{l.speaker}: {l.text}" for l in dialogue_lines)[:2000]
+
+    prompt = (
+        "You write viral social media metadata for short-form video (TikTok / YouTube Shorts).\n\n"
+        "Here is the FULL finished script that plays in the video — this is what actually "
+        f"gets said on screen, not just the idea behind it:\n{transcript}\n\n"
+        "Return ONLY valid JSON with exactly two keys:\n"
+        "  \"title\"     — one punchy post title under 80 characters, no hashtags inside it, "
+        "based on the specific angle/punchline of THIS script (not a generic paraphrase of the topic)\n"
+        "  \"hashtags\"  — array of 6-8 relevant hashtags WITH the # sign, e.g. [\"#skibidi\", \"#fyp\"]\n\n"
+        "Rules: title must grab attention in < 5 words; hashtags mix trending (#fyp #viral) "
+        "with topic-specific ones. Return nothing except the JSON object."
+    )
+    try:
+        resp = await _client.chat.completions.create(
+            model=SCRIPT_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=200,
+            temperature=0.8,
+            response_format={"type": "json_object"},
+        )
+        data = json.loads(resp.choices[0].message.content or "{}")
+        title = str(data.get("title", "")).strip()[:100]
+        hashtags = [str(h).strip() for h in data.get("hashtags", []) if h][:10]
+        return {"title": title, "hashtags": hashtags}
+    except Exception as exc:
+        logger.warning(f"generate_post_meta (post-script) failed: {exc}")
+        return {"title": "", "hashtags": []}
+
+
 async def _call_gpt(system: str, user: str) -> str:
     _CONNECT_RETRIES = 3
     _CONNECT_DELAY = 3.0

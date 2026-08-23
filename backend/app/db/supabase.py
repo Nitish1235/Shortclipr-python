@@ -321,6 +321,20 @@ async def set_brainrot_scene_plan(job_id: str, scene_plan: list[dict]) -> None:
     )
 
 
+async def set_brainrot_post_meta(job_id: str, post_title: str, post_hashtags: list[str]) -> None:
+    """
+    Overwrites just post_title/post_hashtags inside the payload JSONB, once
+    they've been (re)generated from the actual finished dialogue rather than
+    the raw topic seed submitted at job creation. `payload || $1::jsonb`
+    merges only these two keys — every other key in payload is left as-is.
+    """
+    patch = {"post_title": post_title, "post_hashtags": post_hashtags}
+    await _execute(
+        "UPDATE brainrot_jobs SET payload = payload || $1::jsonb, updated_at=$2 WHERE job_id=$3",
+        patch, _now(), job_id,
+    )
+
+
 async def set_job_api_done_brainrot(job_id: str) -> None:
     """API stage finished for a brainrot job. Sets status to api_done to trigger FFmpeg dispatch."""
     await _execute(

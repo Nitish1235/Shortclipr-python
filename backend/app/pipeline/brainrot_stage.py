@@ -202,6 +202,14 @@ async def _execute_brainrot_api_stage(job_id: str) -> None:
                 left_profile=left_profile,
                 right_profile=right_profile,
             )
+            # Post title/hashtags are derived from the ACTUAL dialogue just
+            # written above, never from the raw topic the user typed — the
+            # frontend's pre-generated values (seeded from the topic, before
+            # this script existed) were only ever a preview. This call reads
+            # the finished lines and never feeds anything back into them.
+            post_meta = await brainrot_script.generate_post_meta(dialogue_lines)
+            if post_meta["title"] or post_meta["hashtags"]:
+                await db.set_brainrot_post_meta(job_id, post_meta["title"], post_meta["hashtags"])
 
         async with _step(job_id, "synthesize_voices"):
             await db.update_brainrot_job_progress(job_id, 30, "Synthesizing voices...", status="synthesizing_voice")
