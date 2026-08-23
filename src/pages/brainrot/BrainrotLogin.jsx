@@ -103,8 +103,8 @@ export default function BrainrotLogin() {
   const onBlur  = (e) => { e.target.style.borderColor = error ? BRAIN : '#e5e7eb' }
 
   return (
-    <div style={{
-      display: 'flex', height: '100vh', overflow: 'hidden',
+    <div className="br-login-wrap" style={{
+      display: 'flex', minHeight: '100vh',
       fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
     }}>
 
@@ -304,7 +304,7 @@ export default function BrainrotLogin() {
                 onError={() => {}}
                 theme="outline" shape="rectangular"
                 text="signin_with" size="large"
-                width="360"
+                width="340"
               />
             </div>
           </div>
@@ -350,9 +350,11 @@ export default function BrainrotLogin() {
                 <button
                   type="button" onClick={() => setShowPw(v => !v)}
                   style={{
-                    position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                    position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
                     background: 'none', border: 'none', cursor: 'pointer',
-                    color: '#9ca3af', fontSize: '0.72rem', fontWeight: 700, padding: 0,
+                    color: '#9ca3af', fontSize: '0.72rem', fontWeight: 700,
+                    padding: '8px 6px', minWidth: 36, minHeight: 36,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}
                 >{showPw ? 'Hide' : 'Show'}</button>
               </div>
@@ -415,9 +417,13 @@ export default function BrainrotLogin() {
 
       <style>{`
         @media (max-width: 768px) {
+          .br-login-wrap { overflow: visible !important; }
           .br-login-left { display: none !important; }
-          .br-login-right { flex: 0 0 100% !important; padding: 40px 24px !important; }
+          .br-login-right { flex: 0 0 100% !important; padding: 40px 20px !important; overflow-y: visible !important; }
           .br-login-mobile-logo { display: flex !important; }
+        }
+        @media (max-width: 400px) {
+          .br-login-right { padding: 32px 16px !important; }
         }
       `}</style>
     </div>

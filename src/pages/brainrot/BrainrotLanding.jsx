@@ -136,15 +136,17 @@ async function fetchGameplayClips() {
 //  Used in the hero, the interactive builder, and each example clip card.
 // ═══════════════════════════════════════════════════════════════════
 function LiveStage({
-  leftChar,          // { id, name, image_url } | null
-  rightChar,         // { id, name, image_url } | null
-  clip,              // { category, thumbnail_url, ... } | null
-  title,             // string — small chip at top of stage
-  dialogues,         // [{ text, speaker: 'left'|'right', color? }]
+  leftChar,
+  rightChar,
+  clip,
+  title,
+  dialogues,
   width = 240,
   shadowColor = P.brain,
   showStats = false,
-  stats = null,      // { plays, comments, likes }
+  stats = null,
+  charMode = 'rotate2',   // 'rotate2' | 'single'
+  entryVariant = 'pop',   // 'pop' | 'whoosh_left' | 'zoom' | 'drop' | 'swoosh_right'
 }) {
   const [dialogueIdx, setDialogueIdx] = useState(0)
   const [fadeIn, setFadeIn] = useState(true)
@@ -240,12 +242,17 @@ function LiveStage({
         }}>{current.text}</div>
       ))}
 
-      {/* Characters — one at a time, centered, pops in when speaker switches */}
+      {/* Characters — one at a time, centered, entry animation per variant */}
       {(() => {
+        if (charMode === 'single') {
+          return leftChar
+            ? <CharacterFigure key={leftChar.id} char={leftChar} entryVariant={entryVariant} />
+            : null
+        }
         const activeChar = current?.speaker === 'right' ? rightChar : leftChar
-        return activeChar ? (
-          <CharacterFigure key={activeChar.id + dialogueIdx} char={activeChar} />
-        ) : null
+        return activeChar
+          ? <CharacterFigure key={activeChar.id + '-' + dialogueIdx} char={activeChar} entryVariant={entryVariant} />
+          : null
       })()}
 
       {/* Stats bar */}
@@ -296,8 +303,16 @@ function CaptionDemo({ current, fadeIn }) {
   )
 }
 
-// Individual character on the stage — centered, big, pops in from below each swap
-function CharacterFigure({ char }) {
+const CHAR_ANIM = {
+  pop:          'br-char-pop .38s cubic-bezier(.34,1.56,.64,1) forwards',
+  whoosh_left:  'br-char-whoosh-left .3s cubic-bezier(.22,.68,0,1.2) forwards',
+  zoom:         'br-char-zoom .4s cubic-bezier(.34,1.3,.64,1) forwards',
+  drop:         'br-char-drop .4s cubic-bezier(.36,.07,.19,.97) forwards',
+  swoosh_right: 'br-char-swoosh-right .3s cubic-bezier(.22,.68,0,1.2) forwards',
+}
+
+// Individual character on the stage — centered, big, unique entry per variant
+function CharacterFigure({ char, entryVariant = 'pop' }) {
   return (
     <div style={{
       position: 'absolute',
@@ -307,7 +322,7 @@ function CharacterFigure({ char }) {
       aspectRatio: '3 / 4',
       pointerEvents: 'none',
       filter: 'drop-shadow(0 8px 18px rgba(0,0,0,.65))',
-      animation: 'br-char-pop .38s cubic-bezier(.34,1.56,.64,1) forwards',
+      animation: CHAR_ANIM[entryVariant] || CHAR_ANIM.pop,
       zIndex: 4,
       transformOrigin: 'bottom center',
       transform: 'translateX(-50%)',
@@ -616,23 +631,21 @@ function RenderDemo() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Section: EXAMPLE CLIP WALL — 3 clips, each different chars + different bg + different dialogue
+//  Section: EXAMPLE CLIP WALL — 5 clips, alternating 2-char/1-char rows
 // ═══════════════════════════════════════════════════════════════════
 function ClipWall({ characters, clips }) {
-  // Pick different chars per card, cycling through the roster.
-  // Deterministic (index-based, not random) so screenshot tests stay stable.
-  const pickPair = (offset) => [
-    characters[(offset * 2) % Math.max(characters.length, 1)] || null,
-    characters[(offset * 2 + 1) % Math.max(characters.length, 1)] || null,
-  ]
-  const pickClip = (offset) => clips[offset % Math.max(clips.length, 1)] || null
+  const n = Math.max(characters.length, 1)
+  const pickPair   = (a, b) => [characters[a % n] || null, characters[b % n] || null]
+  const pickSingle = (idx)  => characters[idx % n] || null
+  const pickClip   = (offset) => clips[offset % Math.max(clips.length, 1)] || null
 
   const CARDS = useMemo(() => [
+    // 1 — two alternating chars, pop from bottom
     {
       title: 'CATS VS DOGS',
-      pair: pickPair(0),
-      clip: pickClip(0),
-      shadowColor: P.brain3,
+      charMode: 'rotate2', entryVariant: 'pop',
+      leftChar: pickPair(0, 1)[0], rightChar: pickPair(0, 1)[1],
+      clip: pickClip(0), shadowColor: P.brain3,
       dialogues: [
         { text: 'DOGS ARE THE BEST 🐕', speaker: 'left' },
         { text: 'CATS RULE THE HOUSE 👑', speaker: 'right', color: '#ff4dd8' },
@@ -641,24 +654,26 @@ function ClipWall({ characters, clips }) {
       ],
       stats: { plays: '2.4M', comments: '12k', likes: '380k' },
     },
+    // 2 — single constant char, whoosh from left
     {
-      title: 'IPHONE VS ANDROID',
-      pair: pickPair(1),
-      clip: pickClip(1),
-      shadowColor: P.brain2,
+      title: 'OHIO LORE',
+      charMode: 'single', entryVariant: 'whoosh_left',
+      leftChar: pickSingle(2), rightChar: null,
+      clip: pickClip(1), shadowColor: P.brain2,
       dialogues: [
-        { text: 'IPHONE = 💎', speaker: 'left' },
-        { text: 'ANDROID CUSTOMIZES 🔧', speaker: 'right' },
-        { text: 'IMESSAGE > 💬', speaker: 'left' },
-        { text: 'FREEDOM 🐧', speaker: 'right' },
+        { text: 'ONLY IN OHIO 🌽', speaker: 'left' },
+        { text: 'RIZZ LEVEL: MAX 💀', speaker: 'left' },
+        { text: 'OHIO IS BUILT DIFF', speaker: 'left' },
+        { text: 'NO CAP FR FR 🔥', speaker: 'left' },
       ],
-      stats: { plays: '890k', comments: '5.2k', likes: '120k' },
+      stats: { plays: '3.1M', comments: '19k', likes: '510k' },
     },
+    // 3 — two diff alternating chars, zoom in
     {
       title: 'PIZZA VS BURGER',
-      pair: pickPair(2),
-      clip: pickClip(2),
-      shadowColor: P.yellow,
+      charMode: 'rotate2', entryVariant: 'zoom',
+      leftChar: pickPair(4, 5)[0], rightChar: pickPair(4, 5)[1],
+      clip: pickClip(2), shadowColor: P.yellow,
       dialogues: [
         { text: 'PIZZA IS LIFE 🍕', speaker: 'left' },
         { text: 'BURGERS RULE 🍔', speaker: 'right', color: '#ff4dd8' },
@@ -667,10 +682,38 @@ function ClipWall({ characters, clips }) {
       ],
       stats: { plays: '1.7M', comments: '8.9k', likes: '260k' },
     },
+    // 4 — single constant char, drop from top
+    {
+      title: 'SKIBIDI LORE',
+      charMode: 'single', entryVariant: 'drop',
+      leftChar: pickSingle(6), rightChar: null,
+      clip: pickClip(3), shadowColor: P.brain,
+      dialogues: [
+        { text: 'SKIBIDI RIZZ 🚽', speaker: 'left' },
+        { text: 'GYATT UNLOCKED 💪', speaker: 'left' },
+        { text: 'SIGMA GRINDSET 📈', speaker: 'left' },
+        { text: 'NO SKIPS 🔥', speaker: 'left' },
+      ],
+      stats: { plays: '4.8M', comments: '34k', likes: '820k' },
+    },
+    // 5 — two diff alternating chars, swoosh from right
+    {
+      title: 'IPHONE VS ANDROID',
+      charMode: 'rotate2', entryVariant: 'swoosh_right',
+      leftChar: pickPair(8, 9)[0], rightChar: pickPair(8, 9)[1],
+      clip: pickClip(4), shadowColor: P.brain2,
+      dialogues: [
+        { text: 'IPHONE = 💎', speaker: 'left' },
+        { text: 'ANDROID CUSTOMIZES 🔧', speaker: 'right' },
+        { text: 'IMESSAGE > 💬', speaker: 'left' },
+        { text: 'FREEDOM 🐧', speaker: 'right' },
+      ],
+      stats: { plays: '890k', comments: '5.2k', likes: '120k' },
+    },
   ], [characters, clips])
 
   return (
-    <section id="examples" style={{ padding: '72px 5%' }}>
+    <section id="examples" style={{ padding: '72px 5%', overflow: 'hidden' }}>
       <div style={{ textAlign: 'center', marginBottom: 40 }}>
         <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.2rem)', fontWeight: 900, letterSpacing: '-.02em' }}>
           Real clips, <span style={{ color: P.brain, position: 'relative', display: 'inline-block' }}>
@@ -683,19 +726,25 @@ function ClipWall({ characters, clips }) {
         </p>
       </div>
       <div className="br-wall-cards" style={{
-        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 28,
-        maxWidth: 900, margin: '0 auto', justifyItems: 'center',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(5, 1fr)',
+        gap: 20,
+        maxWidth: 1100,
+        margin: '0 auto',
+        justifyItems: 'center',
       }}>
         {CARDS.map((c, i) => (
           <LiveStage
             key={i}
-            leftChar={c.pair[0]}
-            rightChar={c.pair[1]}
+            leftChar={c.leftChar}
+            rightChar={c.rightChar}
             clip={c.clip}
             title={c.title}
-            width={240}
+            width={190}
             shadowColor={c.shadowColor}
             dialogues={c.dialogues}
+            charMode={c.charMode}
+            entryVariant={c.entryVariant}
             showStats
             stats={c.stats}
           />
@@ -1165,6 +1214,25 @@ export default function BrainrotLanding() {
           from { transform: translateX(-50%) translateY(36px) scale(0.78); opacity: 0; }
           to   { transform: translateX(-50%) translateY(0)    scale(1);    opacity: 1; }
         }
+        @keyframes br-char-whoosh-left {
+          from { transform: translateX(-130%) scale(0.85) rotate(-6deg); opacity: 0; }
+          80%  { transform: translateX(-44%)  scale(1.04) rotate(1deg);  opacity: 1; }
+          to   { transform: translateX(-50%)  scale(1)    rotate(0deg);  opacity: 1; }
+        }
+        @keyframes br-char-zoom {
+          from { transform: translateX(-50%) scale(0.45); opacity: 0; filter: blur(4px); }
+          to   { transform: translateX(-50%) scale(1);    opacity: 1; filter: blur(0); }
+        }
+        @keyframes br-char-drop {
+          from { transform: translateX(-50%) translateY(-32px) scaleY(0.82); opacity: 0; }
+          65%  { transform: translateX(-50%) translateY(8px)   scaleY(1.06); opacity: 1; }
+          to   { transform: translateX(-50%) translateY(0)     scaleY(1);    opacity: 1; }
+        }
+        @keyframes br-char-swoosh-right {
+          from { transform: translateX(30%)  scale(0.85) rotate(6deg);  opacity: 0; }
+          80%  { transform: translateX(-56%) scale(1.04) rotate(-1deg); opacity: 1; }
+          to   { transform: translateX(-50%) scale(1)    rotate(0deg);  opacity: 1; }
+        }
         @keyframes br-pulse {
           0%, 100% { opacity: 1; transform: scale(1); }
           50% { opacity: .4; transform: scale(.7); }
@@ -1181,7 +1249,7 @@ export default function BrainrotLanding() {
         @media (max-width: 900px) {
           .br-hero-inner { grid-template-columns: 1fr !important; }
           .br-builder-grid { grid-template-columns: 1fr !important; }
-          .br-wall-cards { grid-template-columns: 1fr !important; }
+          .br-wall-cards { grid-template-columns: repeat(2, 1fr) !important; overflow-x: auto; }
           .br-steps { grid-template-columns: repeat(2, 1fr) !important; }
           .br-pricing-grid { grid-template-columns: 1fr !important; }
         }

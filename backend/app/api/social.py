@@ -61,11 +61,18 @@ TIKTOK_SCOPES      = "user.info.basic,video.publish"
 # ══════════════════════════════════════════════════════════════════
 
 class PublishItem(BaseModel):
-    clip_id:     str
-    video_url:   str
-    title:       str = "Generated Short"
-    description: str = ""
-    tags:        List[str] = []
+    clip_id:          str
+    video_url:        str
+    title:            str = "Generated Short"
+    description:      str = ""
+    tags:             List[str] = []
+    # YouTube-specific
+    privacy_status:   str = "public"          # "public" | "unlisted" | "private"
+    # TikTok-specific
+    privacy_level:    str = "PUBLIC_TO_EVERYONE"   # PUBLIC_TO_EVERYONE | MUTUAL_FOLLOW_FRIENDS | FOLLOWER_OF_CREATOR | SELF_ONLY
+    disable_duet:     bool = False
+    disable_comment:  bool = False
+    disable_stitch:   bool = False
 
 
 class PublishRequest(BaseModel):
@@ -257,7 +264,7 @@ async def _upload_one_yt(item: PublishItem, yt_tokens: dict) -> dict:
                 "categoryId":  "22",
             },
             "status": {
-                "privacyStatus":           "public",
+                "privacyStatus":           item.privacy_status if item.privacy_status in ("public", "unlisted", "private") else "public",
                 "selfDeclaredMadeForKids": False,
             },
         }
@@ -272,8 +279,19 @@ async def _upload_one_yt(item: PublishItem, yt_tokens: dict) -> dict:
         logger.info(f"Uploaded clip {item.clip_id} → YouTube {youtube_id}")
         return {"clip_id": item.clip_id, "youtube_id": youtube_id, "status": "success"}
     except Exception as exc:
-        logger.error(f"YouTube upload failed for {item.clip_id}: {exc}")
-        return {"clip_id": item.clip_id, "status": "failed", "error": str(exc)}
+        err_str = str(exc)
+        logger.error(f"YouTube upload failed for {item.clip_id}: {err_str}")
+        # Surface actionable message for the most common API errors
+        if "youtubeSignupRequired" in err_str:
+            friendly = ("The connected Google account doesn't have a YouTube channel. "
+                        "Visit youtube.com, create a channel, then reconnect YouTube here.")
+        elif "forbidden" in err_str.lower() or "insufficientPermissions" in err_str:
+            friendly = "YouTube permissions are insufficient — please disconnect and reconnect YouTube."
+        elif "quotaExceeded" in err_str:
+            friendly = "YouTube upload quota exceeded. Try again tomorrow."
+        else:
+            friendly = err_str
+        return {"clip_id": item.clip_id, "status": "failed", "error": friendly}
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -507,10 +525,12 @@ async def _publish_one_tiktok(item: PublishItem, access_token: str) -> dict:
     init_payload = {
         "post_info": {
             "title":                  item.title[:150],
-            "privacy_level":          "SELF_ONLY",   # safe default; upgrade to PUBLIC after review
-            "disable_duet":           False,
-            "disable_comment":        False,
-            "disable_stitch":         False,
+            "privacy_level":          item.privacy_level if item.privacy_level in (
+                "PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY"
+            ) else "PUBLIC_TO_EVERYONE",
+            "disable_duet":           item.disable_duet,
+            "disable_comment":        item.disable_comment,
+            "disable_stitch":         item.disable_stitch,
             "video_cover_timestamp_ms": 1000,
         },
         "source_info": {

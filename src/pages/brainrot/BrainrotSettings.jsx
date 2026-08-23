@@ -72,7 +72,7 @@ export default function BrainrotSettings() {
           padding: '20px 24px', marginBottom: 20,
         }}>
           <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0f0f0f', margin: '0 0 16px' }}>Account</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px' }}>
+          <div className="br-account-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px' }}>
             <LabeledField label="Name"  value={user?.full_name || '—'} />
             <LabeledField label="Email" value={user?.email || '—'} />
             <LabeledField label="Plan"  value={user?.brainrot_plan ? (user.brainrot_plan.charAt(0).toUpperCase() + user.brainrot_plan.slice(1)) : 'Free'} />
@@ -162,11 +162,11 @@ export default function BrainrotSettings() {
               </div>
             )}
 
-            <div>
+            <div className="br-submit-wrap">
               <button
                 type="submit" disabled={saving}
                 style={{
-                  padding: '10px 24px', borderRadius: 8,
+                  width: '100%', padding: '12px 24px', borderRadius: 8,
                   background: saving ? '#e5e5e5' : BRAIN,
                   color: saving ? '#aaa' : '#fff',
                   fontSize: '.88rem', fontWeight: 700,
@@ -185,6 +185,11 @@ export default function BrainrotSettings() {
         </div>
       </div>
     </div>
+    <style>{`
+      @media (max-width: 600px) {
+        .br-account-grid { grid-template-columns: 1fr !important; }
+      }
+    `}</style>
   )
 }
 

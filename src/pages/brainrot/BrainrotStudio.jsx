@@ -87,6 +87,30 @@ export default function BrainrotStudio() {
   const [introSfxId, setIntroSfxId] = useState('')
   const [outroSfxId, setOutroSfxId] = useState('')
 
+  // ── Post metadata (auto-generated from script, user-editable) ───
+  const [postTitle, setPostTitle]       = useState('')
+  const [postHashtags, setPostHashtags] = useState([])
+  const [metaLoading, setMetaLoading]   = useState(false)
+  const metaTimerRef = useRef(null)
+
+  // Debounce: generate post meta 1.8s after user stops typing script
+  useEffect(() => {
+    if (metaTimerRef.current) clearTimeout(metaTimerRef.current)
+    if (!script.trim() || script.trim().length < 8) { setPostTitle(''); setPostHashtags([]); return }
+    metaTimerRef.current = setTimeout(async () => {
+      setMetaLoading(true)
+      try {
+        const d = await brainrotApi.generatePostMeta(script)
+        if (d.title)    setPostTitle(d.title)
+        if (d.hashtags?.length) setPostHashtags(d.hashtags)
+      } catch { /* silent */ } finally { setMetaLoading(false) }
+    }, 1800)
+    return () => clearTimeout(metaTimerRef.current)
+  }, [script])
+
+  // ── Publish modal state ──────────────────────────────────────────
+  const [publishModal, setPublishModal] = useState(null) // { job, platform }
+
   // ── Social connectivity ──────────────────────────────────────────
   const [ytConnected, setYtConnected] = useState(false)
   const [ttConnected, setTtConnected] = useState(false)
@@ -265,53 +289,49 @@ export default function BrainrotStudio() {
     } catch { showToast('Disconnect failed', 'err') }
   }
 
-  const publishYT = async (job) => {
+  // Open publish modal instead of posting directly
+  const publishYT = (job) => {
     if (!ytConnected) { connectYT(); return }
-    const jobId = job.job_id
-    setPublishingYT(prev => new Set([...prev, jobId]))
-    try {
-      const token = localStorage.getItem('sc_token')
-      const title = (job.script_input || 'Brainrot Clip').slice(0, 100)
-      const res = await fetch(`${API_BASE}/social/publish/youtube`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ clips: [{ clip_id: jobId, video_url: job.output_url, title, description: '', tags: [] }] }),
-      })
-      const data = await res.json()
-      if (res.ok && data.results?.[0]?.status === 'success') {
-        setPublishedYT(prev => new Set([...prev, jobId])); showToast('Published to YouTube Shorts! 🎉', 'ok')
-      } else if (res.status === 400 && data.detail?.includes('not connected')) {
-        localStorage.removeItem('yt_connected'); setYtConnected(false); connectYT()
-      } else {
-        showToast(data.results?.[0]?.error || 'YouTube publish failed', 'err')
-      }
-    } catch { showToast('YouTube publish failed', 'err') }
-    setPublishingYT(prev => { const n = new Set(prev); n.delete(jobId); return n })
+    setPublishModal({ job, platform: 'youtube' })
   }
 
-  const publishTT = async (job) => {
+  const publishTT = (job) => {
     if (!ttConnected) { connectTT(); return }
+    setPublishModal({ job, platform: 'tiktok' })
+  }
+
+  // Actual API call — called from PublishModal on confirm
+  const doPublish = async (job, platform, opts) => {
     const jobId = job.job_id
-    setPublishingTT(prev => new Set([...prev, jobId]))
+    const setPublishing = platform === 'youtube' ? setPublishingYT : setPublishingTT
+    const setPublished  = platform === 'youtube' ? setPublishedYT  : setPublishedTT
+    setPublishing(prev => new Set([...prev, jobId]))
     try {
       const token = localStorage.getItem('sc_token')
-      const title = (job.script_input || 'Brainrot Clip').slice(0, 150)
-      const res = await fetch(`${API_BASE}/social/publish/tiktok`, {
+      const endpoint = platform === 'youtube' ? '/social/publish/youtube' : '/social/publish/tiktok'
+      const clipPayload = {
+        clip_id: jobId,
+        video_url: job.output_url,
+        ...opts,
+      }
+      const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ clips: [{ clip_id: jobId, video_url: job.output_url, title }] }),
+        body: JSON.stringify({ clips: [clipPayload] }),
       })
       const data = await res.json()
       const result = data.results?.[0]
       if (res.ok && result?.status === 'success') {
-        setPublishedTT(prev => new Set([...prev, jobId])); showToast('Queued on TikTok! Appears in ~1 min 🔥', 'ok')
+        setPublished(prev => new Set([...prev, jobId]))
+        showToast(platform === 'youtube' ? 'Published to YouTube Shorts! 🎉' : 'Queued on TikTok! 🔥', 'ok')
       } else if (res.status === 400 && data.detail?.includes('not connected')) {
-        localStorage.removeItem('tt_connected'); setTtConnected(false); connectTT()
+        if (platform === 'youtube') { localStorage.removeItem('yt_connected'); setYtConnected(false); connectYT() }
+        else { localStorage.removeItem('tt_connected'); setTtConnected(false); connectTT() }
       } else {
-        showToast(result?.error || data.detail || 'TikTok publish failed', 'err')
+        showToast(result?.error || data.detail || `${platform} publish failed`, 'err')
       }
-    } catch { showToast('TikTok publish failed', 'err') }
-    setPublishingTT(prev => { const n = new Set(prev); n.delete(jobId); return n })
+    } catch { showToast(`${platform} publish failed`, 'err') }
+    setPublishing(prev => { const n = new Set(prev); n.delete(jobId); return n })
   }
 
   const showToast = (msg, type = 'info') => {
@@ -485,6 +505,8 @@ export default function BrainrotStudio() {
         music_volume: musicVolume,
         intro_sfx_id: introSfxId || null,
         outro_sfx_id: outroSfxId || null,
+        post_title: postTitle,
+        post_hashtags: postHashtags,
       }
       const { job_id } = await brainrotApi.createJob(options)
       if (draftKey) { try { localStorage.removeItem(draftKey) } catch { /* ignore */ } }
@@ -534,6 +556,17 @@ export default function BrainrotStudio() {
   return (
     <div style={{ minHeight: '100vh', background: T.paper, fontFamily: FONT, color: T.ink }}>
 
+      {publishModal && (
+        <PublishModal
+          job={publishModal.job}
+          platform={publishModal.platform}
+          ytConnected={ytConnected}
+          ttConnected={ttConnected}
+          onClose={() => setPublishModal(null)}
+          onPublish={doPublish}
+        />
+      )}
+
       <Header user={user} onLogout={logout} navigate={navigate}
         connectionOffline={anyOffline} onRetryConnection={retryFetches}
         libraryClips={libraryClips} />
@@ -543,7 +576,10 @@ export default function BrainrotStudio() {
 
         <StudioSideNav view={view} onChange={setView} user={user}
           clipCount={libraryClips.filter(c => c.status !== 'failed').length}
-          renderingCount={renderingCount} />
+          renderingCount={renderingCount}
+          ytConnected={ytConnected} ttConnected={ttConnected}
+          onConnectYT={connectYT} onConnectTT={connectTT}
+          onDisconnect={disconnectSocial} />
 
         <div style={{ flex: 1, minWidth: 0 }}>
       {view === 'clips' ? (
@@ -602,6 +638,67 @@ export default function BrainrotStudio() {
                 ))}
               </div>
             </div>
+
+            {/* Post meta — auto-generated, user-editable */}
+            {(postTitle || postHashtags.length > 0 || metaLoading) && (
+              <div style={{
+                marginTop: 16, padding: '14px 16px', borderRadius: 10,
+                background: '#faf5ff', border: '1.5px solid #e9d5ff',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#7c3aed',
+                    textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                    Post metadata
+                  </span>
+                  {metaLoading && (
+                    <span style={{ fontSize: '.68rem', color: '#a78bfa' }}>✦ generating…</span>
+                  )}
+                </div>
+                {/* Title */}
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: '.7rem', fontWeight: 600, color: '#6b21a8',
+                    display: 'block', marginBottom: 4 }}>Title</label>
+                  <input
+                    value={postTitle}
+                    onChange={e => setPostTitle(e.target.value)}
+                    maxLength={100}
+                    placeholder="e.g. This debate is INSANE 🔥"
+                    style={{
+                      width: '100%', boxSizing: 'border-box',
+                      border: '1.5px solid #d8b4fe', borderRadius: 7,
+                      padding: '8px 12px', fontSize: '.86rem', fontFamily: FONT,
+                      background: '#fff', color: T.ink, outline: 'none',
+                    }}
+                    onFocus={e => e.currentTarget.style.borderColor = '#7c3aed'}
+                    onBlur={e => e.currentTarget.style.borderColor = '#d8b4fe'}
+                  />
+                  <div style={{ textAlign: 'right', fontSize: '.65rem', color: '#a78bfa', marginTop: 2 }}>
+                    {postTitle.length}/100
+                  </div>
+                </div>
+                {/* Hashtags */}
+                <div>
+                  <label style={{ fontSize: '.7rem', fontWeight: 600, color: '#6b21a8',
+                    display: 'block', marginBottom: 6 }}>Hashtags</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {postHashtags.map((tag, i) => (
+                      <span key={i} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        background: '#ede9fe', color: '#6d28d9',
+                        border: '1px solid #c4b5fd', borderRadius: 999,
+                        padding: '3px 10px', fontSize: '.76rem', fontWeight: 600,
+                      }}>
+                        {tag}
+                        <button onClick={() => setPostHashtags(prev => prev.filter((_, j) => j !== i))}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer',
+                            color: '#a78bfa', fontSize: '.7rem', padding: 0, lineHeight: 1 }}>×</button>
+                      </span>
+                    ))}
+                    <HashtagInput onAdd={tag => setPostHashtags(prev => [...new Set([...prev, tag])])} />
+                  </div>
+                </div>
+              </div>
+            )}
 
             <StageFootnote>
               The AI writes each character fully in-character and paces the dialogue to
@@ -1252,16 +1349,22 @@ function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection
         @media (max-width: 900px) {
           .br-studio-grid { grid-template-columns: 1fr !important; gap: 20px !important; }
           .br-studio-preview { position: static !important; top: auto !important; }
-          .br-preview-stage { max-width: 260px !important; margin: 0 auto !important; }
-          .br-shell { flex-direction: column !important; gap: 16px !important; padding-top: 14px !important; }
+          .br-preview-stage { max-width: 280px !important; margin: 0 auto !important; }
+          .br-shell { flex-direction: column !important; gap: 12px !important; padding-top: 14px !important; }
           .br-sidenav { position: sticky !important; top: 96px !important; width: 100% !important;
-            flex-direction: row !important; z-index: 140; }
-          .br-sidenav button, .br-sidenav a { flex: 1 !important; justify-content: center !important; }
-          .br-sidenav > div { display: none !important; }
+            flex-direction: row !important; flex-wrap: wrap !important; z-index: 140; }
+          .br-sidenav > button, .br-sidenav > a { flex: 1 !important; justify-content: center !important; min-height: 44px !important; }
+          .br-sidenav > div:not(.br-pub-section) { display: none !important; }
+          .br-pub-section { width: 100% !important; display: flex !important; flex-direction: row !important;
+            gap: 6px !important; padding: 6px 2px 4px !important; border-top: 1px solid #e8e8e0 !important; }
+          .br-pub-divider, .br-pub-label { display: none !important; }
+          .br-pub-section > div { flex: 1 !important; margin: 0 !important; font-size: .72rem !important; }
+          .br-social-disc-row { display: none !important; }
         }
         @media (max-width: 640px) {
-          .br-studio-headrow, .br-shell { padding-left: 16px !important; padding-right: 16px !important; }
+          .br-studio-headrow, .br-shell { padding-left: 12px !important; padding-right: 12px !important; }
           .br-studio-tag { display: none; }
+          .br-publish-modal-card { padding: 16px 14px 14px !important; border-radius: 12px !important; }
         }
       `}</style>
     </header>
@@ -1291,13 +1394,306 @@ const SIDENAV_ICON = {
   ),
 }
 
+// ── Small inline hashtag adder ─────────────────────────────────────
+function HashtagInput({ onAdd }) {
+  const [val, setVal] = useState('')
+  const commit = () => {
+    const tag = val.trim().replace(/\s+/g, '').replace(/^#*/, '#')
+    if (tag.length > 1) { onAdd(tag); setVal('') }
+  }
+  return (
+    <input
+      value={val}
+      onChange={e => setVal(e.target.value)}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commit() } }}
+      onBlur={commit}
+      placeholder="+ add tag"
+      maxLength={40}
+      style={{
+        border: '1.5px dashed #c4b5fd', borderRadius: 999, background: 'transparent',
+        padding: '3px 10px', fontSize: '.76rem', color: '#6d28d9',
+        fontFamily: FONT, outline: 'none', width: 90,
+      }}
+    />
+  )
+}
+
+// ── Publish modal — shown when user clicks YT or TT on a ClipCard ─
+function PublishModal({ job, platform, ytConnected, ttConnected, onClose, onPublish }) {
+  const isPlatConnected = platform === 'youtube' ? ytConnected : ttConnected
+  const tags = job.post_hashtags || []
+  const defaultTitle = job.post_title || (job.script_input || '').slice(0, 80) || 'Brainrot Clip'
+
+  const [title, setTitle]         = useState(defaultTitle)
+  const [description, setDesc]    = useState(tags.join(' '))
+  const [hashtags, setHashtags]   = useState(tags)
+  // YouTube
+  const [ytPrivacy, setYtPrivacy] = useState('public')
+  // TikTok
+  const [ttPrivacy, setTtPrivacy] = useState('PUBLIC_TO_EVERYONE')
+  const [noDuet, setNoDuet]       = useState(false)
+  const [noComment, setNoComment] = useState(false)
+  const [noStitch, setNoStitch]   = useState(false)
+
+  const [busy, setBusy] = useState(false)
+
+  const fullTitle = hashtags.length
+    ? `${title} ${hashtags.join(' ')}`.slice(0, platform === 'youtube' ? 100 : 150)
+    : title.slice(0, platform === 'youtube' ? 100 : 150)
+
+  const handlePublish = async () => {
+    setBusy(true)
+    await onPublish(job, platform, {
+      title: fullTitle,
+      description,
+      tags: hashtags,
+      privacy_status: ytPrivacy,
+      privacy_level: ttPrivacy,
+      disable_duet: noDuet,
+      disable_comment: noComment,
+      disable_stitch: noStitch,
+    })
+    setBusy(false)
+    onClose()
+  }
+
+  const isYT = platform === 'youtube'
+  const accent = isYT ? '#cf1322' : '#000'
+  const platformLabel = isYT ? 'YouTube Shorts' : 'TikTok'
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9000,
+      background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(3px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 20,
+    }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="br-publish-modal-card" style={{
+        background: '#fff', borderRadius: 16,
+        border: `2px solid ${T.ink}`, boxShadow: `6px 6px 0 ${accent}`,
+        width: '100%', maxWidth: 480,
+        maxHeight: '90vh', overflowY: 'auto',
+        padding: '24px 24px 20px',
+        fontFamily: FONT,
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+          {isYT
+            ? <svg width="20" height="20" viewBox="0 0 24 24" fill={accent}><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+            : <svg width="17" height="20" viewBox="0 0 24 24" fill={accent}><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.26 6.26 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.94a8.17 8.17 0 0 0 4.78 1.52V7.01a4.85 4.85 0 0 1-1.01-.32z"/></svg>
+          }
+          <span style={{ fontSize: '1rem', fontWeight: 800, color: T.ink }}>
+            Post to {platformLabel}
+          </span>
+          <button onClick={onClose} style={{
+            marginLeft: 'auto', background: 'none', border: 'none',
+            cursor: 'pointer', color: T.mute, fontSize: '1.1rem', lineHeight: 1,
+          }}>✕</button>
+        </div>
+
+        {!isPlatConnected && (
+          <div style={{ padding: '10px 14px', borderRadius: 8, background: '#fef9c3',
+            border: '1px solid #fde047', fontSize: '.82rem', color: '#854d0e', marginBottom: 16 }}>
+            {platformLabel} isn't connected yet — connect it from the sidebar first.
+          </div>
+        )}
+
+        {/* Title */}
+        <Field label={`Title ${isYT ? '(max 100 chars)' : '(caption, max 150 chars)'}`}>
+          <input value={title} onChange={e => setTitle(e.target.value)}
+            maxLength={isYT ? 100 : 150}
+            style={inputStyle}
+            onFocus={e => e.currentTarget.style.borderColor = accent}
+            onBlur={e => e.currentTarget.style.borderColor = T.line}
+          />
+          <div style={{ textAlign: 'right', fontSize: '.65rem', color: T.mute, marginTop: 2 }}>
+            {fullTitle.length}/{isYT ? 100 : 150} chars (hashtags included)
+          </div>
+        </Field>
+
+        {/* Hashtags */}
+        <Field label="Hashtags">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 10px',
+            border: `1.5px solid ${T.line}`, borderRadius: 8, minHeight: 44 }}>
+            {hashtags.map((tag, i) => (
+              <span key={i} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                background: T.lineSoft, borderRadius: 999,
+                padding: '2px 9px', fontSize: '.76rem', fontWeight: 600, color: T.ink,
+              }}>
+                {tag}
+                <button onClick={() => setHashtags(prev => prev.filter((_, j) => j !== i))}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer',
+                    color: T.mute, fontSize: '.7rem', padding: 0 }}>×</button>
+              </span>
+            ))}
+            <HashtagInput onAdd={tag => setHashtags(prev => [...new Set([...prev, tag])])} />
+          </div>
+        </Field>
+
+        {/* Description — YouTube only */}
+        {isYT && (
+          <Field label="Description (optional)">
+            <textarea value={description} onChange={e => setDesc(e.target.value)}
+              rows={3} maxLength={5000}
+              placeholder="Add more context, links, credits..."
+              style={{ ...inputStyle, resize: 'vertical', fontFamily: FONT }}
+              onFocus={e => e.currentTarget.style.borderColor = accent}
+              onBlur={e => e.currentTarget.style.borderColor = T.line}
+            />
+          </Field>
+        )}
+
+        {/* Platform options */}
+        <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 16, marginTop: 4 }}>
+          <div style={{ fontSize: '.72rem', fontWeight: 700, color: T.mute,
+            textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>
+            Options
+          </div>
+
+          {isYT ? (
+            <Field label="Privacy">
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[['public','Public'],['unlisted','Unlisted'],['private','Private']].map(([v,l]) => (
+                  <button key={v} onClick={() => setYtPrivacy(v)}
+                    style={{
+                      flex: 1, padding: '7px 4px', borderRadius: 7, cursor: 'pointer',
+                      fontSize: '.76rem', fontWeight: 600, fontFamily: FONT,
+                      border: `1.5px solid ${ytPrivacy === v ? accent : T.line}`,
+                      background: ytPrivacy === v ? (accent === '#cf1322' ? '#fef2f2' : '#f0f0f0') : '#fff',
+                      color: ytPrivacy === v ? accent : T.mute,
+                    }}>{l}</button>
+                ))}
+              </div>
+            </Field>
+          ) : (
+            <>
+              <Field label="Who can view">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {[
+                    ['PUBLIC_TO_EVERYONE','Everyone'],
+                    ['MUTUAL_FOLLOW_FRIENDS','Mutual followers'],
+                    ['FOLLOWER_OF_CREATOR','Your followers'],
+                    ['SELF_ONLY','Only me'],
+                  ].map(([v,l]) => (
+                    <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 8,
+                      cursor: 'pointer', fontSize: '.82rem', fontWeight: 500 }}>
+                      <input type="radio" checked={ttPrivacy === v} onChange={() => setTtPrivacy(v)}
+                        style={{ accentColor: '#000' }} />
+                      {l}
+                    </label>
+                  ))}
+                </div>
+              </Field>
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 10 }}>
+                {[['noDuet','Disable Duet',noDuet,setNoDuet],
+                  ['noComment','Disable Comments',noComment,setNoComment],
+                  ['noStitch','Disable Stitch',noStitch,setNoStitch]].map(([k,l,v,s]) => (
+                  <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 6,
+                    cursor: 'pointer', fontSize: '.8rem', fontWeight: 500 }}>
+                    <input type="checkbox" checked={v} onChange={e => s(e.target.checked)}
+                      style={{ accentColor: '#000', width: 15, height: 15 }} />
+                    {l}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Submit */}
+        <button onClick={handlePublish} disabled={busy || !isPlatConnected}
+          style={{
+            marginTop: 20, width: '100%', padding: '12px',
+            background: isPlatConnected ? accent : '#e5e5e5',
+            color: isPlatConnected ? '#fff' : '#aaa',
+            border: `2px solid ${isPlatConnected ? T.ink : '#e5e5e5'}`,
+            borderRadius: 10, fontWeight: 800, fontSize: '.9rem',
+            cursor: isPlatConnected && !busy ? 'pointer' : 'default',
+            boxShadow: isPlatConnected ? `3px 3px 0 ${T.ink}` : 'none',
+            fontFamily: FONT, transition: 'all .12s',
+          }}>
+          {busy ? 'Publishing…' : `Publish to ${platformLabel} →`}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+const inputStyle = {
+  width: '100%', boxSizing: 'border-box',
+  border: `1.5px solid ${T.line}`, borderRadius: 8,
+  padding: '8px 12px', fontSize: '.86rem',
+  background: '#fff', color: T.ink, outline: 'none',
+}
+
+function Field({ label, children }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: 'block', fontSize: '.72rem', fontWeight: 700,
+        color: T.mute, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+function SocialConnectRow({ icon, label, connected, onConnect, onDisconnect }) {
+  const [hoverDisc, setHoverDisc] = useState(false)
+  return (
+    <div style={{
+      borderRadius: 8, margin: '2px 0',
+      border: `1px solid ${connected ? '#bbf7d0' : T.line}`,
+      background: connected ? '#f0fdf4' : T.paper,
+      overflow: 'hidden',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px' }}>
+        <span style={{ color: connected ? '#16a34a' : '#aaa', display: 'flex', flexShrink: 0 }}>{icon}</span>
+        <span style={{ flex: 1, fontSize: '.78rem', fontWeight: 600,
+          color: connected ? '#15803d' : T.ink }}>
+          {label}
+        </span>
+        {connected ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: '.65rem', color: '#16a34a', fontWeight: 600 }}>✓ Connected</span>
+          </span>
+        ) : (
+          <button onClick={onConnect} style={{
+            fontSize: '.68rem', fontWeight: 700, color: '#fff',
+            background: T.ink, border: 'none', cursor: 'pointer',
+            padding: '3px 9px', borderRadius: 5, fontFamily: FONT,
+          }}>Connect</button>
+        )}
+      </div>
+      {connected && (
+        <div className="br-social-disc-row" style={{ borderTop: '1px solid #bbf7d0', padding: '5px 10px', display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={onDisconnect}
+            onMouseEnter={() => setHoverDisc(true)}
+            onMouseLeave={() => setHoverDisc(false)}
+            style={{
+              fontSize: '.65rem', fontWeight: 600,
+              color: hoverDisc ? '#dc2626' : '#999',
+              background: 'none', border: 'none', cursor: 'pointer',
+              padding: '1px 4px', fontFamily: FONT,
+              transition: 'color .12s',
+            }}>
+            Disconnect
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Left-side nav — Create / My clips, plus a Billing link. Brainrot has its
 // own plan/credits pool (brainrot_plan / brainrot_credits_*, migration 016)
 // fully separate from YT-Shorts, so this opens /brainrot/billing — its own
 // page, not the shared /billing. Sticky column on desktop, collapses to a
 // horizontal bar (same items, same active styling) on mobile via the
 // .br-sidenav / .br-shell media rules in Header's <style> block.
-function StudioSideNav({ view, onChange, clipCount, renderingCount, user }) {
+function StudioSideNav({ view, onChange, clipCount, renderingCount, user, ytConnected, ttConnected, onConnectYT, onConnectTT, onDisconnect }) {
   const ITEMS = [
     { id: 'create', label: 'Create',   icon: SIDENAV_ICON.create },
     { id: 'clips',  label: 'My clips', icon: SIDENAV_ICON.clips, count: clipCount },
@@ -1361,6 +1757,30 @@ function StudioSideNav({ view, onChange, clipCount, renderingCount, user }) {
           borderRadius: 999, padding: '1px 8px',
         }}>{user?.brainrot_plan || 'free'}</span>
       </Link>
+
+      {/* ── Social publish section ── */}
+      <div className="br-pub-section" style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        <div className="br-pub-divider" style={{ height: 1, background: T.lineSoft, margin: '6px 4px' }} />
+        <div className="br-pub-label" style={{ padding: '4px 6px 2px', fontSize: '.65rem', fontWeight: 700,
+          color: T.mute, textTransform: 'uppercase', letterSpacing: '.07em' }}>
+          Publish to
+        </div>
+
+      <SocialConnectRow
+        icon={<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>}
+        label="YouTube"
+        connected={ytConnected}
+        onConnect={onConnectYT}
+        onDisconnect={() => onDisconnect('youtube')}
+      />
+      <SocialConnectRow
+        icon={<svg width="13" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.26 6.26 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.94a8.17 8.17 0 0 0 4.78 1.52V7.01a4.85 4.85 0 0 1-1.01-.32z"/></svg>}
+        label="TikTok"
+        connected={ttConnected}
+        onConnect={onConnectTT}
+        onDisconnect={() => onDisconnect('tiktok')}
+      />
+      </div>
     </nav>
   )
 }
@@ -1894,6 +2314,20 @@ function ClipCard({ job, ytConnected, ttConnected, publishedYT, publishingYT, pu
           </a>
         )}
       </div>
+      {isComplete && job.post_title && (
+        <div style={{ padding: '0 4px 6px' }}>
+          <div style={{ fontSize: '.7rem', fontWeight: 700, color: T.ink,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {job.post_title}
+          </div>
+          {job.post_hashtags?.length > 0 && (
+            <div style={{ fontSize: '.62rem', color: '#7c3aed', marginTop: 2,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {job.post_hashtags.join(' ')}
+            </div>
+          )}
+        </div>
+      )}
       {isComplete && (
         <div style={{ display: 'flex', gap: 5, padding: '4px 4px 2px' }}>
           {/* YouTube publish */}

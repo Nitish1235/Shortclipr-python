@@ -103,6 +103,8 @@ class BrainrotJobOptions(BaseModel):
     music_volume: float = 0.3
     intro_sfx_id: str | None = None
     outro_sfx_id: str | None = None
+    post_title: str = ""
+    post_hashtags: list[str] = []
 
     @field_validator("character_positions")
     @classmethod
@@ -282,6 +284,8 @@ async def create_brainrot_job(body: CreateBrainrotJobRequest, current_user: Curr
         "intro_sfx_url": intro_sfx_url,
         "outro_sfx_id": opts.outro_sfx_id,
         "outro_sfx_url": outro_sfx_url,
+        "post_title": opts.post_title.strip(),
+        "post_hashtags": opts.post_hashtags,
     }
 
     try:
@@ -324,6 +328,7 @@ async def list_brainrot_jobs(current_user: CurrentUser):
 
 
 def _serialize_brainrot_job(row: dict) -> dict:
+    payload = row.get("payload") or {}
     return {
         "job_id": str(row["job_id"]),
         "status": row["status"],
@@ -332,10 +337,56 @@ def _serialize_brainrot_job(row: dict) -> dict:
         "output_url": row.get("output_url"),
         "error_message": row.get("error_message"),
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+        "script_input": payload.get("script_input", ""),
+        "post_title": payload.get("post_title", ""),
+        "post_hashtags": payload.get("post_hashtags", []),
     }
 
 
 # ── GET /brainrot/characters ─────────────────────────────────────
+
+class PostMetaRequest(BaseModel):
+    script_input: str
+
+
+@router.post("/generate-post-meta")
+async def generate_post_meta(body: PostMetaRequest, current_user: CurrentUser):
+    """
+    Given a script/topic, return a viral post title and hashtags for YT/TikTok.
+    Uses the same OpenAI client as brainrot_script.py.
+    """
+    from app.pipeline.brainrot_script import _client as _openai, SCRIPT_MODEL
+
+    script = body.script_input.strip()[:600]
+    if not script:
+        return {"title": "", "hashtags": []}
+
+    prompt = (
+        "You write viral social media metadata for short-form video (TikTok / YouTube Shorts).\n\n"
+        f"Video topic / script:\n{script}\n\n"
+        "Return ONLY valid JSON with exactly two keys:\n"
+        "  \"title\"     — one punchy post title under 80 characters, no hashtags inside it\n"
+        "  \"hashtags\"  — array of 6–8 relevant hashtags WITH the # sign, e.g. [\"#skibidi\", \"#fyp\"]\n\n"
+        "Rules: title must grab attention in < 5 words; hashtags mix trending (#fyp #viral) "
+        "with topic-specific ones. Return nothing except the JSON object."
+    )
+    try:
+        resp = await _openai.chat.completions.create(
+            model=SCRIPT_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=200,
+            temperature=0.8,
+            response_format={"type": "json_object"},
+        )
+        import json as _json
+        data = _json.loads(resp.choices[0].message.content or "{}")
+        title = str(data.get("title", "")).strip()[:100]
+        hashtags = [str(h).strip() for h in data.get("hashtags", []) if h][:10]
+        return {"title": title, "hashtags": hashtags}
+    except Exception as exc:
+        logger.warning(f"generate-post-meta failed: {exc}")
+        return {"title": "", "hashtags": []}
+
 
 @router.get("/characters")
 async def list_characters():

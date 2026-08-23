@@ -48,6 +48,8 @@ export const brainrotApi = {
   listJobs:      () => getJSON('/brainrot/jobs'),
   getJob:        (id) => getJSON(`/brainrot/jobs/${id}`),
 
+  generatePostMeta: (script_input) => postJSON('/brainrot/generate-post-meta', { script_input }),
+
   listSignatureCasts:   () => getJSON('/brainrot/signature-casts'),
   saveSignatureCast:    (character_ids, label) => postJSON('/brainrot/signature-casts', { character_ids, label }),
   deleteSignatureCast:  (id) => deleteJSON(`/brainrot/signature-casts/${id}`),

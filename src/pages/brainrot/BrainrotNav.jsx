@@ -172,7 +172,7 @@ export default function BrainrotNav() {
           aria-label="Menu" aria-expanded={menuOpen}
           style={{
             display: 'none', flexShrink: 0,
-            width: 38, height: 38, alignItems: 'center', justifyContent: 'center',
+            width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
             background: menuOpen ? BRAIN : '#f4f4f4', color: menuOpen ? '#fff' : INK,
             border: `1.5px solid ${menuOpen ? BRAIN : '#e5e5e5'}`,
             borderRadius: 8, cursor: 'pointer', fontSize: '1.05rem',
@@ -189,21 +189,22 @@ export default function BrainrotNav() {
           }}>
             <Link to="/brainrot" onClick={() => setMenuOpen(false)} style={{
               color: INK, fontSize: '.9rem', fontWeight: 700,
-              padding: '12px 14px', borderRadius: 8, textDecoration: 'none',
+              padding: '14px 16px', borderRadius: 8, textDecoration: 'none',
+              minHeight: 44, display: 'flex', alignItems: 'center',
             }}>Home</Link>
             {user ? (
               <button onClick={() => { setMenuOpen(false); logout() }} style={{
                 background: 'transparent', border: 'none', cursor: 'pointer',
                 textAlign: 'left', color: '#999', fontSize: '.9rem', fontWeight: 700,
-                padding: '12px 14px', borderRadius: 8,
+                padding: '14px 16px', borderRadius: 8, minHeight: 44,
               }}>Sign out</button>
             ) : (
               <Link
                 to="/brainrot/login"
                 onClick={() => setMenuOpen(false)}
                 style={{
-                  display: 'block', color: BRAIN, fontSize: '.9rem', fontWeight: 700,
-                  padding: '12px 14px', borderRadius: 8, textDecoration: 'none',
+                  display: 'flex', alignItems: 'center', color: BRAIN, fontSize: '.9rem', fontWeight: 700,
+                  padding: '14px 16px', borderRadius: 8, textDecoration: 'none', minHeight: 44,
                 }}
               >Sign in →</Link>
             )}
