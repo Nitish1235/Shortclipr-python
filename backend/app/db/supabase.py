@@ -347,11 +347,19 @@ async def complete_brainrot_job(job_id: str, output_url: str) -> None:
 
 
 async def fail_brainrot_job(job_id: str, error_message: str) -> None:
+    """No-op if the job already reached 'complete'. Guards a real race: the
+    render/upload can finish and call complete_brainrot_job at nearly the
+    same instant the stage's outer BRAINROT_STAGE_TIMEOUT_SECONDS timeout
+    fires and calls this too. Without this guard, a successfully-delivered
+    clip gets silently flipped back to 'failed' (output_url/current_step
+    stay from the completion since this UPDATE never touched them, but
+    status and error_message get clobbered) — and _fail_and_refund would
+    then refund a credit for a clip the user actually received."""
     await _execute(
         """
         UPDATE brainrot_jobs
         SET status='failed', error_message=$1, updated_at=$2
-        WHERE job_id=$3
+        WHERE job_id=$3 AND status != 'complete'
         """,
         error_message[:1000], _now(), job_id,
     )

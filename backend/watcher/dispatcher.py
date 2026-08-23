@@ -403,7 +403,7 @@ async def release_brainrot_api_for_retry(pool: asyncpg.Pool, job_id: str) -> Non
             retry_count       = retry_count + 1,
             target_api_region = NULL,
             updated_at        = NOW()
-        WHERE job_id = $1
+        WHERE job_id = $1 AND status != 'complete'
     """, job_id, config.MAX_RETRIES)
 
     row = await pool.fetchrow(
@@ -418,7 +418,15 @@ async def release_brainrot_api_for_retry(pool: asyncpg.Pool, job_id: str) -> Non
 
 async def release_brainrot_ffmpeg_for_retry(pool: asyncpg.Pool, job_id: str) -> None:
     """Bounce a failed brainrot FFmpeg dispatch back to 'api_done' with
-    exponential backoff, or fail + refund if MAX_RETRIES exceeded."""
+    exponential backoff, or fail + refund if MAX_RETRIES exceeded.
+
+    WHERE guards against status='complete': the render can finish and call
+    complete_brainrot_job right as the reconciler (or a dispatch-failure
+    callback) independently decides this same job looks stuck and calls
+    this — without the guard, a successfully-delivered clip gets flipped
+    back to 'api_done'/'failed' and its credit wrongly refunded (the
+    refund check below re-reads status AFTER this UPDATE, so if the guard
+    keeps it at 'complete' the refund correctly never fires)."""
     await pool.execute("""
         UPDATE brainrot_jobs
         SET status = CASE
@@ -432,7 +440,7 @@ async def release_brainrot_ffmpeg_for_retry(pool: asyncpg.Pool, job_id: str) -> 
             retry_count          = retry_count + 1,
             target_brainrot_region = NULL,
             updated_at           = NOW()
-        WHERE job_id = $1
+        WHERE job_id = $1 AND status != 'complete'
     """, job_id, config.MAX_RETRIES)
 
     row = await pool.fetchrow(

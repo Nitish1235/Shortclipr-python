@@ -133,6 +133,13 @@ async def _fail_and_refund(job_id: str, message: str) -> None:
         row = await db.get_brainrot_job(job_id)
         if not row:
             return
+        if row["status"] == "complete":
+            # Race: the render/upload actually finished and called
+            # complete_brainrot_job right as this timeout fired.
+            # fail_brainrot_job's own status guard already no-op'd the
+            # flip back to 'failed' — skip the refund too, the clip is real.
+            logger.info(f"[{job_id}] Timeout/failure fired but job had already completed — skipping refund")
+            return
         payload = row.get("payload") or {}
         reserved = payload.get("reserved_credits", 0)
         if reserved > 0:

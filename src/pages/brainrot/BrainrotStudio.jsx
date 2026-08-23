@@ -2171,26 +2171,33 @@ const LIBRARY_FILTERS = [
   { id: 'all',      label: 'All' },
   { id: 'active',   label: 'Rendering' },
   { id: 'complete', label: 'Ready' },
+  { id: 'failed',   label: 'Failed' },
 ]
 
 function ClipsLibrary({ clips, onCreate, ytConnected, ttConnected, publishedYT, publishingYT, publishedTT, publishingTT, onPublishYT, onPublishTT, onConnectYT, onConnectTT, onDisconnect }) {
   const [filter, setFilter] = useState('all')
 
-  // Failed clips never surface in the library — hide them from every
-  // filter's count and from the visible list.
+  // Failed clips are kept out of "All"/"Rendering"/"Ready" (and their
+  // counts) so a stuck/errored run doesn't clutter the default view — but
+  // unlike before, they're not hidden entirely: the "Failed" tab surfaces
+  // them with their error_message (see ClipCard), so a refunded/failed
+  // clip reads as "this failed, here's why" instead of just vanishing.
   const shownClips = useMemo(() => clips.filter(c => c.status !== 'failed'), [clips])
+  const failedClips = useMemo(() => clips.filter(c => c.status === 'failed'), [clips])
 
   const counts = useMemo(() => ({
     all: shownClips.length,
     active: shownClips.filter(c => isActive(c)).length,
     complete: shownClips.filter(c => c.status === 'complete').length,
-  }), [shownClips])
+    failed: failedClips.length,
+  }), [shownClips, failedClips])
 
   const visible = useMemo(() => {
     if (filter === 'all') return shownClips
     if (filter === 'active') return shownClips.filter(c => isActive(c))
+    if (filter === 'failed') return failedClips
     return shownClips.filter(c => c.status === filter)
-  }, [shownClips, filter])
+  }, [shownClips, failedClips, filter])
 
   return (
     <div style={{ padding: '8px 0 80px' }}>
@@ -2211,7 +2218,7 @@ function ClipsLibrary({ clips, onCreate, ytConnected, ttConnected, publishedYT, 
         </button>
       </div>
 
-      {shownClips.length > 0 && (
+      {(shownClips.length > 0 || failedClips.length > 0) && (
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 20 }}>
           {LIBRARY_FILTERS.map(f => {
             const on = filter === f.id
@@ -2237,7 +2244,7 @@ function ClipsLibrary({ clips, onCreate, ytConnected, ttConnected, publishedYT, 
         </div>
       )}
 
-      {shownClips.length === 0 ? (
+      {shownClips.length === 0 && failedClips.length === 0 ? (
         <div style={{
           textAlign: 'center', padding: '64px 20px',
           background: T.paper2, border: `1px solid ${T.line}`, borderRadius: 12,
