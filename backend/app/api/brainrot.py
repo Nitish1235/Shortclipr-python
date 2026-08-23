@@ -19,6 +19,7 @@ URLs) runs the stage in-process via asyncio.create_task, same as jobs.py.
 import asyncio
 import logging
 import random
+import re
 import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -703,9 +704,10 @@ class BulkCreateRequest(BaseModel):
 async def admin_bulk_create(body: BulkCreateRequest, current_user: CurrentUser):
     """Admin: queue a list of topics for sequential, one-at-a-time brainrot
     generation. Each topic becomes its own job — 2 random characters from
-    BULK_CHARACTER_POOL, auto-assigned voices, a random selected gameplay
-    background, sensible defaults everywhere else (turn_based motion,
-    slide entry/exit, default caption style)."""
+    BULK_CHARACTER_POOL by default (see _parse_topic_tag for the ". #1"/
+    ". #2" per-line override), auto-assigned voices, a random selected
+    gameplay background, sensible defaults everywhere else (turn_based
+    motion, slide entry/exit, default caption style)."""
     _require_admin(current_user)
     if _bulk_gen["running"]:
         raise HTTPException(status_code=409, detail="Bulk generation already running")
@@ -732,10 +734,11 @@ async def _run_bulk_generation(topics: list[str], user_id: str) -> None:
         roster = {c["id"]: c for c in await get_character_roster()}
         pool = [cid for cid in BULK_CHARACTER_POOL if cid in roster]
 
-        for topic in topics:
+        for raw_topic in topics:
+            topic, character_count = _parse_topic_tag(raw_topic)
             _bulk_gen["current_topic"] = topic
             try:
-                job_id = await _create_bulk_job(topic, user_id, roster, pool, gameplay_clips)
+                job_id = await _create_bulk_job(topic, character_count, user_id, roster, pool, gameplay_clips)
                 final = await _wait_for_job_terminal(job_id)
                 if final and final["status"] == "complete":
                     _bulk_gen["done"] += 1
@@ -753,6 +756,22 @@ async def _run_bulk_generation(topics: list[str], user_id: str) -> None:
         logger.info(f"[bulk] done: {_bulk_gen['done']} ok, {_bulk_gen['failed']} failed")
 
 
+_TOPIC_TAG_RE = re.compile(r"^(?P<topic>.*\.)\s+#(?P<n>[12])\s*$")
+
+
+def _parse_topic_tag(raw: str) -> tuple[str, int]:
+    """A bulk-create topic line can end with ". #1" or ". #2" — a full stop
+    (the topic sentence's own punctuation), a space, then the tag — to
+    force a 1- or 2-character cast for that specific clip. Untagged lines
+    default to 2 (the normal two-character argument format). The tag is
+    stripped before the topic reaches the dialogue writer; it's a control
+    signal for the bulk runner, not part of the actual topic text."""
+    m = _TOPIC_TAG_RE.match(raw.strip())
+    if not m:
+        return raw.strip(), 2
+    return m.group("topic").strip(), int(m.group("n"))
+
+
 async def _wait_for_job_terminal(job_id: str, poll_seconds: float = 5.0) -> dict | None:
     """Blocks until the job reaches complete/failed — this is what makes
     the bulk run genuinely sequential (one render actually finishing
@@ -765,15 +784,16 @@ async def _wait_for_job_terminal(job_id: str, poll_seconds: float = 5.0) -> dict
 
 
 async def _create_bulk_job(
-    topic: str, user_id: str, roster: dict, pool: list[str], gameplay_clips: list[dict],
+    topic: str, character_count: int, user_id: str, roster: dict, pool: list[str], gameplay_clips: list[dict],
 ) -> str:
-    if len(pool) < 2:
-        raise RuntimeError("Bulk character pool has fewer than 2 valid characters")
+    if character_count not in (1, 2):
+        character_count = 2
+    if len(pool) < character_count:
+        raise RuntimeError(f"Bulk character pool has fewer than {character_count} valid characters")
     if not gameplay_clips:
         raise RuntimeError("No selected gameplay clips available to pick a background from")
 
-    left_id, right_id = random.sample(pool, 2)
-    left, right = roster[left_id], roster[right_id]
+    picked_ids = random.sample(pool, character_count)
     gameplay_clip = random.choice(gameplay_clips)
 
     def _profile(character: dict, side: str) -> dict:
@@ -789,9 +809,19 @@ async def _create_bulk_job(
             "voice": character.get("voice", ""),
         }
 
-    character_positions = [_profile(left, "left"), _profile(right, "right")]
-    voice_left = default_voice_for_gender(left.get("gender", "neutral"), slot=0).voice_id
-    voice_right = default_voice_for_gender(right.get("gender", "neutral"), slot=1).voice_id
+    if character_count == 1:
+        # Single-character clips are always "left" (matches the normal
+        # 1-character convention — brainrot_composite.py forces always_on
+        # motion for a lone character, and voice_right stays empty).
+        left = roster[picked_ids[0]]
+        character_positions = [_profile(left, "left")]
+        voice_left = default_voice_for_gender(left.get("gender", "neutral"), slot=0).voice_id
+        voice_right = ""
+    else:
+        left, right = roster[picked_ids[0]], roster[picked_ids[1]]
+        character_positions = [_profile(left, "left"), _profile(right, "right")]
+        voice_left = default_voice_for_gender(left.get("gender", "neutral"), slot=0).voice_id
+        voice_right = default_voice_for_gender(right.get("gender", "neutral"), slot=1).voice_id
 
     reserved_credits = await db.reserve_brainrot_credits(user_id, 1)
     if reserved_credits < 1:
@@ -800,7 +830,7 @@ async def _create_bulk_job(
     payload = {
         "reserved_credits": reserved_credits,
         "script_input": topic,
-        "character_ids": [left_id, right_id],
+        "character_ids": picked_ids,
         "character_positions": character_positions,
         "gameplay_clip_id": str(gameplay_clip["id"]),
         "gameplay_clip_url": gameplay_clip["gcs_path"],

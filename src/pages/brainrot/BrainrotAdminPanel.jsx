@@ -118,12 +118,12 @@ function BulkCreateSection({ notify }) {
   return (
     <div style={cardS}>
       <SectionHead icon="🎬" title="Bulk create"
-        sub="One topic per line — casts 2 random characters + voices per clip, renders one at a time." />
+        sub={'One topic per line — casts 2 random characters + voices per clip by default. End a line with ". #1" to force 1 character instead, or ". #2" to be explicit about 2.'} />
       <textarea
         value={topics}
         onChange={e => setTopics(e.target.value)}
         disabled={running}
-        placeholder={'A corporate woman with a good sense of humor, talking gibberish...\nTwo roommates arguing about the thermostat...'}
+        placeholder={'A corporate woman with a good sense of humor, talking gibberish.\nA lone conspiracy uncle ranting about the thermostat. #1\nTwo roommates arguing about the thermostat. #2'}
         rows={6}
         style={{ ...inputS, marginTop: 12, resize: 'vertical', fontFamily: 'inherit', opacity: running ? .6 : 1 }}
       />
