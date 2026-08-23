@@ -8,7 +8,11 @@ Flow:
   2. generate_scene_plan() — AI dialogue timeline (brainrot_script.py)
   3. TTS every line in parallel (bounded concurrency), build a sequential
      timeline from the REAL audio durations (no interpolated timestamps)
-  4. Download character assets + gameplay clip + music/SFX from GCS
+  4. Download character assets + music/SFX from GCS. The gameplay clip and
+     TTS line audio are handed to ffmpeg as GCS URLs directly (no local
+     download) — see the "streamed render" comment in
+     _run_brainrot_ffmpeg_stage for why, and its fallback for what happens
+     if that fails mid-render.
   5. brainrot_composite.render() — one ffmpeg pass
   6. Upload the finished clip, mark the job complete
 
@@ -223,19 +227,22 @@ async def _run_brainrot_ffmpeg_stage(job_id: str) -> None:
     with tempfile.TemporaryDirectory(prefix=f"brainrot_{job_id}_") as tmp_dir_str:
         tmp_dir = Path(tmp_dir_str)
 
-        # Hydrate timed_lines from the scene_plan — each line's audio is an
-        # independent GCS download, so fetch them all concurrently instead
-        # of one-at-a-time (order doesn't matter here, gather preserves it).
-        async def _hydrate_line(i: int, line: dict) -> composite.TimedLine:
-            local_audio = tmp_dir / f"line_{i}.mp3"
-            await download_to_file(line["audio_url"], local_audio)
-            return composite.TimedLine(
-                speaker=line["speaker"], text=line["text"], start=line["start"], end=line["end"], audio_path=local_audio,
+        # Remote timed_lines — no download. TimedLine.audio_path takes a GCS
+        # URL string just as happily as a local Path (see its dataclass
+        # comment), and composite.render() only ever does str(audio_path) to
+        # build the ffmpeg -i args, so handing it the URL directly skips the
+        # "API stage uploads it, FFmpeg stage downloads it straight back
+        # down" round trip entirely. Each line plays once, never looped, so
+        # there's no seek-back-over-HTTP behavior to worry about — the
+        # lowest-risk version of this technique (see the gameplay clip below
+        # for the higher-risk, `-stream_loop`'d case, and its fallback).
+        remote_lines = [
+            composite.TimedLine(
+                speaker=line["speaker"], text=line["text"], start=line["start"], end=line["end"],
+                audio_path=line["audio_url"],
             )
-
-        timed_lines = list(await asyncio.gather(
-            *(_hydrate_line(i, line) for i, line in enumerate(scene_plan))
-        ))
+            for line in scene_plan
+        ]
 
         # Prefer the REAL synthesized-audio length (sum of actual TTS clip
         # durations) over the nominal requested duration_seconds — the latter
@@ -243,26 +250,25 @@ async def _run_brainrot_ffmpeg_stage(job_id: str) -> None:
         # and is always truthy (clamped 5-120), so using it here would
         # silently truncate dialogue/captions mid-line whenever the real
         # audio runs longer than estimated.
-        clip_duration = (timed_lines[-1].end if timed_lines else 0.0) or payload.get("duration_seconds", 30)
+        clip_duration = (remote_lines[-1].end if remote_lines else 0.0) or payload.get("duration_seconds", 30)
 
         motion_mode = payload.get("motion_mode", "turn_based")
+        gameplay_url = payload["gameplay_clip_url"]  # resolved by the API layer at job-creation time
 
         async with _step(job_id, "fetch_assets"):
             await db.update_brainrot_job_progress(job_id, 50, "Downloading assets...", status="rendering")
-            # Characters, gameplay clip, and music/SFX are all independent
-            # GCS downloads — fetch them concurrently instead of sequentially.
-            # entry/exit SFX resolution needs `characters` first (it reads
-            # each character's own entry/exit pick), so that pair stays a
-            # second, smaller gather after the first one completes.
-            characters, gameplay_path, music_path, intro_sfx_path, outro_sfx_path = await asyncio.gather(
+            # Characters + music/SFX only — small, single-read files where a
+            # local download is already cheap. The gameplay clip (the one
+            # genuinely large asset) and TTS lines are NOT fetched here; they
+            # go straight to ffmpeg as URLs in the streamed render below.
+            characters, music_path, intro_sfx_path, outro_sfx_path = await asyncio.gather(
                 _fetch_characters(payload, tmp_dir),
-                _fetch_gameplay_clip(payload, tmp_dir),
                 _fetch_optional_asset(payload.get("music_url"), tmp_dir, "music"),
                 _fetch_optional_asset(payload.get("intro_sfx_url"), tmp_dir, "intro_sfx"),
                 _fetch_optional_asset(payload.get("outro_sfx_url"), tmp_dir, "outro_sfx"),
             )
             entry_motion, exit_motion = composite.resolve_entry_exit_motions(
-                timed_lines, characters, motion_mode, clip_duration,
+                remote_lines, characters, motion_mode, clip_duration,
             )
             entry_sfx_path, exit_sfx_path = await asyncio.gather(
                 _fetch_motion_sfx(entry_motion, tmp_dir, "entry_sfx"),
@@ -281,24 +287,57 @@ async def _run_brainrot_ffmpeg_stage(job_id: str) -> None:
                 # a second one landing on the same instance → both drop to
                 # half, read fresh at each render's own start.
                 threads = max(1, settings.BRAINROT_WORKER_VCPUS // _ACTIVE_RENDERS_ON_INSTANCE)
-                await composite.render(
-                    gameplay_clip_path=gameplay_path,
-                    lines=timed_lines,
-                    characters=characters,
-                    motion_mode=motion_mode,
-                    clip_duration=clip_duration,
-                    caption_style=payload.get("caption_style", "brainrot"),
-                    caption_color=payload.get("caption_color", "yellow_black"),
-                    caption_y=payload.get("caption_y", 0.82),
-                    output_path=output_path,
-                    music_path=music_path,
-                    music_volume=payload.get("music_volume", 0.3),
-                    intro_sfx=intro_sfx_path,
-                    outro_sfx=outro_sfx_path,
-                    entry_sfx=entry_sfx_path,
-                    exit_sfx=exit_sfx_path,
-                    threads=threads,
-                )
+
+                def _render(gameplay_clip_path, lines):
+                    return composite.render(
+                        gameplay_clip_path=gameplay_clip_path,
+                        lines=lines,
+                        characters=characters,
+                        motion_mode=motion_mode,
+                        clip_duration=clip_duration,
+                        caption_style=payload.get("caption_style", "brainrot"),
+                        caption_color=payload.get("caption_color", "yellow_black"),
+                        caption_y=payload.get("caption_y", 0.82),
+                        output_path=output_path,
+                        music_path=music_path,
+                        music_volume=payload.get("music_volume", 0.3),
+                        intro_sfx=intro_sfx_path,
+                        outro_sfx=outro_sfx_path,
+                        entry_sfx=entry_sfx_path,
+                        exit_sfx=exit_sfx_path,
+                        threads=threads,
+                    )
+
+                try:
+                    # Fast path: gameplay clip streamed straight from its GCS
+                    # URL with -stream_loop -1 (validated against a real
+                    # Range-serving HTTP source before shipping this — ffmpeg
+                    # correctly re-seeks to byte 0 on each loop). This is the
+                    # one place a mid-render network hiccup can actually fail
+                    # the whole ffmpeg process (unlike the never-looped TTS
+                    # lines above), so it gets the fallback below; TTS lines
+                    # don't need their own because a full render retry
+                    # re-reads them too.
+                    await _render(gameplay_url, remote_lines)
+                except Exception as exc:
+                    logger.warning(
+                        f"[{job_id}] Streamed render failed ({exc}) — "
+                        f"falling back to fully-local assets and retrying once"
+                    )
+                    gameplay_path = await _fetch_gameplay_clip(payload, tmp_dir)
+
+                    async def _hydrate_line(i: int, line: dict) -> composite.TimedLine:
+                        local_audio = tmp_dir / f"line_{i}.mp3"
+                        await download_to_file(line["audio_url"], local_audio)
+                        return composite.TimedLine(
+                            speaker=line["speaker"], text=line["text"],
+                            start=line["start"], end=line["end"], audio_path=local_audio,
+                        )
+
+                    local_lines = list(await asyncio.gather(
+                        *(_hydrate_line(i, line) for i, line in enumerate(scene_plan))
+                    ))
+                    await _render(gameplay_path, local_lines)
             finally:
                 _ACTIVE_RENDERS_ON_INSTANCE = max(0, _ACTIVE_RENDERS_ON_INSTANCE - 1)
 

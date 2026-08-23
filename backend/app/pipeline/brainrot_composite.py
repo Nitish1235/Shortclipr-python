@@ -632,7 +632,7 @@ def _dual_speaker_ass_content(
 
 
 async def render(
-    gameplay_clip_path: Path,
+    gameplay_clip_path: Path | str,   # local path, or a GCS URL to stream directly (see brainrot_stage.py)
     lines: list[TimedLine],
     characters: list[CharacterPlacement],
     motion_mode: str,          # "turn_based" | "always_on"
@@ -651,6 +651,14 @@ async def render(
 ) -> Path:
     """Composite gameplay background + character overlays + mixed audio +
     burned-in captions into one MP4. Single ffmpeg invocation.
+
+    gameplay_clip_path and each TimedLine.audio_path accept either a local
+    Path or a GCS URL string — both just get str()'d into the ffmpeg -i
+    args, so ffmpeg streams straight from GCS with no local download when
+    the caller passes a URL. gameplay_clip_path is `-stream_loop`'d, so a
+    URL there depends on the source honoring HTTP Range requests to seek
+    back to the start each loop (GCS does); TTS lines play once, never
+    looped, so that risk doesn't apply to them.
 
     threads: ffmpeg decode/filter/encode thread count for this call — sized
     by the caller from how many renders are concurrently live on this worker
