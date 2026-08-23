@@ -227,6 +227,13 @@ def _innertube_is_blocked(data: dict) -> tuple[bool, str]:
         # status=OK but no streamingData → soft bot block (very common)
         return True, "streamingData absent despite OK status (soft block)"
 
+    # YouTube now returns serverAbrStreamingUrl instead of per-format CDN URLs
+    # for ANDROID clients — adaptiveFormats exist but none have a `url` field.
+    # Treat this as a fast-fail so callers skip straight to yt-dlp.
+    fmts = data.get("streamingData", {}).get("adaptiveFormats", [])
+    if fmts and not any("url" in f for f in fmts):
+        return True, "ABR-only response (no per-format CDN URLs — serverAbrStreamingUrl mode)"
+
     return False, ""
 
 

@@ -33,7 +33,7 @@ from pathlib import Path
 from app.core.config import get_settings
 from app.core.email import send_email
 from app.core.email_templates import clips_ready_email_html
-from app.core.proxy import get_proxycheap_proxy, get_proxyseller_proxy
+from app.core.proxy import get_proxycheap_proxy, get_proxyseller_proxy, url_is_ip_bound
 from app.db import supabase as db
 from app.pipeline.ai_clipper import ClipTimestamp
 from app.pipeline.captions import (
@@ -518,15 +518,21 @@ async def _dash_download_with_refresh(
     last = (stream_url, audio_url, user_agent, ps_proxy_0)
 
     # ── Attempt 1: cached URLs + Proxy-Seller (pool IP #0) ──
-    try:
-        return await download_all_clips_parallel(
-            stream_url, clip_ranges, job_dir,
-            audio_url=audio_url, user_agent=user_agent,
-            proxy_url=ps_proxy_0,
-            max_concurrent=3,
-        )
-    except Exception as exc1:
-        logger.warning(f"[{job_id}] DASH attempt 1 failed (cached URLs + Proxy-Seller #0): {exc1}")
+    # Skip when the URL is IP-bound: the cached URL was resolved via proxy-cheap
+    # (bound to that IP), so Proxy-Seller's different exit IP gets a guaranteed
+    # 403 — no point spending 5s to confirm it.
+    if url_is_ip_bound(stream_url):
+        logger.info(f"[{job_id}] Cached URL is IP-bound — skipping attempt 1 (would 403)")
+    else:
+        try:
+            return await download_all_clips_parallel(
+                stream_url, clip_ranges, job_dir,
+                audio_url=audio_url, user_agent=user_agent,
+                proxy_url=ps_proxy_0,
+                max_concurrent=3,
+            )
+        except Exception as exc1:
+            logger.warning(f"[{job_id}] DASH attempt 1 failed (cached URLs + Proxy-Seller #0): {exc1}")
 
     # ── Attempt 2: resolve + download via Proxy-Seller pool IP #1 (rotated) ──
     ps_proxy_1 = get_proxyseller_proxy(job_id, attempt=1)
