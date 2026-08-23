@@ -240,21 +240,13 @@ function LiveStage({
         }}>{current.text}</div>
       ))}
 
-      {/* Characters — actual roster canon.png images */}
-      {leftChar && (
-        <CharacterFigure
-          char={leftChar}
-          side="left"
-          talking={current?.speaker === 'left'}
-        />
-      )}
-      {rightChar && (
-        <CharacterFigure
-          char={rightChar}
-          side="right"
-          talking={current?.speaker === 'right'}
-        />
-      )}
+      {/* Characters — one at a time, centered, pops in when speaker switches */}
+      {(() => {
+        const activeChar = current?.speaker === 'right' ? rightChar : leftChar
+        return activeChar ? (
+          <CharacterFigure key={activeChar.id + dialogueIdx} char={activeChar} />
+        ) : null
+      })()}
 
       {/* Stats bar */}
       {showStats && stats && (
@@ -304,53 +296,29 @@ function CaptionDemo({ current, fadeIn }) {
   )
 }
 
-// Individual character on the stage — actual canon.png with wobble + talking indicator
-function CharacterFigure({ char, side, talking }) {
-  const isLeft = side === 'left'
+// Individual character on the stage — centered, big, pops in from below each swap
+function CharacterFigure({ char }) {
   return (
     <div style={{
       position: 'absolute',
-      [isLeft ? 'left' : 'right']: '-6%',
-      bottom: '6%',
-      width: '46%',
+      bottom: '2%',
+      left: '50%',
+      width: '60%',
       aspectRatio: '3 / 4',
       pointerEvents: 'none',
-      filter: 'drop-shadow(0 4px 8px rgba(0,0,0,.5))',
-      animation: `${isLeft ? 'br-wobble-a' : 'br-wobble-b'} 2.5s ease-in-out infinite`,
-      zIndex: talking ? 4 : 3,
+      filter: 'drop-shadow(0 8px 18px rgba(0,0,0,.65))',
+      animation: 'br-char-pop .38s cubic-bezier(.34,1.56,.64,1) forwards',
+      zIndex: 4,
+      transformOrigin: 'bottom center',
+      transform: 'translateX(-50%)',
     }}>
       <img
         src={char.image_url}
-        alt={char.name || ''}
+        alt=""
         draggable={false}
         style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-        onError={(e) => {
-          // Canon PNG missing — hide gracefully rather than showing broken image
-          e.currentTarget.style.visibility = 'hidden'
-        }}
+        onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
       />
-      {/* Name label */}
-      <div style={{
-        position: 'absolute', bottom: '-4%', left: '50%',
-        transform: 'translateX(-50%)',
-        background: '#fff', border: `2px solid ${P.ink}`,
-        borderRadius: 5, fontSize: '.56rem', fontWeight: 800,
-        padding: '2px 6px', whiteSpace: 'nowrap',
-        boxShadow: `2px 2px 0 ${P.ink}`,
-      }}>{(char.name || '').toUpperCase()}</div>
-      {/* Talking indicator */}
-      {talking && (
-        <div style={{
-          position: 'absolute', top: '-2%',
-          [isLeft ? 'right' : 'left']: '20%',
-          width: 10, height: 10,
-          borderRadius: '50%',
-          background: P.brain3,
-          border: `1.5px solid ${P.ink}`,
-          boxShadow: '0 0 8px rgba(34,197,94,.8)',
-          animation: 'br-pulse 1s ease-in-out infinite',
-        }}/>
-      )}
     </div>
   )
 }
@@ -1193,13 +1161,9 @@ export default function BrainrotLanding() {
 
       {/* Keyframes — single injection, scoped by prefix to avoid collisions */}
       <style>{`
-        @keyframes br-wobble-a {
-          0%, 100% { transform: translateY(0) rotate(-3deg); }
-          50% { transform: translateY(-6px) rotate(3deg); }
-        }
-        @keyframes br-wobble-b {
-          0%, 100% { transform: translateY(0) rotate(3deg); }
-          50% { transform: translateY(-6px) rotate(-3deg); }
+        @keyframes br-char-pop {
+          from { transform: translateX(-50%) translateY(36px) scale(0.78); opacity: 0; }
+          to   { transform: translateX(-50%) translateY(0)    scale(1);    opacity: 1; }
         }
         @keyframes br-pulse {
           0%, 100% { opacity: 1; transform: scale(1); }
