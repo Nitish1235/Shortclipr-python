@@ -72,11 +72,22 @@ BRAINROT_WORKERS: list[dict] = _BRAINROT_WORKERS_RAW or FFMPEG_WORKERS
 #
 # API workers are I/O-bound (GPT + TTS), so 4 concurrent jobs per instance
 # is safe and leaves headroom. FFmpeg workers are CPU-bound: 1 job per
-# instance is the correct limit so encoding doesn't starve the CPU.
-# Brainrot FFmpeg is similarly CPU-bound but lighter: 4 concurrent is fine.
+# instance is the correct limit so encoding doesn't starve the CPU (see
+# cloudbuild-ffmpeg-worker.yaml's --concurrency 1 — matched here on purpose).
+#
+# Brainrot FFmpeg worker deliberately runs 2 jobs per instance instead (2
+# vCPU, --concurrency 2 in cloudbuild-brainrot-worker.yaml) — the worker
+# itself adapts each render's ffmpeg thread count to how many renders are
+# actually live on that instance (_ACTIVE_RENDERS_ON_INSTANCE in
+# brainrot_stage.py), so packing 2 onto one instance is safe by design, not
+# just tolerated. This soft cap is still the *fleet-wide* ceiling across all
+# instances of the region (not a per-instance limit) — sized here as
+# roughly 2 jobs/instance × a handful of concurrently-warm instances under
+# normal load. Raise it if brainrot volume grows enough that this becomes
+# the bottleneck before max-instances does.
 API_REGION_SOFT_CAP:      int = _int("API_REGION_SOFT_CAP",      4)
 FFMPEG_REGION_SOFT_CAP:   int = _int("FFMPEG_REGION_SOFT_CAP",   1)
-BRAINROT_REGION_SOFT_CAP: int = _int("BRAINROT_REGION_SOFT_CAP", 4)
+BRAINROT_REGION_SOFT_CAP: int = _int("BRAINROT_REGION_SOFT_CAP", 8)
 
 # ── Legacy unified pool (WORKER_SERVICE_URLS) ──────────────────
 LEGACY_WORKERS: list[dict] = _parse_workers("WORKER_SERVICE_URLS", "WORKER_SERVICE_REGIONS")

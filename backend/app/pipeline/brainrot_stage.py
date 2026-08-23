@@ -27,16 +27,34 @@ import uuid
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
+from app.core.config import get_settings
 from app.db import supabase as db
 from app.pipeline import brainrot_composite as composite
 from app.pipeline import brainrot_script, tts, voice_catalog
 from app.pipeline.uploader import download_to_file, upload_clip
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 BRAINROT_STAGE_TIMEOUT_SECONDS = 1500  # 25 minutes, same ceiling as ffmpeg_stage.py
 TTS_CONCURRENCY = 5
 HEARTBEAT_INTERVAL_SECONDS = 20
+
+# How many brainrot renders are actually executing composite.render() on this
+# instance right now. Module-level (not per-request) because the Cloud Run
+# image runs a single uvicorn worker (--workers 1, see Dockerfile) — one
+# process, one event loop per instance — so a plain int genuinely reflects
+# this instance's live state and is safe without a lock (no other OS thread
+# ever touches it). --concurrency on the brainrot worker allows 2 requests
+# per instance, and /internal/brainrot-ffmpeg-stage/run fires the actual
+# render as a detached asyncio task (see internal.py) that outlives the HTTP
+# response — so unlike the main FFmpeg worker (1 job/instance, no sharing
+# possible), two renders CAN genuinely run at once here. This counter is
+# what lets each one find out and divide the CPU budget accordingly, the
+# same role ffmpeg_stage.py's _ACTIVE_JOBS_ON_INSTANCE plays for the main
+# pipeline (see that file's "fix: concurrency" / "fix: cpu thread min load"
+# history for why unpinned/unaware ffmpeg thread counts silently oversubscribe).
+_ACTIVE_RENDERS_ON_INSTANCE = 0
 
 
 async def _heartbeat(job_id: str) -> None:
@@ -205,14 +223,19 @@ async def _run_brainrot_ffmpeg_stage(job_id: str) -> None:
     with tempfile.TemporaryDirectory(prefix=f"brainrot_{job_id}_") as tmp_dir_str:
         tmp_dir = Path(tmp_dir_str)
 
-        # Hydrate timed_lines from the scene_plan
-        timed_lines = []
-        for i, line in enumerate(scene_plan):
+        # Hydrate timed_lines from the scene_plan — each line's audio is an
+        # independent GCS download, so fetch them all concurrently instead
+        # of one-at-a-time (order doesn't matter here, gather preserves it).
+        async def _hydrate_line(i: int, line: dict) -> composite.TimedLine:
             local_audio = tmp_dir / f"line_{i}.mp3"
             await download_to_file(line["audio_url"], local_audio)
-            timed_lines.append(composite.TimedLine(
+            return composite.TimedLine(
                 speaker=line["speaker"], text=line["text"], start=line["start"], end=line["end"], audio_path=local_audio,
-            ))
+            )
+
+        timed_lines = list(await asyncio.gather(
+            *(_hydrate_line(i, line) for i, line in enumerate(scene_plan))
+        ))
 
         # Prefer the REAL synthesized-audio length (sum of actual TTS clip
         # durations) over the nominal requested duration_seconds — the latter
@@ -226,37 +249,58 @@ async def _run_brainrot_ffmpeg_stage(job_id: str) -> None:
 
         async with _step(job_id, "fetch_assets"):
             await db.update_brainrot_job_progress(job_id, 50, "Downloading assets...", status="rendering")
-            characters = await _fetch_characters(payload, tmp_dir)
-            gameplay_path = await _fetch_gameplay_clip(payload, tmp_dir)
-            music_path = await _fetch_optional_asset(payload.get("music_url"), tmp_dir, "music")
-            intro_sfx_path = await _fetch_optional_asset(payload.get("intro_sfx_url"), tmp_dir, "intro_sfx")
-            outro_sfx_path = await _fetch_optional_asset(payload.get("outro_sfx_url"), tmp_dir, "outro_sfx")
+            # Characters, gameplay clip, and music/SFX are all independent
+            # GCS downloads — fetch them concurrently instead of sequentially.
+            # entry/exit SFX resolution needs `characters` first (it reads
+            # each character's own entry/exit pick), so that pair stays a
+            # second, smaller gather after the first one completes.
+            characters, gameplay_path, music_path, intro_sfx_path, outro_sfx_path = await asyncio.gather(
+                _fetch_characters(payload, tmp_dir),
+                _fetch_gameplay_clip(payload, tmp_dir),
+                _fetch_optional_asset(payload.get("music_url"), tmp_dir, "music"),
+                _fetch_optional_asset(payload.get("intro_sfx_url"), tmp_dir, "intro_sfx"),
+                _fetch_optional_asset(payload.get("outro_sfx_url"), tmp_dir, "outro_sfx"),
+            )
             entry_motion, exit_motion = composite.resolve_entry_exit_motions(
                 timed_lines, characters, motion_mode, clip_duration,
             )
-            entry_sfx_path = await _fetch_motion_sfx(entry_motion, tmp_dir, "entry_sfx")
-            exit_sfx_path = await _fetch_motion_sfx(exit_motion, tmp_dir, "exit_sfx")
+            entry_sfx_path, exit_sfx_path = await asyncio.gather(
+                _fetch_motion_sfx(entry_motion, tmp_dir, "entry_sfx"),
+                _fetch_motion_sfx(exit_motion, tmp_dir, "exit_sfx"),
+            )
 
         async with _step(job_id, "composite_render"):
             await db.update_brainrot_job_progress(job_id, 60, "Rendering clip...", status="rendering")
             output_path = tmp_dir / "output.mp4"
-            await composite.render(
-                gameplay_clip_path=gameplay_path,
-                lines=timed_lines,
-                characters=characters,
-                motion_mode=motion_mode,
-                clip_duration=clip_duration,
-                caption_style=payload.get("caption_style", "brainrot"),
-                caption_color=payload.get("caption_color", "yellow_black"),
-                caption_y=payload.get("caption_y", 0.82),
-                output_path=output_path,
-                music_path=music_path,
-                music_volume=payload.get("music_volume", 0.3),
-                intro_sfx=intro_sfx_path,
-                outro_sfx=outro_sfx_path,
-                entry_sfx=entry_sfx_path,
-                exit_sfx=exit_sfx_path,
-            )
+            global _ACTIVE_RENDERS_ON_INSTANCE
+            _ACTIVE_RENDERS_ON_INSTANCE += 1
+            try:
+                # Split this instance's vCPU budget across however many
+                # renders are actually live right now — see the comment on
+                # _ACTIVE_RENDERS_ON_INSTANCE above. Solo render → full box;
+                # a second one landing on the same instance → both drop to
+                # half, read fresh at each render's own start.
+                threads = max(1, settings.BRAINROT_WORKER_VCPUS // _ACTIVE_RENDERS_ON_INSTANCE)
+                await composite.render(
+                    gameplay_clip_path=gameplay_path,
+                    lines=timed_lines,
+                    characters=characters,
+                    motion_mode=motion_mode,
+                    clip_duration=clip_duration,
+                    caption_style=payload.get("caption_style", "brainrot"),
+                    caption_color=payload.get("caption_color", "yellow_black"),
+                    caption_y=payload.get("caption_y", 0.82),
+                    output_path=output_path,
+                    music_path=music_path,
+                    music_volume=payload.get("music_volume", 0.3),
+                    intro_sfx=intro_sfx_path,
+                    outro_sfx=outro_sfx_path,
+                    entry_sfx=entry_sfx_path,
+                    exit_sfx=exit_sfx_path,
+                    threads=threads,
+                )
+            finally:
+                _ACTIVE_RENDERS_ON_INSTANCE = max(0, _ACTIVE_RENDERS_ON_INSTANCE - 1)
 
         async with _step(job_id, "upload"):
             await db.update_brainrot_job_progress(job_id, 90, "Uploading...", status="rendering")
@@ -357,33 +401,46 @@ async def _synthesize_timeline(
 
     from app.pipeline.uploader import upload_tts_audio
 
-    timed_lines: list[composite.TimedLine] = []
+    # Timeline math (start/end) only depends on synth order + real durations,
+    # already known here — compute it up front, then fire every line's GCS
+    # upload concurrently instead of one-at-a-time. Uploads don't need to
+    # finish in order, only to be matched back to the right line afterward.
     cursor = 0.0
-    for i, (line, (duration, audio_path)) in enumerate(zip(dialogue_lines, results)):
-        start, end = cursor, cursor + duration
-        audio_url = await upload_tts_audio(audio_path, job_id, f"line_{i}")
-        timed_lines.append(composite.TimedLine(
-            speaker=line.speaker, text=line.text, start=start, end=end, audio_path=audio_url,
-        ))
-        cursor = end
+    windows: list[tuple[float, float]] = []
+    for duration, _audio_path in results:
+        windows.append((cursor, cursor + duration))
+        cursor += duration
+
+    audio_urls = await asyncio.gather(*(
+        upload_tts_audio(audio_path, job_id, f"line_{i}")
+        for i, (_duration, audio_path) in enumerate(results)
+    ))
+
+    timed_lines: list[composite.TimedLine] = [
+        composite.TimedLine(speaker=line.speaker, text=line.text, start=start, end=end, audio_path=audio_url)
+        for line, (start, end), audio_url in zip(dialogue_lines, windows, audio_urls)
+    ]
     logger.info(f"[{job_id}] Synthesized {len(timed_lines)} lines, total {cursor:.1f}s")
     return timed_lines
 
 
 async def _fetch_characters(payload: dict, tmp_dir: Path) -> list[composite.CharacterPlacement]:
     positions = payload.get("character_positions", [])
-    characters: list[composite.CharacterPlacement] = []
-    for pos in positions:
+
+    async def _fetch_one(pos: dict) -> composite.CharacterPlacement:
         image_url = pos["image_url"]  # resolved by the API layer from GET /brainrot/characters
         local_path = tmp_dir / f"char_{pos['side']}.png"
         await download_to_file(image_url, local_path)
-        characters.append(composite.CharacterPlacement(
+        return composite.CharacterPlacement(
             side=pos["side"], image_path=local_path,
             x=pos.get("x", 0.25 if pos["side"] == "left" else 0.75),
             y=pos.get("y", 0.75), scale=pos.get("scale", 1.0), rotation=pos.get("rotation", 0.0),
             entry=pos.get("entry", "slide"), exit=pos.get("exit", "slide"),
-        ))
-    return characters
+        )
+
+    # Almost always exactly 2 (left + right) — download both concurrently
+    # rather than one-at-a-time.
+    return list(await asyncio.gather(*(_fetch_one(pos) for pos in positions)))
 
 
 async def _fetch_gameplay_clip(payload: dict, tmp_dir: Path) -> Path:

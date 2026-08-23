@@ -133,6 +133,17 @@ class Settings(BaseSettings):
     # from queuing up a burst of jobs back-to-back as each prior one finishes.
     MAX_BRAINROT_JOBS_PER_HOUR: int = 5
 
+    # vCPU allocated to the brainrot FFmpeg worker (must match --cpu in
+    # cloudbuild-brainrot-worker.yaml). Unlike the main FFmpeg worker (1 job
+    # per instance, no thread math needed), the brainrot worker runs
+    # --concurrency 2 — two jobs can share one instance's CPU. brainrot_stage.py
+    # divides this by however many renders are actually live on the instance
+    # right now (see _ACTIVE_RENDERS_ON_INSTANCE) to size each ffmpeg call's
+    # -threads/-filter_complex_threads: 1 job alone gets the full box, 2
+    # concurrent jobs each get half — never oversubscribed, never idle CPU
+    # left on the table for the common one-job case.
+    BRAINROT_WORKER_VCPUS: int = 2
+
     # ── Worker dispatch (optional second Cloud Run services) ───
     # Two operating modes:
     #

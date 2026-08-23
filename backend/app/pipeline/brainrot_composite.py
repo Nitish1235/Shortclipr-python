@@ -647,9 +647,16 @@ async def render(
     outro_sfx: Path | None = None,
     entry_sfx: Path | None = None,
     exit_sfx: Path | None = None,
+    threads: int = 1,
 ) -> Path:
     """Composite gameplay background + character overlays + mixed audio +
-    burned-in captions into one MP4. Single ffmpeg invocation."""
+    burned-in captions into one MP4. Single ffmpeg invocation.
+
+    threads: ffmpeg decode/filter/encode thread count for this call — sized
+    by the caller from how many renders are concurrently live on this worker
+    instance (see brainrot_stage.py's _ACTIVE_RENDERS_ON_INSTANCE), so N
+    concurrent renders together never claim more threads than the instance
+    actually has vCPUs."""
 
     inputs: list[str] = ["-stream_loop", "-1", "-i", str(gameplay_clip_path)]
     input_index_map: dict[str, int] = {}
@@ -738,7 +745,7 @@ async def render(
         "-t", f"{clip_duration:.3f}",
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
         "-c:a", "aac", "-b:a", "192k",
-        "-threads", "1", "-filter_complex_threads", "1",
+        "-threads", str(threads), "-filter_complex_threads", str(threads),
         str(output_path),
     ]
 
