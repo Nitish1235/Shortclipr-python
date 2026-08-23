@@ -879,7 +879,6 @@ function BrainrotJobsPanel() {
                   <div style={{ fontSize: '0.72rem', color: '#999' }}>
                     {job.user_email || 'unknown user'} · {new Date(job.created_at).toLocaleString()} · {job.character_count} character{job.character_count === 1 ? '' : 's'}
                     {job.duration_seconds ? ` · ${job.duration_seconds}s` : ''}
-                    {job.tts_provider ? ` · ${job.tts_provider}` : ''}
                   </div>
                   {job.status === 'failed' && job.error_message && (
                     <div style={{ fontSize: '0.72rem', color: '#dc2626', marginTop: '4px' }}>

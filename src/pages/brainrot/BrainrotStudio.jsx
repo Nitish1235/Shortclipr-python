@@ -62,7 +62,6 @@ export default function BrainrotStudio() {
   const [signatureCasts, setSignatureCasts] = useState([])
   const [savingCast, setSavingCast] = useState(false)
   const [musicLib, setMusicLib] = useState([])
-  const [sfxLib, setSfxLib]     = useState([])
 
   // ── Stage rail ───────────────────────────────────────────────────
   const [stage, setStage] = useState('spark')
@@ -74,7 +73,6 @@ export default function BrainrotStudio() {
   const [script, setScript]         = useState('')
   const [castCount, setCastCount]   = useState(2)
   const [picked, setPicked]         = useState([])   // [{...character, side, voiceId, entry, exit, x, y, scale, rotation}]
-  const [provider, setProvider]     = useState('unrealspeech')
   const [background, setBackground] = useState(null)
   const [category, setCategory]     = useState('all')
   const [duration, setDuration]     = useState(30)
@@ -86,8 +84,6 @@ export default function BrainrotStudio() {
   const [motionMode, setMotionMode] = useState('turn_based')  // 'turn_based' | 'always_on'
   const [musicId, setMusicId]       = useState('')
   const [musicVolume, setMusicVolume] = useState(0.3)
-  const [introSfxId, setIntroSfxId] = useState('')
-  const [outroSfxId, setOutroSfxId] = useState('')
 
   // ── Post metadata (auto-generated from script, user-editable) ───
   const [postTitle, setPostTitle]       = useState('')
@@ -158,8 +154,7 @@ export default function BrainrotStudio() {
       brainrotApi.listJobs(),
       brainrotApi.listSignatureCasts(),
       brainrotApi.audioAssets('music'),
-      brainrotApi.audioAssets('sfx'),
-    ]).then(([c, v, a, g, j, s, m, fx]) => {
+    ]).then(([c, v, a, g, j, s, m]) => {
       if (!alive) return
       if (c.status === 'fulfilled') { setRoster(c.value.characters || []); setRosterOnline(true) }
       else setRosterOnline(false)
@@ -170,7 +165,6 @@ export default function BrainrotStudio() {
       if (j.status === 'fulfilled') setMyClips(j.value.jobs || [])
       if (s.status === 'fulfilled') setSignatureCasts(s.value.casts || [])
       if (m.status === 'fulfilled') setMusicLib(m.value.assets || [])
-      if (fx.status === 'fulfilled') setSfxLib(fx.value.assets || [])
       setRefLoaded(true)
     })
     return () => { alive = false; if (pollRef.current) clearInterval(pollRef.current) }
@@ -191,13 +185,10 @@ export default function BrainrotStudio() {
       if (draft.captionColor) setCaptionColor(draft.captionColor)
       if (draft.captionY) setCaptionY(draft.captionY)
       if (draft.duration) setDuration(draft.duration)
-      if (draft.provider) setProvider(draft.provider)
       if (draft.category) setCategory(draft.category)
       if (draft.motionMode) setMotionMode(draft.motionMode)
       if (draft.musicId) setMusicId(draft.musicId)
       if (draft.musicVolume) setMusicVolume(draft.musicVolume)
-      if (draft.introSfxId) setIntroSfxId(draft.introSfxId)
-      if (draft.outroSfxId) setOutroSfxId(draft.outroSfxId)
       if (Array.isArray(draft.picked) && draft.picked.length) {
         const hydrated = draft.picked
           .map(saved => {
@@ -221,8 +212,8 @@ export default function BrainrotStudio() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
       const draft = {
-        script, captionStyle, captionColor, captionY, duration, provider, category,
-        motionMode, musicId, musicVolume, introSfxId, outroSfxId,
+        script, captionStyle, captionColor, captionY, duration, category,
+        motionMode, musicId, musicVolume,
         backgroundId: background?.id || null,
         picked: picked.map(p => ({
           id: p.id, side: p.side, voiceId: p.voiceId, entry: p.entry, exit: p.exit,
@@ -232,8 +223,8 @@ export default function BrainrotStudio() {
       try { localStorage.setItem(draftKey, JSON.stringify(draft)) } catch { /* storage full/unavailable */ }
     }, 800)
     return () => clearTimeout(saveTimerRef.current)
-  }, [script, captionStyle, captionColor, captionY, duration, provider, category, background, picked, draftKey,
-      motionMode, musicId, musicVolume, introSfxId, outroSfxId])
+  }, [script, captionStyle, captionColor, captionY, duration, category, background, picked, draftKey,
+      motionMode, musicId, musicVolume])
 
   // ── Social connect: detect callback URL params + verify server state ──
   useEffect(() => {
@@ -492,9 +483,10 @@ export default function BrainrotStudio() {
   }
 
   const voicesFor = (gender) => {
-    const forProvider = voices.filter(v => v.provider === provider)
-    // gender-matching voices first
-    return [...forProvider].sort((a, b) =>
+    // Combined pool across both TTS providers — shown as one flat list with
+    // no provider distinction (see voice_catalog.default_voice_for_gender
+    // backend-side). gender-matching voices first.
+    return [...voices].sort((a, b) =>
       (a.gender === gender ? -1 : 0) - (b.gender === gender ? -1 : 0))
   }
 
@@ -542,14 +534,11 @@ export default function BrainrotStudio() {
         caption_style: captionStyle,
         caption_color: captionColor,
         caption_y: captionY,
-        tts_provider: provider,
         voice_left: picked.find(p => p.side === 'left')?.voiceId || '',
         voice_right: picked.find(p => p.side === 'right')?.voiceId || '',
         motion_mode: motionMode,
         music_asset_id: musicId || null,
         music_volume: musicVolume,
-        intro_sfx_id: introSfxId || null,
-        outro_sfx_id: outroSfxId || null,
         post_title: postTitle,
         post_hashtags: postHashtags,
       }
@@ -1001,35 +990,6 @@ export default function BrainrotStudio() {
                       style={{ width: '100%', accentColor: T.ink }} />
                   </div>
                 )}
-              </>
-            )}
-
-            {sfxLib.length > 0 && (
-              <>
-                <div style={{ height: 20 }} />
-                <SubLabel>Sound effects</SubLabel>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <label style={{ flex: 1 }}>
-                    <span style={{ fontSize: '.72rem', color: T.mute, textTransform: 'uppercase' }}>Intro</span>
-                    <select value={introSfxId} onChange={e => setIntroSfxId(e.target.value)}
-                      style={{ width: '100%', boxSizing: 'border-box', marginTop: 4,
-                        background: '#fff', border: `1px solid ${T.line}`, borderRadius: 8,
-                        padding: '8px 10px', fontSize: '.82rem', fontFamily: FONT, cursor: 'pointer' }}>
-                      <option value="">None</option>
-                      {sfxLib.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </label>
-                  <label style={{ flex: 1 }}>
-                    <span style={{ fontSize: '.72rem', color: T.mute, textTransform: 'uppercase' }}>Outro</span>
-                    <select value={outroSfxId} onChange={e => setOutroSfxId(e.target.value)}
-                      style={{ width: '100%', boxSizing: 'border-box', marginTop: 4,
-                        background: '#fff', border: `1px solid ${T.line}`, borderRadius: 8,
-                        padding: '8px 10px', fontSize: '.82rem', fontFamily: FONT, cursor: 'pointer' }}>
-                      <option value="">None</option>
-                      {sfxLib.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </label>
-                </div>
               </>
             )}
 

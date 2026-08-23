@@ -34,13 +34,12 @@ from app.pipeline.brainrot_characters import get_character_by_id, get_character_
 from app.pipeline.brainrot_stage import run_brainrot_stage
 from app.pipeline.animation_catalog import DEFAULT_ENTRY, DEFAULT_EXIT, MOTIONS, valid_motion
 from app.pipeline.captions import VALID_COLORS, VALID_STYLES
-from app.pipeline.voice_catalog import SAMPLE_TEXT, default_voice_for, list_voices
+from app.pipeline.voice_catalog import SAMPLE_TEXT, default_voice_for_gender, list_voices
 
 router = APIRouter(prefix="/brainrot", tags=["brainrot"])
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-VALID_TTS_PROVIDERS = ["unrealspeech", "lemonfox"]
 VALID_MOTION_MODES = ["turn_based", "always_on"]
 DEFAULT_CAPTION_STYLE = "brainrot"
 DEFAULT_CAPTION_COLOR = "yellow_black"
@@ -97,12 +96,9 @@ class BrainrotJobOptions(BaseModel):
     caption_y: float = DEFAULT_CAPTION_Y   # 0=top, 1=bottom — the "Caption position" slider
     voice_left: str = ""
     voice_right: str = ""
-    tts_provider: str = "unrealspeech"
     motion_mode: str = "turn_based"
     music_asset_id: str | None = None
     music_volume: float = 0.3
-    intro_sfx_id: str | None = None
-    outro_sfx_id: str | None = None
     post_title: str = ""
     post_hashtags: list[str] = []
 
@@ -133,11 +129,6 @@ class BrainrotJobOptions(BaseModel):
     @classmethod
     def clamp_caption_y(cls, v: float) -> float:
         return max(0.0, min(1.0, v))
-
-    @field_validator("tts_provider")
-    @classmethod
-    def validate_tts_provider(cls, v: str) -> str:
-        return v if v in VALID_TTS_PROVIDERS else "unrealspeech"
 
     @field_validator("motion_mode")
     @classmethod
@@ -205,16 +196,20 @@ async def create_brainrot_job(body: CreateBrainrotJobRequest, current_user: Curr
         raise HTTPException(status_code=400, detail="Two characters must be on different sides (left + right)")
 
     # Auto-assign a fitting voice per side when the user didn't pick one:
-    # match the character's gender (female character -> female voice, etc.).
-    # slot rotates left=0/right=1 so two same-gender characters differ.
-    # With no character on a side (0-char narrator clips), fall back to a
-    # neutral voice so the narrator still has a defined voice.
+    # match the character's gender (female character -> female voice, etc.),
+    # drawn from the FULL combined catalog (UnrealSpeech + Lemonfox, shown
+    # to the user as one flat list with no provider distinction) so two
+    # same-gender characters get genuinely different defaults instead of
+    # rotating within a single 5-voice provider subset. slot rotates
+    # left=0/right=1 so two same-gender characters differ. With no character
+    # on a side (0-char narrator clips), fall back to a neutral voice so the
+    # narrator still has a defined voice.
     voice_left = opts.voice_left
     if not voice_left:
-        voice_left = default_voice_for(opts.tts_provider, gender_by_side.get("left", "neutral"), slot=0)
+        voice_left = default_voice_for_gender(gender_by_side.get("left", "neutral"), slot=0).voice_id
     voice_right = opts.voice_right
     if not voice_right and "right" in gender_by_side:
-        voice_right = default_voice_for(opts.tts_provider, gender_by_side["right"], slot=1)
+        voice_right = default_voice_for_gender(gender_by_side["right"], slot=1).voice_id
 
     gameplay_clip = await db.get_gameplay_clip(opts.gameplay_clip_id)
     if gameplay_clip is None:
@@ -226,20 +221,6 @@ async def create_brainrot_job(body: CreateBrainrotJobRequest, current_user: Curr
         if music_asset is None:
             raise HTTPException(status_code=404, detail="Unknown music_asset_id")
         music_url = music_asset["gcs_path"]
-
-    intro_sfx_url = None
-    if opts.intro_sfx_id:
-        asset = await db.get_audio_asset(opts.intro_sfx_id)
-        if asset is None:
-            raise HTTPException(status_code=404, detail="Unknown intro_sfx_id")
-        intro_sfx_url = asset["gcs_path"]
-
-    outro_sfx_url = None
-    if opts.outro_sfx_id:
-        asset = await db.get_audio_asset(opts.outro_sfx_id)
-        if asset is None:
-            raise HTTPException(status_code=404, detail="Unknown outro_sfx_id")
-        outro_sfx_url = asset["gcs_path"]
 
     # Reserve 1 brainrot credit atomically (FOR UPDATE row lock — same
     # primitive jobs.py uses for YT-Shorts, but against the fully separate
@@ -275,15 +256,10 @@ async def create_brainrot_job(body: CreateBrainrotJobRequest, current_user: Curr
         "caption_y": opts.caption_y,
         "voice_left": voice_left,
         "voice_right": voice_right,
-        "tts_provider": opts.tts_provider,
         "motion_mode": opts.motion_mode,
         "music_asset_id": opts.music_asset_id,
         "music_volume": opts.music_volume,
         "music_url": music_url,
-        "intro_sfx_id": opts.intro_sfx_id,
-        "intro_sfx_url": intro_sfx_url,
-        "outro_sfx_id": opts.outro_sfx_id,
-        "outro_sfx_url": outro_sfx_url,
         "post_title": opts.post_title.strip(),
         "post_hashtags": opts.post_hashtags,
     }
@@ -548,7 +524,6 @@ def _serialize_admin_brainrot_job(row: dict) -> dict:
         "character_count": len(payload.get("character_ids") or []),
         "duration_seconds": payload.get("duration_seconds"),
         "caption_style": payload.get("caption_style"),
-        "tts_provider": payload.get("tts_provider"),
     }
 
 

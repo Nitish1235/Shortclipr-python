@@ -261,11 +261,9 @@ async def _run_brainrot_ffmpeg_stage(job_id: str) -> None:
             # local download is already cheap. The gameplay clip (the one
             # genuinely large asset) and TTS lines are NOT fetched here; they
             # go straight to ffmpeg as URLs in the streamed render below.
-            characters, music_path, intro_sfx_path, outro_sfx_path = await asyncio.gather(
+            characters, music_path = await asyncio.gather(
                 _fetch_characters(payload, tmp_dir),
                 _fetch_optional_asset(payload.get("music_url"), tmp_dir, "music"),
-                _fetch_optional_asset(payload.get("intro_sfx_url"), tmp_dir, "intro_sfx"),
-                _fetch_optional_asset(payload.get("outro_sfx_url"), tmp_dir, "outro_sfx"),
             )
             entry_motion, exit_motion = composite.resolve_entry_exit_motions(
                 remote_lines, characters, motion_mode, clip_duration,
@@ -287,6 +285,11 @@ async def _run_brainrot_ffmpeg_stage(job_id: str) -> None:
                 # a second one landing on the same instance → both drop to
                 # half, read fresh at each render's own start.
                 threads = max(1, settings.BRAINROT_WORKER_VCPUS // _ACTIVE_RENDERS_ON_INSTANCE)
+                logger.info(
+                    f"[{job_id}] render start: threads={threads} "
+                    f"active_renders_on_instance={_ACTIVE_RENDERS_ON_INSTANCE} "
+                    f"clip_duration={clip_duration:.1f}s characters={len(characters)} lines={len(remote_lines)}"
+                )
 
                 def _render(gameplay_clip_path, lines):
                     return composite.render(
@@ -301,8 +304,6 @@ async def _run_brainrot_ffmpeg_stage(job_id: str) -> None:
                         output_path=output_path,
                         music_path=music_path,
                         music_volume=payload.get("music_volume", 0.3),
-                        intro_sfx=intro_sfx_path,
-                        outro_sfx=outro_sfx_path,
                         entry_sfx=entry_sfx_path,
                         exit_sfx=exit_sfx_path,
                         threads=threads,
@@ -366,29 +367,33 @@ def _side_profiles(payload: dict) -> tuple[dict | None, dict | None]:
     return left, right
 
 
-def _resolve_distinct_voices(payload: dict, provider: str) -> tuple[str, str]:
+def _resolve_distinct_voices(payload: dict) -> tuple[str, str]:
     """voice_left/voice_right straight from the payload — but POST /brainrot/jobs's
-    auto-assign (gender-matched, slot-rotated) only runs at job-creation time,
-    so if either side is still empty here, or both happen to already be the
+    auto-assign (gender-matched, slot-rotated, drawn from the full combined
+    catalog across both providers) only runs at job-creation time, so if
+    either side is still empty here, or both happen to already be the
     identical voice_id (an explicit user pick, or a stale duplicate default),
     this is the last chance to fix it before TTS actually runs. Without this,
     an empty voice on both sides falls through to tts.py's single flat
     DEFAULT_VOICES entry and both characters render with the exact same
-    voice — the "same voice for both characters" bug."""
+    voice — the "same voice for both characters" bug. No provider param —
+    the Studio picker shows all voices from both providers as one flat
+    list, so the provider each voice_id actually belongs to is resolved
+    per-voice downstream (see _synthesize_timeline), not fixed per-job."""
     voice_left = payload.get("voice_left", "")
     voice_right = payload.get("voice_right", "")
     gender_by_side = {p.get("side"): p.get("gender", "neutral") for p in payload.get("character_positions", [])}
     has_right = "right" in gender_by_side
 
     if not voice_left:
-        voice_left = voice_catalog.default_voice_for(provider, gender_by_side.get("left", "neutral"), slot=0)
+        voice_left = voice_catalog.default_voice_for_gender(gender_by_side.get("left", "neutral"), slot=0).voice_id
     if not voice_right and has_right:
-        voice_right = voice_catalog.default_voice_for(provider, gender_by_side["right"], slot=1)
+        voice_right = voice_catalog.default_voice_for_gender(gender_by_side["right"], slot=1).voice_id
 
     if has_right and voice_right and voice_right == voice_left:
         gender = gender_by_side.get("right", "neutral")
-        candidates = [v.voice_id for v in voice_catalog.list_voices(provider) if v.voice_id != voice_left]
-        same_gender = [vid for vid in candidates if voice_catalog.get_voice(provider, vid).gender == gender]
+        candidates = [v.voice_id for v in voice_catalog.VOICES if v.voice_id != voice_left]
+        same_gender = [vid for vid in candidates if voice_catalog.find_voice(vid).gender == gender]
         if same_gender or candidates:
             voice_right = (same_gender or candidates)[0]
 
@@ -401,13 +406,17 @@ async def _synthesize_timeline(
     """TTS every line (bounded concurrency), then lay them out sequentially —
     line N starts the instant line N-1's audio ends. This gives exact
     start/end timestamps straight from real audio duration, no interpolation."""
-    provider = payload.get("tts_provider", "unrealspeech")
-    voice_left, voice_right = _resolve_distinct_voices(payload, provider)
+    voice_left, voice_right = _resolve_distinct_voices(payload)
     sem = asyncio.Semaphore(TTS_CONCURRENCY)
 
     async def _synth_one(i: int, line):
         voice = voice_right if line.speaker == "right" else voice_left
-        voice_entry = voice_catalog.get_voice(provider, voice) if voice else None
+        # Combined picker, no per-job provider field — each voice_id
+        # carries its own provider (see voice_catalog.find_voice), so a
+        # single clip can freely mix an UnrealSpeech voice on one side
+        # with a Lemonfox voice on the other.
+        voice_entry = voice_catalog.find_voice(voice) if voice else None
+        provider = voice_entry.provider if voice_entry else "unrealspeech"
         locale = voice_entry.locale if voice_entry else "en-US"
         # One retry on transient TTS failure: providers occasionally 5xx or
         # timeout under load, and re-running the whole job just to re-do a
@@ -505,8 +514,7 @@ async def _fetch_motion_sfx(motion_id: str | None, tmp_dir: Path, name: str) -> 
     'slide', 'bounce', etc. — see animation_catalog.MOTIONS) via the
     existing Music & SFX admin form. None if no motion resolved (e.g. a
     0-character narrator clip), or no asset uploaded yet for that motion —
-    the clip just renders without that stinger, same as an unset
-    intro_sfx/outro_sfx."""
+    the clip just renders without that stinger."""
     if not motion_id:
         return None
     asset = await db.get_audio_asset_by_category("sfx", motion_id)

@@ -530,13 +530,12 @@ def _music_duck_expr(base_vol: float, lines: list[TimedLine]) -> str:
 
 
 def _audio_mix_filter(lines: list[TimedLine], music_path: Path | None, music_volume: float,
-                       intro_sfx: Path | None, outro_sfx: Path | None,
                        entry_sfx: Path | None, entry_sfx_at: float,
                        exit_sfx: Path | None, exit_sfx_at: float,
                        input_index_map: dict[str, int]) -> tuple[str, str]:
     """Builds the audio filter_complex fragment: delays each TTS line to its
-    timeline position, mixes in ducked background music and optional
-    intro/outro stingers. Returns (filter_string, output_label)."""
+    timeline position, mixes in ducked background music and the motion-
+    linked entry/exit stingers. Returns (filter_string, output_label)."""
     parts: list[str] = []
     mix_inputs: list[str] = []
 
@@ -557,20 +556,6 @@ def _audio_mix_filter(lines: list[TimedLine], music_path: Path | None, music_vol
         duck_expr = _music_duck_expr(vol, lines)
         parts.append(f"[{idx}:a]volume='{duck_expr}':eval=frame[a_music]")
         mix_inputs.append("[a_music]")
-
-    if intro_sfx is not None:
-        idx = input_index_map["intro_sfx"]
-        # Light headroom — stinger assets are often mastered hotter than
-        # dialogue/TTS output and would otherwise overpower it at t=0.
-        parts.append(f"[{idx}:a]volume=0.8[a_intro]")
-        mix_inputs.append("[a_intro]")
-
-    if outro_sfx is not None:
-        idx = input_index_map["outro_sfx"]
-        last_end = max((l.end for l in lines), default=0.0)
-        delay_ms = int(last_end * 1000)
-        parts.append(f"[{idx}:a]volume=0.8,adelay={delay_ms}|{delay_ms}[a_outro]")
-        mix_inputs.append("[a_outro]")
 
     # Motion-linked one-shot stingers — plays once for the whole clip, tied
     # to whichever character's own entry/exit motion opens/closes it (see
@@ -643,8 +628,6 @@ async def render(
     caption_y: float = 0.82,   # 0=top, 1=bottom, canvas-relative — see captions.py's _resolve_slider_pos
     music_path: Path | None = None,
     music_volume: float = 0.3,
-    intro_sfx: Path | None = None,
-    outro_sfx: Path | None = None,
     entry_sfx: Path | None = None,
     exit_sfx: Path | None = None,
     threads: int = 1,
@@ -683,14 +666,6 @@ async def render(
     if music_path is not None:
         input_index_map["music"] = next_idx
         inputs += ["-stream_loop", "-1", "-i", str(music_path)]
-        next_idx += 1
-    if intro_sfx is not None:
-        input_index_map["intro_sfx"] = next_idx
-        inputs += ["-i", str(intro_sfx)]
-        next_idx += 1
-    if outro_sfx is not None:
-        input_index_map["outro_sfx"] = next_idx
-        inputs += ["-i", str(outro_sfx)]
         next_idx += 1
     if entry_sfx is not None:
         input_index_map["entry_sfx"] = next_idx
@@ -731,7 +706,7 @@ async def render(
     exit_sfx_at = latest_exit if latest_exit is not None else clip_duration
 
     audio_filter, audio_label = _audio_mix_filter(
-        lines, music_path, music_volume, intro_sfx, outro_sfx,
+        lines, music_path, music_volume,
         entry_sfx, entry_sfx_at, exit_sfx, exit_sfx_at, input_index_map,
     )
     filter_parts.append(audio_filter)

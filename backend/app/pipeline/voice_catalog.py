@@ -70,28 +70,44 @@ _BY_KEY: dict[str, Voice] = {f"{v.provider}:{v.voice_id}": v for v in VOICES}
 
 SAMPLE_TEXT = "Hey, what's up? This is how I sound when I'm talking in your brainrot clips. Pretty cool, right?"
 
-# Default voice per (provider, gender). Used to auto-assign a fitting voice
-# when the user doesn't hand-pick one — a female-presenting character gets a
-# female voice, etc. "neutral" (creatures/bots/objects) leans on a
-# distinctive, non-gendered-sounding pick. Rotation lists give left vs. right
-# characters different voices even at the same gender, so a two-character clip
-# never has both sides sounding identical.
-DEFAULT_VOICES_BY_GENDER: dict[str, dict[str, list[str]]] = {
-    "unrealspeech": {
-        "male":    ["Ethan", "Daniel"],
-        "female":  ["Charlotte", "Emily", "Amelia"],
-        "neutral": ["Daniel", "Charlotte"],
-    },
-    "lemonfox": {
-        "male":    ["michael", "eric", "liam", "onyx", "fenrir"],
-        "female":  ["sarah", "bella", "nova", "jessica", "nicole"],
-        "neutral": ["puck", "alloy", "rivers", "fenrir"],
-    },
-}
-
-
 def get_voice(provider: str, voice_id: str) -> Voice | None:
     return _BY_KEY.get(f"{provider}:{voice_id}")
+
+
+_BY_VOICE_ID: dict[str, Voice] = {v.voice_id: v for v in VOICES}
+
+
+def find_voice(voice_id: str) -> Voice | None:
+    """Resolve a Voice from just its voice_id, regardless of provider —
+    the combined picker (Studio) shows all 33 voices from both providers
+    in one flat list with no provider selector, so callers downstream of
+    a user's pick (TTS synthesis, sample lookup) need to recover which
+    provider that voice_id actually belongs to. Exact, case-sensitive
+    match — voice_id casing differs by provider by construction (e.g.
+    UnrealSpeech "Daniel" vs Lemonfox "daniel" are deliberately distinct
+    strings), so this never collides across the two catalogs today, but
+    if a future addition ever makes two providers share an exact voice_id
+    string, this returns whichever was added to VOICES first."""
+    return _BY_VOICE_ID.get(voice_id)
+
+
+# Every voice, grouped by gender, across BOTH providers — the "combine
+# them, don't show as separate providers" pool used by
+# default_voice_for_gender below. Order is deterministic (insertion order
+# of VOICES) so slot-rotation is stable across calls/deploys.
+_ALL_BY_GENDER: dict[str, list[Voice]] = {"male": [], "female": [], "neutral": []}
+for _v in VOICES:
+    _ALL_BY_GENDER.setdefault(_v.gender, []).append(_v)
+
+
+def default_voice_for_gender(gender: str, slot: int = 0) -> Voice:
+    """Auto-assign a fitting voice when the user leaves a character on
+    "Auto voice" — gender-matched, drawn from the FULL combined catalog
+    (both providers) so two same-gender characters still get genuinely
+    different-sounding defaults, not just a rotation within one provider's
+    5-voice UnrealSpeech subset. slot rotates left=0/right=1."""
+    options = _ALL_BY_GENDER.get(gender) or _ALL_BY_GENDER["neutral"]
+    return options[slot % len(options)]
 
 
 def list_voices(provider: str | None = None, locale: str | None = None) -> list[Voice]:
@@ -101,17 +117,3 @@ def list_voices(provider: str | None = None, locale: str | None = None) -> list[
     if locale:
         result = [v for v in result if v.locale == locale]
     return result
-
-
-def default_voice_for(provider: str, gender: str, slot: int = 0) -> str:
-    """Pick a fitting voice_id for a character's gender.
-
-    provider: "unrealspeech" | "lemonfox"
-    gender:   "male" | "female" | "neutral" (falls back to neutral)
-    slot:     0 for the first/left character, 1 for the second/right — rotates
-              through the gender's voice list so two same-gender characters
-              still get distinct voices.
-    """
-    by_gender = DEFAULT_VOICES_BY_GENDER.get(provider, DEFAULT_VOICES_BY_GENDER["unrealspeech"])
-    options = by_gender.get(gender) or by_gender["neutral"]
-    return options[slot % len(options)]
