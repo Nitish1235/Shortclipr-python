@@ -305,13 +305,26 @@ async def list_brainrot_jobs(current_user: CurrentUser):
 
 def _serialize_brainrot_job(row: dict) -> dict:
     payload = row.get("payload") or {}
+    status = row["status"]
+    output_url = row.get("output_url")
+    error_message = row.get("error_message")
+    # A completed render/upload can race with the stage timeout firing at
+    # nearly the same instant — fail_brainrot_job's own status guard (see
+    # db/supabase.py) stops this going forward, but rows written before
+    # that guard existed can still say status='failed' even though
+    # output_url/current_step prove the clip genuinely finished. Trust the
+    # artifact over a stale status field: a real output_url is definitive
+    # proof the clip rendered and uploaded successfully.
+    if output_url and status != "complete":
+        status = "complete"
+        error_message = None
     return {
         "job_id": str(row["job_id"]),
-        "status": row["status"],
+        "status": status,
         "progress": row["progress"],
         "current_step": row["current_step"],
-        "output_url": row.get("output_url"),
-        "error_message": row.get("error_message"),
+        "output_url": output_url,
+        "error_message": error_message,
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
         "script_input": payload.get("script_input", ""),
         "post_title": payload.get("post_title", ""),

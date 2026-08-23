@@ -233,14 +233,17 @@ export default function BrainrotStudio() {
     if (statusParam === 'youtube_connected') {
       localStorage.setItem('yt_connected', 'true'); setYtConnected(true)
       showToast('YouTube connected!', 'ok')
+      setView('clips')
       window.history.replaceState({}, '', '/brainrot/studio')
     } else if (statusParam === 'tiktok_connected') {
       localStorage.setItem('tt_connected', 'true'); setTtConnected(true)
       showToast('TikTok connected!', 'ok')
+      setView('clips')
       window.history.replaceState({}, '', '/brainrot/studio')
     } else if (statusParam === 'youtube_error' || statusParam === 'tiktok_error') {
       const reason = params.get('reason') || 'unknown'
       showToast(`Connect failed: ${reason}`, 'err')
+      setView('clips')
       window.history.replaceState({}, '', '/brainrot/studio')
     } else {
       setYtConnected(localStorage.getItem('yt_connected') === 'true')
