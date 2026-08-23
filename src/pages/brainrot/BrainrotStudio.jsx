@@ -12,6 +12,8 @@ import { T, card, pill, btn, pressHandlers, FONT } from './brainrotTheme'
 import Logo from '../../components/Logo'
 import PreviewStage from './PreviewStage'
 import { getChemistry } from './chemistry'
+import ErrorModal from './ErrorModal'
+import { friendlyError } from './errorHelpers'
 import {
   CAPTION_PRESETS, CAPTION_TRENDING, CAPTION_STYLE_BY_ID,
   CAPTION_COLORS, CAPTION_COLOR_BY_ID, DEFAULT_CAPTION_COLOR, DEFAULT_CAPTION_Y,
@@ -110,6 +112,9 @@ export default function BrainrotStudio() {
 
   // ── Publish modal state ──────────────────────────────────────────
   const [publishModal, setPublishModal] = useState(null) // { job, platform }
+
+  // ── Error popup — friendly, never raw backend text (see errorHelpers.js)
+  const [errorModal, setErrorModal] = useState(null) // { error, retry? }
 
   // ── Social connectivity ──────────────────────────────────────────
   const [ytConnected, setYtConnected] = useState(false)
@@ -267,8 +272,13 @@ export default function BrainrotStudio() {
       const token = localStorage.getItem('sc_token')
       const r = await fetch(`${API_BASE}/social/auth/youtube?product=brainrot`, { headers: { Authorization: `Bearer ${token}` } })
       if (r.ok) { const d = await r.json(); window.location.href = d.url }
-      else showToast('Could not start YouTube connect', 'err')
-    } catch { showToast('Network error', 'err') }
+      else {
+        const err = new Error('yt connect failed'); err.status = r.status
+        setErrorModal({ error: friendlyError(err, { title: 'Could not connect YouTube' }), retry: connectYT })
+      }
+    } catch (e) {
+      setErrorModal({ error: friendlyError(e, { title: 'Could not connect YouTube' }), retry: connectYT })
+    }
   }
 
   const connectTT = async () => {
@@ -276,17 +286,30 @@ export default function BrainrotStudio() {
       const token = localStorage.getItem('sc_token')
       const r = await fetch(`${API_BASE}/social/auth/tiktok?product=brainrot`, { headers: { Authorization: `Bearer ${token}` } })
       if (r.ok) { const d = await r.json(); window.location.href = d.url }
-      else { const d = await r.json(); showToast(d.detail || 'Could not start TikTok connect', 'err') }
-    } catch { showToast('Network error', 'err') }
+      else {
+        const err = new Error('tt connect failed'); err.status = r.status
+        setErrorModal({ error: friendlyError(err, { title: 'Could not connect TikTok' }), retry: connectTT })
+      }
+    } catch (e) {
+      setErrorModal({ error: friendlyError(e, { title: 'Could not connect TikTok' }), retry: connectTT })
+    }
   }
 
   const disconnectSocial = async (platform) => {
+    const label = platform === 'youtube' ? 'YouTube' : 'TikTok'
     try {
       const token = localStorage.getItem('sc_token')
-      await fetch(`${API_BASE}/social/disconnect/${platform}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+      const r = await fetch(`${API_BASE}/social/disconnect/${platform}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+      if (!r.ok) {
+        const err = new Error('disconnect failed'); err.status = r.status
+        setErrorModal({ error: friendlyError(err, { title: `Could not disconnect ${label}` }), retry: () => disconnectSocial(platform) })
+        return
+      }
       if (platform === 'youtube') { setYtConnected(false); localStorage.removeItem('yt_connected') }
       else { setTtConnected(false); localStorage.removeItem('tt_connected') }
-    } catch { showToast('Disconnect failed', 'err') }
+    } catch (e) {
+      setErrorModal({ error: friendlyError(e, { title: `Could not disconnect ${label}` }), retry: () => disconnectSocial(platform) })
+    }
   }
 
   // Open publish modal instead of posting directly
@@ -321,6 +344,7 @@ export default function BrainrotStudio() {
       })
       const data = await res.json()
       const result = data.results?.[0]
+      const platformLabel = platform === 'youtube' ? 'YouTube' : 'TikTok'
       if (res.ok && result?.status === 'success') {
         setPublished(prev => new Set([...prev, jobId]))
         showToast(platform === 'youtube' ? 'Published to YouTube Shorts! 🎉' : 'Queued on TikTok! 🔥', 'ok')
@@ -328,9 +352,26 @@ export default function BrainrotStudio() {
         if (platform === 'youtube') { localStorage.removeItem('yt_connected'); setYtConnected(false); connectYT() }
         else { localStorage.removeItem('tt_connected'); setTtConnected(false); connectTT() }
       } else {
-        showToast(result?.error || data.detail || `${platform} publish failed`, 'err')
+        const err = new Error('publish failed'); err.status = res.status
+        setErrorModal({
+          error: friendlyError(err, {
+            title: `Couldn't publish to ${platformLabel}`,
+            tips: [
+              `${platformLabel} may have rejected the video format or length`,
+              'Your connection to this platform may need to be refreshed',
+              'Try again in a moment',
+            ],
+          }),
+          retry: () => doPublish(job, platform, opts),
+        })
       }
-    } catch { showToast(`${platform} publish failed`, 'err') }
+    } catch (e) {
+      const platformLabel = platform === 'youtube' ? 'YouTube' : 'TikTok'
+      setErrorModal({
+        error: friendlyError(e, { title: `Couldn't publish to ${platformLabel}` }),
+        retry: () => doPublish(job, platform, opts),
+      })
+    }
     setPublishing(prev => { const n = new Set(prev); n.delete(jobId); return n })
   }
 
@@ -416,16 +457,20 @@ export default function BrainrotStudio() {
       setSignatureCasts(prev => [cast, ...prev])
       showToast('Saved as a signature cast', 'ok')
     } catch (e) {
-      showToast(e.message || 'Could not save this cast', 'err')
+      setErrorModal({ error: friendlyError(e, { title: 'Could not save this cast' }), retry: saveCurrentCast })
     } finally {
       setSavingCast(false)
     }
   }
 
   const removeSignatureCast = async (id) => {
+    const prevCasts = signatureCasts
     setSignatureCasts(prev => prev.filter(c => c.id !== id)) // optimistic
     try { await brainrotApi.deleteSignatureCast(id) }
-    catch { showToast('Could not delete — try again', 'err') }
+    catch (e) {
+      setSignatureCasts(prevCasts) // roll back the optimistic removal
+      setErrorModal({ error: friendlyError(e, { title: 'Could not delete this cast' }), retry: () => removeSignatureCast(id) })
+    }
   }
 
   const isSavedPair = picked.length === 2 && signatureCasts.some(c => {
@@ -514,7 +559,7 @@ export default function BrainrotStudio() {
       pollJob(job_id)
       setView('clips')
     } catch (e) {
-      showToast(e.message || 'Failed to start', 'err')
+      setErrorModal({ error: friendlyError(e, { title: 'Could not start your clip' }), retry: generate })
     } finally {
       setSubmitting(false)
     }
@@ -566,6 +611,12 @@ export default function BrainrotStudio() {
           onPublish={doPublish}
         />
       )}
+
+      <ErrorModal
+        error={errorModal?.error}
+        onClose={() => setErrorModal(null)}
+        onRetry={errorModal?.retry ? () => { const r = errorModal.retry; setErrorModal(null); r() } : undefined}
+      />
 
       <Header user={user} onLogout={logout} navigate={navigate}
         connectionOffline={anyOffline} onRetryConnection={retryFetches}

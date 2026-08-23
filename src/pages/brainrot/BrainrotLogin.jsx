@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../../context/AuthContext'
+import ErrorModal from './ErrorModal'
+import { friendlyError } from './errorHelpers'
 
 const BRAIN = '#a855f7'
-const BRAIN_DARK = '#7c3aed'
 const INK = '#0f0f0f'
 
 const TESTIMONIALS = [
@@ -52,7 +53,8 @@ export default function BrainrotLogin() {
   const [email, setEmail]           = useState('')
   const [password, setPassword]     = useState('')
   const [showPw, setShowPw]         = useState(false)
-  const [error, setError]           = useState('')
+  const [hasError, setHasError]     = useState(false)
+  const [errorModal, setErrorModal] = useState(null) // { error, retry? }
   const [submitting, setSubmitting] = useState(false)
   const [activeIdx, setActiveIdx]   = useState(0)
   const [fading, setFading]         = useState(false)
@@ -75,20 +77,40 @@ export default function BrainrotLogin() {
   const handleGoogle = async (cr) => {
     const ok = await loginWithGoogleToken(cr.credential)
     if (ok) navigate('/brainrot/studio')
+    else setErrorModal({
+      error: friendlyError({}, {
+        title: 'Google sign-in failed',
+        tips: ['Try again in a moment', 'Use email sign-in below instead'],
+      }),
+    })
   }
 
-  const handleEmail = async (e) => {
-    e.preventDefault()
-    setError('')
+  const submitEmailLogin = async () => {
     if (!email.trim() || !password) return
+    setHasError(false)
     setSubmitting(true)
     const result = await loginWithEmailPassword(email.trim(), password)
     if (result.ok) {
       navigate('/brainrot/studio')
     } else {
-      setError(result.error)
+      setHasError(true)
+      setErrorModal({
+        error: friendlyError({ status: result.status }, {
+          title: 'Could not sign in',
+          tips: [
+            'Double-check your email and password',
+            'If you signed up with Google, use the Google button above',
+            'Set a password from Settings if you haven\'t yet',
+          ],
+        }),
+      })
     }
     setSubmitting(false)
+  }
+
+  const handleEmail = async (e) => {
+    e.preventDefault()
+    await submitEmailLogin()
   }
 
   const t = TESTIMONIALS[activeIdx]
@@ -100,13 +122,14 @@ export default function BrainrotLogin() {
     color: INK, background: '#fff', transition: 'border-color 0.15s',
   })
   const onFocus = (e) => { e.target.style.borderColor = BRAIN }
-  const onBlur  = (e) => { e.target.style.borderColor = error ? BRAIN : '#e5e7eb' }
+  const onBlur  = (e) => { e.target.style.borderColor = hasError ? BRAIN : '#e5e7eb' }
 
   return (
     <div className="br-login-wrap" style={{
       display: 'flex', minHeight: '100vh',
       fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
     }}>
+      <ErrorModal error={errorModal?.error} onClose={() => setErrorModal(null)} onRetry={errorModal?.retry} />
 
       {/* ════════════ LEFT PANEL ════════════ */}
       <div className="br-login-left" style={{
@@ -301,7 +324,12 @@ export default function BrainrotLogin() {
             >
               <GoogleLogin
                 onSuccess={handleGoogle}
-                onError={() => {}}
+                onError={() => setErrorModal({
+                  error: friendlyError({}, {
+                    title: 'Google sign-in failed',
+                    tips: ['Try again in a moment', 'Use email sign-in below instead'],
+                  }),
+                })}
                 theme="outline" shape="rectangular"
                 text="signin_with" size="large"
                 width="340"
@@ -326,25 +354,25 @@ export default function BrainrotLogin() {
               </label>
               <input
                 type="email" value={email}
-                onChange={e => { setEmail(e.target.value); setError('') }}
+                onChange={e => { setEmail(e.target.value); setHasError(false) }}
                 placeholder="you@example.com"
                 required autoComplete="email"
-                style={inputStyle(!!error)}
+                style={inputStyle(hasError)}
                 onFocus={onFocus} onBlur={onBlur}
               />
             </div>
 
-            <div style={{ marginBottom: error ? 10 : 18 }}>
+            <div style={{ marginBottom: hasError ? 10 : 18 }}>
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#374151', marginBottom: 5 }}>
                 Password
               </label>
               <div style={{ position: 'relative' }}>
                 <input
                   type={showPw ? 'text' : 'password'} value={password}
-                  onChange={e => { setPassword(e.target.value); setError('') }}
+                  onChange={e => { setPassword(e.target.value); setHasError(false) }}
                   placeholder="Your password"
                   required autoComplete="current-password"
-                  style={{ ...inputStyle(!!error), paddingRight: 52 }}
+                  style={{ ...inputStyle(hasError), paddingRight: 52 }}
                   onFocus={onFocus} onBlur={onBlur}
                 />
                 <button
@@ -359,16 +387,6 @@ export default function BrainrotLogin() {
                 >{showPw ? 'Hide' : 'Show'}</button>
               </div>
             </div>
-
-            {error && (
-              <div style={{
-                marginBottom: 14, padding: '9px 13px',
-                background: '#fdf4ff', border: `1px solid ${BRAIN}`,
-                borderRadius: 8, fontSize: '0.78rem', color: BRAIN_DARK, fontWeight: 600, lineHeight: 1.5,
-              }}>
-                {error}
-              </div>
-            )}
 
             <button
               type="submit" disabled={submitting}

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import BrainrotNav from './BrainrotNav'
+import ErrorModal from './ErrorModal'
+import { friendlyError } from './errorHelpers'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 const BRAIN = '#a855f7'
@@ -13,10 +15,10 @@ export default function BrainrotSettings() {
   const [pwConfirm, setPwConfirm] = useState('')
   const [showPw, setShowPw]     = useState(false)
   const [saving, setSaving]     = useState(false)
-  const [msg, setMsg]           = useState(null) // { type: 'ok'|'err', text }
+  const [msg, setMsg]           = useState(null) // { type: 'ok'|'err', text } — client-side validation only
+  const [errorModal, setErrorModal] = useState(null) // { error, retry } — API/network failures
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const submitPassword = async () => {
     setMsg(null)
     if (pw.length < 8) {
       setMsg({ type: 'err', text: 'Password must be at least 8 characters.' })
@@ -34,23 +36,29 @@ export default function BrainrotSettings() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ password: pw }),
       })
-      const data = await res.json()
       if (!res.ok) {
-        setMsg({ type: 'err', text: data.detail || 'Failed to set password.' })
-      } else {
-        setMsg({ type: 'ok', text: 'Password set! You can now sign in with your email and this password.' })
-        setPw('')
-        setPwConfirm('')
+        const err = new Error('set-password failed'); err.status = res.status
+        setErrorModal({ error: friendlyError(err, { title: 'Could not set password' }), retry: submitPassword })
+        return
       }
-    } catch {
-      setMsg({ type: 'err', text: 'Network error — please try again.' })
+      setMsg({ type: 'ok', text: 'Password set! You can now sign in with your email and this password.' })
+      setPw('')
+      setPwConfirm('')
+    } catch (e) {
+      setErrorModal({ error: friendlyError(e, { title: 'Could not set password' }), retry: submitPassword })
     } finally {
       setSaving(false)
     }
   }
 
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    await submitPassword()
+  }
+
   return (
     <>
+    <ErrorModal error={errorModal?.error} onClose={() => setErrorModal(null)} onRetry={errorModal?.retry} />
     <div style={{ minHeight: '100vh', background: '#faf5ff', fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif' }}>
       <BrainrotNav />
 

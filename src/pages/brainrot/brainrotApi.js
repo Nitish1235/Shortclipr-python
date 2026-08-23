@@ -13,7 +13,11 @@ function authHeaders(json = false) {
 
 async function getJSON(path) {
   const res = await fetch(`${API_BASE}${path}`, { headers: authHeaders() })
-  if (!res.ok) throw new Error(`${path} → ${res.status}`)
+  if (!res.ok) {
+    const error = new Error(`${path} → ${res.status}`)
+    error.status = res.status
+    throw error
+  }
   return res.json()
 }
 
@@ -24,7 +28,9 @@ async function postJSON(path, body) {
   if (!res.ok) {
     let detail = `${path} → ${res.status}`
     try { detail = (await res.json()).detail || detail } catch { /* ignore */ }
-    throw new Error(detail)
+    const error = new Error(detail)
+    error.status = res.status
+    throw error
   }
   return res.json()
 }
@@ -34,7 +40,9 @@ async function deleteJSON(path) {
   if (!res.ok) {
     let detail = `${path} → ${res.status}`
     try { detail = (await res.json()).detail || detail } catch { /* ignore */ }
-    throw new Error(detail)
+    const error = new Error(detail)
+    error.status = res.status
+    throw error
   }
   return res.json()
 }
@@ -63,7 +71,9 @@ export const brainrotApi = {
     if (!res.ok) {
       let detail = `Request failed (${res.status})`
       try { detail = (await res.json()).detail || detail } catch { /* ignore */ }
-      throw new Error(detail)
+      const error = new Error(detail)
+      error.status = res.status
+      throw error
     }
     return res.json()
   },

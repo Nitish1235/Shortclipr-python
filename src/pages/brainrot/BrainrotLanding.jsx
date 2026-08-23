@@ -1161,6 +1161,8 @@ function Footer() {
           <div style={{ lineHeight: 1.8 }}>
             <Link to="/brainrot/guides/how-to-make-brainrot-clips" style={fLink}>How to make clips</Link>
             <Link to="/brainrot/guides/best-brainrot-topics" style={fLink}>Best topics</Link>
+            <Link to="/brainrot/guides/best-brainrot-character-combos" style={fLink}>Character combos</Link>
+            <Link to="/brainrot/guides/brainrot-clip-ideas" style={fLink}>Clip ideas</Link>
             <Link to="/brainrot/guides/grow-tiktok-with-brainrot" style={fLink}>TikTok growth</Link>
             <Link to="/brainrot/guides" style={fLink}>All guides</Link>
           </div>

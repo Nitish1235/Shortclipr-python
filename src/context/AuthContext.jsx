@@ -65,12 +65,12 @@ export function AuthProvider({ children }) {
         body: JSON.stringify({ email, password }),
       })
       const data = await res.json()
-      if (!res.ok) return { ok: false, error: data.detail || 'Sign in failed.' }
+      if (!res.ok) return { ok: false, error: data.detail || 'Sign in failed.', status: res.status }
       localStorage.setItem('sc_token', data.access_token)
       setUser(data.user)
       return { ok: true }
     } catch {
-      return { ok: false, error: 'Network error — please try again.' }
+      return { ok: false, error: 'Network error — please try again.', status: 0 }
     } finally {
       setLoading(false)
     }
