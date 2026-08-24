@@ -9,6 +9,7 @@ GET  /brainrot/characters         — the 105-character roster (from GCS, see br
 GET  /brainrot/gameplay-clips     — selectable gameplay backgrounds (optional ?category=)
 GET  /brainrot/audio-assets       — music/SFX library (optional ?type=music|sfx)
 GET  /brainrot/admin/jobs         — admin: brainrot jobs across all users (parallel to /admin/jobs)
+POST /brainrot/admin/gameplay-clips/direct — admin: register an already-final clip, NO processing
 
 Same dispatch-mode split as jobs.py: split-worker mode (FFMPEG_WORKER_URLS
 configured) inserts as 'created' and relies on the watcher's poll loop
@@ -1123,6 +1124,78 @@ async def admin_upload_gameplay(
 
 
     return {"source_id": source_id, "status": "created" if (multi_region and video_id) else "processing"}
+
+
+async def _probe_video_duration(url: str) -> float:
+    """ffprobe against a public HTTPS URL — a metadata read, not "processing"
+    (no trim/split/reframe). Backs the direct-upload path below, which
+    otherwise never touches the watcher pipeline (app/pipeline/brainrot_gameplay.py)."""
+    proc = await asyncio.create_subprocess_exec(
+        "ffprobe", "-v", "error", "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1", url,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        out, err = await asyncio.wait_for(proc.communicate(), timeout=30)
+    except asyncio.TimeoutError:
+        proc.kill()
+        raise RuntimeError("ffprobe timed out")
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffprobe failed: {err.decode()[-200:]}")
+    return float(out.decode().strip())
+
+
+class DirectGameplayClipRequest(BaseModel):
+    category: str
+    title: str | None = None
+    direct_gcs_path: str   # gs://bucket/object — from POST /admin/gameplay/upload-url
+
+
+@router.post("/admin/gameplay-clips/direct", status_code=201)
+async def admin_direct_gameplay_clip(body: DirectGameplayClipRequest, current_user: CurrentUser):
+    """
+    Admin: register an already-finished gameplay clip with NO processing —
+    no head-trim, no <=120s splitting, no 9:16 reframe. The admin uploads a
+    file that's already the right shape (via POST /admin/gameplay/upload-url
+    + a direct PUT to the signed URL); this just records it as a selectable
+    clip, bypassing the watcher pipeline in brainrot_gameplay.py entirely.
+    Still lands with status='pending' like every other clip — curation
+    (Select/Reject in the admin Clips section) is unchanged.
+    """
+    _require_admin(current_user)
+    category = body.category.strip()
+    if not category:
+        raise HTTPException(status_code=400, detail="category is required")
+    if not body.direct_gcs_path.startswith("gs://"):
+        raise HTTPException(status_code=400, detail="direct_gcs_path must be a gs:// URI from POST /admin/gameplay/upload-url")
+
+    bucket_name, _, object_name = body.direct_gcs_path[len("gs://"):].partition("/")
+    if not bucket_name or not object_name:
+        raise HTTPException(status_code=400, detail="Malformed direct_gcs_path")
+    public_url = f"{settings.GCS_PUBLIC_BASE_URL}/{bucket_name}/{object_name}"
+
+    source_row = await db.insert_gameplay_source(
+        category=category,
+        title=(body.title or "").strip() or None,
+        gcs_path=body.direct_gcs_path,
+        uploaded_by=str(current_user.user_id),
+        video_id=None,
+        initial_status="ready",
+    )
+    source_id = str(source_row["id"])
+
+    try:
+        duration = await _probe_video_duration(public_url)
+    except Exception as exc:
+        logger.warning(f"[gameplay-direct {source_id}] ffprobe failed on {public_url}: {exc}")
+        duration = 0.0
+
+    clip_row = await db.insert_gameplay_clip(
+        source_id=source_id, category=category, gcs_path=public_url,
+        thumbnail_url=None, duration_seconds=duration,
+    )
+    logger.info(f"Admin {current_user.email} direct-uploaded gameplay clip {clip_row['id']} ({category}) — no processing")
+    return {"clip_id": str(clip_row["id"]), "source_id": source_id, "duration_seconds": duration}
 
 
 @router.get("/admin/gameplay/sources")

@@ -365,7 +365,7 @@ function GameplaySection({ notify }) {
   const [title, setTitle] = useState('')
   const [youtubeUrl, setYoutubeUrl] = useState('')
   const [file, setFile] = useState(null)
-  const [tab, setTab] = useState('youtube') // 'youtube' | 'file'
+  const [tab, setTab] = useState('youtube') // 'youtube' | 'file' | 'direct'
   const [busy, setBusy] = useState(false)
   const timer = useRef(null)
   const fileRef = useRef(null)
@@ -400,15 +400,35 @@ function GameplaySection({ notify }) {
         
         await send('/brainrot/admin/gameplay', { form })
         notify('YouTube video received — processing in background', 'success')
+      } else if (tab === 'direct') {
+        if (!file) return notify('Choose a video file', 'error')
+
+        // Same signed-URL PUT as the file tab, but the finalize call below
+        // goes to /admin/gameplay-clips/direct instead of /admin/gameplay —
+        // no watcher pickup, no trim/split/reframe. It's registered as a
+        // single selectable clip exactly as uploaded.
+        setUploadState('Requesting URL...')
+        const { url, gcs_path } = await send('/brainrot/admin/gameplay/upload-url', {
+          json: { filename: file.name, content_type: file.type }
+        })
+
+        setUploadState('Uploading to Cloud... 0%')
+        await putWithProgress(url, file, (pct) => setUploadState(`Uploading to Cloud... ${pct}%`))
+
+        setUploadState('Finalizing...')
+        await send('/brainrot/admin/gameplay-clips/direct', {
+          json: { category: category.trim(), title: title.trim() || null, direct_gcs_path: gcs_path }
+        })
+        notify('Uploaded as-is, no processing — it’s pending in Brainrot Clips below, select it to make it live', 'success')
       } else {
         if (!file) return notify('Choose a video file', 'error')
-        
+
         // 1. Get signed URL
         setUploadState('Requesting URL...')
-        const { url, gcs_path } = await send('/brainrot/admin/gameplay/upload-url', { 
-          json: { filename: file.name, content_type: file.type } 
+        const { url, gcs_path } = await send('/brainrot/admin/gameplay/upload-url', {
+          json: { filename: file.name, content_type: file.type }
         })
-        
+
         // 2. Upload file to GCS — this is the slow part for large gameplay
         // recordings (can take many minutes, bound by upload bandwidth, not
         // by anything on the backend). Show real progress so it doesn't look
@@ -422,7 +442,7 @@ function GameplaySection({ notify }) {
         form.append('category', category.trim())
         if (title.trim()) form.append('title', title.trim())
         form.append('direct_gcs_path', gcs_path)
-        
+
         await send('/brainrot/admin/gameplay', { form })
         notify('File uploaded directly to cloud — processing in background', 'success')
       }
@@ -455,19 +475,28 @@ function GameplaySection({ notify }) {
           </div>
         </div>
         
-        <div style={{ display: 'flex', gap: 10, marginTop: 6, marginBottom: -4 }}>
-          <button type="button" onClick={() => setTab('youtube')} style={{ ...btnGhost, fontWeight: tab === 'youtube' ? 800 : 500, color: tab === 'youtube' ? C.text : C.mute }}>YouTube URL</button>
-          <button type="button" onClick={() => setTab('file')} style={{ ...btnGhost, fontWeight: tab === 'file' ? 800 : 500, color: tab === 'file' ? C.text : C.mute }}>Upload File</button>
+        <div style={{ display: 'flex', gap: 10, marginTop: 6, marginBottom: -4, flexWrap: 'wrap' }}>
+          <button type="button" onClick={() => setTab('youtube')} style={{ ...btnGhost, fontWeight: tab === 'youtube' ? 800 : 500, color: tab === 'youtube' ? C.ink : C.mute }}>YouTube URL</button>
+          <button type="button" onClick={() => setTab('file')} style={{ ...btnGhost, fontWeight: tab === 'file' ? 800 : 500, color: tab === 'file' ? C.ink : C.mute }}>Upload File</button>
+          <button type="button" onClick={() => setTab('direct')} style={{ ...btnGhost, fontWeight: tab === 'direct' ? 800 : 500, color: tab === 'direct' ? C.ink : C.mute }}>Direct Upload</button>
         </div>
+
+        {tab === 'direct' && (
+          <div style={{ fontSize: '.72rem', color: C.mute, lineHeight: 1.5 }}>
+            Uploaded exactly as-is — no head-trim, no ≤120s splitting, no 9:16 reframe. Use only for
+            files that are already ready to play (ideally already vertical). Lands as one pending
+            clip in Brainrot Clips below — select it there to make it live.
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           {tab === 'youtube' ? (
              <input type="url" placeholder="https://youtube.com/watch?v=..." value={youtubeUrl} onChange={e => setYoutubeUrl(e.target.value)} style={{ ...inputS, flex: 1 }} />
           ) : (
-             <input ref={fileRef} type="file" accept="video/mp4,video/quicktime,video/*" onChange={e => setFile(e.target.files?.[0] || null)} style={{ flex: 1, fontSize: '.8rem', color: C.text }} />
+             <input ref={fileRef} type="file" accept="video/mp4,video/quicktime,video/*" onChange={e => setFile(e.target.files?.[0] || null)} style={{ flex: 1, fontSize: '.8rem', color: C.ink }} />
           )}
           <button type="submit" style={{ ...btnRed, opacity: busy ? .6 : 1 }} disabled={busy}>
-            {uploadState || (busy ? 'Processing…' : (tab === 'youtube' ? 'Process YouTube' : 'Upload & Process'))}
+            {uploadState || (busy ? 'Uploading…' : (tab === 'youtube' ? 'Process YouTube' : tab === 'direct' ? 'Upload (no processing)' : 'Upload & Process'))}
           </button>
           <button type="button" style={btnGhost} onClick={load}>🔄 Refresh</button>
         </div>
