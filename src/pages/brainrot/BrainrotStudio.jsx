@@ -528,11 +528,15 @@ export default function BrainrotStudio() {
 
   const moveCaption = useCallback((y) => setCaptionY(y), [])
 
-  // ── Voice preview ───────────────────────────────────────────────
-  const playPreview = (url, failMsg = 'Preview not ready yet — admin needs to generate voice samples.') => {
+  // ── Voice / music preview ─────────────────────────────────────────
+  // `volume` (0-1) lets the music picker's preview actually reflect the
+  // volume slider — previously always played at full volume regardless of
+  // where the slider sat, so dragging it appeared to do nothing.
+  const playPreview = (url, failMsg = 'Preview not ready yet — admin needs to generate voice samples.', volume = 1) => {
     if (!url) return
     if (audioRef.current) { audioRef.current.pause() }
     audioRef.current = new Audio(url)
+    audioRef.current.volume = Math.max(0, Math.min(1, volume))
     audioRef.current.play().catch(() => showToast(failMsg, 'warn'))
   }
 
@@ -1056,7 +1060,7 @@ export default function BrainrotStudio() {
                             cursor: 'pointer', padding: '5px 6px 5px 14px', border: 'none', background: 'transparent',
                             color: on ? '#fff' : T.ink, fontSize: '.75rem', fontWeight: 500, fontFamily: FONT,
                           }}>{m.name}</button>
-                        <button onClick={() => playPreview(m.gcs_path, 'Could not play this track — try again in a moment.')} title="Preview this track"
+                        <button onClick={() => playPreview(m.gcs_path, 'Could not play this track — try again in a moment.', musicVolume)} title={`Preview at ${Math.round(musicVolume * 100)}% volume`}
                           disabled={!m.gcs_path}
                           style={{
                             cursor: m.gcs_path ? 'pointer' : 'not-allowed', padding: '5px 12px 5px 4px',
@@ -1326,7 +1330,7 @@ export default function BrainrotStudio() {
       </div>
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 999,
+        <div className="br-toast" style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 999,
           background: toast.type === 'err' ? '#fef2f2' : toast.type === 'ok' ? '#f0fdf4' : '#fff',
           border: `1px solid ${toast.type === 'err' ? '#fecaca' : toast.type === 'ok' ? '#bbf7d0' : T.line}`,
           borderRadius: 8, padding: '10px 18px', fontSize: '.85rem', fontWeight: 500,
@@ -1428,7 +1432,7 @@ function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection
       </div>
 
       {/* Row 2 — stats grid, same layout as YT-shorts Dashboard */}
-      <div style={{
+      <div className="br-header-stats" style={{
         display: 'grid',
         gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))`,
         borderTop: `1px solid ${T.line}`,
@@ -1457,25 +1461,61 @@ function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection
       <style>{`
         @keyframes br-pulse-dot { 0%,100% { opacity: .4 } 50% { opacity: 1 } }
         @keyframes brSpin { to { transform: rotate(360deg) } }
+
+        /* ── Tablet / mobile: stack the two-column studio grid, and turn
+           the desktop side rail into a fixed bottom tab bar (the standard
+           mobile-app nav pattern) instead of squeezing a sticky sidebar
+           full of desktop-density content under the header. Publish/social
+           connect moves out of the tab bar entirely — see .br-clips-connect
+           below, rendered inside "My clips" instead, where it's contextual. */
         @media (max-width: 900px) {
-          .br-studio-grid { grid-template-columns: 1fr !important; gap: 20px !important; }
+          .br-studio-grid { grid-template-columns: 1fr !important; gap: 24px !important; }
           .br-studio-preview { position: static !important; top: auto !important; }
-          .br-preview-stage { max-width: 280px !important; margin: 0 auto !important; }
-          .br-shell { flex-direction: column !important; gap: 12px !important; padding-top: 14px !important; }
-          .br-sidenav { position: sticky !important; top: 96px !important; width: 100% !important;
-            flex-direction: row !important; flex-wrap: wrap !important; z-index: 140; }
-          .br-sidenav > button, .br-sidenav > a { flex: 1 !important; justify-content: center !important; min-height: 44px !important; }
-          .br-sidenav > div:not(.br-pub-section) { display: none !important; }
-          .br-pub-section { width: 100% !important; display: flex !important; flex-direction: row !important;
-            gap: 6px !important; padding: 6px 2px 4px !important; border-top: 1px solid #e8e8e0 !important; }
-          .br-pub-divider, .br-pub-label { display: none !important; }
-          .br-pub-section > div { flex: 1 !important; margin: 0 !important; font-size: .72rem !important; }
-          .br-social-disc-row { display: none !important; }
+          .br-preview-stage { max-width: min(340px, 82vw) !important; margin: 0 auto !important; }
+          .br-shell { flex-direction: column !important; gap: 0 !important; padding-top: 14px !important;
+            padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important; }
+
+          .br-sidenav {
+            position: fixed !important; inset: auto 0 0 0 !important; top: auto !important;
+            width: 100% !important; flex-direction: row !important; flex-wrap: nowrap !important;
+            align-items: stretch !important; gap: 2px !important;
+            border-radius: 0 !important; border-left: none !important; border-right: none !important; border-bottom: none !important;
+            padding: 6px calc(env(safe-area-inset-right, 0px) + 6px) calc(env(safe-area-inset-bottom, 0px) + 6px) calc(env(safe-area-inset-left, 0px) + 6px) !important;
+            box-shadow: 0 -2px 14px rgba(0,0,0,.07) !important;
+            z-index: 300 !important;
+          }
+          .br-sidenav > button, .br-sidenav > a {
+            flex: 1 !important; flex-direction: column !important; justify-content: center !important;
+            gap: 2px !important; min-height: 54px !important; padding: 6px 4px !important;
+            font-size: .66rem !important; border-radius: 10px !important;
+          }
+          .br-sidenav > button > span, .br-sidenav > a > span { flex: none !important; }
+          .br-sidenav > div:not(.br-pub-section) { display: none !important; } /* divider */
+          .br-pub-section { display: none !important; } /* relocated to .br-clips-connect on mobile */
+
+          /* "Connected accounts" — shown at the top of My Clips on mobile only
+             (desktop already has this in the side rail). */
+          .br-clips-connect { display: block !important; }
         }
+
         @media (max-width: 640px) {
-          .br-studio-headrow, .br-shell { padding-left: 12px !important; padding-right: 12px !important; }
+          .br-studio-headrow { padding: 8px 12px !important; gap: 8px !important; }
+          .br-shell { padding-left: 12px !important; padding-right: 12px !important; }
           .br-studio-tag { display: none; }
           .br-publish-modal-card { padding: 16px 14px 14px !important; border-radius: 12px !important; }
+          .br-header-stats > div { padding: 7px 8px !important; }
+          .br-header-stats > div > div:first-child { font-size: .92rem !important; }
+          .br-stage-body { padding: 18px 16px 22px !important; }
+          .br-stage-body h2 { font-size: 1.05rem !important; }
+          .br-callsheet-row { grid-template-columns: 62px 1fr 38px !important; padding: 10px 12px !important; gap: 8px !important; }
+          .br-toast { bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important; max-width: calc(100vw - 32px) !important; }
+        }
+
+        @media (max-width: 400px) {
+          .br-stage-rail { overflow-x: auto !important; scrollbar-width: none !important; }
+          .br-stage-rail::-webkit-scrollbar { display: none !important; }
+          .br-stage-rail button { flex: 0 0 auto !important; min-width: 62px !important; }
+          .br-stage-rail > span { display: none !important; }
         }
       `}</style>
     </header>
@@ -1880,14 +1920,30 @@ function StudioSideNav({ view, onChange, clipCount, renderingCount, user, ytConn
         }}>{user?.brainrot_plan || 'free'}</span>
       </Link>
 
-      {/* ── Social publish section ── */}
+      {/* ── Social publish section (desktop only — mobile shows this inside
+           "My clips" instead, via .br-clips-connect) ── */}
       <div className="br-pub-section" style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
         <div className="br-pub-divider" style={{ height: 1, background: T.lineSoft, margin: '6px 4px' }} />
         <div className="br-pub-label" style={{ padding: '4px 6px 2px', fontSize: '.65rem', fontWeight: 700,
           color: T.mute, textTransform: 'uppercase', letterSpacing: '.07em' }}>
           Publish to
         </div>
+        <PublishConnections
+          ytConnected={ytConnected} ttConnected={ttConnected}
+          onConnectYT={onConnectYT} onConnectTT={onConnectTT} onDisconnect={onDisconnect}
+        />
+      </div>
+    </nav>
+  )
+}
 
+// Shared YouTube/TikTok connect rows — used in the desktop side rail
+// (StudioSideNav) and, on mobile, resurfaced inside "My clips" (see
+// .br-clips-connect in Header's mobile styles) since the bottom tab bar
+// has no room for it.
+function PublishConnections({ ytConnected, ttConnected, onConnectYT, onConnectTT, onDisconnect }) {
+  return (
+    <>
       <SocialConnectRow
         icon={<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>}
         label="YouTube"
@@ -1902,8 +1958,7 @@ function StudioSideNav({ view, onChange, clipCount, renderingCount, user, ytConn
         onConnect={onConnectTT}
         onDisconnect={() => onDisconnect('tiktok')}
       />
-      </div>
-    </nav>
+    </>
   )
 }
 
@@ -1915,7 +1970,7 @@ function StageShell({ id, children }) {
       borderRadius: 12,
       border: `1px solid ${T.line}`,
     }}>
-      <div style={{ padding: '24px 24px 28px' }}>
+      <div className="br-stage-body" style={{ padding: '24px 24px 28px' }}>
         <h2 style={{
           margin: '0 0 4px', fontWeight: 500,
           fontSize: '1.15rem', letterSpacing: '-.02em',
@@ -1983,7 +2038,7 @@ function StageNextButton({ label, onClick }) {
 
 function CallsheetRow({ label, done, onEdit, children, last }) {
   return (
-    <div style={{
+    <div className="br-callsheet-row" style={{
       display: 'grid', gridTemplateColumns: '80px 1fr 50px', gap: 12, alignItems: 'center',
       padding: '12px 16px',
       borderBottom: last ? 'none' : `1px solid ${T.lineSoft}`,
@@ -2062,7 +2117,7 @@ function StageRail({ stage, onJump, stageDone }) {
   const doneCount = STAGES.filter(s => stageDone[s.id]).length
 
   return (
-    <div style={{
+    <div className="br-stage-rail" style={{
       display: 'flex', alignItems: 'center', gap: 2,
       background: T.paper2,
       border: `1px solid ${T.line}`,
@@ -2305,6 +2360,25 @@ function ClipsLibrary({ clips, counts, filter, onFilterChange, hasMore, loadingM
           style={{ ...btn(T.ink, '#fff', { padding: '10px 18px', fontSize: '.82rem' }) }}>
           New clip
         </button>
+      </div>
+
+      {/* Mobile only — desktop already has this in the side rail. The bottom
+          tab bar has no room for it, so it lives here instead, contextually
+          next to the clips it publishes. */}
+      <div className="br-clips-connect" style={{
+        display: 'none', marginBottom: 20, padding: 10,
+        background: T.paper2, border: `1px solid ${T.line}`, borderRadius: 12,
+      }}>
+        <div style={{ padding: '2px 4px 8px', fontSize: '.68rem', fontWeight: 700,
+          color: T.mute, textTransform: 'uppercase', letterSpacing: '.07em' }}>
+          Publish to
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <PublishConnections
+            ytConnected={ytConnected} ttConnected={ttConnected}
+            onConnectYT={onConnectYT} onConnectTT={onConnectTT} onDisconnect={onDisconnect}
+          />
+        </div>
       </div>
 
       {counts.all > 0 && (

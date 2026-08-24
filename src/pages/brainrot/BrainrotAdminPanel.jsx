@@ -246,6 +246,25 @@ function AudioSection({ notify }) {
       load()
     } catch (e) { notify(e.message, 'error') }
   }
+  const [bulkSwapping, setBulkSwapping] = useState(false)
+  // Same fix as swapNameCategory, applied to every asset of the given type
+  // that actually has a category to swap in — one click for the whole
+  // library instead of per-row.
+  const swapAll = async (assetType) => {
+    const targets = assets.filter(a => a.asset_type === assetType && a.category)
+    if (!targets.length) return notify(`No ${assetType} tracks with a category set to swap`, 'error')
+    setBulkSwapping(true)
+    let ok = 0, failed = 0
+    for (const a of targets) {
+      try {
+        await send(`/brainrot/admin/audio-assets/${a.id}`, { method: 'PATCH', json: { name: a.category, category: a.name } })
+        ok++
+      } catch { failed++ }
+    }
+    setBulkSwapping(false)
+    notify(`Swapped ${ok} ${assetType} track${ok === 1 ? '' : 's'}${failed ? ` (${failed} failed)` : ''}`, failed ? 'error' : 'success')
+    load()
+  }
 
   const upload = async (e) => {
     e.preventDefault()
@@ -292,6 +311,19 @@ function AudioSection({ notify }) {
           <button type="submit" style={{ ...btnRed, opacity: busy ? .6 : 1 }} disabled={busy}>{busy ? 'Uploading…' : 'Upload'}</button>
         </div>
       </form>
+
+      {assets.some(a => a.asset_type === 'music' && a.category) && (
+        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 12px', background: '#fef2f2', border: `1px solid #fecaca`, borderRadius: 8 }}>
+          <span style={{ fontSize: '.8rem', color: '#7a1a1a', flex: 1 }}>
+            Music tracks uploaded with name/category swapped? Fix all of them in one click.
+          </span>
+          <button style={{ ...btnRed, opacity: bulkSwapping ? .6 : 1 }} disabled={bulkSwapping}
+            onClick={() => swapAll('music')}>
+            {bulkSwapping ? 'Swapping…' : '⇄ Swap all music'}
+          </button>
+        </div>
+      )}
 
       {assets.length > 0 && (
         <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
