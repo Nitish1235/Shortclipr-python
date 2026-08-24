@@ -1,17 +1,17 @@
 // BrainrotNav.jsx — sticky top nav for the Brainrot product surface.
 //
 // Forked from `src/components/Navigation.jsx` (the YT-shorts nav) rather than
-// generalized as a prop-driven shared component, because the two products are
-// visually distinct on purpose: YT-shorts uses brand red (#cf1322) on a white
-// card with a red offset shadow, Brainrot uses electric purple (#a855f7). The
-// underlying "sticky rounded card + hard offset shadow + chunky button" pattern
-// is the shared design language across the whole app.
+// generalized as a prop-driven shared component, so the two can still diverge
+// structurally (different link sets, "Studio" vs "Dashboard", etc). Visually
+// they now match exactly — same brand red (#cf1322) on a white card with a
+// red offset shadow, same "sticky rounded card + hard offset shadow + chunky
+// button" pattern.
 
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 
-const BRAIN = '#a855f7'
+const BRAIN = '#cf1322'
 const INK = '#0f0f0f'
 
 export default function BrainrotNav() {
@@ -56,7 +56,7 @@ export default function BrainrotNav() {
   return (
     <div style={{
       position: 'sticky', top: 0, zIndex: 200,
-      background: '#faf5ff',
+      background: '#f9f9f9',
       padding: scrolled ? '8px 5%' : '14px 5%',
       transition: 'padding 0.2s',
     }}>
@@ -100,7 +100,7 @@ export default function BrainrotNav() {
                     textDecoration: 'none',
                     transition: 'background 0.15s, color 0.15s',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#f5f0ff'; e.currentTarget.style.color = BRAIN }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = BRAIN }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#333' }}
                 >{label}</a>
               </li>
@@ -113,7 +113,7 @@ export default function BrainrotNav() {
           {user ? (
             <>
               <div style={{
-                background: '#f5f0ff', border: `1px solid ${BRAIN}`,
+                background: '#fef2f2', border: '1px solid #fecaca',
                 borderRadius: 8, padding: '6px 12px',
                 fontSize: '.78rem', fontWeight: 700, color: BRAIN,
               }}>

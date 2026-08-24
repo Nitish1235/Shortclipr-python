@@ -4,8 +4,8 @@
 // The paid studio lives at /brainrot/studio and stays protected.
 //
 // Design language matches the YT-shorts landing (rounded sticky nav, black
-// borders, hard offset shadows, hand-drawn SVG underline) with a purple
-// accent instead of red, plus brainrot-native motion (character wobble,
+// borders, hard offset shadows, hand-drawn SVG underline) — same brand red
+// (#cf1322) as YT-shorts, plus brainrot-native motion (character wobble,
 // rotating captions, marquee, hover-lift cards).
 //
 // Real data:
@@ -40,14 +40,17 @@ const DEMO_STYLES = [
 ]
 
 // ── Design tokens (local to landing — brainrot-flavored) ────────────
+// Same brand red as the YT-shorts landing (Navigation.jsx / Hero.jsx —
+// #cf1322 main, #a10e1b hover-dark, #fef2f2 light tint, #fecaca light
+// border) instead of the old purple/pink accent.
 const P = {
   ink: '#0f0f0f',
-  paper: '#faf5ff',
+  paper: '#fef2f2',
   paper2: '#ffffff',
-  brain: '#a855f7',
-  brain2: '#ec4899',
+  brain: '#cf1322',
+  brain2: '#a10e1b',
   brain3: '#22c55e',
-  brainTint: '#f5f0ff',
+  brainTint: '#fee2e2',
   yellow: '#fde047',
   captionYellow: '#ffd23f',
   mute: '#6b7280',
@@ -350,13 +353,13 @@ function Hero({ characters, clips }) {
   return (
     <section style={{
       padding: 'clamp(56px, 8vw, 96px) 5%',
-      background: 'linear-gradient(180deg, #fff 0%, #faf5ff 100%)',
+      background: 'linear-gradient(180deg, #fff 0%, #fef2f2 100%)',
       position: 'relative', overflow: 'hidden',
     }}>
       {/* Dot grid background */}
       <div style={{
         position: 'absolute', inset: 0, zIndex: 0,
-        backgroundImage: 'linear-gradient(#f0e6ff 1px, transparent 1px), linear-gradient(90deg, #f0e6ff 1px, transparent 1px)',
+        backgroundImage: 'linear-gradient(#fee2e2 1px, transparent 1px), linear-gradient(90deg, #fee2e2 1px, transparent 1px)',
         backgroundSize: '48px 48px',
         opacity: .6,
         WebkitMaskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%)',
@@ -499,7 +502,7 @@ function Parade({ characters }) {
             <div style={{
               width: 82, height: 82, margin: '0 auto 8px', borderRadius: '50%',
               border: `2px solid ${P.ink}`, overflow: 'hidden',
-              background: '#f5f0ff',
+              background: '#fee2e2',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <img
@@ -890,7 +893,7 @@ function SwapRow({ items, selectedIdx, onSelect, renderItem, more }) {
           width: 40, height: 40, borderRadius: '50%',
           border: `2px solid ${P.ink}`, overflow: 'hidden', cursor: 'pointer',
           boxShadow: selectedIdx === i ? `0 0 0 3px ${P.brain}` : 'none',
-          background: '#f5f0ff',
+          background: '#fee2e2',
         }}>{renderItem(it)}</div>
       ))}
       {more > 0 && (
