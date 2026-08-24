@@ -382,6 +382,21 @@ async def _run_brainrot_ffmpeg_stage(job_id: str, prefetched: "_PrefetchedAssets
                     f"clip_duration={clip_duration:.1f}s characters={len(characters)} lines={len(remote_lines)}"
                 )
 
+                # Real mid-render progress instead of sitting static at 60%
+                # for the whole ~60-90s encode — see composite.render()'s
+                # on_progress docstring. Throttled to one DB write per whole
+                # percentage point (not per progress line, which fires many
+                # times a second) so this doesn't hammer the DB.
+                last_reported_pct = -1
+
+                async def _on_render_progress(frac: float) -> None:
+                    nonlocal last_reported_pct
+                    pct = 60 + int(30 * frac)
+                    if pct == last_reported_pct:
+                        return
+                    last_reported_pct = pct
+                    await db.update_brainrot_job_progress(job_id, pct, "Rendering clip...", status="rendering")
+
                 def _render(gameplay_clip_path, lines):
                     return composite.render(
                         gameplay_clip_path=gameplay_clip_path,
@@ -398,6 +413,7 @@ async def _run_brainrot_ffmpeg_stage(job_id: str, prefetched: "_PrefetchedAssets
                         entry_sfx=entry_sfx_path,
                         exit_sfx=exit_sfx_path,
                         threads=threads,
+                        on_progress=_on_render_progress,
                     )
 
                 try:

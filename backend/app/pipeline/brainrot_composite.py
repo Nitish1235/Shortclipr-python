@@ -631,6 +631,7 @@ async def render(
     entry_sfx: Path | None = None,
     exit_sfx: Path | None = None,
     threads: int = 1,
+    on_progress=None,   # optional async callable(frac: float) -> None, see below
 ) -> Path:
     """Composite gameplay background + character overlays + mixed audio +
     burned-in captions into one MP4. Single ffmpeg invocation.
@@ -647,7 +648,15 @@ async def render(
     by the caller from how many renders are concurrently live on this worker
     instance (see brainrot_stage.py's _ACTIVE_RENDERS_ON_INSTANCE), so N
     concurrent renders together never claim more threads than the instance
-    actually has vCPUs."""
+    actually has vCPUs.
+
+    on_progress: awaited with a 0.0-1.0 completion fraction as this ffmpeg
+    call progresses (parsed from `-progress pipe:1`'s out_time_us, same
+    technique brainrot_gameplay.py already uses for its own encode). Without
+    this, the caller sees zero feedback for the ~60-90s a render can take —
+    one atomic ffmpeg call has no natural sub-steps otherwise. A callback
+    exception is logged and swallowed, never allowed to fail an otherwise-
+    successful render."""
 
     inputs: list[str] = ["-stream_loop", "-1", "-i", str(gameplay_clip_path)]
     input_index_map: dict[str, int] = {}
@@ -729,21 +738,49 @@ async def render(
         "-c:v", "libx264", "-preset", "superfast", "-crf", "20",
         "-c:a", "aac", "-b:a", "192k",
         "-threads", str(threads), "-filter_complex_threads", str(threads),
+        # -progress pipe:1: periodic out_time_us=... blocks on stdout, parsed
+        # by _drain_progress below. -nostats suppresses the normal per-frame
+        # stderr spam (not needed — the structured pipe:1 stream replaces it).
+        "-progress", "pipe:1", "-nostats",
         str(output_path),
     ]
 
     proc = await asyncio.create_subprocess_exec(
         *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
+
+    async def _drain_progress() -> None:
+        """Read -progress's stdout stream to completion. With on_progress
+        set, parses each out_time_us= line into a completion fraction and
+        reports it; either way, stdout must be drained as the process runs
+        or ffmpeg blocks once the pipe buffer fills (same deadlock risk
+        communicate() exists to avoid — this replaces it since communicate()
+        can't stream progress mid-read)."""
+        async for raw in proc.stdout:
+            if on_progress is None or clip_duration <= 0:
+                continue
+            line = raw.decode(errors="ignore").strip()
+            if not line.startswith("out_time_us="):
+                continue
+            try:
+                seconds = int(line.split("=", 1)[1]) / 1_000_000
+            except ValueError:
+                continue
+            try:
+                await on_progress(min(1.0, max(0.0, seconds / clip_duration)))
+            except Exception:
+                logger.warning("brainrot_composite on_progress callback failed", exc_info=True)
+
     try:
-        _, stderr = await proc.communicate()
-        if proc.returncode != 0:
+        _, stderr = await asyncio.gather(_drain_progress(), proc.stderr.read())
+        returncode = await proc.wait()
+        if returncode != 0:
             raise RuntimeError(f"brainrot_composite ffmpeg failed: {stderr.decode()[-1500:]}")
     except asyncio.CancelledError:
         # Outer stage timeout (BRAINROT_STAGE_TIMEOUT_SECONDS) cancels this
-        # await — cancelling proc.communicate() does NOT kill the child
-        # process, so without this it keeps running/consuming CPU in the
-        # background until it exits on its own.
+        # await — cancelling here does NOT kill the child process, so
+        # without this it keeps running/consuming CPU in the background
+        # until it exits on its own.
         proc.kill()
         await proc.communicate()
         raise

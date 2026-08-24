@@ -142,6 +142,11 @@ export default function BrainrotStudio() {
   const [myClips, setMyClips]       = useState([])
   const [toast, setToast]           = useState(null)
   const [refLoaded, setRefLoaded]   = useState(false)
+  // Set by the reference-data load effect when it finds a job still active
+  // from an earlier visit — picked up by the effect right after pollJob's
+  // own definition below (can't call pollJob directly from the earlier
+  // effect; it isn't declared yet at that point in the component).
+  const [resumeActiveJobId, setResumeActiveJobId] = useState(null)
   const pollRef = useRef(null)
   const audioRef = useRef(null)
 
@@ -217,8 +222,11 @@ export default function BrainrotStudio() {
         // it was on THIS page load until the user manually reloads again
         // to get a fresh snapshot. MAX_CONCURRENT_BRAINROT_JOBS_PER_USER
         // caps this at one, so at most one clip in the list can need it.
+        // Flagged via state (see resumeActiveJobId) rather than calling
+        // pollJob directly — it isn't declared yet at this point in the
+        // component; the effect right after its definition picks this up.
         const stillActive = clips.find(isActive)
-        if (stillActive) pollJob(stillActive.job_id)
+        if (stillActive) setResumeActiveJobId(stillActive.job_id)
       }
       if (s.status === 'fulfilled') setSignatureCasts(s.value.casts || [])
       if (m.status === 'fulfilled') setMusicLib(m.value.assets || [])
@@ -689,6 +697,14 @@ export default function BrainrotStudio() {
     tick()
     pollRef.current = setInterval(tick, 2500)
   }
+
+  // Picks up a job the reference-data load effect (above) found still
+  // active from an earlier visit — see resumeActiveJobId's own comment.
+  // Placed here (after pollJob's declaration) rather than inside that
+  // earlier effect directly, since pollJob isn't in scope yet up there.
+  useEffect(() => {
+    if (resumeActiveJobId) pollJob(resumeActiveJobId)
+  }, [resumeActiveJobId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Connection state — quietly true when everything's fine, quietly
   // encourages a retry when it isn't. No page-wide red banner.
