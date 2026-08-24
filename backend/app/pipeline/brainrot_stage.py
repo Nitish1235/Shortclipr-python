@@ -29,6 +29,7 @@ import tempfile
 import time
 import uuid
 from contextlib import asynccontextmanager, suppress
+from dataclasses import dataclass
 from pathlib import Path
 
 from app.core.config import get_settings
@@ -103,10 +104,33 @@ async def run_brainrot_api_stage(job_id: str) -> None:
         await _fail_and_refund(job_id, _friendly_error(str(exc)))
 
 
-async def run_brainrot_ffmpeg_stage(job_id: str) -> None:
+@dataclass
+class _PrefetchedAssets:
+    """Characters + music, already downloaded to local disk before the
+    FFmpeg stage even starts — see _prefetch_shared_assets / run_brainrot_stage."""
+    characters: list
+    music_path: object  # Path | None
+
+
+async def _prefetch_shared_assets(payload: dict, tmp_dir: Path) -> "_PrefetchedAssets":
+    """Characters + music are fully known from the job's payload at creation
+    time — nothing about them depends on the script or TTS output that the
+    API stage produces. Kicking their download off concurrently with
+    generate_scene_plan()/TTS (see run_brainrot_stage) instead of waiting
+    for the whole API stage to finish hides their download time entirely
+    behind however long script+TTS already take, rather than adding it on
+    top afterward in the FFmpeg stage."""
+    characters, music_path = await asyncio.gather(
+        _fetch_characters(payload, tmp_dir),
+        _fetch_optional_asset(payload.get("music_url"), tmp_dir, "music"),
+    )
+    return _PrefetchedAssets(characters=characters, music_path=music_path)
+
+
+async def run_brainrot_ffmpeg_stage(job_id: str, prefetched: "_PrefetchedAssets | None" = None) -> None:
     try:
         await asyncio.wait_for(
-            _execute_brainrot_ffmpeg_stage(job_id),
+            _execute_brainrot_ffmpeg_stage(job_id, prefetched=prefetched),
             timeout=BRAINROT_STAGE_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
@@ -151,15 +175,53 @@ async def _fail_and_refund(job_id: str, message: str) -> None:
 
 async def run_brainrot_stage(job_id: str) -> None:
     """
-    Single-service pipeline: run API stage → check outcome → run FFmpeg stage.
+    Single-service pipeline: run the API stage (script + TTS) and prefetch
+    characters/music concurrently — not sequentially — since the latter are
+    fully known from the payload at job-creation time and don't depend on
+    anything the API stage produces. Only safe here (not in
+    run_brainrot_api_stage/run_brainrot_ffmpeg_stage individually) because
+    this function runs both stages in the same process: the split-worker
+    dispatch path (watcher calling those two separately, on two different
+    machines) has no local disk to share a prefetch across, so it keeps the
+    original self-contained fetch in the FFmpeg stage untouched.
     """
-    await run_brainrot_api_stage(job_id)
-
-    job = await db.get_brainrot_job(job_id)
-    if not job or job.get("status") != "api_done":
+    row = await db.get_brainrot_job(job_id)
+    if not row:
+        logger.error(f"[{job_id}] Brainrot job not found at stage start")
         return
+    payload = row["payload"]
 
-    await run_brainrot_ffmpeg_stage(job_id)
+    with tempfile.TemporaryDirectory(prefix=f"brainrot_prefetch_{job_id}_") as prefetch_dir_str:
+        prefetch_task = asyncio.create_task(
+            _prefetch_shared_assets(payload, Path(prefetch_dir_str)),
+            name=f"brainrot-prefetch-{job_id[:8]}",
+        )
+
+        await run_brainrot_api_stage(job_id)
+
+        job = await db.get_brainrot_job(job_id)
+        if not job or job.get("status") != "api_done":
+            # API stage failed — the prefetch is now moot. Drain it before
+            # the tmp dir it's writing into gets torn down on the way out
+            # of this `with` block, and don't let a prefetch-side failure
+            # (e.g. a bad music URL) surface as this job's error instead of
+            # whatever actually failed in the API stage.
+            prefetch_task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await prefetch_task
+            return
+
+        try:
+            prefetched = await prefetch_task
+        except Exception as exc:
+            # A prefetch failure (e.g. a bad/expired music URL) shouldn't
+            # sink a job whose script+TTS already succeeded — fall back to
+            # None and let the FFmpeg stage do its own self-contained fetch,
+            # same as it always has.
+            logger.warning(f"[{job_id}] Asset prefetch failed ({exc}) — falling back to fetching in the FFmpeg stage")
+            prefetched = None
+
+        await run_brainrot_ffmpeg_stage(job_id, prefetched=prefetched)
 
 
 def _friendly_error(raw: str) -> str:
@@ -222,17 +284,17 @@ async def _execute_brainrot_api_stage(job_id: str) -> None:
         await db.set_job_api_done_brainrot(job_id)
 
 
-async def _execute_brainrot_ffmpeg_stage(job_id: str) -> None:
+async def _execute_brainrot_ffmpeg_stage(job_id: str, prefetched: "_PrefetchedAssets | None" = None) -> None:
     heartbeat_task = asyncio.create_task(_heartbeat(job_id))
     try:
-        await _run_brainrot_ffmpeg_stage(job_id)
+        await _run_brainrot_ffmpeg_stage(job_id, prefetched=prefetched)
     finally:
         heartbeat_task.cancel()
         with suppress(asyncio.CancelledError):
             await heartbeat_task
 
 
-async def _run_brainrot_ffmpeg_stage(job_id: str) -> None:
+async def _run_brainrot_ffmpeg_stage(job_id: str, prefetched: "_PrefetchedAssets | None" = None) -> None:
     row = await db.get_brainrot_job(job_id)
     if not row:
         raise RuntimeError(f"Brainrot job {job_id} not found")
@@ -272,13 +334,27 @@ async def _run_brainrot_ffmpeg_stage(job_id: str) -> None:
 
         async with _step(job_id, "fetch_assets"):
             await db.update_brainrot_job_progress(job_id, 50, "Downloading assets...", status="rendering")
-            # Characters + music/SFX only — small, single-read files where a
-            # local download is already cheap. The gameplay clip (the one
-            # genuinely large asset) and TTS lines are NOT fetched here; they
-            # go straight to ffmpeg as URLs in the streamed render below.
-            characters, music_path = await asyncio.gather(
-                _fetch_characters(payload, tmp_dir),
-                _fetch_optional_asset(payload.get("music_url"), tmp_dir, "music"),
+            if prefetched is not None:
+                # run_brainrot_stage already fetched these concurrently with
+                # script generation + TTS (see _prefetch_shared_assets) —
+                # nothing left to download here.
+                characters, music_path = prefetched.characters, prefetched.music_path
+                logger.info(f"[{job_id}] using prefetched characters/music (fetched during API stage)")
+            else:
+                # Standalone call (split-worker dispatch, or the prefetch
+                # failed upstream) — self-contained fetch, same as always.
+                # Characters + music/SFX only — small, single-read files
+                # where a local download is already cheap. The gameplay
+                # clip (the one genuinely large asset) and TTS lines are NOT
+                # fetched here; they go straight to ffmpeg as URLs in the
+                # streamed render below.
+                characters, music_path = await asyncio.gather(
+                    _fetch_characters(payload, tmp_dir),
+                    _fetch_optional_asset(payload.get("music_url"), tmp_dir, "music"),
+                )
+            logger.info(
+                f"[{job_id}] music_url={payload.get('music_url')!r} → "
+                f"{'downloaded to ' + str(music_path) if music_path else 'NOT included (music_url was empty)'}"
             )
             entry_motion, exit_motion = composite.resolve_entry_exit_motions(
                 remote_lines, characters, motion_mode, clip_duration,

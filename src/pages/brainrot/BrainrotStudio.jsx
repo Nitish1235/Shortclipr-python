@@ -205,10 +205,20 @@ export default function BrainrotStudio() {
       if (g.status === 'fulfilled') { setClipsLib(g.value.clips || []); setClipsOnline(true) }
       else setClipsOnline(false)
       if (j.status === 'fulfilled') {
-        setMyClips(j.value.clips || [])
+        const clips = j.value.clips || []
+        setMyClips(clips)
         setClipsCounts(j.value.counts || { all: 0, active: 0, complete: 0, queued: 0 })
         setClipsHasMore(!!j.value.has_more)
-        setClipsOffset((j.value.clips || []).length)
+        setClipsOffset(clips.length)
+        // A job still running from an earlier visit (page reload, closed
+        // tab, came back later) has nothing polling it — pollJob only ever
+        // gets started from generate() in the SAME session that submitted
+        // it. Without this, its status/progress just freezes at whatever
+        // it was on THIS page load until the user manually reloads again
+        // to get a fresh snapshot. MAX_CONCURRENT_BRAINROT_JOBS_PER_USER
+        // caps this at one, so at most one clip in the list can need it.
+        const stillActive = clips.find(isActive)
+        if (stillActive) pollJob(stillActive.job_id)
       }
       if (s.status === 'fulfilled') setSignatureCasts(s.value.casts || [])
       if (m.status === 'fulfilled') setMusicLib(m.value.assets || [])
@@ -547,13 +557,38 @@ export default function BrainrotStudio() {
   // `volume` (0-1) lets the music picker's preview actually reflect the
   // volume slider — previously always played at full volume regardless of
   // where the slider sat, so dragging it appeared to do nothing.
+  //
+  // `previewingUrl` tracks which track (if any) is currently playing so a
+  // second click on the SAME ▶ button stops it instead of restarting it —
+  // previously every click spawned a fresh Audio() that played to the end
+  // regardless of what you clicked next.
+  const [previewingUrl, setPreviewingUrl] = useState(null)
+
+  const stopPreview = () => {
+    if (audioRef.current) audioRef.current.pause()
+    setPreviewingUrl(null)
+  }
+
   const playPreview = (url, failMsg = 'Preview not ready yet — admin needs to generate voice samples.', volume = 1) => {
     if (!url) return
-    if (audioRef.current) { audioRef.current.pause() }
-    audioRef.current = new Audio(url)
-    audioRef.current.volume = Math.max(0, Math.min(1, volume))
-    audioRef.current.play().catch(() => showToast(failMsg, 'warn'))
+    if (previewingUrl === url && audioRef.current && !audioRef.current.paused) {
+      stopPreview()
+      return
+    }
+    if (audioRef.current) audioRef.current.pause()
+    const audio = new Audio(url)
+    audio.volume = Math.max(0, Math.min(1, volume))
+    audio.onended = () => setPreviewingUrl(prev => (prev === url ? null : prev))
+    audioRef.current = audio
+    setPreviewingUrl(url)
+    audio.play().catch(() => { showToast(failMsg, 'warn'); setPreviewingUrl(null) })
   }
+
+  // Stop any playing preview the moment the user navigates away — to a
+  // different builder stage (Spark/Scene/Cast/Style/Review) or between the
+  // Create/My clips views — instead of letting it keep playing to the end
+  // in the background regardless of where they went next.
+  useEffect(() => { stopPreview() }, [stage, view]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const voicesFor = (gender) => {
     // Combined pool across both TTS providers — shown as one flat list with
@@ -1075,39 +1110,45 @@ export default function BrainrotStudio() {
                             cursor: 'pointer', padding: '5px 6px 5px 14px', border: 'none', background: 'transparent',
                             color: on ? '#fff' : T.ink, fontSize: '.75rem', fontWeight: 500, fontFamily: FONT,
                           }}>{m.name}</button>
-                        <button onClick={() => playPreview(m.gcs_path, 'Could not play this track — try again in a moment.', musicVolume * MUSIC_DUCK_FACTOR)} title={`Preview at ~${Math.round(musicVolume * MUSIC_DUCK_FACTOR * 100)}% — ducked under dialogue, like it plays in the real clip`}
+                        <button onClick={() => playPreview(m.gcs_path, 'Could not play this track — try again in a moment.', musicVolume * MUSIC_DUCK_FACTOR)}
+                          title={previewingUrl === m.gcs_path ? 'Stop preview' : `Preview at ~${Math.round(musicVolume * MUSIC_DUCK_FACTOR * 100)}% — ducked under dialogue, like it plays in the real clip`}
                           disabled={!m.gcs_path}
                           style={{
                             cursor: m.gcs_path ? 'pointer' : 'not-allowed', padding: '5px 12px 5px 4px',
                             border: 'none', background: 'transparent',
                             color: on ? '#fff' : T.mute, fontSize: '.7rem', opacity: m.gcs_path ? 1 : .4,
-                          }}>▶</button>
+                          }}>{previewingUrl === m.gcs_path ? '⏸' : '▶'}</button>
                       </span>
                     )
                   })}
                 </div>
-                {musicId && (
-                  <div style={{ marginBottom: 8 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between',
-                      fontSize: '.75rem', color: T.mute, marginBottom: 4 }}>
-                      <span>Volume</span>
-                      <span>{Math.round(musicVolume * 100)}%</span>
-                    </div>
-                    <input type="range" min={0.2} max={0.4} step={0.02} value={musicVolume}
-                      onChange={e => {
-                        const v = Number(e.target.value)
-                        setMusicVolume(v)
-                        // Live-update whatever preview is currently playing —
-                        // previously the slider only took effect on the NEXT
-                        // ▶ click, so dragging it while a track played had no
-                        // audible effect at all and looked completely dead.
-                        // Scaled by the same duck factor the preview plays
-                        // at, so a live drag matches what you already hear.
-                        if (audioRef.current) audioRef.current.volume = v * MUSIC_DUCK_FACTOR
-                      }}
-                      style={{ width: '100%', accentColor: T.ink }} />
+                {/* Always visible (not gated on musicId) — previously this
+                    whole block only rendered once a track was picked, which
+                    read as "the volume slider is missing" to anyone who
+                    hadn't selected a track yet (or had just cleared it to
+                    "None"). Disabled + dimmed instead when there's nothing
+                    to adjust, so it's clear why rather than absent. */}
+                <div style={{ marginBottom: 8, opacity: musicId ? 1 : .5 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between',
+                    fontSize: '.75rem', color: T.mute, marginBottom: 4 }}>
+                    <span>Volume{!musicId && ' (pick a track above)'}</span>
+                    <span>{Math.round(musicVolume * 100)}%</span>
                   </div>
-                )}
+                  <input type="range" min={0.2} max={0.4} step={0.02} value={musicVolume}
+                    disabled={!musicId}
+                    onChange={e => {
+                      const v = Number(e.target.value)
+                      setMusicVolume(v)
+                      // Live-update whatever preview is currently playing —
+                      // previously the slider only took effect on the NEXT
+                      // ▶ click, so dragging it while a track played had no
+                      // audible effect at all and looked completely dead.
+                      // Scaled by the same duck factor the preview plays
+                      // at, so a live drag matches what you already hear.
+                      if (audioRef.current) audioRef.current.volume = v * MUSIC_DUCK_FACTOR
+                    }}
+                    style={{ width: '100%', accentColor: T.ink, cursor: musicId ? 'pointer' : 'not-allowed' }} />
+                </div>
               </>
             )}
 

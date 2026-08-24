@@ -234,6 +234,9 @@ async def create_brainrot_job(body: CreateBrainrotJobRequest, current_user: Curr
         if music_asset is None:
             raise HTTPException(status_code=404, detail="Unknown music_asset_id")
         music_url = music_asset["gcs_path"]
+        logger.info(f"Brainrot job music: asset_id={opts.music_asset_id} name={music_asset.get('name')!r} url={music_url}")
+    else:
+        logger.info("Brainrot job music: none selected (music_asset_id was empty)")
 
     # Reserve 1 brainrot credit atomically (FOR UPDATE row lock — same
     # primitive jobs.py uses for YT-Shorts, but against the fully separate
