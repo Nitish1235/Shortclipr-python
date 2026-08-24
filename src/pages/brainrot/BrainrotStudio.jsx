@@ -48,10 +48,18 @@ const STAGE_BY_ID = Object.fromEntries(STAGES.map(s => [s.id, s]))
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
+// YouTube/TikTok connect + publish are gated to this one account while
+// both platforms are still pending app review (see the TikTok
+// unaudited_client_can_only_post_to_private_accounts / YouTube audit
+// situation) — everyone else sees a "Coming soon" placeholder instead of
+// a connect button or publish buttons that would just fail for them.
+const SOCIAL_BETA_EMAIL = 'jainnitish432@gmail.com'
+
 export default function BrainrotStudio() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const socialEnabled = (user?.email || '').trim().toLowerCase() === SOCIAL_BETA_EMAIL
 
   // ── Reference data ──────────────────────────────────────────────
   const [roster, setRoster]     = useState([])
@@ -703,7 +711,7 @@ export default function BrainrotStudio() {
           renderingCount={renderingCount}
           ytConnected={ytConnected} ttConnected={ttConnected}
           onConnectYT={connectYT} onConnectTT={connectTT}
-          onDisconnect={disconnectSocial} />
+          onDisconnect={disconnectSocial} socialEnabled={socialEnabled} />
 
         <div style={{ flex: 1, minWidth: 0 }}>
       {view === 'clips' ? (
@@ -716,7 +724,7 @@ export default function BrainrotStudio() {
           publishedTT={publishedTT} publishingTT={publishingTT}
           onPublishYT={publishYT} onPublishTT={publishTT}
           onConnectYT={connectYT} onConnectTT={connectTT}
-          onDisconnect={disconnectSocial} />
+          onDisconnect={disconnectSocial} socialEnabled={socialEnabled} />
       ) : (
       <div className="br-studio-grid" style={{ padding: '8px 0 80px',
         display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 32, alignItems: 'start' }}>
@@ -1872,7 +1880,7 @@ function SocialConnectRow({ icon, label, connected, onConnect, onDisconnect }) {
 // page, not the shared /billing. Sticky column on desktop, collapses to a
 // horizontal bar (same items, same active styling) on mobile via the
 // .br-sidenav / .br-shell media rules in Header's <style> block.
-function StudioSideNav({ view, onChange, clipCount, renderingCount, user, ytConnected, ttConnected, onConnectYT, onConnectTT, onDisconnect }) {
+function StudioSideNav({ view, onChange, clipCount, renderingCount, user, ytConnected, ttConnected, onConnectYT, onConnectTT, onDisconnect, socialEnabled }) {
   const ITEMS = [
     { id: 'create', label: 'Create',   icon: SIDENAV_ICON.create },
     { id: 'clips',  label: 'My clips', icon: SIDENAV_ICON.clips, count: clipCount },
@@ -1948,6 +1956,7 @@ function StudioSideNav({ view, onChange, clipCount, renderingCount, user, ytConn
         <PublishConnections
           ytConnected={ytConnected} ttConnected={ttConnected}
           onConnectYT={onConnectYT} onConnectTT={onConnectTT} onDisconnect={onDisconnect}
+          socialEnabled={socialEnabled}
         />
       </div>
     </nav>
@@ -1958,24 +1967,56 @@ function StudioSideNav({ view, onChange, clipCount, renderingCount, user, ytConn
 // (StudioSideNav) and, on mobile, resurfaced inside "My clips" (see
 // .br-clips-connect in Header's mobile styles) since the bottom tab bar
 // has no room for it.
-function PublishConnections({ ytConnected, ttConnected, onConnectYT, onConnectTT, onDisconnect }) {
+const YT_ICON = <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+const TT_ICON = <svg width="13" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.26 6.26 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.94a8.17 8.17 0 0 0 4.78 1.52V7.01a4.85 4.85 0 0 1-1.01-.32z"/></svg>
+
+function PublishConnections({ ytConnected, ttConnected, onConnectYT, onConnectTT, onDisconnect, socialEnabled }) {
+  if (!socialEnabled) {
+    return (
+      <>
+        <ComingSoonRow icon={YT_ICON} label="YouTube" />
+        <ComingSoonRow icon={TT_ICON} label="TikTok" />
+      </>
+    )
+  }
   return (
     <>
       <SocialConnectRow
-        icon={<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>}
+        icon={YT_ICON}
         label="YouTube"
         connected={ytConnected}
         onConnect={onConnectYT}
         onDisconnect={() => onDisconnect('youtube')}
       />
       <SocialConnectRow
-        icon={<svg width="13" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.26 6.26 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.94a8.17 8.17 0 0 0 4.78 1.52V7.01a4.85 4.85 0 0 1-1.01-.32z"/></svg>}
+        icon={TT_ICON}
         label="TikTok"
         connected={ttConnected}
         onConnect={onConnectTT}
         onDisconnect={() => onDisconnect('tiktok')}
       />
     </>
+  )
+}
+
+// Shown to everyone except SOCIAL_BETA_EMAIL while YouTube/TikTok are
+// pending platform review — same visual shape as SocialConnectRow so it
+// doesn't look like a broken/missing feature, just not launched yet.
+function ComingSoonRow({ icon, label }) {
+  return (
+    <div style={{
+      borderRadius: 8, margin: '2px 0',
+      border: `1px solid ${T.line}`, background: T.paper, overflow: 'hidden',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px' }}>
+        <span style={{ color: '#bbb', display: 'flex', flexShrink: 0 }}>{icon}</span>
+        <span style={{ flex: 1, fontSize: '.78rem', fontWeight: 600, color: T.mute }}>{label}</span>
+        <span style={{
+          fontSize: '.63rem', fontWeight: 700, color: T.mute,
+          background: T.lineSoft, borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap',
+        }}>Coming soon</span>
+      </div>
+    </div>
   )
 }
 
@@ -2358,7 +2399,7 @@ const LIBRARY_FILTERS = [
 
 function ClipsLibrary({ clips, counts, filter, onFilterChange, hasMore, loadingMore, onLoadMore,
   onCreate, ytConnected, ttConnected, publishedYT, publishingYT, publishedTT, publishingTT,
-  onPublishYT, onPublishTT, onConnectYT, onConnectTT, onDisconnect }) {
+  onPublishYT, onPublishTT, onConnectYT, onConnectTT, onDisconnect, socialEnabled }) {
 
   return (
     <div style={{ padding: '8px 0 80px' }}>
@@ -2394,6 +2435,7 @@ function ClipsLibrary({ clips, counts, filter, onFilterChange, hasMore, loadingM
           <PublishConnections
             ytConnected={ytConnected} ttConnected={ttConnected}
             onConnectYT={onConnectYT} onConnectTT={onConnectTT} onDisconnect={onDisconnect}
+            socialEnabled={socialEnabled}
           />
         </div>
       </div>
@@ -2452,7 +2494,8 @@ function ClipsLibrary({ clips, counts, filter, onFilterChange, hasMore, loadingM
                 ytConnected={ytConnected} ttConnected={ttConnected}
                 publishedYT={publishedYT} publishingYT={publishingYT}
                 publishedTT={publishedTT} publishingTT={publishingTT}
-                onPublishYT={onPublishYT} onPublishTT={onPublishTT} />
+                onPublishYT={onPublishYT} onPublishTT={onPublishTT}
+                socialEnabled={socialEnabled} />
             ))}
           </div>
           {hasMore && (
@@ -2472,7 +2515,7 @@ function ClipsLibrary({ clips, counts, filter, onFilterChange, hasMore, loadingM
   )
 }
 
-function ClipCard({ job, ytConnected, ttConnected, publishedYT, publishingYT, publishedTT, publishingTT, onPublishYT, onPublishTT }) {
+function ClipCard({ job, ytConnected, ttConnected, publishedYT, publishingYT, publishedTT, publishingTT, onPublishYT, onPublishTT, socialEnabled }) {
   const meta = STATUS_META[job.status] || STATUS_META.created
   const jid = job.job_id
   const isComplete = job.status === 'complete' && job.output_url
@@ -2539,7 +2582,18 @@ function ClipCard({ job, ytConnected, ttConnected, publishedYT, publishingYT, pu
           )}
         </div>
       )}
-      {isComplete && (
+      {isComplete && !socialEnabled && (
+        <div style={{ padding: '4px 4px 2px' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            padding: '7px 4px', borderRadius: 7, border: '1.5px solid #e5e5e5',
+            background: '#fafafa', color: T.mute, fontSize: '.65rem', fontWeight: 600,
+          }}>
+            Publish to YouTube/TikTok — coming soon
+          </div>
+        </div>
+      )}
+      {isComplete && socialEnabled && (
         <div style={{ display: 'flex', gap: 5, padding: '4px 4px 2px' }}>
           {/* YouTube publish */}
           <button
