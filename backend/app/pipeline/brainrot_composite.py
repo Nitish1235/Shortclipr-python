@@ -726,7 +726,7 @@ async def render(
         "-filter_complex", filter_complex,
         "-map", "[vout]", "-map", f"[{audio_label}]",
         "-t", f"{clip_duration:.3f}",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+        "-c:v", "libx264", "-preset", "superfast", "-crf", "20",
         "-c:a", "aac", "-b:a", "192k",
         "-threads", str(threads), "-filter_complex_threads", str(threads),
         str(output_path),

@@ -783,6 +783,7 @@ async def _run_bulk_generation(topics: list[str], user_id: str) -> None:
     logger.info(f"[bulk] starting {len(topics)} topics")
     try:
         gameplay_clips = await db.list_gameplay_clips(None, status="selected")
+        music_assets = await db.list_audio_assets("music")
         roster = {c["id"]: c for c in await get_character_roster()}
         pool = [cid for cid in BULK_CHARACTER_POOL if cid in roster]
 
@@ -790,7 +791,9 @@ async def _run_bulk_generation(topics: list[str], user_id: str) -> None:
             topic, character_count = _parse_topic_tag(raw_topic)
             _bulk_gen["current_topic"] = topic
             try:
-                job_id = await _create_bulk_job(topic, character_count, user_id, roster, pool, gameplay_clips)
+                job_id = await _create_bulk_job(
+                    topic, character_count, user_id, roster, pool, gameplay_clips, music_assets,
+                )
                 final = await _wait_for_job_terminal(job_id)
                 if final and final["status"] == "complete":
                     _bulk_gen["done"] += 1
@@ -836,7 +839,8 @@ async def _wait_for_job_terminal(job_id: str, poll_seconds: float = 5.0) -> dict
 
 
 async def _create_bulk_job(
-    topic: str, character_count: int, user_id: str, roster: dict, pool: list[str], gameplay_clips: list[dict],
+    topic: str, character_count: int, user_id: str, roster: dict, pool: list[str],
+    gameplay_clips: list[dict], music_assets: list[dict],
 ) -> str:
     if character_count not in (1, 2):
         character_count = 2
@@ -847,6 +851,10 @@ async def _create_bulk_job(
 
     picked_ids = random.sample(pool, character_count)
     gameplay_clip = random.choice(gameplay_clips)
+    # Random background music per clip (from whatever's uploaded in the
+    # Music & SFX admin library) — None/no music if nothing's uploaded yet,
+    # same as a normal job with no music picked.
+    music = random.choice(music_assets) if music_assets else None
 
     def _profile(character: dict, side: str) -> dict:
         return {
@@ -893,9 +901,9 @@ async def _create_bulk_job(
         "voice_left": voice_left,
         "voice_right": voice_right,
         "motion_mode": "turn_based",
-        "music_asset_id": None,
+        "music_asset_id": str(music["id"]) if music else None,
         "music_volume": 0.3,
-        "music_url": None,
+        "music_url": music["gcs_path"] if music else None,
         "post_title": "",
         "post_hashtags": [],
     }

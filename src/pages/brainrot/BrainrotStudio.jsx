@@ -29,6 +29,13 @@ const SPARK_TOPICS = [
 const DURATION_PRESETS = [15, 30, 45, 60, 90, 120]
 const ACTIVE_STATUSES = ['created', 'generating_script', 'synthesizing_voice', 'rendering']
 const CLIPS_PAGE_SIZE = 24
+// Mirrors MUSIC_DUCK_FACTOR in backend/app/pipeline/brainrot_composite.py —
+// the render ducks music to this fraction of the slider's value whenever a
+// character is talking, which is most of a clip. Previewing at the raw
+// slider value (instead of this ducked level) made the preview sound much
+// louder than what the actual rendered clip mostly plays at. Keep in sync
+// if the backend constant ever changes.
+const MUSIC_DUCK_FACTOR = 0.35
 
 const STAGES = [
   { id: 'spark',  label: 'Script',     title: 'Script',       hint: 'What are they arguing about?' },
@@ -1060,7 +1067,7 @@ export default function BrainrotStudio() {
                             cursor: 'pointer', padding: '5px 6px 5px 14px', border: 'none', background: 'transparent',
                             color: on ? '#fff' : T.ink, fontSize: '.75rem', fontWeight: 500, fontFamily: FONT,
                           }}>{m.name}</button>
-                        <button onClick={() => playPreview(m.gcs_path, 'Could not play this track — try again in a moment.', musicVolume)} title={`Preview at ${Math.round(musicVolume * 100)}% volume`}
+                        <button onClick={() => playPreview(m.gcs_path, 'Could not play this track — try again in a moment.', musicVolume * MUSIC_DUCK_FACTOR)} title={`Preview at ~${Math.round(musicVolume * MUSIC_DUCK_FACTOR * 100)}% — ducked under dialogue, like it plays in the real clip`}
                           disabled={!m.gcs_path}
                           style={{
                             cursor: m.gcs_path ? 'pointer' : 'not-allowed', padding: '5px 12px 5px 4px',
@@ -1079,7 +1086,17 @@ export default function BrainrotStudio() {
                       <span>{Math.round(musicVolume * 100)}%</span>
                     </div>
                     <input type="range" min={0.2} max={0.4} step={0.02} value={musicVolume}
-                      onChange={e => setMusicVolume(Number(e.target.value))}
+                      onChange={e => {
+                        const v = Number(e.target.value)
+                        setMusicVolume(v)
+                        // Live-update whatever preview is currently playing —
+                        // previously the slider only took effect on the NEXT
+                        // ▶ click, so dragging it while a track played had no
+                        // audible effect at all and looked completely dead.
+                        // Scaled by the same duck factor the preview plays
+                        // at, so a live drag matches what you already hear.
+                        if (audioRef.current) audioRef.current.volume = v * MUSIC_DUCK_FACTOR
+                      }}
                       style={{ width: '100%', accentColor: T.ink }} />
                   </div>
                 )}
