@@ -548,7 +548,7 @@ def _audio_mix_filter(lines: list[TimedLine], music_path: Path | None, music_vol
 
     if music_path is not None:
         idx = input_index_map["music"]
-        vol = max(0.2, min(0.4, music_volume))
+        vol = max(0.2, min(0.6, music_volume))
         # Genuinely ducked now (see _music_duck_expr) — dips under whichever
         # character is talking instead of sitting at one flat level for the
         # whole clip, which is what the old code (and its docstring, which

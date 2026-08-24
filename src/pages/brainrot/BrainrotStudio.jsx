@@ -271,6 +271,20 @@ export default function BrainrotStudio() {
     } catch { /* corrupt or foreign draft — ignore, start fresh */ }
   }, [refLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Default background music: "Wii Shop Channel" unless a restored draft
+  // (see above) or a manual pick already set musicId. Gated on
+  // hydratedRef so this runs only after the draft-restore attempt above —
+  // same commit, since that effect sets the ref synchronously as its first
+  // line and effects run in declaration order — so an explicit "None" from
+  // an older draft format is never overridden by this default. Name-matched
+  // (not a hardcoded id, which is per-deployment/DB-generated) with a loose
+  // pattern to tolerate the "chanel" vs "channel" spelling in the library.
+  useEffect(() => {
+    if (!hydratedRef.current || musicId || musicLib.length === 0) return
+    const wiiShop = musicLib.find(m => /wii\s*shop/i.test(m.name || ''))
+    if (wiiShop) setMusicId(wiiShop.id)
+  }, [refLoaded, musicLib]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // debounced save on every change, once the initial restore has run
   useEffect(() => {
     if (!hydratedRef.current || !draftKey) return
@@ -1153,7 +1167,7 @@ export default function BrainrotStudio() {
                     <span>Volume{!musicId && ' — applies once you pick a track'}</span>
                     <span>{Math.round(musicVolume * 100)}%</span>
                   </div>
-                  <input type="range" min={0.2} max={0.4} step={0.02} value={musicVolume}
+                  <input type="range" min={0.2} max={0.6} step={0.02} value={musicVolume}
                     onChange={e => {
                       const v = Number(e.target.value)
                       setMusicVolume(v)

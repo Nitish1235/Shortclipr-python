@@ -151,7 +151,7 @@ class BrainrotJobOptions(BaseModel):
     @field_validator("music_volume")
     @classmethod
     def clamp_music_volume(cls, v: float) -> float:
-        return max(0.2, min(0.4, v))
+        return max(0.2, min(0.6, v))
 
 
 class CreateBrainrotJobRequest(BaseModel):
