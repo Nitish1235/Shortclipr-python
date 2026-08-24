@@ -381,6 +381,21 @@ export default function BrainrotStudio() {
       } else if (res.status === 400 && data.detail?.includes('not connected')) {
         if (platform === 'youtube') { localStorage.removeItem('yt_connected'); setYtConnected(false); connectYT() }
         else { localStorage.removeItem('tt_connected'); setTtConnected(false); connectTT() }
+      } else if (result?.tiktok_error_code === 'unaudited_client_can_only_post_to_private_accounts') {
+        // This one is safe to show verbatim — it's our own curated copy
+        // (see _publish_one_tiktok in social.py), not raw backend text.
+        setErrorModal({
+          error: {
+            title: 'This TikTok account needs to be Private',
+            message: result.error,
+            tips: [
+              'Open the TikTok app → Profile → Settings and privacy → Privacy',
+              'Turn on "Private account", then try publishing again',
+              'This restriction lifts automatically once ShortClipr passes TikTok\'s app review',
+            ],
+          },
+          retry: () => doPublish(job, platform, opts),
+        })
       } else {
         const err = new Error('publish failed'); err.status = res.status
         setErrorModal({

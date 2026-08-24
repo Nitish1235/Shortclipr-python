@@ -572,6 +572,19 @@ async def _publish_one_tiktok(item: PublishItem, access_token: str) -> dict:
     if not (resp.status_code == 200 and err_code == "ok"):
         msg = err.get("message", "Unknown TikTok error")
         logger.error(f"TikTok publish-init failed for {item.clip_id}: code={err_code} msg={msg}")
+        if err_code == "unaudited_client_can_only_post_to_private_accounts":
+            # This is NOT about post_info.privacy_level (already forced to
+            # SELF_ONLY above for unaudited apps) — TikTok separately requires
+            # the CONNECTED ACCOUNT's own setting to be Private until this
+            # app passes Content Posting API review. No request field can
+            # work around that; the account owner has to flip it themselves:
+            # TikTok app → Profile → ⋯ → Settings and privacy → Privacy →
+            # Private account: On.
+            msg = (
+                "This TikTok account is set to Public. Until ShortClipr passes TikTok's app review, "
+                "TikTok only allows posting to accounts set to Private — go to the TikTok app → "
+                "Profile → Settings and privacy → Privacy → turn on \"Private account\", then try again."
+            )
         return {
             "clip_id":            item.clip_id,
             "status":             "failed",
