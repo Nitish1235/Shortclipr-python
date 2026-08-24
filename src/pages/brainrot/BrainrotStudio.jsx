@@ -229,7 +229,12 @@ export default function BrainrotStudio() {
         if (stillActive) setResumeActiveJobId(stillActive.job_id)
       }
       if (s.status === 'fulfilled') setSignatureCasts(s.value.casts || [])
-      if (m.status === 'fulfilled') setMusicLib(m.value.assets || [])
+      if (m.status === 'fulfilled') {
+        const assets = m.value.assets || []
+        setMusicLib(assets)
+        const wii = assets.find(a => a.name?.toLowerCase().includes('wii shop'))
+        if (wii) setMusicId(wii.id)
+      }
       setRefLoaded(true)
     })
     return () => { alive = false; if (pollRef.current) clearInterval(pollRef.current) }
