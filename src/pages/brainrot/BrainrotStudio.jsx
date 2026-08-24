@@ -1138,20 +1138,22 @@ export default function BrainrotStudio() {
                     )
                   })}
                 </div>
-                {/* Always visible (not gated on musicId) — previously this
-                    whole block only rendered once a track was picked, which
-                    read as "the volume slider is missing" to anyone who
-                    hadn't selected a track yet (or had just cleared it to
-                    "None"). Disabled + dimmed instead when there's nothing
-                    to adjust, so it's clear why rather than absent. */}
-                <div style={{ marginBottom: 8, opacity: musicId ? 1 : .5 }}>
+                {/* Always visible AND always interactive (not gated on
+                    musicId) — a `disabled` attribute here previously made
+                    the slider genuinely non-draggable whenever "None" was
+                    selected, which is exactly the state it defaults to, so
+                    most people's first encounter with this control was one
+                    that looked broken. Pre-setting a volume before picking
+                    a track is harmless (music_volume is a no-op server-side
+                    until music_asset_id is actually set), so there's no
+                    reason to lock it — the hint text is enough context. */}
+                <div style={{ marginBottom: 8 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between',
                     fontSize: '.75rem', color: T.mute, marginBottom: 4 }}>
-                    <span>Volume{!musicId && ' (pick a track above)'}</span>
+                    <span>Volume{!musicId && ' — applies once you pick a track'}</span>
                     <span>{Math.round(musicVolume * 100)}%</span>
                   </div>
                   <input type="range" min={0.2} max={0.4} step={0.02} value={musicVolume}
-                    disabled={!musicId}
                     onChange={e => {
                       const v = Number(e.target.value)
                       setMusicVolume(v)
@@ -1163,7 +1165,7 @@ export default function BrainrotStudio() {
                       // at, so a live drag matches what you already hear.
                       if (audioRef.current) audioRef.current.volume = v * MUSIC_DUCK_FACTOR
                     }}
-                    style={{ width: '100%', accentColor: T.ink, cursor: musicId ? 'pointer' : 'not-allowed' }} />
+                    style={{ width: '100%', accentColor: T.ink, cursor: 'pointer' }} />
                 </div>
               </>
             )}
