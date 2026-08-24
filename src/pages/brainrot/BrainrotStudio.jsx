@@ -28,6 +28,7 @@ const SPARK_TOPICS = [
 
 const DURATION_PRESETS = [15, 30, 45, 60, 90, 120]
 const ACTIVE_STATUSES = ['created', 'generating_script', 'synthesizing_voice', 'rendering']
+const CLIPS_PAGE_SIZE = 24
 
 const STAGES = [
   { id: 'spark',  label: 'Script',     title: 'Script',       hint: 'What are they arguing about?' },
@@ -129,6 +130,13 @@ export default function BrainrotStudio() {
   const pollRef = useRef(null)
   const audioRef = useRef(null)
 
+  // ── My clips library — paginated, server-filtered (GET /brainrot/clips) ──
+  const [clipsFilter, setClipsFilter]           = useState('all')   // 'all' | 'active' | 'complete'
+  const [clipsCounts, setClipsCounts]           = useState({ all: 0, active: 0, complete: 0, queued: 0 })
+  const [clipsOffset, setClipsOffset]           = useState(0)
+  const [clipsHasMore, setClipsHasMore]         = useState(false)
+  const [clipsLoadingMore, setClipsLoadingMore] = useState(false)
+
   // ── Draft autosave ───────────────────────────────────────────────
   // Protects an interrupted session (mobile especially): a reload restores
   // script, cast, background, and vibe from wherever the user left off.
@@ -138,8 +146,27 @@ export default function BrainrotStudio() {
   const hydratedRef = useRef(false)
   const saveTimerRef = useRef(null)
 
+  // Fetches one page of the "My clips" library from its own endpoint
+  // (GET /brainrot/clips — separate from /brainrot/jobs, which backs the
+  // create flow's live status polling below). `append` drives Load More
+  // vs. a fresh page (initial load / filter switch / post-completion resync).
+  const loadClipsPage = useCallback(async (status, offset, append) => {
+    if (append) setClipsLoadingMore(true)
+    try {
+      const data = await brainrotApi.listClips({ status, limit: CLIPS_PAGE_SIZE, offset })
+      setMyClips(prev => append ? [...prev, ...(data.clips || [])] : (data.clips || []))
+      setClipsCounts(data.counts || { all: 0, active: 0, complete: 0, queued: 0 })
+      setClipsHasMore(!!data.has_more)
+      setClipsOffset(offset + (data.clips || []).length)
+    } catch { /* keep whatever's currently loaded */ }
+    finally { if (append) setClipsLoadingMore(false) }
+  }, [])
+
+  const changeClipsFilter = (status) => { setClipsFilter(status); loadClipsPage(status, 0, false) }
+  const loadMoreClips = () => loadClipsPage(clipsFilter, clipsOffset, true)
+
   // ── Load reference data + history ───────────────────────────────
-  // Non-critical fetches (jobs, signature casts, audio assets) fail
+  // Non-critical fetches (clips, signature casts, audio assets) fail
   // silently — their absence just means an empty list, no user-facing
   // error. Critical fetches (characters, gameplay clips) update the
   // per-resource online flag so the affected section can render its own
@@ -151,7 +178,7 @@ export default function BrainrotStudio() {
       brainrotApi.voices(),
       brainrotApi.animations(),
       brainrotApi.gameplayClips(),
-      brainrotApi.listJobs(),
+      brainrotApi.listClips({ status: 'all', limit: CLIPS_PAGE_SIZE, offset: 0 }),
       brainrotApi.listSignatureCasts(),
       brainrotApi.audioAssets('music'),
     ]).then(([c, v, a, g, j, s, m]) => {
@@ -162,7 +189,12 @@ export default function BrainrotStudio() {
       if (a.status === 'fulfilled') setMotions(a.value.entry || [])
       if (g.status === 'fulfilled') { setClipsLib(g.value.clips || []); setClipsOnline(true) }
       else setClipsOnline(false)
-      if (j.status === 'fulfilled') setMyClips(j.value.jobs || [])
+      if (j.status === 'fulfilled') {
+        setMyClips(j.value.clips || [])
+        setClipsCounts(j.value.counts || { all: 0, active: 0, complete: 0, queued: 0 })
+        setClipsHasMore(!!j.value.has_more)
+        setClipsOffset((j.value.clips || []).length)
+      }
       if (s.status === 'fulfilled') setSignatureCasts(s.value.casts || [])
       if (m.status === 'fulfilled') setMusicLib(m.value.assets || [])
       setRefLoaded(true)
@@ -341,7 +373,11 @@ export default function BrainrotStudio() {
       const platformLabel = platform === 'youtube' ? 'YouTube' : 'TikTok'
       if (res.ok && result?.status === 'success') {
         setPublished(prev => new Set([...prev, jobId]))
-        showToast(platform === 'youtube' ? 'Published to YouTube Shorts! 🎉' : 'Queued on TikTok! 🔥', 'ok')
+        if (result.forced_private) {
+          showToast('Queued on TikTok — visible only to you for now (app is pending TikTok review for public posts)', 'ok')
+        } else {
+          showToast(platform === 'youtube' ? 'Published to YouTube Shorts! 🎉' : 'Queued on TikTok! 🔥', 'ok')
+        }
       } else if (res.status === 400 && data.detail?.includes('not connected')) {
         if (platform === 'youtube') { localStorage.removeItem('yt_connected'); setYtConnected(false); connectYT() }
         else { localStorage.removeItem('tt_connected'); setTtConnected(false); connectTT() }
@@ -548,6 +584,9 @@ export default function BrainrotStudio() {
       const { job_id } = await brainrotApi.createJob(options)
       if (draftKey) { try { localStorage.removeItem(draftKey) } catch { /* ignore */ } }
       showToast('Cooking your brainrot clip… 🍳', 'ok')
+      // Optimistic — the authoritative counts land once the job finishes
+      // and pollJob resyncs from the server (see below).
+      setClipsCounts(prev => ({ ...prev, all: prev.all + 1, active: prev.active + 1 }))
       pollJob(job_id)
       setView('clips')
     } catch (e) {
@@ -571,6 +610,10 @@ export default function BrainrotStudio() {
           } else if (job.status === 'failed') {
             showToast(job.error_message || 'Generation failed', 'err')
           }
+          // Resync counts + first page from the server now that this job
+          // has left the "active" state — the optimistic bump in generate()
+          // only estimated the totals.
+          loadClipsPage(clipsFilter, 0, false)
         }
       } catch { /* keep polling through transient errors */ }
     }
@@ -583,11 +626,23 @@ export default function BrainrotStudio() {
   const anyOffline = !rosterOnline || !clipsOnline
   const retryFetches = () => setRefetchTick(t => t + 1)
 
-  // clips tab data: merge the actively-polling job in so it shows up live
+  // clips tab data: merge the actively-polling job in so it shows up live,
+  // then re-apply the current tab's filter (myClips is already server-
+  // filtered per clipsFilter, but the merged-in activeJob isn't, so a job
+  // that just started wouldn't otherwise respect e.g. the "Ready" tab).
   const libraryClips = activeJob && isActive(activeJob)
     ? [activeJob, ...myClips.filter(c => c.job_id !== activeJob.job_id)]
     : myClips
-  const renderingCount = libraryClips.filter(c => isActive(c)).length
+  const visibleLibraryClips = libraryClips.filter(c => {
+    if (c.status === 'failed') return false
+    if (clipsFilter === 'active') return isActive(c)
+    if (clipsFilter === 'complete') return c.status === 'complete'
+    return true
+  })
+  // clipsCounts comes from the server and may lag by one until the next
+  // resync (see pollJob) — Math.max keeps a just-started job reflected
+  // immediately in the sidenav/header without waiting on that round-trip.
+  const renderingCount = Math.max(clipsCounts.active, isActive(activeJob) ? 1 : 0)
 
   // ── Render ──────────────────────────────────────────────────────
   return (
@@ -612,13 +667,13 @@ export default function BrainrotStudio() {
 
       <Header user={user} onLogout={logout} navigate={navigate}
         connectionOffline={anyOffline} onRetryConnection={retryFetches}
-        libraryClips={libraryClips} />
+        clipsCounts={clipsCounts} hasActiveJob={isActive(activeJob)} />
 
       <div className="br-shell" style={{ maxWidth: 1360, margin: '0 auto', padding: '20px 24px 0',
         display: 'flex', gap: 24, alignItems: 'flex-start' }}>
 
         <StudioSideNav view={view} onChange={setView} user={user}
-          clipCount={libraryClips.filter(c => c.status !== 'failed').length}
+          clipCount={clipsCounts.all}
           renderingCount={renderingCount}
           ytConnected={ytConnected} ttConnected={ttConnected}
           onConnectYT={connectYT} onConnectTT={connectTT}
@@ -626,7 +681,10 @@ export default function BrainrotStudio() {
 
         <div style={{ flex: 1, minWidth: 0 }}>
       {view === 'clips' ? (
-        <ClipsLibrary clips={libraryClips} onCreate={() => setView('create')}
+        <ClipsLibrary clips={visibleLibraryClips} counts={clipsCounts}
+          filter={clipsFilter} onFilterChange={changeClipsFilter}
+          hasMore={clipsHasMore} loadingMore={clipsLoadingMore} onLoadMore={loadMoreClips}
+          onCreate={() => setView('create')}
           ytConnected={ytConnected} ttConnected={ttConnected}
           publishedYT={publishedYT} publishingYT={publishingYT}
           publishedTT={publishedTT} publishingTT={publishingTT}
@@ -1260,18 +1318,19 @@ function pickTopic(current) {
   return pool[Math.floor(Math.random() * pool.length)] || SPARK_TOPICS[0]
 }
 
-function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection, libraryClips = [] }) {
+function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection, clipsCounts, hasActiveJob }) {
   const initials = (user?.full_name || user?.email || 'U')[0].toUpperCase()
 
-  // Brainrot-only stats — derived from this user's brainrot jobs alone.
-  // Failed clips are excluded from every count (and from the library
-  // below) so a stuck/errored run never lingers as a distraction on the
-  // dashboard.
-  const visibleClips   = libraryClips.filter(c => c.status !== 'failed')
-  const totalCount     = visibleClips.length
-  const readyCount     = visibleClips.filter(c => c.status === 'complete').length
-  const renderingCount = visibleClips.filter(c => isActive(c)).length
-  const queuedCount    = visibleClips.filter(c => c.status === 'created').length
+  // Brainrot-only stats — sourced from GET /brainrot/clips's server-computed
+  // counts rather than the (now paginated) client-side clip list, so these
+  // stay accurate regardless of how many pages have been loaded. Failed
+  // clips are excluded server-side so a stuck/errored run never lingers as
+  // a distraction on the dashboard. Math.max covers the gap between a job
+  // just starting and the next server resync (see pollJob).
+  const totalCount     = clipsCounts.all
+  const readyCount     = clipsCounts.complete
+  const renderingCount = Math.max(clipsCounts.active, hasActiveJob ? 1 : 0)
+  const queuedCount    = clipsCounts.queued
 
   const stats = [
     { n: totalCount,     l: 'Clips made', c: T.ink },
@@ -1302,6 +1361,16 @@ function Header({ user, onLogout, navigate, connectionOffline, onRetryConnection
           }}>Brainrot</span>
         </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {typeof user?.brainrot_credits_remaining === 'number' && (
+            <Link to="/brainrot/billing" title="Credits remaining — click to top up" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none',
+              background: T.lineSoft, border: `1px solid ${T.line}`, borderRadius: 999,
+              padding: '5px 12px', fontSize: '.78rem', fontWeight: 600, color: T.ink,
+            }}>
+              <span style={{ fontSize: '.85rem' }}>🧠</span>
+              {user.brainrot_credits_remaining} credit{user.brainrot_credits_remaining === 1 ? '' : 's'}
+            </Link>
+          )}
           {connectionOffline && (
             <button onClick={onRetryConnection}
               title="Some data isn't reachable — click to retry"
@@ -1444,7 +1513,10 @@ function PublishModal({ job, platform, ytConnected, ttConnected, onClose, onPubl
   // YouTube
   const [ytPrivacy, setYtPrivacy] = useState('public')
   // TikTok
-  const [ttPrivacy, setTtPrivacy] = useState('PUBLIC_TO_EVERYONE')
+  // TikTok rejects anything but SELF_ONLY until the app passes their
+  // Content Posting API audit — default + lock to that so users aren't
+  // offered an option that will fail (see backend TIKTOK_APP_AUDITED).
+  const [ttPrivacy, setTtPrivacy] = useState('SELF_ONLY')
   const [noDuet, setNoDuet]       = useState(false)
   const [noComment, setNoComment] = useState(false)
   const [noStitch, setNoStitch]   = useState(false)
@@ -1589,15 +1661,23 @@ function PublishModal({ job, platform, ytConnected, ttConnected, onClose, onPubl
                     ['MUTUAL_FOLLOW_FRIENDS','Mutual followers'],
                     ['FOLLOWER_OF_CREATOR','Your followers'],
                     ['SELF_ONLY','Only me'],
-                  ].map(([v,l]) => (
-                    <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 8,
-                      cursor: 'pointer', fontSize: '.82rem', fontWeight: 500 }}>
-                      <input type="radio" checked={ttPrivacy === v} onChange={() => setTtPrivacy(v)}
-                        style={{ accentColor: '#000' }} />
-                      {l}
-                    </label>
-                  ))}
+                  ].map(([v,l]) => {
+                    const locked = v !== 'SELF_ONLY'
+                    return (
+                      <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 8,
+                        cursor: locked ? 'not-allowed' : 'pointer', fontSize: '.82rem', fontWeight: 500,
+                        opacity: locked ? .45 : 1 }}>
+                        <input type="radio" checked={ttPrivacy === v} disabled={locked}
+                          onChange={() => setTtPrivacy(v)} style={{ accentColor: '#000' }} />
+                        {l}
+                      </label>
+                    )
+                  })}
                 </div>
+                <p style={{ margin: '8px 0 0', fontSize: '.72rem', color: T.mute, lineHeight: 1.5 }}>
+                  TikTok only allows "Only me" posts until this app passes their Content Posting API review —
+                  other visibility options unlock automatically once approved.
+                </p>
               </Field>
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 10 }}>
                 {[['noDuet','Disable Duet',noDuet,setNoDuet],
@@ -2176,27 +2256,9 @@ const LIBRARY_FILTERS = [
   { id: 'complete', label: 'Ready' },
 ]
 
-function ClipsLibrary({ clips, onCreate, ytConnected, ttConnected, publishedYT, publishingYT, publishedTT, publishingTT, onPublishYT, onPublishTT, onConnectYT, onConnectTT, onDisconnect }) {
-  const [filter, setFilter] = useState('all')
-
-  // Failed clips never surface in the library — hide them from every
-  // filter's count and from the visible list. (GET /brainrot/jobs already
-  // reclassifies any job with a real output_url as 'complete' regardless
-  // of its stored status — see _serialize_brainrot_job — so a clip only
-  // ever reaches 'failed' here when it genuinely has no usable output.)
-  const shownClips = useMemo(() => clips.filter(c => c.status !== 'failed'), [clips])
-
-  const counts = useMemo(() => ({
-    all: shownClips.length,
-    active: shownClips.filter(c => isActive(c)).length,
-    complete: shownClips.filter(c => c.status === 'complete').length,
-  }), [shownClips])
-
-  const visible = useMemo(() => {
-    if (filter === 'all') return shownClips
-    if (filter === 'active') return shownClips.filter(c => isActive(c))
-    return shownClips.filter(c => c.status === filter)
-  }, [shownClips, filter])
+function ClipsLibrary({ clips, counts, filter, onFilterChange, hasMore, loadingMore, onLoadMore,
+  onCreate, ytConnected, ttConnected, publishedYT, publishingYT, publishedTT, publishingTT,
+  onPublishYT, onPublishTT, onConnectYT, onConnectTT, onDisconnect }) {
 
   return (
     <div style={{ padding: '8px 0 80px' }}>
@@ -2217,13 +2279,13 @@ function ClipsLibrary({ clips, onCreate, ytConnected, ttConnected, publishedYT, 
         </button>
       </div>
 
-      {shownClips.length > 0 && (
+      {counts.all > 0 && (
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 20 }}>
           {LIBRARY_FILTERS.map(f => {
             const on = filter === f.id
             const n = counts[f.id]
             return (
-              <button key={f.id} onClick={() => setFilter(f.id)}
+              <button key={f.id} onClick={() => onFilterChange(f.id)}
                 style={{
                   cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
                   background: on ? T.ink : T.paper2,
@@ -2243,7 +2305,7 @@ function ClipsLibrary({ clips, onCreate, ytConnected, ttConnected, publishedYT, 
         </div>
       )}
 
-      {shownClips.length === 0 ? (
+      {counts.all === 0 ? (
         <div style={{
           textAlign: 'center', padding: '64px 20px',
           background: T.paper2, border: `1px solid ${T.line}`, borderRadius: 12,
@@ -2259,20 +2321,33 @@ function ClipsLibrary({ clips, onCreate, ytConnected, ttConnected, publishedYT, 
             Make your first clip
           </button>
         </div>
-      ) : visible.length === 0 ? (
+      ) : clips.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 20px', color: T.mute, fontSize: '.86rem' }}>
           Nothing in this filter yet.
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 16 }}>
-          {visible.map(job => (
-            <ClipCard key={job.job_id} job={job}
-              ytConnected={ytConnected} ttConnected={ttConnected}
-              publishedYT={publishedYT} publishingYT={publishingYT}
-              publishedTT={publishedTT} publishingTT={publishingTT}
-              onPublishYT={onPublishYT} onPublishTT={onPublishTT} />
-          ))}
-        </div>
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 16 }}>
+            {clips.map(job => (
+              <ClipCard key={job.job_id} job={job}
+                ytConnected={ytConnected} ttConnected={ttConnected}
+                publishedYT={publishedYT} publishingYT={publishingYT}
+                publishedTT={publishedTT} publishingTT={publishingTT}
+                onPublishYT={onPublishYT} onPublishTT={onPublishTT} />
+            ))}
+          </div>
+          {hasMore && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
+              <button onClick={onLoadMore} disabled={loadingMore} {...pressHandlers}
+                style={{
+                  ...btn(T.paper2, T.ink, { padding: '10px 24px', fontSize: '.82rem', border: `1px solid ${T.line}` }),
+                  cursor: loadingMore ? 'default' : 'pointer', opacity: loadingMore ? .6 : 1,
+                }}>
+                {loadingMore ? 'Loading…' : 'Load more'}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

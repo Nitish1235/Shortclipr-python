@@ -60,7 +60,7 @@ export default function BrainrotNav() {
       padding: scrolled ? '8px 5%' : '14px 5%',
       transition: 'padding 0.2s',
     }}>
-      <nav style={{
+      <nav className="br-nav-bar" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         background: '#fff', borderRadius: 16,
         padding: '10px 10px 10px 22px',
@@ -179,7 +179,7 @@ export default function BrainrotNav() {
           }}
         >{menuOpen ? '✕' : '☰'}</button>
 
-        {/* Mobile dropdown — Home + sign in/out only */}
+        {/* Mobile dropdown — full link set + Studio/Login */}
         {menuOpen && (
           <div style={{
             position: 'absolute', top: 'calc(100% + 8px)', right: 0, left: 0,
@@ -192,21 +192,49 @@ export default function BrainrotNav() {
               padding: '14px 16px', borderRadius: 8, textDecoration: 'none',
               minHeight: 44, display: 'flex', alignItems: 'center',
             }}>Home</Link>
-            {user ? (
-              <button onClick={() => { setMenuOpen(false); logout() }} style={{
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                textAlign: 'left', color: '#999', fontSize: '.9rem', fontWeight: 700,
-                padding: '14px 16px', borderRadius: 8, minHeight: 44,
-              }}>Sign out</button>
-            ) : (
-              <Link
-                to="/brainrot/login"
-                onClick={() => setMenuOpen(false)}
+
+            {links.map(({ label, href, external }) => (
+              <a
+                key={href}
+                href={href}
+                onClick={(e) => { setMenuOpen(false); handleLinkClick(e, href, external) }}
                 style={{
-                  display: 'flex', alignItems: 'center', color: BRAIN, fontSize: '.9rem', fontWeight: 700,
-                  padding: '14px 16px', borderRadius: 8, textDecoration: 'none', minHeight: 44,
+                  color: '#333', fontSize: '.9rem', fontWeight: 700,
+                  padding: '14px 16px', borderRadius: 8, textDecoration: 'none',
+                  minHeight: 44, display: 'flex', alignItems: 'center',
                 }}
-              >Sign in →</Link>
+              >{label}</a>
+            ))}
+
+            <div style={{ height: 1, background: '#eee', margin: '6px 8px' }} />
+
+            {user ? (
+              <>
+                <Link
+                  to="/brainrot/studio"
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    display: 'flex', alignItems: 'center', color: BRAIN, fontSize: '.9rem', fontWeight: 800,
+                    padding: '14px 16px', borderRadius: 8, textDecoration: 'none', minHeight: 44,
+                  }}
+                >🧠 Studio →</Link>
+                <button onClick={() => { setMenuOpen(false); logout() }} style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  textAlign: 'left', color: '#999', fontSize: '.9rem', fontWeight: 700,
+                  padding: '14px 16px', borderRadius: 8, minHeight: 44,
+                }}>Sign out</button>
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/brainrot/login"
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    display: 'flex', alignItems: 'center', color: BRAIN, fontSize: '.9rem', fontWeight: 800,
+                    padding: '14px 16px', borderRadius: 8, textDecoration: 'none', minHeight: 44,
+                  }}
+                >Login →</Link>
+              </>
             )}
           </div>
         )}
@@ -216,6 +244,7 @@ export default function BrainrotNav() {
         @media (max-width: 768px) {
           .br-nav-desktop { display: none !important; }
           .br-nav-toggle { display: inline-flex !important; }
+          .br-nav-bar { padding: 10px 14px !important; }
         }
       `}</style>
     </div>

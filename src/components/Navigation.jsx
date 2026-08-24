@@ -56,7 +56,7 @@ export default function Navigation() {
   }
 
   return (
-    <div style={{
+    <div className="sc-nav-wrap" style={{
       position: 'sticky', top: 0, zIndex: 200,
       background: '#f9f9f9',
       padding: scrolled ? '8px 5%' : '14px 5%',

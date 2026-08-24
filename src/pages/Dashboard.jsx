@@ -559,7 +559,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <main style={{ background:'#f7f8fa', flex:1, paddingBottom:'90px' }}>
+      <main className="dashboard-page" style={{ background:'#f7f8fa', flex:1, paddingBottom:'90px' }}>
 
         {/* ── Platform status + stats bar ── */}
         <div style={{ background:'#fff', borderBottom:'1px solid #e5e7eb' }}>

@@ -522,12 +522,20 @@ async def _publish_one_tiktok(item: PublishItem, access_token: str) -> dict:
     video_size = len(video_bytes)
     chunk_size, total_chunk_count = _tiktok_chunk_plan(video_size)
 
+    requested_privacy = item.privacy_level if item.privacy_level in (
+        "PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY"
+    ) else "PUBLIC_TO_EVERYONE"
+    # Unaudited apps get a hard TikTok-side rejection
+    # (unaudited_client_can_only_post_to_private_accounts) for anything but
+    # SELF_ONLY — force it here so the post actually goes through instead of
+    # failing after a full upload round trip. See TIKTOK_APP_AUDITED.
+    effective_privacy = requested_privacy if settings.TIKTOK_APP_AUDITED else "SELF_ONLY"
+    forced_private = effective_privacy != requested_privacy
+
     init_payload = {
         "post_info": {
             "title":                  item.title[:150],
-            "privacy_level":          item.privacy_level if item.privacy_level in (
-                "PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY"
-            ) else "PUBLIC_TO_EVERYONE",
+            "privacy_level":          effective_privacy,
             "disable_duet":           item.disable_duet,
             "disable_comment":        item.disable_comment,
             "disable_stitch":         item.disable_stitch,
@@ -603,7 +611,10 @@ async def _publish_one_tiktok(item: PublishItem, access_token: str) -> dict:
         return {"clip_id": item.clip_id, "status": "failed", "error": str(exc)}
 
     logger.info(f"TikTok uploaded clip {item.clip_id} → publish_id={publish_id}")
-    return {"clip_id": item.clip_id, "status": "success", "publish_id": publish_id}
+    return {
+        "clip_id": item.clip_id, "status": "success", "publish_id": publish_id,
+        "forced_private": forced_private,
+    }
 
 
 class TikTokStatusRequest(BaseModel):

@@ -71,6 +71,13 @@ class Settings(BaseSettings):
     # Dev:  http://localhost:8080/social/auth/tiktok/callback
     # Prod: https://shortclipr.com/social/auth/tiktok/callback
     TIKTOK_REDIRECT_URI:  str = "http://localhost:8080/social/auth/tiktok/callback"
+    # Until TikTok approves this app in Content Posting API audit, TikTok
+    # rejects any post with privacy_level other than SELF_ONLY
+    # ("unaudited_client_can_only_post_to_private_accounts" — see
+    # https://developers.tiktok.com/doc/content-sharing-guidelines/).
+    # Defaults to False (safe/current state); flip to true only once the
+    # app has actually passed TikTok's review for public posting.
+    TIKTOK_APP_AUDITED: bool = False
 
     # ── Resend (email broadcast) ─────────────────────────────
     RESEND_API_KEY: str = ""

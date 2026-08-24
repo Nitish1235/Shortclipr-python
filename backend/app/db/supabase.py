@@ -292,6 +292,19 @@ async def list_brainrot_jobs(user_id: str, limit: int = 50) -> list[dict]:
     )
 
 
+async def list_brainrot_clips_source(user_id: str, limit: int = 300) -> list[dict]:
+    """Backs GET /brainrot/clips — the Studio "My clips" library's own
+    endpoint, kept separate from list_brainrot_jobs (used for the create
+    flow's job-status polling). Fetches a wider recent window than the
+    jobs list; the endpoint itself does status filtering/pagination/counts
+    in Python (see _serialize_brainrot_job's output_url-overrides-status
+    rule, which a raw SQL count would have to duplicate to stay correct)."""
+    return await _fetch(
+        "SELECT * FROM brainrot_jobs WHERE user_id=$1 ORDER BY created_at DESC LIMIT $2",
+        user_id, limit,
+    )
+
+
 async def update_brainrot_job_progress(
     job_id: str, progress: int, current_step: str, status: str = "processing",
 ) -> None:

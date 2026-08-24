@@ -175,7 +175,7 @@ h1,h2,h3,h4,h5 { line-height: 1.2; letter-spacing: -0.04em; font-weight: 700; co
 /* Dashboard Global Fixes (Overrides for hardcoded inline styles in Dashboard.jsx) */
 
 /* Target the dashboard platform pills row */
-main > div:first-child > div > div:nth-child(1) {
+.dashboard-page > div:first-child > div > div:nth-child(1) {
   flex-wrap: wrap !important;
   gap: 12px !important;
 }
@@ -188,7 +188,7 @@ main > div:first-child > div > div:nth-child(1) {
 /* Mobile specific styling */
 @media (max-width: 1024px) {
   /* Override Dashboard Stats Grid for iPad */
-  main > div:first-child > div > div[style*="repeat(7"] {
+  .dashboard-page > div:first-child > div > div[style*="repeat(7"] {
     grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
     row-gap: 12px;
   }
@@ -198,19 +198,19 @@ main > div:first-child > div > div:nth-child(1) {
   .hide-mobile { display: none !important; }
   .section { padding: 60px 0; }
   .card { padding: 20px; }
-  
+
   /* Full dashboard stats squish fix for mobile */
-  main > div:first-child > div > div[style*="repeat(7"] {
+  .dashboard-page > div:first-child > div > div[style*="repeat(7"] {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     border-top: none !important;
   }
-  
-  main > div:first-child > div > div[style*="repeat(7"] > div {
+
+  .dashboard-page > div:first-child > div > div[style*="repeat(7"] > div {
     border-right: none !important;
     border-bottom: 1px solid var(--border);
     padding: 12px !important;
   }
-  
+
   /* Fix ClipEngine layout on mobile */
   .clip-engine-container { flex-direction: column !important; }
 }
@@ -230,19 +230,26 @@ main > div:first-child > div > div:nth-child(1) {
   .eyebrow { flex-direction: column; align-items: flex-start; gap: 8px; }
   .card-red-shadow { box-shadow: 4px 4px 0 var(--red); }
   
-  /* Inline grid responsive */
-  div[style*="grid-template-columns"]:not([style*="repeat(7"]):not([style*="minmax("]) {
-    grid-template-columns: 1fr !important;
-    gap: 16px !important;
-  }
-  
-  div[style*="grid-template-columns: repeat(auto-fill"] {
+  /* Inline grid responsive (scoped to the legacy YT-shorts Dashboard only —
+     an unscoped inline-style substring selector here also matched
+     BrainrotStudio's Cast size / Motion mode / Caption style / Callsheet
+     grids, none of which use "minmax(", forcing them into a single broken
+     column on small phones even though Studio never asked for that) */
+  .dashboard-page div[style*="grid-template-columns"]:not([style*="repeat(7"]):not([style*="minmax("]) {
     grid-template-columns: 1fr !important;
     gap: 16px !important;
   }
 
-  /* Navigation wrapper fix */
-  div[style*="z-index: 200"] > nav {
+  .dashboard-page div[style*="grid-template-columns: repeat(auto-fill"] {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  /* Navigation wrapper fix (scoped to the legacy YT-shorts nav only —
+     do NOT use an inline-style substring selector here, it also matched
+     BrainrotNav's wrapper since both use the same z-index: 200 style and
+     forced its nav into flex-direction: column on mobile) */
+  .sc-nav-wrap > nav {
     flex-wrap: wrap;
     justify-content: center !important;
     padding: 14px !important;
@@ -250,11 +257,11 @@ main > div:first-child > div > div:nth-child(1) {
     flex-direction: column;
   }
   /* Hide the nav links on mobile for cleaner look */
-  div[style*="z-index: 200"] > nav > ul {
+  .sc-nav-wrap > nav > ul {
     display: none !important;
   }
   /* Auth buttons row in Navigation wrapper */
-  div[style*="z-index: 200"] > nav > div:last-child {
+  .sc-nav-wrap > nav > div:last-child {
     width: 100%;
     justify-content: center !important;
     flex-wrap: wrap;

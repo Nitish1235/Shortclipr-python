@@ -227,7 +227,7 @@ export default function App() {
             <Route path="/brainrot/login"    element={<BrainrotLogin />} />
 
             {/* Protected — user must be logged in */}
-            <Route path="/brainrot/studio"   element={<ProtectedRoute fallback="/brainrot"><BrainrotStudio /></ProtectedRoute>} />
+            <Route path="/brainrot/studio"   element={<ProtectedRoute fallback="/brainrot/login"><BrainrotStudio /></ProtectedRoute>} />
             <Route path="/brainrot/billing"  element={<ProtectedRoute fallback="/brainrot"><BrainrotBilling /></ProtectedRoute>} />
             <Route path="/brainrot/settings" element={<ProtectedRoute fallback="/brainrot"><BrainrotSettings /></ProtectedRoute>} />
           </Routes>

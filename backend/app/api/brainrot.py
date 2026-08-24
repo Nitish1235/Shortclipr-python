@@ -2,8 +2,9 @@
 brainrot.py — /brainrot endpoints for the Brainrot Clips Maker.
 
 POST /brainrot/jobs               — validate → resolve assets → INSERT job → dispatch
-GET  /brainrot/jobs/{job_id}      — single job
-GET  /brainrot/jobs               — list user's jobs
+GET  /brainrot/jobs/{job_id}      — single job (create flow's live status polling)
+GET  /brainrot/jobs               — list user's jobs (unfiltered, uncapped-by-status)
+GET  /brainrot/clips              — Studio "My clips" library: status filter + pagination + tab counts
 GET  /brainrot/characters         — the 105-character roster (from GCS, see brainrot_characters.py)
 GET  /brainrot/gameplay-clips     — selectable gameplay backgrounds (optional ?category=)
 GET  /brainrot/audio-assets       — music/SFX library (optional ?type=music|sfx)
@@ -46,6 +47,15 @@ VALID_MOTION_MODES = ["turn_based", "always_on"]
 DEFAULT_CAPTION_STYLE = "brainrot"
 DEFAULT_CAPTION_COLOR = "yellow_black"
 DEFAULT_CAPTION_Y = 0.82
+
+# Statuses shown as "rendering" in the Studio — mirrors the frontend's
+# ACTIVE_STATUSES in BrainrotStudio.jsx. Keep both lists in sync.
+ACTIVE_JOB_STATUSES = {"created", "generating_script", "synthesizing_voice", "rendering"}
+# Generous recent-history window for the /clips endpoint — see
+# list_brainrot_clips_source. A single user realistically has dozens, not
+# thousands, of brainrot jobs, so this comfortably covers real usage while
+# keeping status filtering/counts in Python next to _serialize_brainrot_job.
+CLIPS_FETCH_CAP = 300
 
 
 # ── Request schema ──────────────────────────────────────────────
@@ -303,6 +313,47 @@ async def get_brainrot_job(job_id: str, current_user: CurrentUser):
 async def list_brainrot_jobs(current_user: CurrentUser):
     rows = await db.list_brainrot_jobs(current_user.user_id)
     return {"jobs": [_serialize_brainrot_job(r) for r in rows]}
+
+
+# ── GET /brainrot/clips ───────────────────────────────────────────
+# Dedicated feed for the Studio's "My clips" library — separate from
+# GET /brainrot/jobs above (which backs the create flow's live job-status
+# polling). Failed jobs never show in the library, so they're excluded
+# here entirely; supports status filtering + pagination and returns tab
+# counts so the UI's All/Rendering/Ready filter chips don't need the full
+# list loaded client-side.
+
+@router.get("/clips")
+async def list_brainrot_clips(
+    current_user: CurrentUser,
+    status: str = Query("all", pattern="^(all|active|complete)$"),
+    limit: int = Query(24, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    rows = await db.list_brainrot_clips_source(current_user.user_id, limit=CLIPS_FETCH_CAP)
+    all_clips = [c for c in (_serialize_brainrot_job(r) for r in rows) if c["status"] != "failed"]
+
+    counts = {
+        "all": len(all_clips),
+        "active": sum(1 for c in all_clips if c["status"] in ACTIVE_JOB_STATUSES),
+        "complete": sum(1 for c in all_clips if c["status"] == "complete"),
+        "queued": sum(1 for c in all_clips if c["status"] == "created"),
+    }
+
+    if status == "active":
+        filtered = [c for c in all_clips if c["status"] in ACTIVE_JOB_STATUSES]
+    elif status == "complete":
+        filtered = [c for c in all_clips if c["status"] == "complete"]
+    else:
+        filtered = all_clips
+
+    page = filtered[offset:offset + limit]
+    return {
+        "clips": page,
+        "counts": counts,
+        "total": len(filtered),
+        "has_more": offset + len(page) < len(filtered),
+    }
 
 
 def _serialize_brainrot_job(row: dict) -> dict:

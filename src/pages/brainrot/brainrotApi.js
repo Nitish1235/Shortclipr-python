@@ -55,6 +55,11 @@ export const brainrotApi = {
   audioAssets:   (type) => getJSON(`/brainrot/audio-assets${type ? `?type=${type}` : ''}`),
   listJobs:      () => getJSON('/brainrot/jobs'),
   getJob:        (id) => getJSON(`/brainrot/jobs/${id}`),
+  // Dedicated "My clips" library feed — separate from listJobs/getJob above,
+  // which back the create flow's live status polling. Supports status
+  // filtering + pagination; see GET /brainrot/clips in backend/app/api/brainrot.py.
+  listClips:     ({ status = 'all', limit = 24, offset = 0 } = {}) =>
+    getJSON(`/brainrot/clips?status=${status}&limit=${limit}&offset=${offset}`),
 
   generatePostMeta: (script_input) => postJSON('/brainrot/generate-post-meta', { script_input }),
 
