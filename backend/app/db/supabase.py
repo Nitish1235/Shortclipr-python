@@ -556,6 +556,13 @@ async def delete_audio_asset(asset_id: str) -> None:
     await _execute("DELETE FROM brainrot_audio_assets WHERE id=$1", asset_id)
 
 
+async def update_audio_asset(asset_id: str, name: str, category: str | None) -> dict | None:
+    return await _fetchrow(
+        "UPDATE brainrot_audio_assets SET name=$1, category=$2 WHERE id=$3 RETURNING *",
+        name, category, asset_id,
+    )
+
+
 # ── Voice samples ────────────────────────────────────────────
 
 async def upsert_voice_sample(

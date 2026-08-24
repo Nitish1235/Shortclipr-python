@@ -958,6 +958,29 @@ async def admin_upload_audio_asset(
     }
 
 
+class AudioAssetUpdate(BaseModel):
+    name: str
+    category: str | None = None
+
+
+@router.patch("/admin/audio-assets/{asset_id}")
+async def admin_update_audio_asset(asset_id: str, body: AudioAssetUpdate, current_user: CurrentUser):
+    """Admin: correct a track's name/category after upload — added because
+    music gets typed in with name and category swapped often enough
+    (the two fields sit right next to each other on the upload form) that
+    fixing it needs to not require re-uploading the file."""
+    _require_admin(current_user)
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="Name can't be empty")
+    row = await db.update_audio_asset(asset_id, body.name.strip(), (body.category or "").strip() or None)
+    if not row:
+        raise HTTPException(status_code=404, detail="Audio asset not found")
+    return {
+        "id": str(row["id"]), "asset_type": row["asset_type"], "category": row.get("category"),
+        "name": row["name"], "gcs_path": row["gcs_path"], "duration_seconds": row.get("duration_seconds"),
+    }
+
+
 @router.delete("/admin/audio-assets/{asset_id}")
 async def admin_delete_audio_asset(asset_id: str, current_user: CurrentUser):
     _require_admin(current_user)

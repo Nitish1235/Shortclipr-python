@@ -216,12 +216,36 @@ function AudioSection({ notify }) {
   const [category, setCategory] = useState('')
   const [file, setFile] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [editName, setEditName] = useState('')
+  const [editCategory, setEditCategory] = useState('')
   const fileRef = useRef(null)
 
   const load = useCallback(async () => {
     try { setAssets((await getJSON('/brainrot/audio-assets')).assets || []) } catch { /* */ }
   }, [])
   useEffect(() => { load() }, [load])
+
+  const startEdit = (a) => { setEditingId(a.id); setEditName(a.name); setEditCategory(a.category || '') }
+  const cancelEdit = () => setEditingId(null)
+  const saveEdit = async (id) => {
+    if (!editName.trim()) return notify('Name can’t be empty', 'error')
+    try {
+      await send(`/brainrot/admin/audio-assets/${id}`, { method: 'PATCH', json: { name: editName.trim(), category: editCategory.trim() || null } })
+      setEditingId(null)
+      load()
+    } catch (e) { notify(e.message, 'error') }
+  }
+  // One-click fix for the exact mistake of typing the category into the
+  // Name field (and vice versa) during upload — swaps the two columns
+  // without needing to retype anything.
+  const swapNameCategory = async (a) => {
+    try {
+      await send(`/brainrot/admin/audio-assets/${a.id}`, { method: 'PATCH', json: { name: a.category || a.name, category: a.name } })
+      notify(`Swapped name/category for "${a.name}"`, 'success')
+      load()
+    } catch (e) { notify(e.message, 'error') }
+  }
 
   const upload = async (e) => {
     e.preventDefault()
@@ -274,11 +298,26 @@ function AudioSection({ notify }) {
           {assets.map(a => (
             <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: `1px solid ${C.line}`, borderRadius: 8 }}>
               <span style={{ fontSize: '.64rem', fontWeight: 800, color: a.asset_type === 'music' ? C.red : C.amber, textTransform: 'uppercase', width: 42 }}>{a.asset_type}</span>
-              <span style={{ flex: 1, fontSize: '.82rem', fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {a.name}{a.category ? ` · ${a.category}` : ''}{a.duration_seconds ? ` · ${a.duration_seconds.toFixed(1)}s` : ''}
-              </span>
-              {a.gcs_path && <audio src={a.gcs_path} controls style={{ height: 30 }} />}
-              <button style={{ ...btnGhost, color: C.red, padding: '5px 10px' }} onClick={() => del(a.id)}>Delete</button>
+              {editingId === a.id ? (
+                <>
+                  <input style={{ ...inputS, flex: 1 }} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Name" />
+                  <input style={{ ...inputS, flex: 1 }} value={editCategory} onChange={e => setEditCategory(e.target.value)} placeholder="Category (optional)" />
+                  <button style={{ ...btnGhost, padding: '5px 10px' }} onClick={() => saveEdit(a.id)}>Save</button>
+                  <button style={{ ...btnGhost, padding: '5px 10px' }} onClick={cancelEdit}>Cancel</button>
+                </>
+              ) : (
+                <>
+                  <span style={{ flex: 1, fontSize: '.82rem', fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {a.name}{a.category ? ` · ${a.category}` : ''}{a.duration_seconds ? ` · ${a.duration_seconds.toFixed(1)}s` : ''}
+                  </span>
+                  {a.gcs_path && <audio src={a.gcs_path} controls style={{ height: 30 }} />}
+                  <button style={{ ...btnGhost, padding: '5px 10px' }} onClick={() => startEdit(a)}>Edit</button>
+                  <button style={{ ...btnGhost, padding: '5px 10px' }} disabled={!a.category}
+                    title={a.category ? 'Swap name ⇄ category' : 'No category set — nothing to swap'}
+                    onClick={() => swapNameCategory(a)}>⇄ Swap</button>
+                  <button style={{ ...btnGhost, color: C.red, padding: '5px 10px' }} onClick={() => del(a.id)}>Delete</button>
+                </>
+              )}
             </div>
           ))}
         </div>

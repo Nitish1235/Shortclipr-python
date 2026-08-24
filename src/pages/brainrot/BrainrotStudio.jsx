@@ -529,11 +529,11 @@ export default function BrainrotStudio() {
   const moveCaption = useCallback((y) => setCaptionY(y), [])
 
   // ── Voice preview ───────────────────────────────────────────────
-  const playPreview = (url) => {
+  const playPreview = (url, failMsg = 'Preview not ready yet — admin needs to generate voice samples.') => {
     if (!url) return
     if (audioRef.current) { audioRef.current.pause() }
     audioRef.current = new Audio(url)
-    audioRef.current.play().catch(() => showToast('Preview not ready yet — admin needs to generate voice samples.', 'warn'))
+    audioRef.current.play().catch(() => showToast(failMsg, 'warn'))
   }
 
   const voicesFor = (gender) => {
@@ -1043,16 +1043,29 @@ export default function BrainrotStudio() {
                       border: `1px solid ${!musicId ? T.ink : T.line}`,
                       borderRadius: 999, fontSize: '.75rem', fontWeight: 500, fontFamily: FONT,
                     }}>None</button>
-                  {musicLib.map(m => (
-                    <button key={m.id} onClick={() => setMusicId(m.id)}
-                      style={{
-                        cursor: 'pointer', padding: '5px 14px',
-                        background: musicId === m.id ? T.ink : '#fff',
-                        color: musicId === m.id ? '#fff' : T.ink,
-                        border: `1px solid ${musicId === m.id ? T.ink : T.line}`,
-                        borderRadius: 999, fontSize: '.75rem', fontWeight: 500, fontFamily: FONT,
-                      }}>{m.name}</button>
-                  ))}
+                  {musicLib.map(m => {
+                    const on = musicId === m.id
+                    return (
+                      <span key={m.id} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 2,
+                        border: `1px solid ${on ? T.ink : T.line}`, borderRadius: 999,
+                        background: on ? T.ink : '#fff', overflow: 'hidden',
+                      }}>
+                        <button onClick={() => setMusicId(m.id)}
+                          style={{
+                            cursor: 'pointer', padding: '5px 6px 5px 14px', border: 'none', background: 'transparent',
+                            color: on ? '#fff' : T.ink, fontSize: '.75rem', fontWeight: 500, fontFamily: FONT,
+                          }}>{m.name}</button>
+                        <button onClick={() => playPreview(m.gcs_path, 'Could not play this track — try again in a moment.')} title="Preview this track"
+                          disabled={!m.gcs_path}
+                          style={{
+                            cursor: m.gcs_path ? 'pointer' : 'not-allowed', padding: '5px 12px 5px 4px',
+                            border: 'none', background: 'transparent',
+                            color: on ? '#fff' : T.mute, fontSize: '.7rem', opacity: m.gcs_path ? 1 : .4,
+                          }}>▶</button>
+                      </span>
+                    )
+                  })}
                 </div>
                 {musicId && (
                   <div style={{ marginBottom: 8 }}>
