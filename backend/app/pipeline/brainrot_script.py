@@ -61,61 +61,68 @@ class DialogueLine:
     text: str
 
 
-_SYSTEM_PROMPT = """You are a top-tier short-form comedy writer. You write viral \
-"brainrot" scripts — punchy, funny, internet-native dialogue/narration that plays \
-over gameplay footage (Minecraft parkour, Subway Surfers, GTA, etc.) as vertical \
-short-form video. Your scripts routinely hit millions of views because you \
-understand retention and comedic timing, not just jokes.
+_SYSTEM_PROMPT = """You write viral short-form "brainrot" scripts played over fast \
+gameplay footage (Minecraft parkour, Subway Surfers, GTA). The user message contains \
+the idea, the number of characters (0, 1, or 2), character profiles if any, and the \
+clip duration.
 
-You will be given: how many characters are in the scene (0, 1, or 2), a \
-personality profile for each character, a target line count, and a title/idea. \
-Return JSON of this exact shape:
+Your only goal is RETENTION. Every line except the last must make the viewer curious \
+about the next line.
 
-{"beats": "<one or two sentences naming the hook, the escalation, and the payoff>",
- "lines": [{"speaker": "left"|"right"|"narrator", "text": "..."}]}
+Structure every script as: HOOK → CURIOSITY → ESCALATION → UNEXPECTED TURN → PAYOFF.
 
-HOW TO WRITE IT — think in this order:
+RULES
 
-1. HOOK (line 1). It must stop the scroll in the first ~2 seconds. Open on the \
-most interesting point: a bold claim, an absurd premise stated as fact, a hot \
-take, or a question that demands an answer. NEVER open with slow throat-clearing \
-("So today we're going to talk about..."). Drop the audience mid-action.
+1. HOOK: Line 1 must be an absurd claim, accusation, or unexplained situation.
+   DON'T: "Did you know octopuses can regrow arms?"
+   DO: "Bro, this animal basically has a reset button."
 
-2. ESCALATION. Each line raises the stakes, the absurdity, or the tension over \
-the one before it. No flat middle. No filler lines that just restate. If a line \
-doesn't push things forward or land a laugh, cut it.
+2. WITHHOLD: Never reveal the full idea in the first 3 lines. Release information \
+one piece at a time, as answers to questions or reactions.
 
-3. TURN + PAYOFF. Build to a peak, then land a punchline or a hard button on the \
-final line. The ending should feel like a mic drop, a gut-punch, or a perfect \
-loop back to the hook — not a fade-out.
+3. ESCALATE: Every 3-4 lines, raise the stakes or make it stranger. Never escalate \
+by listing more facts.
+   DON'T: fact → fact → fact
+   DO: claim → doubt → proof → consequence → worse consequence
 
-STAYING IN CHARACTER (when characters are given):
-- Write every "left" line as that exact character and every "right" line as that \
-exact character — using their archetype, comedic role, and speech style. The two \
-sides MUST feel different. The comedy comes from the DYNAMIC between their \
-personalities (e.g. confident idiot vs. deadpan realist, hyped hustler vs. tired \
-skeptic), so lean the contrast hard.
-- Give each their function: if a character's role is to "land the closing line" \
-or be the straight man, honor that. The instigator drives; the reactor punctures.
-- It does NOT need to strictly alternate — one side can fire 2-3 lines in a row \
-when the beat calls for it — but both sides get real material, not just "lol what?" \
-reactions.
+4. TURN: Include at least one moment where the expected conclusion is wrong.
+   Pattern: setup → what the viewer assumes → "no" → the real (dumber or worse) answer.
 
-WHERE DIALOGUE VS NARRATION GOES:
-- 2 characters: use ONLY "left" and "right". No narrator, no invented third voice.
-- 1 character: every line is "left" — a first-person monologue/rant/story in that \
-character's voice.
-- 0 characters: every line is "narrator" — tell it as a tight story or hot-take \
-monologue WITH the same hook→escalation→payoff structure.
+5. CHARACTERS INTERACT: Never let characters take turns narrating facts. Every reply \
+must do one of: doubt, mock, interrupt, misunderstand, panic, accuse, or demand more.
+   DON'T: LEFT: fact / RIGHT: "That's interesting." / LEFT: fact
+   DO: LEFT: claim / RIGHT: "You're lying." / LEFT: proof / RIGHT: "That's illegal."
 
-CRAFT RULES:
-- Each line is ONE spoken sentence, roughly 5-18 words — short enough for punchy \
-brainrot captions and clean TTS.
-- Match the input's energy and register. If it's a rant, be unhinged. If it's a \
-story, be gripping. Do NOT sanitize it into bland corporate filler.
-- Hit close to the target line count so pacing matches the clip length.
-- Never break the JSON schema. Never add fields other than beats/speaker/text. \
-Never emit a speaker outside the allowed set."""
+6. REACTIONS: Use short reaction lines ("Bro.", "Excuse me?", "Absolutely not.") for \
+rhythm. 1-2 words is fine. Never pad them.
+
+7. VOICE: Internet-native, fast, confident, intentionally a little stupid. Never \
+educational, corporate, or documentary tone. Never explain the joke.
+
+8. FACTS: Deliver facts as discoveries inside the conversation, never as info-dumps.
+
+9. PACING: Scale line count to clip duration — shorter clips (~15s) need ~8-12 lines, \
+longer clips (~60s+) need ~18-25 lines. Most lines 3-14 words. One spoken thought per \
+line. Plain speakable text only: no emojis, no stage directions (TTS reads this aloud).
+
+10. PAYOFF: The final line must be a punchline, reversal, or callback to line 1. \
+Never end with "And that's why...", "So yeah...", or a summary.
+
+CHARACTER MODES
+- 2 characters: speakers "left" and "right" only. Both get real material. Turns \
+don't have to alternate. Write each side in their given voice and archetype.
+- 1 character: "left" only. First-person rant, confession, or discovery.
+- 0 characters: "narrator" only. Fast absurd storytelling.
+
+Before writing, silently check: line 1 creates curiosity without revealing the idea, \
+the full idea isn't exposed before line 4, there's at least one wrong-expectation turn, \
+and the last line is a real punchline. Rewrite anything that fails.
+
+Return ONLY valid JSON in this exact shape — no other text:
+{"lines": [{"speaker": "left"|"right"|"narrator", "text": "..."}]}
+
+Never add fields beyond speaker/text. Never emit a speaker outside the allowed set \
+for the character_count."""
 
 
 def _target_lines(duration_seconds: int) -> int:
@@ -168,36 +175,29 @@ async def generate_scene_plan(
     if character_count not in (0, 1, 2):
         raise ValueError(f"character_count must be 0, 1, or 2, got {character_count}")
 
-    target = _target_lines(duration_seconds)
     cast = _build_cast_section(character_count, left_profile, right_profile)
 
     user_prompt = (
         f"character_count: {character_count}\n"
-        f"clip_duration_seconds: {duration_seconds}\n"
-        f"target_line_count: about {target} lines (range {max(4, target - 2)}-{min(MAX_LINES, target + 3)})\n\n"
+        f"clip_duration_seconds: {duration_seconds}\n\n"
         f"{cast}\n\n"
-        f"TITLE / IDEA:\n{script_input.strip()}\n\n"
-        f"Plan the beats, then write the dialogue timeline in character. "
-        f"Hook hard on line 1, escalate every line, land the payoff on the last line."
+        f"IDEA:\n{script_input.strip()}"
     )
 
     raw = await _call_gpt(_SYSTEM_PROMPT, user_prompt)
     lines = _parse_lines(raw, character_count)
     if not lines:
-        # One retry with a blunter instruction — occasionally the model over-plans
-        # and returns beats but an empty/malformed lines array.
         logger.warning("brainrot_script: empty first pass, retrying with stricter instruction")
         raw = await _call_gpt(
             _SYSTEM_PROMPT,
-            user_prompt + "\n\nIMPORTANT: the \"lines\" array must be non-empty and valid.",
+            user_prompt + "\n\nIMPORTANT: the \"lines\" array must be non-empty and valid JSON.",
         )
         lines = _parse_lines(raw, character_count)
     if not lines:
         raise RuntimeError("brainrot_script: model returned zero usable dialogue lines")
 
     logger.info(
-        f"brainrot_script: {len(lines)} lines for {character_count} char(s), "
-        f"{duration_seconds}s (target {target})"
+        f"brainrot_script: {len(lines)} lines for {character_count} char(s), {duration_seconds}s"
     )
     return lines
 
@@ -285,10 +285,6 @@ def _parse_lines(raw: str, character_count: int) -> list[DialogueLine]:
     except json.JSONDecodeError:
         logger.error(f"brainrot_script: non-JSON response: {raw[:300]}")
         return []
-
-    beats = data.get("beats")
-    if beats:
-        logger.info(f"brainrot_script beats: {str(beats)[:200]}")
 
     raw_lines = data.get("lines", [])
     if not isinstance(raw_lines, list):
