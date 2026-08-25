@@ -37,16 +37,16 @@ _http_client = httpx.AsyncClient(
 UNREALSPEECH_STREAM_URL = "https://api.v8.unrealspeech.com/stream"
 LEMONFOX_SPEECH_URL = "https://api.lemonfox.ai/v1/audio/speech"
 
-# Every line, every clip, every provider — slightly slower than the
-# providers' own defaults reads as more natural/less rushed for brainrot's
-# punchy short lines. Lemonfox's `speed` is a literal multiplier (OpenAI-
-# compatible: 0.5-4.0, default 1.0), so 0.9 there is exact. UnrealSpeech's
-# `Speed` is its own -1.0..1.0 scale with no published conversion formula —
-# -0.1 is an approximation of ~0.9x based on their one documented example
-# (Speed=-0.5 → ~1.5x duration, i.e. ~0.67x speed); listen and retune this
-# constant if it sounds off in practice.
-TTS_SPEED_MULTIPLIER = 0.9
-_UNREALSPEECH_SPEED = -0.1
+# Every line, every clip, every provider — slower than the providers' own
+# defaults reads as more natural/less rushed for brainrot's punchy short
+# lines. Lemonfox's `speed` is a literal multiplier (OpenAI-compatible:
+# 0.5-4.0, default 1.0), so 0.8 there is exact. UnrealSpeech's `Speed` is its
+# own -1.0..1.0 scale with no published conversion formula — -0.2 is an
+# approximation of ~0.8x based on their one documented example (Speed=-0.5 →
+# ~1.5x duration, i.e. ~0.67x speed); listen and retune this constant if it
+# sounds off in practice.
+TTS_SPEED_MULTIPLIER = 0.8
+_UNREALSPEECH_SPEED = -0.2
 
 # Default voices per provider/locale. UnrealSpeech only ships US English
 # voices (see voice_catalog.py) — en-GB requests fall back to en-US there.
