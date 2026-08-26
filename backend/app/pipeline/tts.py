@@ -48,11 +48,10 @@ LEMONFOX_SPEECH_URL = "https://api.lemonfox.ai/v1/audio/speech"
 TTS_SPEED_MULTIPLIER = 0.8
 _UNREALSPEECH_SPEED = -0.2
 
-# Default voices per provider/locale. UnrealSpeech only ships US English
-# voices (see voice_catalog.py) — en-GB requests fall back to en-US there.
+# Default voices per provider/locale.
 DEFAULT_VOICES = {
-    "unrealspeech": {"en-US": "Charlotte", "en-GB": "Charlotte"},
-    "lemonfox":     {"en-US": "sarah",     "en-GB": "alice"},
+    "unrealspeech": {"en-US": "Emily", "en-GB": "Charlotte"},
+    "lemonfox":     {"en-US": "sarah", "en-GB": "alice"},
 }
 
 
@@ -87,7 +86,7 @@ async def _unrealspeech(text: str, voice_id: str) -> bytes:
     resp = await _http_client.post(
         UNREALSPEECH_STREAM_URL,
         headers={"Authorization": f"Bearer {settings.UNREALSPEECH_API_KEY}"},
-        json={"Text": text, "VoiceId": voice_id, "Bitrate": "192k", "Speed": _UNREALSPEECH_SPEED, "Pitch": 1.0},
+        json={"Text": text, "VoiceId": voice_id, "Bitrate": "192k", "Speed": _UNREALSPEECH_SPEED, "Pitch": 1.0, "Temperature": 0.65},
     )
     if resp.status_code != 200:
         raise TTSError(f"UnrealSpeech {resp.status_code}: {resp.text[:300]}")

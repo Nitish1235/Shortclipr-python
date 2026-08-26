@@ -205,7 +205,7 @@ export default function BrainrotStudio() {
       if (!alive) return
       if (c.status === 'fulfilled') { setRoster(c.value.characters || []); setRosterOnline(true) }
       else setRosterOnline(false)
-      if (v.status === 'fulfilled') setVoices(v.value.voices || [])
+      if (v.status === 'fulfilled') setVoices((v.value.voices || []).filter(voice => voice.provider !== 'lemonfox'))
       if (a.status === 'fulfilled') setMotions(a.value.entry || [])
       if (g.status === 'fulfilled') { setClipsLib(g.value.clips || []); setClipsOnline(true) }
       else setClipsOnline(false)
@@ -504,7 +504,11 @@ export default function BrainrotStudio() {
   // ── Cast management ─────────────────────────────────────────────
   const setCast = (n) => {
     setCastCount(n)
-    setPicked(prev => prev.slice(0, n).map((p, i) => ({ ...p, side: i === 0 ? 'left' : 'right' })))
+    setPicked(prev => prev.slice(0, n).map((p, i) => {
+      const side = i === 0 ? 'left' : 'right'
+      const autoVoice = getAutoVoiceForCharacter(p, side)
+      return { ...p, side, voiceId: autoVoice }
+    }))
   }
 
   const toggleCharacter = (ch) => {
@@ -514,8 +518,9 @@ export default function BrainrotStudio() {
       if (prev.length >= castCount) { showToast('Remove a character first, or bump the cast size.', 'warn'); return prev }
       const side = prev.some(p => p.side === 'left') ? 'right' : 'left'
       const entry = motions[0]?.id || 'slide'
+      const autoVoice = getAutoVoiceForCharacter(ch, side)
       return reflow([...prev, {
-        ...ch, side, voiceId: '', entry, exit: entry,
+        ...ch, side, voiceId: autoVoice, entry, exit: entry,
         x: side === 'left' ? 0.17 : 0.83, y: 0.76, scale: 1, rotation: 0,
       }])
     })
@@ -538,10 +543,14 @@ export default function BrainrotStudio() {
     }
     const entry = motions[0]?.id || 'slide'
     setCastCount(2)
-    setPicked(resolved.map((ch, i) => ({
-      ...ch, side: i === 0 ? 'left' : 'right', voiceId: '', entry, exit: entry,
-      x: i === 0 ? 0.17 : 0.83, y: 0.76, scale: 1, rotation: 0,
-    })))
+    setPicked(resolved.map((ch, i) => {
+      const side = i === 0 ? 'left' : 'right'
+      const autoVoice = getAutoVoiceForCharacter(ch, side)
+      return {
+        ...ch, side, voiceId: autoVoice, entry, exit: entry,
+        x: i === 0 ? 0.17 : 0.83, y: 0.76, scale: 1, rotation: 0,
+      }
+    }))
     showToast(`Loaded ${cast.label || 'signature cast'}`, 'ok')
   }
 
@@ -623,6 +632,15 @@ export default function BrainrotStudio() {
     // backend-side). gender-matching voices first.
     return [...voices].sort((a, b) =>
       (a.gender === gender ? -1 : 0) - (b.gender === gender ? -1 : 0))
+  }
+
+  const getAutoVoiceForCharacter = (character, side) => {
+    // Auto-assign a voice based on character gender and position (left/right).
+    // Same gender gets different voices so two male characters don't sound identical.
+    const genderVoices = voicesFor(character.gender)
+    if (!genderVoices.length) return ''
+    const slot = side === 'left' ? 0 : 1
+    return genderVoices[slot % genderVoices.length]?.voice_id || ''
   }
 
   // ── Validation ──────────────────────────────────────────────────

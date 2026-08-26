@@ -19,19 +19,35 @@ class Voice:
 
 
 VOICES: list[Voice] = [
-    # ── UnrealSpeech (5 voices, English only) ────────────────────
-    # Previous voice_ids (Dan/Will/Scarlett/Liv/Amy) were removed/renamed by
-    # UnrealSpeech at some point — every one now 400s with "Invalid VoiceId"
-    # (see the admin voice-sample-generation logs). Replaced with 5 from
-    # their current allowed list. Gender tags are inferred from the name —
-    # UnrealSpeech's error response lists valid IDs but not genders — so
-    # worth a listen via the admin "Generate voice samples" tool after
-    # deploying to confirm they sound right, not just that they're accepted.
+    # ── UnrealSpeech — US English ────────────────────────────────
+    Voice("Autumn",    "unrealspeech", "en-US", "Autumn",    "female"),
+    Voice("Melody",    "unrealspeech", "en-US", "Melody",    "female"),
+    Voice("Hannah",    "unrealspeech", "en-US", "Hannah",    "female"),
+    Voice("Emily",     "unrealspeech", "en-US", "Emily",     "female"),
+    Voice("Ivy",       "unrealspeech", "en-US", "Ivy",       "female"),
+    Voice("Kaitlyn",   "unrealspeech", "en-US", "Kaitlyn",   "female"),
+    Voice("Luna",      "unrealspeech", "en-US", "Luna",      "female"),
+    Voice("Willow",    "unrealspeech", "en-US", "Willow",    "female"),
+    Voice("Lauren",    "unrealspeech", "en-US", "Lauren",    "female"),
+    Voice("Sierra",    "unrealspeech", "en-US", "Sierra",    "female"),
+    Voice("Noah",      "unrealspeech", "en-US", "Noah",      "male"),
+    Voice("Jasper",    "unrealspeech", "en-US", "Jasper",    "male"),
+    Voice("Caleb",     "unrealspeech", "en-US", "Caleb",     "male"),
+    Voice("Ronan",     "unrealspeech", "en-US", "Ronan",     "male"),
     Voice("Ethan",     "unrealspeech", "en-US", "Ethan",     "male"),
     Voice("Daniel",    "unrealspeech", "en-US", "Daniel",    "male"),
-    Voice("Charlotte", "unrealspeech", "en-US", "Charlotte", "female"),
-    Voice("Emily",     "unrealspeech", "en-US", "Emily",     "female"),
-    Voice("Amelia",    "unrealspeech", "en-US", "Amelia",    "female"),
+    Voice("Zane",      "unrealspeech", "en-US", "Zane",      "male"),
+    Voice("Rowan",     "unrealspeech", "en-US", "Rowan",     "male"),
+
+    # ── UnrealSpeech — UK English ────────────────────────────────
+    Voice("Eleanor",   "unrealspeech", "en-GB", "Eleanor",   "female"),
+    Voice("Chloe",     "unrealspeech", "en-GB", "Chloe",     "female"),
+    Voice("Charlotte", "unrealspeech", "en-GB", "Charlotte", "female"),
+    Voice("Amelia",    "unrealspeech", "en-GB", "Amelia",    "female"),
+    Voice("Benjamin",  "unrealspeech", "en-GB", "Benjamin",  "male"),
+    Voice("Oliver",    "unrealspeech", "en-GB", "Oliver",    "male"),
+    Voice("Edward",    "unrealspeech", "en-GB", "Edward",    "male"),
+    Voice("Arthur",    "unrealspeech", "en-GB", "Arthur",    "male"),
 
     # ── Lemonfox — English US ────────────────────────────────────
     Voice("heart",    "lemonfox", "en-US", "Heart",    "female"),
@@ -91,13 +107,13 @@ def find_voice(voice_id: str) -> Voice | None:
     return _BY_VOICE_ID.get(voice_id)
 
 
-# Every voice, grouped by gender, across BOTH providers — the "combine
-# them, don't show as separate providers" pool used by
-# default_voice_for_gender below. Order is deterministic (insertion order
-# of VOICES) so slot-rotation is stable across calls/deploys.
+# UnrealSpeech voices grouped by gender — used for auto-assignment when
+# picking characters. Order is deterministic (insertion order of VOICES)
+# so slot-rotation is stable across calls/deploys. Only UnrealSpeech.
 _ALL_BY_GENDER: dict[str, list[Voice]] = {"male": [], "female": [], "neutral": []}
 for _v in VOICES:
-    _ALL_BY_GENDER.setdefault(_v.gender, []).append(_v)
+    if _v.provider == "unrealspeech":  # Auto-voice selection uses UnrealSpeech only
+        _ALL_BY_GENDER.setdefault(_v.gender, []).append(_v)
 
 
 def default_voice_for_gender(gender: str, slot: int = 0) -> Voice:
