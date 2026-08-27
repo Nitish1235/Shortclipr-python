@@ -136,16 +136,6 @@ def _even(n: float) -> int:
     return n if n % 2 == 0 else n + 1
 
 
-def _base_crop_filter(input_label: str, out_label: str) -> str:
-    """Scale-to-cover + center-crop to the fixed 9:16 canvas. Same technique
-    as extractor.py's _fc_full_screen(), without the face-tracking pan since
-    gameplay backgrounds have no face to track."""
-    return (
-        f"[{input_label}]scale={CANVAS_W}:{CANVAS_H}:force_original_aspect_ratio=increase:flags=bicubic,"
-        f"crop={CANVAS_W}:{CANVAS_H}[{out_label}]"
-    )
-
-
 def _motion_offset(
     motion_id: str, side: str, on_x: float, on_y: float, char_w: float, char_h: float,
 ) -> tuple[float, float, float, str]:
@@ -691,8 +681,13 @@ async def render(
     # off screen, so force always_on here instead.
     effective_motion_mode = "always_on" if len(characters) <= 1 else motion_mode
 
-    filter_parts = [_base_crop_filter("0:v", "bg0")]
-    bg_label = "bg0"
+    # Gameplay sources are pre-reframed to CANVAS_W x CANVAS_H at upload time
+    # (see brainrot_gameplay.py's admin ingestion pipeline) — every clip this
+    # renders already matches the canvas exactly, so re-scaling/cropping here
+    # on every render would be pure wasted encode time. Reference the raw
+    # input directly instead of routing it through a redundant scale+crop.
+    filter_parts: list[str] = []
+    bg_label = "0:v"
     earliest_entry: float | None = None
     latest_exit: float | None = None
     for i, char in enumerate(characters):
