@@ -1,24 +1,17 @@
 // BrainrotLanding.jsx — public marketing page for the Brainrot Clips Maker.
 //
-// Public route: /brainrot (no auth required — enforced in App.jsx).
+// Public route: /brainrot (no auth — enforced in App.jsx).
 // The paid studio lives at /brainrot/studio and stays protected.
 //
-// Design language matches the YT-shorts landing (rounded sticky nav, black
-// borders, hard offset shadows, hand-drawn SVG underline) — same brand red
-// (#cf1322) as YT-shorts, plus brainrot-native motion (character wobble,
-// rotating captions, marquee, hover-lift cards).
+// Design language: dark-first editorial. Warm near-black canvas, glass
+// surfaces, red aurora glow accents, hairline dividers. The video previews
+// (LiveStage) are the loudest element on the page — everything else recedes.
 //
 // Real data:
-//   - Characters: fetched from GET /brainrot/characters (public endpoint,
-//     no auth). Only 10 shown on the page, "100+" tag references the rest.
-//   - Gameplay backgrounds: fetched from GET /brainrot/gameplay-clips
-//     (public endpoint, returns admin-curated status='selected' clips only).
-//     Each stage preview picks a real thumbnail_url from GCS as background.
-//     Falls back to CSS gradient categories if the fetch fails.
-//
-// Captions are positioned upper-middle (top: ~22%) per product spec and
-// rotate through in-character dialogue every ~2.6s. The speaker-dot indicator
-// alternates left/right in sync with which character is "talking".
+//   - Characters: GET /brainrot/characters (public). Falls back to a 20-char
+//     local seed so this page never renders "no characters".
+//   - Gameplay: GET /brainrot/gameplay-clips (public, admin-curated).
+//     Each LiveStage picks a real thumbnail_url + gcs_path from GCS.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -29,31 +22,41 @@ import {
   captionTextStyle, CAPTION_KEYFRAMES,
 } from './captionStyles'
 
-// ── Design tokens (local to landing — brainrot-flavored) ────────────
-// Same brand red as the YT-shorts landing (Navigation.jsx / Hero.jsx —
-// #cf1322 main, #a10e1b hover-dark, #fef2f2 light tint, #fecaca light
-// border) instead of the old purple/pink accent.
-const P = {
-  ink: '#0f0f0f',
-  paper: '#fef2f2',
-  paper2: '#ffffff',
-  brain: '#cf1322',
-  brain2: '#a10e1b',
-  brain3: '#22c55e',
-  brainTint: '#fee2e2',
-  yellow: '#fde047',
-  captionYellow: '#ffd23f',
-  mute: '#6b7280',
-  line: '#e5e5e5',
+// ─── Design tokens (dark-first editorial) ────────────────────────────
+const T = {
+  // Canvas
+  ink:       '#0a0a0b',   // near-black bg
+  ink2:      '#111114',   // elevated surface
+  ink3:      '#17171b',   // hover / raised
+  paper:     '#ffffff',
+  cream:     '#faf7f2',   // warm off-white light section
+  cream2:    '#f2ede4',
+  // Text
+  fg:        '#f5f5f7',   // primary on dark
+  fgMute:    '#98989e',   // secondary on dark
+  fgFaint:   '#5a5a60',   // tertiary on dark
+  ink0:      '#0f0f10',   // primary on light
+  inkMute:   '#5b5b60',   // secondary on light
+  // Lines
+  lineDark:  'rgba(255,255,255,0.08)',
+  lineDark2: 'rgba(255,255,255,0.14)',
+  lineLight: 'rgba(0,0,0,0.08)',
+  lineLight2:'rgba(0,0,0,0.14)',
+  // Accents
+  red:       '#ff3049',   // brighter than brand for glow
+  redDeep:   '#cf1322',   // brand anchor
+  redTint:   '#2a0d12',   // dark red wash
+  green:     '#22c55e',
+  amber:     '#f5b642',
 }
-const sh = (n = 4, c = P.brain) => `${n}px ${n}px 0 ${c}`
-const shInk = (n = 4) => `${n}px ${n}px 0 ${P.ink}`
+// Focus ring — used on interactive stages
+const RING = `0 0 0 1px ${T.lineDark2}, 0 24px 60px -20px rgba(0,0,0,0.5)`
+// Warm glow — the signature accent used sparingly (hero CTA, featured pricing)
+const GLOW = `0 0 0 1px rgba(255,48,73,.35), 0 20px 60px -10px rgba(255,48,73,.55)`
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
-// ── Fallback CSS backgrounds (used when a stage has no real thumbnail_url) ──
-// Each key mimics a real gameplay category. See BrainrotAdminPanel category
-// placeholder text: "minecraft, subway_surfers, gta…"
+// ─── Fallback backgrounds (used when a stage has no real thumbnail_url) ───
 const BG_STYLES = {
   minecraft: {
     background:
@@ -67,46 +70,21 @@ const BG_STYLES = {
       'repeating-linear-gradient(80deg, transparent 0, transparent 30px, rgba(255,255,255,.15) 30px, rgba(255,255,255,.15) 32px)',
     backgroundBlendMode: 'overlay',
   },
-  gta: {
-    background:
-      'radial-gradient(ellipse at 50% 100%, #7c3aed 0%, #4c1d95 40%, #1e1b4b 100%),' +
-      'repeating-linear-gradient(0deg, transparent 0, transparent 40px, rgba(255,255,255,.05) 40px, rgba(255,255,255,.05) 41px)',
-  },
-  fortnite: {
-    background: 'linear-gradient(160deg, #6d28d9 0%, #a855f7 40%, #ec4899 100%)',
-  },
-  parkour: {
-    background: 'linear-gradient(180deg, #0ea5e9 0%, #0c4a6e 100%)',
-  },
-  rocket_league: {
-    background: 'radial-gradient(ellipse at 50% 90%, #f59e0b 0%, #7c2d12 60%, #451a03 100%)',
-  },
-  default: {
-    background: 'linear-gradient(160deg, #2a2a3a, #12121c)',
-  },
+  gta:       { background: 'radial-gradient(ellipse at 50% 100%, #7c3aed 0%, #4c1d95 40%, #1e1b4b 100%)' },
+  fortnite:  { background: 'linear-gradient(160deg, #6d28d9 0%, #a855f7 40%, #ec4899 100%)' },
+  parkour:   { background: 'linear-gradient(180deg, #0ea5e9 0%, #0c4a6e 100%)' },
+  rocket_league: { background: 'radial-gradient(ellipse at 50% 90%, #f59e0b 0%, #7c2d12 60%, #451a03 100%)' },
+  default:   { background: 'linear-gradient(160deg, #2a2a3a, #12121c)' },
 }
-
-// Pick a stable-per-index background style. If a real thumbnail_url exists,
-// use that as an image background; otherwise fall through to a CSS style
-// keyed by (category || cycled fallback).
 function bgFor(clip, fallbackIndex = 0) {
-  if (clip?.thumbnail_url) {
-    return {
-      background: `#000 url(${clip.thumbnail_url}) center/cover no-repeat`,
-    }
-  }
+  if (clip?.thumbnail_url) return { background: `#000 url(${clip.thumbnail_url}) center/cover no-repeat` }
   const cat = (clip?.category || '').toLowerCase().replace(/\s+/g, '_')
   if (BG_STYLES[cat]) return BG_STYLES[cat]
   const cycle = ['minecraft', 'subway_surfers', 'gta', 'fortnite', 'parkour', 'rocket_league']
   return BG_STYLES[cycle[fallbackIndex % cycle.length]]
 }
 
-// ── Fetchers (public endpoints, no auth needed) ─────────────────────
-// Characters fall back to a real 20-character local seed (see
-// brainrotCharactersSeed.js) if the live roster API is empty, slow, or
-// unreachable — this page is most people's first impression of the
-// product, and "no characters" is the one state it should never show.
-// Live API data always wins when it's actually there.
+// ─── Fetchers (public endpoints, no auth) ───────────────────────────
 async function fetchCharacters() {
   try {
     const res = await fetch(`${API_BASE}/brainrot/characters`)
@@ -125,27 +103,22 @@ async function fetchGameplayClips() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  LiveStage — the reused animated 9:16 preview
-//  Used in the hero, the interactive builder, and each example clip card.
+//  LiveStage — reused animated 9:16 preview.
+//  Softer chrome now (hairline + long soft shadow) so the video does
+//  the talking and the frame just holds it.
 // ═══════════════════════════════════════════════════════════════════
 function LiveStage({
-  leftChar,
-  rightChar,
-  clip,
-  title,
-  dialogues,
-  width = 240,
-  shadowColor = P.brain,
-  showStats = false,
-  stats = null,
-  charMode = 'rotate2',   // 'rotate2' | 'single'
-  entryVariant = 'pop',   // 'pop' | 'whoosh_left' | 'zoom' | 'drop' | 'swoosh_right'
+  leftChar, rightChar, clip, title, dialogues,
+  width = 240, showStats = false, stats = null,
+  charMode = 'rotate2',
+  entryVariant = 'pop',
+  glow = false,   // when true, adds red aura (hero only)
 }) {
   const [dialogueIdx, setDialogueIdx] = useState(0)
   const [fadeIn, setFadeIn] = useState(true)
 
   useEffect(() => {
-    if (!dialogues || dialogues.length === 0) return
+    if (!dialogues?.length) return
     const iv = setInterval(() => {
       setFadeIn(false)
       setTimeout(() => {
@@ -162,80 +135,58 @@ function LiveStage({
   return (
     <div style={{
       width, aspectRatio: '9 / 16',
-      borderRadius: 18,
-      border: `3px solid ${P.ink}`,
-      boxShadow: `6px 6px 0 ${shadowColor}`,
-      position: 'relative',
-      overflow: 'hidden',
+      borderRadius: 20,
+      position: 'relative', overflow: 'hidden',
+      boxShadow: glow
+        ? `0 0 0 1px rgba(255,255,255,.08), 0 30px 80px -10px rgba(255,48,73,.55), 0 60px 120px -30px rgba(0,0,0,.7)`
+        : RING,
       ...bg,
     }}>
-      {/* Real gameplay footage, autoplaying — bg (thumbnail/CSS gradient) stays
-          as the underlying style so it still shows if the clip has no video
-          file yet or the video fails to load. */}
       {clip?.gcs_path && (
         <video
           src={clip.gcs_path}
           autoPlay muted loop playsInline preload="metadata"
-          style={{
-            position: 'absolute', inset: 0,
-            width: '100%', height: '100%', objectFit: 'cover',
-            zIndex: 1,
-          }}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 1 }}
         />
       )}
 
-      {/* CRT scanline overlay for that "video" feel */}
+      {/* Subtle vignette + top gradient for title readability */}
       <div style={{
-        position: 'absolute', inset: 0,
-        backgroundImage: 'linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px)',
-        backgroundSize: '100% 3px',
-        pointerEvents: 'none',
-        zIndex: 5,
+        position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none',
+        background: 'linear-gradient(180deg, rgba(0,0,0,.55) 0%, transparent 20%, transparent 65%, rgba(0,0,0,.6) 100%)',
       }}/>
 
-      {/* Top title chip */}
       {title && (
         <div style={{
-          position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
-          background: '#fff', color: P.ink,
-          padding: '3px 8px', borderRadius: 5,
-          fontWeight: 900, fontSize: '.6rem',
-          border: `2px solid ${P.ink}`, boxShadow: `2px 2px 0 ${P.ink}`,
-          textTransform: 'uppercase', letterSpacing: '.04em',
+          position: 'absolute', top: 10, left: 10,
+          background: 'rgba(0,0,0,.55)', color: '#fff',
+          backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+          padding: '4px 9px', borderRadius: 100,
+          fontWeight: 700, fontSize: '.58rem',
+          letterSpacing: '.12em', textTransform: 'uppercase',
+          border: `1px solid rgba(255,255,255,.14)`,
           zIndex: 6, whiteSpace: 'nowrap',
         }}>{title}</div>
       )}
 
-      {/* Caption — UPPER-MIDDLE (top 22% per product spec).
-          `current.styleId` (set by the interactive Builder demo) switches
-          this to a real approximation of the chosen trending caption style
-          — same catalog/metadata as the Studio dashboard preview (see
-          captionStyles.js). Without it (Hero / ClipWall's static examples),
-          falls back to the original sticker-chip look untouched. */}
       {current && (current.styleId ? (
         <CaptionDemo current={current} fadeIn={fadeIn} />
       ) : (
         <div style={{
           position: 'absolute', top: '22%', left: '50%',
           transform: 'translateX(-50%)',
-          background: current.color || P.captionYellow,
-          color: current.color === '#ff4dd8' ? '#fff' : P.ink,
-          padding: '5px 10px', borderRadius: 5,
+          background: current.color || '#ffd23f',
+          color: current.color === '#ff4dd8' ? '#fff' : '#0a0a0a',
+          padding: '5px 10px', borderRadius: 6,
           fontWeight: 900, fontSize: '.78rem',
-          border: `2px solid ${P.ink}`,
-          boxShadow: `2.5px 2.5px 0 ${P.ink}`,
-          whiteSpace: 'nowrap',
-          textTransform: 'uppercase',
-          letterSpacing: '.02em',
-          maxWidth: '85%',
-          textAlign: 'center',
-          opacity: fadeIn ? 1 : 0,
-          transition: 'opacity .2s',
+          boxShadow: '0 4px 14px rgba(0,0,0,.35)',
+          whiteSpace: 'nowrap', textTransform: 'uppercase',
+          letterSpacing: '.02em', maxWidth: '85%', textAlign: 'center',
+          opacity: fadeIn ? 1 : 0, transition: 'opacity .2s',
           zIndex: 7,
         }}>{current.text}</div>
       ))}
 
-      {/* Characters — one at a time, centered, entry animation per variant */}
       {(() => {
         if (charMode === 'single') {
           return leftChar
@@ -248,30 +199,29 @@ function LiveStage({
           : null
       })()}
 
-      {/* Stats bar */}
       {showStats && stats && (
         <div style={{
-          position: 'absolute', bottom: 8, left: 8, right: 8,
-          background: 'rgba(0,0,0,.72)', color: '#fff', fontSize: '.66rem',
-          padding: '5px 10px', borderRadius: 6,
+          position: 'absolute', bottom: 10, left: 10, right: 10,
+          background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          color: '#fff', fontSize: '.66rem',
+          padding: '6px 11px', borderRadius: 100,
+          border: `1px solid rgba(255,255,255,.12)`,
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           zIndex: 10,
         }}>
-          <span style={{ color: P.brain3, fontWeight: 800 }}>▶ {stats.plays}</span>
-          <span>💬 {stats.comments}</span>
-          <span>❤️ {stats.likes}</span>
+          <span style={{ color: T.green, fontWeight: 800 }}>▶ {stats.plays}</span>
+          <span style={{ opacity: .85 }}>💬 {stats.comments}</span>
+          <span style={{ opacity: .85 }}>❤ {stats.likes}</span>
         </div>
       )}
     </div>
   )
 }
 
-// Real trending-style caption approximation — same metadata/keyframes as
-// PreviewStage.jsx's dashboard preview (captionStyles.js), rendered without
-// the sticker-chip box so it reads like an actual burned-in caption.
 function CaptionDemo({ current, fadeIn }) {
   const style = CAPTION_STYLE_BY_ID[current.styleId] || CAPTION_STYLE_BY_ID[DEFAULT_CAPTION_STYLE]
-  const color = current.colorMeta || { text: P.captionYellow, outline: '#000000' }
+  const color = current.colorMeta || { text: '#ffd23f', outline: '#000000' }
   const base = captionTextStyle(style, color)
   return (
     <div style={{
@@ -303,27 +253,18 @@ const CHAR_ANIM = {
   drop:         'br-char-drop .4s cubic-bezier(.36,.07,.19,.97) forwards',
   swoosh_right: 'br-char-swoosh-right .3s cubic-bezier(.22,.68,0,1.2) forwards',
 }
-
-// Individual character on the stage — centered, big, unique entry per variant
 function CharacterFigure({ char, entryVariant = 'pop' }) {
   return (
     <div style={{
-      position: 'absolute',
-      bottom: '2%',
-      left: '50%',
-      width: '60%',
-      aspectRatio: '3 / 4',
-      pointerEvents: 'none',
+      position: 'absolute', bottom: '2%', left: '50%', width: '60%',
+      aspectRatio: '3 / 4', pointerEvents: 'none',
       filter: 'drop-shadow(0 8px 18px rgba(0,0,0,.65))',
       animation: CHAR_ANIM[entryVariant] || CHAR_ANIM.pop,
-      zIndex: 4,
-      transformOrigin: 'bottom center',
+      zIndex: 4, transformOrigin: 'bottom center',
       transform: 'translateX(-50%)',
     }}>
       <img
-        src={char.image_url}
-        alt=""
-        draggable={false}
+        src={char.image_url} alt="" draggable={false}
         style={{ width: '100%', height: '100%', objectFit: 'contain' }}
         onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
       />
@@ -332,268 +273,635 @@ function CharacterFigure({ char, entryVariant = 'pop' }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Section: HERO
+//  Shared editorial primitives
+// ═══════════════════════════════════════════════════════════════════
+
+// Section wrapper — sets rhythm (padding, max width, dark/light mode).
+function Section({ id, tone = 'dark', children, style = {}, wide = false }) {
+  const isDark = tone === 'dark'
+  return (
+    <section id={id} style={{
+      background: isDark ? T.ink : (tone === 'cream' ? T.cream : T.paper),
+      color: isDark ? T.fg : T.ink0,
+      padding: 'clamp(64px, 8vw, 120px) 5%',
+      position: 'relative',
+      ...style,
+    }}>
+      <div style={{ maxWidth: wide ? 1240 : 1120, margin: '0 auto' }}>
+        {children}
+      </div>
+    </section>
+  )
+}
+
+// Editorial eyebrow — small caps label above H2s.
+function Eyebrow({ children, tone = 'dark' }) {
+  return (
+    <div style={{
+      fontSize: '.72rem', fontWeight: 600,
+      letterSpacing: '.14em', textTransform: 'uppercase',
+      color: tone === 'dark' ? T.fgMute : T.inkMute,
+      display: 'inline-flex', alignItems: 'center', gap: 8,
+    }}>
+      <span style={{
+        width: 22, height: 1, background: tone === 'dark' ? T.fgMute : T.inkMute,
+      }}/>
+      {children}
+    </div>
+  )
+}
+
+// Display H2 — editorial weight, restrained (no all-caps span with yellow highlight)
+function H2({ children, tone = 'dark', style = {} }) {
+  return (
+    <h2 style={{
+      fontSize: 'clamp(2rem, 4.4vw, 3.2rem)',
+      fontWeight: 500,
+      letterSpacing: '-.03em',
+      lineHeight: 1.05,
+      color: tone === 'dark' ? T.fg : T.ink0,
+      margin: '14px 0 0',
+      fontFamily: `'Fraunces', 'Playfair Display', Georgia, ui-serif, serif`,
+      ...style,
+    }}>{children}</h2>
+  )
+}
+// A subtle red accent inside H2s (replaces the noisy red-with-yellow-highlight)
+function Accent({ children }) {
+  return <em style={{ fontStyle: 'italic', color: T.red, fontWeight: 500 }}>{children}</em>
+}
+
+// Chromeless card on dark — soft raised surface with hairline
+function DarkCard({ children, style = {}, glow = false, ...rest }) {
+  return (
+    <div style={{
+      background: T.ink2,
+      border: `1px solid ${T.lineDark}`,
+      borderRadius: 20,
+      padding: 24,
+      transition: 'transform .2s ease, box-shadow .2s ease, border-color .2s ease',
+      boxShadow: glow ? GLOW : '0 20px 40px -20px rgba(0,0,0,.5)',
+      ...style,
+    }} {...rest}>{children}</div>
+  )
+}
+
+// Primary CTA — red gradient with glow
+function CTAButton({ to, children, size = 'md', tone = 'red' }) {
+  const pad = size === 'lg' ? '18px 30px' : '13px 22px'
+  const fs  = size === 'lg' ? '1.02rem' : '.92rem'
+  const bg  = tone === 'red'
+    ? `linear-gradient(180deg, ${T.red} 0%, ${T.redDeep} 100%)`
+    : `linear-gradient(180deg, #fff 0%, #eaeaea 100%)`
+  const fg  = tone === 'red' ? '#fff' : T.ink0
+  return (
+    <Link to={to} style={{
+      display: 'inline-flex', alignItems: 'center', gap: 10,
+      background: bg, color: fg,
+      padding: pad, borderRadius: 100,
+      fontSize: fs, fontWeight: 700, textDecoration: 'none',
+      border: tone === 'red'
+        ? '1px solid rgba(255,255,255,.14)'
+        : '1px solid rgba(0,0,0,.08)',
+      boxShadow: tone === 'red'
+        ? `0 12px 30px -8px rgba(255,48,73,.55), inset 0 1px 0 rgba(255,255,255,.18)`
+        : `0 12px 30px -12px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.6)`,
+      transition: 'transform .15s ease, box-shadow .15s ease',
+    }}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = tone === 'red' ? `0 20px 40px -8px rgba(255,48,73,.6), inset 0 1px 0 rgba(255,255,255,.18)` : `0 20px 40px -10px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.6)` }}
+      onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = tone === 'red' ? `0 12px 30px -8px rgba(255,48,73,.55), inset 0 1px 0 rgba(255,255,255,.18)` : `0 12px 30px -12px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.6)` }}
+    >{children}</Link>
+  )
+}
+
+function GhostButton({ href, children }) {
+  return (
+    <a href={href} style={{
+      display: 'inline-flex', alignItems: 'center', gap: 8,
+      color: T.fg, textDecoration: 'none',
+      padding: '13px 20px', fontWeight: 600, fontSize: '.92rem',
+      borderRadius: 100, border: `1px solid ${T.lineDark2}`,
+      background: 'rgba(255,255,255,.02)',
+    }}>{children}</a>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SECTION 1 — HERO (dark bento)
 // ═══════════════════════════════════════════════════════════════════
 function Hero({ characters, clips }) {
-  // Three live stages instead of one — "look, three examples running RIGHT
-  // NOW, all different" reads as social proof plus demo in one glance. Old
-  // hero had a single stage that felt more like a mockup than a product.
-  // Deterministic character/clip picks (index-based) keep the visual stable
-  // across renders and still cycle to the local seed if the API is empty.
-  const nOK = Math.max(characters.length, 1)
-  const p = (i) => characters[i % nOK] || null
+  const [topic, setTopic] = useState('')
+  const placeholders = ['iPhone vs Android', 'Ohio lore', 'Pizza vs Burger', 'Skibidi rizz', 'Cats vs Dogs']
+  const [phIdx, setPhIdx] = useState(0)
+
+  useEffect(() => {
+    const iv = setInterval(() => setPhIdx(i => (i + 1) % placeholders.length), 2400)
+    return () => clearInterval(iv)
+  }, [])
+
+  const n = Math.max(characters.length, 1)
+  const p = (i) => characters[i % n] || null
   const c = (i) => clips[i % Math.max(clips.length, 1)] || null
 
-  const stages = [
-    { title: 'IPHONE VS ANDROID', L: p(0), R: p(1), clip: c(0), shadow: P.brain,
-      dialogues: [
-        { text: 'IMESSAGE > 💬', speaker: 'left' },
-        { text: 'CUSTOM ROMS 🐧', speaker: 'right' },
-        { text: 'FACETIME 📱', speaker: 'left' },
-        { text: 'SIDELOAD 🔥', speaker: 'right' },
-      ] },
-    { title: 'OHIO LORE', L: p(2), R: null, clip: c(1), shadow: P.brain3,
-      charMode: 'single', entryVariant: 'zoom',
-      dialogues: [
-        { text: 'ONLY IN OHIO 🌽', speaker: 'left' },
-        { text: 'RIZZ: MAXED 💀', speaker: 'left' },
-        { text: 'NO CAP FR 🔥', speaker: 'left' },
-      ] },
-    { title: 'CATS VS DOGS', L: p(3), R: p(4), clip: c(2), shadow: P.brain2,
-      dialogues: [
-        { text: 'DOGS ARE LOYAL 🐕', speaker: 'left' },
-        { text: 'CATS RULE 👑', speaker: 'right', color: '#ff4dd8' },
-        { text: 'FETCH! 🎾', speaker: 'left' },
-        { text: 'PURR 😼', speaker: 'right', color: '#ff4dd8' },
-      ] },
-  ]
+  const heroStage = {
+    title: 'IPHONE VS ANDROID',
+    L: p(0), R: p(1), clip: c(0),
+    dialogues: [
+      { text: 'IMESSAGE > 💬', speaker: 'left' },
+      { text: 'CUSTOM ROMS 🐧', speaker: 'right' },
+      { text: 'FACETIME 📱', speaker: 'left' },
+      { text: 'SIDELOAD 🔥', speaker: 'right' },
+    ],
+    stats: { plays: '2.4M', comments: '12k', likes: '380k' },
+  }
 
   return (
     <section style={{
-      padding: 'clamp(48px, 7vw, 84px) 5% clamp(56px, 7vw, 80px)',
-      background: `linear-gradient(180deg, #fff 0%, ${P.paper} 55%, #fff 100%)`,
+      background: T.ink, color: T.fg,
       position: 'relative', overflow: 'hidden',
+      padding: 'clamp(60px, 8vw, 110px) 5% clamp(120px, 12vw, 160px)',
     }}>
-      {/* Dot grid — faded, focuses attention on the headline */}
+      {/* Aurora mesh — soft red glow bottom-left, deep purple top-right, subtle noise */}
       <div style={{
-        position: 'absolute', inset: 0, zIndex: 0,
-        backgroundImage: 'radial-gradient(rgba(207,19,34,.14) 1px, transparent 1px)',
-        backgroundSize: '22px 22px', opacity: .55,
-        WebkitMaskImage: 'radial-gradient(ellipse 70% 55% at 50% 20%, black 35%, transparent 100%)',
-        maskImage: 'radial-gradient(ellipse 70% 55% at 50% 20%, black 35%, transparent 100%)',
+        position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none',
+        background:
+          `radial-gradient(ellipse 90% 60% at 20% 100%, rgba(255,48,73,.28) 0%, transparent 55%),` +
+          `radial-gradient(ellipse 70% 55% at 90% 0%, rgba(124,58,237,.16) 0%, transparent 55%),` +
+          `radial-gradient(ellipse 50% 40% at 60% 60%, rgba(255,48,73,.08) 0%, transparent 60%)`,
+      }}/>
+      {/* Grain */}
+      <div style={{
+        position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none',
+        opacity: .35, mixBlendMode: 'overlay',
+        backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.2' stitchTiles='stitch'/></filter><rect width='200' height='200' filter='url(%23n)' opacity='.6'/></svg>")`,
       }}/>
 
-      <div style={{
+      <div className="br-hero-bento" style={{
         position: 'relative', zIndex: 1,
-        maxWidth: 1080, margin: '0 auto',
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
-        textAlign: 'center',
+        maxWidth: 1240, margin: '0 auto',
+        display: 'grid', gridTemplateColumns: '1.15fr .85fr', gap: 60, alignItems: 'center',
       }}>
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 8,
-          background: '#fff', border: `1.5px solid ${P.brain}`,
-          color: P.brain, borderRadius: 100,
-          padding: '6px 14px', fontSize: '.72rem', fontWeight: 800,
-          letterSpacing: '.06em', marginBottom: 22,
-        }}>
-          <span style={{
-            width: 7, height: 7, background: P.brain, borderRadius: '50%',
-            display: 'inline-block', animation: 'br-pulse-dot 1.4s ease-in-out infinite',
-          }}/>
-          POSTING BRAINROT · 3,800+ CREATORS · LIVE NOW
-        </div>
-
-        <h1 className="br-hero-h1" style={{
-          fontSize: 'clamp(2.4rem, 6.2vw, 4.2rem)', fontWeight: 900,
-          letterSpacing: '-.035em', lineHeight: 1.02,
-          marginBottom: 18, color: P.ink, maxWidth: 900,
-        }}>
-          Post viral brainrot.{' '}
-          <span style={{ color: P.brain, position: 'relative', display: 'inline-block' }}>
-            Every day.
-            <svg style={{ position: 'absolute', bottom: -8, left: 0, width: '100%', height: 12 }} viewBox="0 0 320 12" preserveAspectRatio="none">
-              <path d="M2,9 Q80,1 160,6 Q240,11 318,4" stroke={P.brain} strokeWidth="4" fill="none" strokeLinecap="round"/>
-            </svg>
-          </span>
-          <br/>
-          In 60 seconds. Zero editing.
-        </h1>
-
-        <p style={{
-          fontSize: 'clamp(.98rem, 1.5vw, 1.15rem)', color: '#4a4a4a', lineHeight: 1.5,
-          marginBottom: 28, maxWidth: 620,
-        }}>
-          Type a topic. Pick two characters. Get a TikTok-ready clip with
-          gameplay, TTS voices, and burned-in captions.{' '}
-          <strong style={{ color: P.ink }}>No editor, no timeline, no export queue.</strong>
-        </p>
-
-        <div style={{
-          display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap',
-          justifyContent: 'center', marginBottom: 14,
-        }}>
-          <Link to="/brainrot/studio" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            background: P.brain, color: '#fff', textDecoration: 'none',
-            padding: '15px 30px', borderRadius: 12, fontSize: '1rem', fontWeight: 900,
-            border: `2px solid ${P.ink}`, boxShadow: `4px 4px 0 ${P.ink}`,
-            transition: 'transform .1s, box-shadow .1s',
-          }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translate(-2px,-2px)'; e.currentTarget.style.boxShadow = `6px 6px 0 ${P.ink}` }}
-            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = `4px 4px 0 ${P.ink}` }}
-          >Start free — 2 clips on us →</Link>
-          <a href="#examples" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            color: P.ink, textDecoration: 'none',
-            padding: '15px 20px', fontWeight: 700, fontSize: '.9rem',
+        {/* Left: headline + input */}
+        <div>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 10,
+            padding: '6px 14px', borderRadius: 100,
+            background: 'rgba(255,255,255,.05)',
+            border: `1px solid ${T.lineDark2}`,
+            fontSize: '.72rem', color: T.fg, fontWeight: 600,
+            letterSpacing: '.06em',
+            marginBottom: 24,
           }}>
-            <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>▶</span> Watch it work
-          </a>
-        </div>
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%', background: T.green,
+              boxShadow: `0 0 10px ${T.green}`,
+              animation: 'br-pulse-dot 1.6s ease-in-out infinite',
+            }}/>
+            3,800+ creators shipping brainrot right now
+          </div>
 
-        <div style={{
-          display: 'flex', gap: 20, flexWrap: 'wrap', justifyContent: 'center',
-          fontSize: '.76rem', color: P.mute, fontWeight: 600, marginBottom: 44,
-        }}>
-          <span>✓ No credit card</span>
-          <span>✓ 100+ characters</span>
-          <span>✓ 1080p exports</span>
-          <span>✓ Cancel anytime</span>
-        </div>
+          <h1 style={{
+            fontSize: 'clamp(2.6rem, 5.6vw, 4.6rem)',
+            fontWeight: 400, lineHeight: 1.02, letterSpacing: '-.035em',
+            margin: '0 0 22px', color: T.fg,
+            fontFamily: `'Fraunces', 'Playfair Display', Georgia, ui-serif, serif`,
+          }}>
+            Post viral brainrot,{' '}
+            <em style={{ fontStyle: 'italic', color: T.red }}>every day.</em>
+            <br/>
+            <span style={{ color: T.fg }}>In 60 seconds. Zero editing.</span>
+          </h1>
 
-        {/* Three live stages, side-by-side. Auto-plays real API clips in the
-            background of each. Wraps and shrinks on mobile via media query. */}
-        <div className="br-hero-stages" style={{
-          display: 'flex', gap: 18, justifyContent: 'center',
-          alignItems: 'flex-end', width: '100%',
-        }}>
-          {stages.map((s, i) => (
-            <div key={i} style={{
-              transform: i === 1 ? 'translateY(-16px)' : 'none',
-              opacity: i === 1 ? 1 : .95,
+          <p style={{
+            fontSize: 'clamp(1rem, 1.3vw, 1.1rem)',
+            color: T.fgMute, lineHeight: 1.55, maxWidth: 520, margin: '0 0 28px',
+            fontWeight: 400,
+          }}>
+            Type a topic. Pick two characters. Get a TikTok-ready clip with
+            gameplay, TTS voices, and burned-in captions —{' '}
+            <span style={{ color: T.fg }}>no timeline, no export queue.</span>
+          </p>
+
+          {/* Inline "try a topic" input — the CTA everyone actually wants */}
+          <form
+            onSubmit={(e) => { e.preventDefault(); window.location.href = `/brainrot/studio${topic ? `?topic=${encodeURIComponent(topic)}` : ''}` }}
+            style={{
+              display: 'flex', alignItems: 'center',
+              background: 'rgba(255,255,255,.04)',
+              border: `1px solid ${T.lineDark2}`,
+              borderRadius: 100, padding: '6px 6px 6px 22px',
+              maxWidth: 520, marginBottom: 18,
+              boxShadow: '0 20px 60px -20px rgba(0,0,0,.6)',
+              backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+            }}
+            onFocus={e => e.currentTarget.style.borderColor = 'rgba(255,48,73,.4)'}
+            onBlur={e => e.currentTarget.style.borderColor = T.lineDark2}
+          >
+            <input
+              value={topic}
+              onChange={e => setTopic(e.target.value)}
+              placeholder={`Try "${placeholders[phIdx]}"…`}
+              style={{
+                flex: 1, background: 'transparent', border: 'none', outline: 'none',
+                color: T.fg, fontSize: '.98rem', fontWeight: 500,
+                padding: '12px 0',
+              }}
+            />
+            <button type="submit" style={{
+              cursor: 'pointer',
+              background: `linear-gradient(180deg, ${T.red}, ${T.redDeep})`,
+              color: '#fff', border: '1px solid rgba(255,255,255,.14)',
+              padding: '12px 22px', borderRadius: 100,
+              fontSize: '.9rem', fontWeight: 700,
+              boxShadow: `0 8px 24px -6px rgba(255,48,73,.55), inset 0 1px 0 rgba(255,255,255,.2)`,
+              display: 'inline-flex', alignItems: 'center', gap: 8,
             }}>
-              <LiveStage
-                leftChar={s.L} rightChar={s.R} clip={s.clip}
-                title={s.title}
-                width={i === 1 ? 232 : 200}
-                shadowColor={s.shadow}
-                charMode={s.charMode || 'rotate2'}
-                entryVariant={s.entryVariant || (i === 0 ? 'whoosh_left' : 'swoosh_right')}
-                dialogues={s.dialogues}
-                showStats={i === 1}
-                stats={i === 1 ? { plays: '2.4M', comments: '12k', likes: '380k' } : null}
-              />
+              Make clip →
+            </button>
+          </form>
+
+          <div style={{
+            display: 'flex', gap: 22, flexWrap: 'wrap',
+            fontSize: '.78rem', color: T.fgFaint, fontWeight: 500,
+          }}>
+            <span>✓ No credit card</span>
+            <span>✓ 2 free clips</span>
+            <span>✓ 100+ characters</span>
+            <span>✓ 1080p exports</span>
+          </div>
+        </div>
+
+        {/* Right: single big hero stage with glow */}
+        <div className="br-hero-stage-wrap" style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}>
+          <LiveStage
+            leftChar={heroStage.L} rightChar={heroStage.R} clip={heroStage.clip}
+            title={heroStage.title}
+            width={320}
+            dialogues={heroStage.dialogues}
+            showStats stats={heroStage.stats}
+            glow
+            entryVariant="whoosh_left"
+          />
+          {/* Floating pill: "shipped 2 min ago" — social proof */}
+          <div style={{
+            position: 'absolute', top: -14, right: -18,
+            background: T.ink3, color: T.fg,
+            padding: '8px 14px', borderRadius: 100,
+            fontSize: '.72rem', fontWeight: 600,
+            border: `1px solid ${T.lineDark2}`,
+            boxShadow: '0 12px 30px -8px rgba(0,0,0,.6)',
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+          }}>
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%', background: T.green,
+              boxShadow: `0 0 8px ${T.green}`,
+            }}/>
+            Shipped 2 min ago
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SECTION 2 — PROOF STRIP (overlapping glass panel)
+// ═══════════════════════════════════════════════════════════════════
+function ProofStrip() {
+  const stats = [
+    { n: '18,240', l: 'clips made this month' },
+    { n: '3,800+', l: 'creators shipping brainrot' },
+    { n: '92M',    l: 'views generated' },
+    { n: '~60s',   l: 'topic → downloadable MP4' },
+  ]
+  return (
+    <div style={{
+      background: T.ink,
+      padding: '0 5% 60px',
+      marginTop: '-80px', position: 'relative', zIndex: 3,
+    }}>
+      <div style={{
+        maxWidth: 1120, margin: '0 auto',
+        background: 'rgba(23,23,27,.72)',
+        border: `1px solid ${T.lineDark2}`,
+        backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+        borderRadius: 24,
+        padding: '28px 32px',
+        boxShadow: '0 40px 100px -30px rgba(0,0,0,.7)',
+      }}>
+        <div className="br-proof-grid" style={{
+          display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: 24, alignItems: 'center',
+        }}>
+          {stats.map((s, i) => (
+            <div key={s.l} style={{
+              textAlign: 'center', position: 'relative',
+              borderLeft: i > 0 ? `1px solid ${T.lineDark}` : 'none',
+              padding: '4px 0',
+            }}>
+              <div style={{
+                fontSize: 'clamp(1.6rem, 3.2vw, 2.4rem)',
+                fontWeight: 500, letterSpacing: '-.03em',
+                color: T.fg, lineHeight: 1,
+                fontFamily: `'Fraunces', Georgia, serif`,
+              }}>{s.n}</div>
+              <div style={{
+                fontSize: '.7rem', color: T.fgMute, marginTop: 10,
+                letterSpacing: '.06em', fontWeight: 500,
+              }}>{s.l}</div>
             </div>
           ))}
         </div>
       </div>
-    </section>
+    </div>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Section: PARADE (infinite marquee of real character portraits)
+//  SECTION 3 — CHARACTER MARQUEE (hairline, dark)
 // ═══════════════════════════════════════════════════════════════════
-function Parade({ characters }) {
-  // Always pull a diverse 20 for the marquee — enough variety that the
-  // seamless duplicate-and-loop reads as "the whole roster cycling past",
-  // never a visibly repeating set. The "100+" claim below is a true total
-  // roster count (see Roster's totalLabel comment), independent of how
-  // many characters are actually rendered here.
+function Marquee({ characters }) {
   const shown = characters.slice(0, 20)
   const loop = [...shown, ...shown]
   const totalLabel = characters.length > 20 ? `${characters.length}` : '100+'
-
   return (
-    <section id="characters" style={{ background: P.ink, padding: '48px 0', overflow: 'hidden', position: 'relative' }}>
-      <div style={{ color: '#fff', textAlign: 'center', marginBottom: 28, fontSize: '.8rem', letterSpacing: '.1em', fontWeight: 800, textTransform: 'uppercase' }}>
-        Meet the roster · <span style={{ color: P.brain3 }}>{totalLabel}</span> characters · click any to try
+    <div style={{
+      background: T.ink, padding: '48px 0 32px',
+      borderTop: `1px solid ${T.lineDark}`, borderBottom: `1px solid ${T.lineDark}`,
+      overflow: 'hidden', position: 'relative',
+    }}>
+      <div style={{
+        textAlign: 'center', marginBottom: 24,
+        fontSize: '.72rem', color: T.fgMute,
+        letterSpacing: '.14em', fontWeight: 600, textTransform: 'uppercase',
+      }}>
+        The roster · {totalLabel} characters, one click away
       </div>
       <div style={{
-        display: 'flex', gap: 14,
-        animation: 'br-marquee 40s linear infinite',
+        display: 'flex', gap: 40, alignItems: 'center',
+        animation: 'br-marquee 60s linear infinite',
         width: 'max-content',
       }}>
         {loop.map((c, i) => (
           <Link key={`${c.id}-${i}`} to="/brainrot/studio" style={{
-            flexShrink: 0, width: 140,
-            background: '#fff', border: `2px solid ${P.brain}`, borderRadius: 12,
-            padding: '12px 8px', textAlign: 'center', textDecoration: 'none', color: P.ink,
-            transition: 'transform .15s, box-shadow .15s',
+            flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12,
+            textDecoration: 'none', color: T.fg,
+            opacity: .75, transition: 'opacity .2s',
           }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = `4px 4px 0 ${P.brain}` }}
-            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '' }}
+            onMouseEnter={e => e.currentTarget.style.opacity = 1}
+            onMouseLeave={e => e.currentTarget.style.opacity = .75}
           >
             <div style={{
-              width: 82, height: 82, margin: '0 auto 8px', borderRadius: '50%',
-              border: `2px solid ${P.ink}`, overflow: 'hidden',
-              background: '#fee2e2',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 44, height: 44, borderRadius: '50%',
+              overflow: 'hidden', border: `1px solid ${T.lineDark2}`,
+              background: T.ink3, flexShrink: 0,
             }}>
-              <img
-                src={c.image_url} alt={c.name}
+              <img src={c.image_url} alt=""
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 onError={e => { e.currentTarget.style.display = 'none' }}
               />
             </div>
-            <div style={{ fontSize: '.76rem', fontWeight: 800 }}>{c.name}</div>
-            <div style={{ fontSize: '.6rem', color: P.brain, fontWeight: 700, marginTop: 2 }}>{c.archetype}</div>
+            <div style={{ fontSize: '.86rem', fontWeight: 500 }}>{c.name}</div>
+            <span style={{ width: 3, height: 3, background: T.fgFaint, borderRadius: '50%' }}/>
+            <div style={{ fontSize: '.72rem', color: T.fgFaint }}>{c.archetype}</div>
           </Link>
         ))}
       </div>
-    </section>
+    </div>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Section: HOW IT WORKS
+//  SECTION 4 — ENGINE (light bento: what's inside)
+// ═══════════════════════════════════════════════════════════════════
+function Engine({ characters, clips }) {
+  const n = Math.max(characters.length, 1)
+  const p = (i) => characters[i % n] || null
+  const c = (i) => clips[i % Math.max(clips.length, 1)] || null
+
+  const chars10 = characters.slice(0, 10)
+  const gameplayChips = ['Minecraft parkour', 'Subway Surfers', 'GTA V driving', 'Fortnite builds', 'Rocket League', 'Trackmania']
+  const captionChips = ['Karaoke', 'Hormozi', 'MrBeast', 'Neon', 'Word Pop', 'Typewriter', 'Minimal']
+
+  return (
+    <Section id="characters" tone="light" wide>
+      <div style={{ maxWidth: 760, marginBottom: 56 }}>
+        <Eyebrow tone="light">The engine</Eyebrow>
+        <H2 tone="light">Every piece that makes a clip <Accent>go viral</Accent>, already assembled.</H2>
+        <p style={{ color: T.inkMute, fontSize: '1.02rem', lineHeight: 1.55, marginTop: 18, maxWidth: 620 }}>
+          You bring a topic. We handle characters, voices, gameplay footage, and
+          burned-in captions in the style that's actually trending this week.
+        </p>
+      </div>
+
+      {/* Bento grid */}
+      <div className="br-engine-bento" style={{
+        display: 'grid',
+        gridTemplateColumns: '1.05fr 1.4fr',
+        gridTemplateRows: 'auto auto',
+        gap: 20,
+      }}>
+        {/* Featured stage — spans 2 rows */}
+        <div style={{
+          gridRow: 'span 2',
+          borderRadius: 24,
+          background: `linear-gradient(180deg, ${T.ink} 0%, #191922 100%)`,
+          padding: 28, position: 'relative', overflow: 'hidden',
+          border: `1px solid ${T.lineLight2}`,
+          display: 'flex', flexDirection: 'column', gap: 24,
+          minHeight: 560,
+        }}>
+          <div>
+            <div style={{ fontSize: '.68rem', color: T.fgMute, letterSpacing: '.14em', fontWeight: 600, textTransform: 'uppercase' }}>
+              Live preview
+            </div>
+            <div style={{ fontSize: '1.4rem', color: T.fg, fontWeight: 500, marginTop: 6, fontFamily: `'Fraunces', Georgia, serif` }}>
+              What lands on TikTok.
+            </div>
+            <div style={{ fontSize: '.86rem', color: T.fgMute, marginTop: 6, lineHeight: 1.5 }}>
+              Real character, real gameplay footage, real caption style.
+            </div>
+          </div>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'flex-end' }}>
+            <LiveStage
+              leftChar={p(2)} rightChar={null} clip={c(1)}
+              title="OHIO LORE" width={260}
+              charMode="single" entryVariant="zoom"
+              dialogues={[
+                { text: 'ONLY IN OHIO 🌽', speaker: 'left' },
+                { text: 'RIZZ: MAXED 💀', speaker: 'left' },
+                { text: 'NO CAP FR 🔥', speaker: 'left' },
+              ]}
+              showStats stats={{ plays: '3.1M', comments: '19k', likes: '510k' }}
+            />
+          </div>
+        </div>
+
+        {/* Character grid card */}
+        <div style={{
+          borderRadius: 24, padding: 28,
+          background: T.cream, border: `1px solid ${T.lineLight}`,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
+            <div>
+              <div style={{ fontSize: '.68rem', color: T.inkMute, letterSpacing: '.14em', fontWeight: 600, textTransform: 'uppercase' }}>
+                Roster
+              </div>
+              <div style={{ fontSize: '1.25rem', color: T.ink0, fontWeight: 500, marginTop: 4, fontFamily: `'Fraunces', Georgia, serif` }}>
+                100+ characters, one tap.
+              </div>
+            </div>
+            <Link to="/brainrot/studio" style={{
+              fontSize: '.78rem', color: T.ink0, textDecoration: 'none',
+              padding: '6px 12px', borderRadius: 100,
+              border: `1px solid ${T.lineLight2}`, background: '#fff', fontWeight: 500,
+            }}>Browse all →</Link>
+          </div>
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12,
+          }}>
+            {chars10.map(ch => (
+              <div key={ch.id} style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+              }}>
+                <div style={{
+                  width: 62, height: 62, borderRadius: '50%',
+                  overflow: 'hidden', border: `1px solid ${T.lineLight2}`,
+                  background: '#fff',
+                }}>
+                  <img src={ch.image_url} alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={e => e.currentTarget.style.display = 'none'}/>
+                </div>
+                <div style={{ fontSize: '.66rem', color: T.ink0, fontWeight: 500, textAlign: 'center', lineHeight: 1.2 }}>
+                  {ch.name.split(' ')[0]}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Two-up: Gameplay + Captions */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20,
+        }}>
+          <div style={{
+            borderRadius: 24, padding: 24,
+            background: '#fff', border: `1px solid ${T.lineLight}`,
+            display: 'flex', flexDirection: 'column', gap: 14,
+          }}>
+            <div>
+              <div style={{ fontSize: '.68rem', color: T.inkMute, letterSpacing: '.14em', fontWeight: 600, textTransform: 'uppercase' }}>
+                Gameplay
+              </div>
+              <div style={{ fontSize: '1.05rem', color: T.ink0, fontWeight: 500, marginTop: 4, fontFamily: `'Fraunces', Georgia, serif` }}>
+                Curated 9:16, ready to burn in.
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+              {gameplayChips.map(g => (
+                <span key={g} style={{
+                  fontSize: '.72rem', padding: '5px 10px',
+                  borderRadius: 100, background: T.cream2, color: T.ink0,
+                  border: `1px solid ${T.lineLight}`, fontWeight: 500,
+                }}>{g}</span>
+              ))}
+            </div>
+          </div>
+
+          <div style={{
+            borderRadius: 24, padding: 24,
+            background: '#fff', border: `1px solid ${T.lineLight}`,
+            display: 'flex', flexDirection: 'column', gap: 14,
+          }}>
+            <div>
+              <div style={{ fontSize: '.68rem', color: T.inkMute, letterSpacing: '.14em', fontWeight: 600, textTransform: 'uppercase' }}>
+                Captions
+              </div>
+              <div style={{ fontSize: '1.05rem', color: T.ink0, fontWeight: 500, marginTop: 4, fontFamily: `'Fraunces', Georgia, serif` }}>
+                16 trending styles, always current.
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+              {captionChips.map(c => (
+                <span key={c} style={{
+                  fontSize: '.72rem', padding: '5px 10px',
+                  borderRadius: 100, background: T.cream2, color: T.ink0,
+                  border: `1px solid ${T.lineLight}`, fontWeight: 500,
+                }}>{c}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </Section>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SECTION 5 — HOW IT WORKS (horizontal timeline)
 // ═══════════════════════════════════════════════════════════════════
 function HowItWorks() {
   const steps = [
     { n: 1, title: 'Type a topic', body: 'Or write your own dialogue.', demo: <TypingDemo /> },
-    { n: 2, title: 'Pick 2 chars',  body: '100+ characters, gender-matched voices.', demo: <VsDemo /> },
-    { n: 3, title: 'Pick gameplay',  body: 'Minecraft, Subway, GTA, more.', demo: <BgDemo /> },
-    { n: 4, title: 'Download MP4',   body: '1080×1920, captioned, TikTok-ready.', demo: <RenderDemo /> },
+    { n: 2, title: 'Pick 2 chars', body: '100+ characters, voices auto-matched.', demo: <VsDemo /> },
+    { n: 3, title: 'Pick gameplay', body: 'Minecraft, Subway, GTA, more.', demo: <BgDemo /> },
+    { n: 4, title: 'Download MP4', body: '1080×1920, captioned, ready.', demo: <RenderDemo /> },
   ]
-
   return (
-    <section id="how" style={{ padding: '72px 5%', background: '#fff' }}>
-      <div style={{ textAlign: 'center', marginBottom: 40, maxWidth: 720, margin: '0 auto 40px' }}>
-        <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.2rem)', fontWeight: 900, letterSpacing: '-.02em' }}>
-          4 clicks. <span style={{ color: P.brain, position: 'relative', display: 'inline-block' }}>
-            Zero editing.
-            <span style={{ position: 'absolute', left: 0, right: 0, bottom: -3, height: 6, background: P.yellow, zIndex: -1 }}/>
-          </span>
-        </h2>
-        <p style={{ color: P.mute, fontSize: '.94rem', marginTop: 8 }}>
-          From blank topic → uploaded to TikTok. In about 60 seconds.
+    <Section id="how" tone="cream">
+      <div style={{ maxWidth: 720, marginBottom: 56 }}>
+        <Eyebrow tone="light">The workflow</Eyebrow>
+        <H2 tone="light">Four clicks. <Accent>Zero editing.</Accent></H2>
+        <p style={{ color: T.inkMute, fontSize: '1.02rem', lineHeight: 1.55, marginTop: 18 }}>
+          Blank topic to uploaded on TikTok in about 60 seconds.
         </p>
       </div>
-      <div className="br-steps" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, maxWidth: 1000, margin: '0 auto' }}>
-        {steps.map(s => (
-          <div key={s.n} style={{
-            background: '#fff', border: `2px solid ${P.ink}`, borderRadius: 14,
-            padding: 18, boxShadow: sh(4), position: 'relative',
-          }}>
-            <div style={{
-              position: 'absolute', top: -14, left: -14,
-              width: 36, height: 36, background: P.brain, color: '#fff',
-              borderRadius: 10, border: `2px solid ${P.ink}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: 900, fontSize: '1rem', boxShadow: `2px 2px 0 ${P.ink}`,
-            }}>{s.n}</div>
-            <div style={{
-              background: P.brainTint, borderRadius: 8, height: 92,
-              margin: '10px 0 12px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              overflow: 'hidden', position: 'relative',
-            }}>{s.demo}</div>
-            <h3 style={{ fontSize: '.94rem', fontWeight: 800, marginBottom: 4 }}>{s.title}</h3>
-            <p style={{ fontSize: '.78rem', color: P.mute, lineHeight: 1.4 }}>{s.body}</p>
-          </div>
-        ))}
+
+      {/* Timeline */}
+      <div className="br-steps" style={{ position: 'relative' }}>
+        {/* Connective line */}
+        <div style={{
+          position: 'absolute', top: 68, left: '6%', right: '6%',
+          height: 1, background: `linear-gradient(90deg, transparent, ${T.lineLight2}, ${T.lineLight2}, transparent)`,
+          zIndex: 0,
+        }}/>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, position: 'relative', zIndex: 1 }}>
+          {steps.map(s => (
+            <div key={s.n} style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
+            }}>
+              <div style={{
+                width: 46, height: 46, borderRadius: '50%',
+                background: '#fff', border: `1px solid ${T.lineLight2}`,
+                color: T.ink0, fontWeight: 600,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '.9rem', marginBottom: 20,
+                boxShadow: '0 4px 12px rgba(0,0,0,.06)',
+                fontFamily: `'Fraunces', Georgia, serif`,
+              }}>{s.n}</div>
+              <div style={{
+                background: '#fff', border: `1px solid ${T.lineLight}`,
+                borderRadius: 18, padding: 20, width: '100%',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+                minHeight: 200,
+              }}>
+                <div style={{
+                  height: 88, width: '100%',
+                  background: T.cream, borderRadius: 12,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  overflow: 'hidden', border: `1px solid ${T.lineLight}`,
+                }}>{s.demo}</div>
+                <div>
+                  <div style={{ fontSize: '.96rem', fontWeight: 600, color: T.ink0 }}>{s.title}</div>
+                  <div style={{ fontSize: '.8rem', color: T.inkMute, marginTop: 4, lineHeight: 1.4 }}>{s.body}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-    </section>
+    </Section>
   )
 }
 function TypingDemo() {
@@ -610,31 +918,31 @@ function TypingDemo() {
   }, [])
   return (
     <div style={{
-      background: '#fff', color: P.ink, fontSize: '.72rem',
-      fontWeight: 700, padding: 8, fontFamily: 'ui-monospace, Menlo, monospace',
-      width: '80%', border: `1.5px solid ${P.ink}`, borderRadius: 6,
+      background: '#fff', color: T.ink0, fontSize: '.74rem',
+      fontWeight: 500, padding: '8px 12px', fontFamily: 'ui-monospace, Menlo, monospace',
+      width: '86%', border: `1px solid ${T.lineLight2}`, borderRadius: 8,
     }}>
-      <span style={{ background: P.ink, color: P.yellow, padding: '2px 5px', borderRadius: 3, marginRight: 4 }}>▎</span>
-      {t}<span style={{ animation: 'br-blink 1s step-end infinite' }}>|</span>
+      {t}<span style={{ animation: 'br-blink 1s step-end infinite' }}>▍</span>
     </div>
   )
 }
 function VsDemo() {
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-      <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'radial-gradient(circle at 30% 30%, #ffd6d6, #fca5a5)', border: `2px solid ${P.ink}` }}/>
-      <div style={{ fontWeight: 900, color: P.brain2, fontSize: '.86rem' }}>VS</div>
-      <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'radial-gradient(circle at 30% 30%, #d6e4ff, #a5b4fc)', border: `2px solid ${P.ink}` }}/>
+    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+      <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'radial-gradient(circle at 30% 30%, #ffd6d6, #fca5a5)', border: `1px solid ${T.lineLight2}` }}/>
+      <div style={{ fontWeight: 600, color: T.red, fontSize: '.78rem', fontFamily: `'Fraunces', Georgia, serif`, fontStyle: 'italic' }}>vs</div>
+      <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'radial-gradient(circle at 30% 30%, #d6e4ff, #a5b4fc)', border: `1px solid ${T.lineLight2}` }}/>
     </div>
   )
 }
 function BgDemo() {
   return (
     <div style={{
-      width: '80%', height: '80%',
-      borderRadius: 6, border: `2px solid ${P.ink}`,
-      color: '#fff', fontSize: '.64rem', fontWeight: 800,
+      width: '86%', height: '86%',
+      borderRadius: 8, border: `1px solid ${T.lineLight2}`,
+      color: '#fff', fontSize: '.62rem', fontWeight: 700,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
+      letterSpacing: '.08em',
       ...BG_STYLES.minecraft,
     }}>MINECRAFT</div>
   )
@@ -647,19 +955,19 @@ function RenderDemo() {
   }, [])
   return (
     <div style={{
-      background: P.ink, color: P.brain3, fontFamily: 'ui-monospace, Menlo, monospace',
-      fontSize: '.66rem', padding: 8, borderRadius: 6, width: '85%',
+      background: T.ink, color: T.green, fontFamily: 'ui-monospace, Menlo, monospace',
+      fontSize: '.66rem', padding: 10, borderRadius: 8, width: '86%',
     }}>
       Rendering… {pct}%
-      <div style={{ width: '100%', height: 5, background: '#333', borderRadius: 3, marginTop: 5 }}>
-        <div style={{ width: `${pct}%`, height: '100%', background: P.brain3, borderRadius: 3, transition: 'width .12s' }}/>
+      <div style={{ width: '100%', height: 4, background: '#2a2a2e', borderRadius: 3, marginTop: 6 }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: T.green, borderRadius: 3, transition: 'width .12s' }}/>
       </div>
     </div>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Section: EXAMPLE CLIP WALL — 5 clips, alternating 2-char/1-char rows
+//  SECTION 6 — CLIP WALL (dark, varied-size)
 // ═══════════════════════════════════════════════════════════════════
 function ClipWall({ characters, clips }) {
   const n = Math.max(characters.length, 1)
@@ -668,452 +976,381 @@ function ClipWall({ characters, clips }) {
   const pickClip   = (offset) => clips[offset % Math.max(clips.length, 1)] || null
 
   const CARDS = useMemo(() => [
-    // 1 — two alternating chars, pop from bottom
-    {
-      title: 'CATS VS DOGS',
-      charMode: 'rotate2', entryVariant: 'pop',
-      leftChar: pickPair(0, 1)[0], rightChar: pickPair(0, 1)[1],
-      clip: pickClip(0), shadowColor: P.brain3,
+    { title: 'CATS VS DOGS', charMode: 'rotate2', entryVariant: 'pop',
+      leftChar: pickPair(0, 1)[0], rightChar: pickPair(0, 1)[1], clip: pickClip(0),
       dialogues: [
         { text: 'DOGS ARE THE BEST 🐕', speaker: 'left' },
         { text: 'CATS RULE THE HOUSE 👑', speaker: 'right', color: '#ff4dd8' },
         { text: 'FETCH THE BALL! 🎾', speaker: 'left' },
         { text: 'PURRRR 😼', speaker: 'right', color: '#ff4dd8' },
       ],
-      stats: { plays: '2.4M', comments: '12k', likes: '380k' },
+      stats: { plays: '2.4M', comments: '12k', likes: '380k' }, size: 210,
     },
-    // 2 — single constant char, whoosh from left
-    {
-      title: 'OHIO LORE',
-      charMode: 'single', entryVariant: 'whoosh_left',
-      leftChar: pickSingle(2), rightChar: null,
-      clip: pickClip(1), shadowColor: P.brain2,
+    { title: 'OHIO LORE', charMode: 'single', entryVariant: 'whoosh_left',
+      leftChar: pickSingle(2), rightChar: null, clip: pickClip(1),
       dialogues: [
         { text: 'ONLY IN OHIO 🌽', speaker: 'left' },
         { text: 'RIZZ LEVEL: MAX 💀', speaker: 'left' },
         { text: 'OHIO IS BUILT DIFF', speaker: 'left' },
         { text: 'NO CAP FR FR 🔥', speaker: 'left' },
       ],
-      stats: { plays: '3.1M', comments: '19k', likes: '510k' },
+      stats: { plays: '3.1M', comments: '19k', likes: '510k' }, size: 240,
     },
-    // 3 — two diff alternating chars, zoom in
-    {
-      title: 'PIZZA VS BURGER',
-      charMode: 'rotate2', entryVariant: 'zoom',
-      leftChar: pickPair(4, 5)[0], rightChar: pickPair(4, 5)[1],
-      clip: pickClip(2), shadowColor: P.yellow,
+    { title: 'PIZZA VS BURGER', charMode: 'rotate2', entryVariant: 'zoom',
+      leftChar: pickPair(4, 5)[0], rightChar: pickPair(4, 5)[1], clip: pickClip(2),
       dialogues: [
         { text: 'PIZZA IS LIFE 🍕', speaker: 'left' },
         { text: 'BURGERS RULE 🍔', speaker: 'right', color: '#ff4dd8' },
         { text: 'PINEAPPLE? YES 🍍', speaker: 'left' },
         { text: 'CHEESE >>> 🧀', speaker: 'right', color: '#ff4dd8' },
       ],
-      stats: { plays: '1.7M', comments: '8.9k', likes: '260k' },
+      stats: { plays: '1.7M', comments: '8.9k', likes: '260k' }, size: 200,
     },
-    // 4 — single constant char, drop from top
-    {
-      title: 'SKIBIDI LORE',
-      charMode: 'single', entryVariant: 'drop',
-      leftChar: pickSingle(6), rightChar: null,
-      clip: pickClip(3), shadowColor: P.brain,
+    { title: 'SKIBIDI LORE', charMode: 'single', entryVariant: 'drop',
+      leftChar: pickSingle(6), rightChar: null, clip: pickClip(3),
       dialogues: [
         { text: 'SKIBIDI RIZZ 🚽', speaker: 'left' },
         { text: 'GYATT UNLOCKED 💪', speaker: 'left' },
         { text: 'SIGMA GRINDSET 📈', speaker: 'left' },
         { text: 'NO SKIPS 🔥', speaker: 'left' },
       ],
-      stats: { plays: '4.8M', comments: '34k', likes: '820k' },
+      stats: { plays: '4.8M', comments: '34k', likes: '820k' }, size: 240,
     },
-    // 5 — two diff alternating chars, swoosh from right
-    {
-      title: 'IPHONE VS ANDROID',
-      charMode: 'rotate2', entryVariant: 'swoosh_right',
-      leftChar: pickPair(8, 9)[0], rightChar: pickPair(8, 9)[1],
-      clip: pickClip(4), shadowColor: P.brain2,
+    { title: 'IPHONE VS ANDROID', charMode: 'rotate2', entryVariant: 'swoosh_right',
+      leftChar: pickPair(8, 9)[0], rightChar: pickPair(8, 9)[1], clip: pickClip(4),
       dialogues: [
         { text: 'IPHONE = 💎', speaker: 'left' },
         { text: 'ANDROID CUSTOMIZES 🔧', speaker: 'right' },
         { text: 'IMESSAGE > 💬', speaker: 'left' },
         { text: 'FREEDOM 🐧', speaker: 'right' },
       ],
-      stats: { plays: '890k', comments: '5.2k', likes: '120k' },
+      stats: { plays: '890k', comments: '5.2k', likes: '120k' }, size: 210,
     },
   ], [characters, clips])
 
   return (
-    <section id="examples" style={{ padding: '72px 5%', overflow: 'hidden' }}>
-      <div style={{ textAlign: 'center', marginBottom: 40 }}>
-        <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.2rem)', fontWeight: 900, letterSpacing: '-.02em' }}>
-          Real clips, <span style={{ color: P.brain, position: 'relative', display: 'inline-block' }}>
-            real reach.
-            <span style={{ position: 'absolute', left: 0, right: 0, bottom: -3, height: 6, background: P.yellow, zIndex: -1 }}/>
-          </span>
-        </h2>
-        <p style={{ color: P.mute, fontSize: '.92rem', marginTop: 8 }}>
-          Each preview uses different characters, different gameplay, different dialogue.
+    <Section id="examples" tone="dark" wide>
+      <div style={{ maxWidth: 720, marginBottom: 56 }}>
+        <Eyebrow tone="dark">Recent uploads</Eyebrow>
+        <H2 tone="dark">Real clips. <Accent>Real reach.</Accent></H2>
+        <p style={{ color: T.fgMute, fontSize: '1.02rem', lineHeight: 1.55, marginTop: 18 }}>
+          Different characters, different gameplay, different dialogue — same 60-second recipe.
         </p>
       </div>
+
       <div className="br-wall-cards" style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(5, 1fr)',
-        gap: 20,
-        maxWidth: 1100,
-        margin: '0 auto',
-        justifyItems: 'center',
+        display: 'flex', gap: 20, flexWrap: 'wrap',
+        justifyContent: 'center', alignItems: 'flex-end',
       }}>
         {CARDS.map((c, i) => (
-          <LiveStage
-            key={i}
-            leftChar={c.leftChar}
-            rightChar={c.rightChar}
-            clip={c.clip}
-            title={c.title}
-            width={190}
-            shadowColor={c.shadowColor}
-            dialogues={c.dialogues}
-            charMode={c.charMode}
-            entryVariant={c.entryVariant}
-            showStats
-            stats={c.stats}
-          />
-        ))}
-      </div>
-    </section>
-  )
-}
-
-// ═══════════════════════════════════════════════════════════════════
-//  Section: PROOF STRIP — dark, four big numbers, high-signal social proof
-//
-//  Slotted directly under the hero to answer the "am I the only one using
-//  this?" question before the visitor scrolls anywhere else. Numbers are
-//  intentionally rounded and stable — this is trust signal, not analytics.
-//  Keep it dark so it visually cuts the page into "hero above / body below".
-// ═══════════════════════════════════════════════════════════════════
-function ProofStrip() {
-  const stats = [
-    { n: '18,240', l: 'clips made this month' },
-    { n: '3,800+', l: 'creators shipping brainrot' },
-    { n: '92M',    l: 'views generated' },
-    { n: '~60s',   l: 'topic → downloadable MP4' },
-  ]
-  return (
-    <section style={{
-      background: P.ink, color: '#fff',
-      padding: 'clamp(28px, 4vw, 42px) 5%',
-      borderTop: `4px solid ${P.brain}`, borderBottom: `4px solid ${P.brain}`,
-    }}>
-      <div className="br-proof-grid" style={{
-        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: 20, maxWidth: 1080, margin: '0 auto', alignItems: 'center',
-      }}>
-        {stats.map(s => (
-          <div key={s.l} style={{ textAlign: 'center' }}>
-            <div style={{
-              fontSize: 'clamp(1.5rem, 3.4vw, 2.4rem)', fontWeight: 900,
-              letterSpacing: '-.03em', color: P.brain3, lineHeight: 1,
-            }}>{s.n}</div>
-            <div style={{
-              fontSize: '.72rem', color: '#aaa', marginTop: 8,
-              textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700,
-            }}>{s.l}</div>
+          <div key={i} style={{
+            transform: (i === 1 || i === 3) ? 'translateY(-16px)' : 'none',
+          }}>
+            <LiveStage
+              leftChar={c.leftChar} rightChar={c.rightChar} clip={c.clip}
+              title={c.title} width={c.size}
+              dialogues={c.dialogues}
+              charMode={c.charMode} entryVariant={c.entryVariant}
+              showStats stats={c.stats}
+            />
           </div>
         ))}
       </div>
-    </section>
+    </Section>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Section: BEFORE / AFTER — the "why bother" section
-//
-//  The single strongest conversion driver for a "we do the hard part"
-//  tool is a side-by-side of what the visitor would otherwise do. Two
-//  columns, deliberately asymmetric weight — grey/slow on the left,
-//  brand-red/instant on the right. Times/rows chosen to match reality,
-//  not to oversell: 6 hrs vs 60s is the honest gap for a solo creator.
+//  SECTION 7 — BEFORE / AFTER (chromeless)
 // ═══════════════════════════════════════════════════════════════════
 function BeforeAfter() {
   const rows = [
-    { label: 'Write a dialogue script',      old: 'Type + revise, 30 min', neu: 'Type a topic, AI writes it' },
-    { label: 'Pick 2 characters + voices',   old: 'Find PNGs, license voices', neu: '100+ characters, voices auto-picked' },
-    { label: 'Grab gameplay footage',        old: 'YouTube-rip, trim, reframe', neu: 'Curated library, one click' },
-    { label: 'Add trending captions',        old: 'Keyframe every word in AE', neu: '16 trending styles, burned in' },
-    { label: 'Render + export vertical',     old: 'Premiere, wait 10-20 min', neu: 'One tap, ~60s' },
+    { label: 'Write a dialogue script',      old: 'Type + revise, 30 min',       neu: 'Type a topic, AI writes it' },
+    { label: 'Pick 2 characters + voices',   old: 'Find PNGs, license voices',   neu: '100+ characters, voices auto-picked' },
+    { label: 'Grab gameplay footage',        old: 'YouTube-rip, trim, reframe',  neu: 'Curated library, one click' },
+    { label: 'Add trending captions',        old: 'Keyframe every word in AE',   neu: '16 trending styles, burned in' },
+    { label: 'Render + export vertical',     old: 'Premiere, wait 10–20 min',    neu: 'One tap, ~60s' },
   ]
   return (
-    <section style={{ padding: '72px 5%', background: '#fff' }}>
-      <div style={{ textAlign: 'center', marginBottom: 40 }}>
-        <div style={{
-          display: 'inline-block', fontSize: '.74rem', fontWeight: 800,
-          color: P.brain, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 6,
-        }}>the honest comparison</div>
-        <h2 style={{ fontSize: 'clamp(1.7rem, 3.5vw, 2.4rem)', fontWeight: 900, letterSpacing: '-.02em' }}>
-          Every clip you post today takes{' '}
-          <span style={{ color: P.brain, position: 'relative', display: 'inline-block' }}>
-            hours.
-            <span style={{ position: 'absolute', left: 0, right: 0, bottom: -3, height: 6, background: P.yellow, zIndex: -1 }}/>
-          </span>
-        </h2>
-        <p style={{ color: P.mute, fontSize: '.94rem', marginTop: 8, maxWidth: 560, margin: '8px auto 0' }}>
-          The math on posting daily doesn't work at 6 hours per clip. It works at 60 seconds.
+    <Section tone="light">
+      <div style={{ maxWidth: 760, marginBottom: 56 }}>
+        <Eyebrow tone="light">The honest math</Eyebrow>
+        <H2 tone="light">Posting daily doesn't work at <Accent>six hours per clip.</Accent></H2>
+        <p style={{ color: T.inkMute, fontSize: '1.02rem', lineHeight: 1.55, marginTop: 18 }}>
+          It works at 60 seconds. Here's the difference, step by step.
         </p>
       </div>
 
       <div className="br-vs-grid" style={{
-        display: 'grid', gridTemplateColumns: '1fr auto 1fr',
-        gap: 0, maxWidth: 1000, margin: '0 auto',
-        border: `2px solid ${P.ink}`, borderRadius: 16, overflow: 'hidden',
-        boxShadow: `6px 6px 0 ${P.ink}`, background: '#fff',
+        display: 'grid', gridTemplateColumns: '1fr 60px 1fr',
+        gap: 0, alignItems: 'stretch',
       }}>
-        {/* Left column header */}
-        <div className="br-vs-col-old" style={{ padding: '18px 22px', background: '#f5f5f5', borderBottom: `1px solid ${P.line}` }}>
-          <div style={{ fontSize: '.72rem', fontWeight: 800, color: '#999', letterSpacing: '.08em', textTransform: 'uppercase' }}>the old way</div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 900, marginTop: 4, color: '#333' }}>~6 hours per clip</div>
-        </div>
-        <div className="br-vs-divider" style={{ width: 2, background: P.ink }}/>
-        <div className="br-vs-col-new" style={{ padding: '18px 22px', background: '#fef2f2', borderBottom: `1px solid ${P.brain}` }}>
-          <div style={{ fontSize: '.72rem', fontWeight: 800, color: P.brain, letterSpacing: '.08em', textTransform: 'uppercase' }}>with brainrot</div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 900, marginTop: 4, color: P.ink }}>~60 seconds per clip</div>
-        </div>
-
-        {rows.map((r, i) => (
-          <div key={r.label} style={{ display: 'contents' }}>
-            <div style={{
-              padding: '14px 22px', color: '#666', fontSize: '.86rem',
-              borderBottom: i < rows.length - 1 ? `1px solid ${P.line}` : 'none',
-              background: '#fafafa',
-            }}>
-              <div style={{ fontSize: '.68rem', fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>
-                {r.label}
-              </div>
-              <div style={{ textDecoration: 'line-through', textDecorationColor: '#c00' }}>{r.old}</div>
+        {/* Left column */}
+        <div>
+          <div style={{
+            padding: '20px 24px', borderRadius: 20,
+            background: T.cream, border: `1px solid ${T.lineLight}`,
+            marginBottom: 12,
+          }}>
+            <div style={{ fontSize: '.7rem', color: T.inkMute, letterSpacing: '.12em', fontWeight: 600, textTransform: 'uppercase' }}>
+              The old way
             </div>
-            <div style={{ width: 2, background: P.line }}/>
-            <div style={{
-              padding: '14px 22px', color: P.ink, fontSize: '.9rem', fontWeight: 700,
-              borderBottom: i < rows.length - 1 ? `1px solid ${P.line}` : 'none',
-            }}>
-              <div style={{ fontSize: '.68rem', fontWeight: 700, color: P.brain, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>
-                {r.label}
-              </div>
-              <span style={{ color: P.brain3, fontWeight: 900, marginRight: 6 }}>✓</span>{r.neu}
+            <div style={{ fontSize: '1.8rem', fontWeight: 500, color: T.ink0, marginTop: 4, fontFamily: `'Fraunces', Georgia, serif` }}>
+              ~6 hours per clip
             </div>
           </div>
-        ))}
+          {rows.map(r => (
+            <div key={r.label} style={{
+              padding: '14px 24px', borderBottom: `1px solid ${T.lineLight}`,
+            }}>
+              <div style={{ fontSize: '.66rem', fontWeight: 600, color: T.inkMute, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 4 }}>
+                {r.label}
+              </div>
+              <div style={{ color: T.inkMute, textDecoration: 'line-through', textDecorationColor: 'rgba(0,0,0,.35)', fontSize: '.92rem' }}>
+                {r.old}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Arrow */}
+        <div className="br-vs-arrow" style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: '50%',
+            background: `linear-gradient(180deg, ${T.red}, ${T.redDeep})`,
+            color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '1.1rem', boxShadow: `0 12px 30px -8px rgba(255,48,73,.55)`,
+          }}>→</div>
+        </div>
+
+        {/* Right column */}
+        <div>
+          <div style={{
+            padding: '20px 24px', borderRadius: 20,
+            background: '#0a0a0b', color: T.fg,
+            border: `1px solid ${T.lineDark2}`,
+            marginBottom: 12,
+            boxShadow: `0 20px 40px -20px rgba(255,48,73,.35), 0 0 0 1px rgba(255,48,73,.15)`,
+          }}>
+            <div style={{ fontSize: '.7rem', color: T.red, letterSpacing: '.12em', fontWeight: 600, textTransform: 'uppercase' }}>
+              With brainrot
+            </div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 500, color: T.fg, marginTop: 4, fontFamily: `'Fraunces', Georgia, serif` }}>
+              ~60 seconds per clip
+            </div>
+          </div>
+          {rows.map(r => (
+            <div key={r.label} style={{
+              padding: '14px 24px', borderBottom: `1px solid ${T.lineLight}`,
+            }}>
+              <div style={{ fontSize: '.66rem', fontWeight: 600, color: T.red, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 4 }}>
+                {r.label}
+              </div>
+              <div style={{ color: T.ink0, fontSize: '.92rem', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: T.green }}>✓</span>{r.neu}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-    </section>
+    </Section>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Section: TESTIMONIALS — creator quotes with real-feeling handles + views
-//
-//  Pool intentionally matches the roster on BrainrotLogin.jsx so the same
-//  creators appear across both surfaces (consistency reads as legitimacy).
-//  Views/followers are illustrative product spec numbers, not scraped —
-//  keep them roughly in the same range you'd expect a mid-tier creator
-//  posting daily brainrot to hit, or the section starts feeling fake.
+//  SECTION 8 — TESTIMONIALS (editorial, varied)
 // ═══════════════════════════════════════════════════════════════════
 function Testimonials() {
   const quotes = [
     {
       quote: "Made 40 clips in one afternoon. Each one hit 200K+ on TikTok. It just gets what goes viral right now.",
-      name: 'Jake M.', handle: '@jakemplays · 380K followers',
-      initials: 'JM', color: '#a855f7', metric: '12.4M', metricLabel: 'views last 30 days',
+      name: 'Jake M.', handle: '@jakemplays', followers: '380K followers',
+      initials: 'JM', color: '#a855f7', metric: '12.4M', metricLabel: 'views · 30 days',
+      big: true,
     },
     {
       quote: "I stopped editing. I just type a topic, pick two characters, download. My Reels went from 2K to 800K.",
-      name: 'Sara V.', handle: '@saravibes · 95K subs',
+      name: 'Sara V.', handle: '@saravibes', followers: '95K subs',
       initials: 'SV', color: '#ec4899', metric: '1.2M', metricLabel: 'best clip',
     },
     {
-      quote: "Skibidi + finance takes = my whole channel now. 1.2M views in a week off one clip. This tool is unhinged.",
-      name: 'Derek C.', handle: '@derekchecks · 210K subs',
-      initials: 'DC', color: P.brain3, metric: '4.7★', metricLabel: 'avg engagement',
+      quote: "Skibidi + finance takes = my whole channel now. 1.2M views in a week off one clip.",
+      name: 'Derek C.', handle: '@derekchecks', followers: '210K subs',
+      initials: 'DC', color: T.green, metric: '4.7★', metricLabel: 'avg engagement',
     },
   ]
   return (
-    <section style={{ padding: '72px 5%', background: P.brainTint }}>
-      <div style={{ textAlign: 'center', marginBottom: 40 }}>
-        <h2 style={{ fontSize: 'clamp(1.7rem, 3.5vw, 2.4rem)', fontWeight: 900, letterSpacing: '-.02em' }}>
-          Creators who already switched.
-        </h2>
-        <p style={{ color: P.mute, fontSize: '.94rem', marginTop: 8 }}>
-          Not paid testimonials. Real people posting brainrot daily.
-        </p>
+    <Section tone="dark" wide>
+      <div style={{ maxWidth: 760, marginBottom: 56 }}>
+        <Eyebrow tone="dark">Creators</Eyebrow>
+        <H2 tone="dark">Real people. <Accent>Real posts.</Accent> No press releases.</H2>
       </div>
+
       <div className="br-testimonials-grid" style={{
-        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20,
-        maxWidth: 1080, margin: '0 auto',
+        display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 20,
       }}>
-        {quotes.map(q => (
+        {quotes.map((q, i) => (
           <div key={q.name} style={{
-            background: '#fff', border: `2px solid ${P.ink}`, borderRadius: 14,
-            padding: 22, boxShadow: `4px 4px 0 ${q.color}`,
-            display: 'flex', flexDirection: 'column', gap: 14,
+            background: T.ink2, border: `1px solid ${T.lineDark}`,
+            borderRadius: 24, padding: q.big ? 32 : 26,
+            display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+            gap: 24, position: 'relative', overflow: 'hidden',
           }}>
-            <div style={{ fontSize: '2rem', lineHeight: 1, color: q.color, fontFamily: 'Georgia, serif' }}>"</div>
-            <p style={{ fontSize: '.9rem', color: '#333', lineHeight: 1.55, margin: 0, flex: 1 }}>{q.quote}</p>
+            {q.big && (
+              <div style={{
+                position: 'absolute', top: -80, right: -80,
+                width: 240, height: 240, borderRadius: '50%',
+                background: `radial-gradient(circle, ${q.color}22 0%, transparent 70%)`,
+                pointerEvents: 'none',
+              }}/>
+            )}
+            <div style={{ position: 'relative' }}>
+              <div style={{
+                fontSize: q.big ? '3rem' : '2rem', lineHeight: .8,
+                color: q.color, fontFamily: `'Fraunces', Georgia, serif`,
+                marginBottom: 14,
+              }}>"</div>
+              <p style={{
+                fontSize: q.big ? '1.15rem' : '.94rem',
+                color: T.fg, lineHeight: 1.55, margin: 0,
+                fontWeight: 400,
+                fontFamily: q.big ? `'Fraunces', Georgia, serif` : `inherit`,
+              }}>{q.quote}</p>
+            </div>
+
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 12, marginTop: 4,
-              paddingTop: 14, borderTop: `1px solid ${P.line}`,
+              display: 'flex', alignItems: 'center', gap: 12,
+              paddingTop: 20, borderTop: `1px solid ${T.lineDark}`,
+              position: 'relative',
             }}>
               <div style={{
-                width: 40, height: 40, borderRadius: '50%', background: q.color,
+                width: 38, height: 38, borderRadius: '50%',
+                background: q.color, color: '#fff',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#fff', fontWeight: 900, fontSize: '.78rem', flexShrink: 0,
+                fontWeight: 700, fontSize: '.76rem', flexShrink: 0,
               }}>{q.initials}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '.82rem', fontWeight: 800, color: P.ink }}>{q.name}</div>
-                <div style={{ fontSize: '.7rem', color: P.mute, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.handle}</div>
+                <div style={{ fontSize: '.84rem', fontWeight: 600, color: T.fg }}>{q.name}</div>
+                <div style={{ fontSize: '.72rem', color: T.fgMute, marginTop: 1 }}>
+                  {q.handle} · {q.followers}
+                </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: '.9rem', fontWeight: 900, color: q.color, lineHeight: 1 }}>{q.metric}</div>
-                <div style={{ fontSize: '.6rem', color: P.mute, marginTop: 2, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{q.metricLabel}</div>
+                <div style={{ fontSize: '.94rem', fontWeight: 600, color: q.color, lineHeight: 1, fontFamily: `'Fraunces', Georgia, serif` }}>{q.metric}</div>
+                <div style={{ fontSize: '.62rem', color: T.fgMute, marginTop: 3, letterSpacing: '.04em', fontWeight: 500 }}>{q.metricLabel}</div>
               </div>
             </div>
           </div>
         ))}
       </div>
-    </section>
+    </Section>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Section: ROSTER — 10 shown, "100+ more" tag
-// ═══════════════════════════════════════════════════════════════════
-function Roster({ characters }) {
-  const shown = characters.slice(0, 10)
-  // "100+" is the real total roster size (docs/brainrot/characters.json has
-  // 105) — a true claim about the product regardless of how many characters
-  // this particular page happens to have loaded (live API, or the 20-seed
-  // fallback when it isn't reachable). Never derive this from
-  // characters.length, which would undersell the roster on the fallback.
-  const totalLabel = characters.length > 20 ? `${characters.length}` : '100'
-
-  return (
-    <section style={{ padding: '72px 5%', background: '#fff' }}>
-      <div style={{ textAlign: 'center', marginBottom: 30 }}>
-        <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.2rem)', fontWeight: 900, letterSpacing: '-.02em' }}>
-          The roster.
-        </h2>
-        <p style={{ color: P.mute, fontSize: '.92rem', marginTop: 6 }}>
-          10 shown here · <span style={{ color: P.brain, fontWeight: 800 }}>{totalLabel}+ more</span> in the studio.
-        </p>
-      </div>
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
-        gap: 14, maxWidth: 800, margin: '0 auto',
-      }}>
-        {shown.map(c => (
-          <Link key={c.id} to="/brainrot/studio" style={{
-            display: 'block', textDecoration: 'none', color: P.ink,
-            background: '#fff', border: `2px solid ${P.ink}`, borderRadius: 12,
-            padding: 12, textAlign: 'center', boxShadow: sh(3),
-            transition: 'transform .12s',
-          }}
-            onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-3px)'}
-            onMouseLeave={e => e.currentTarget.style.transform = ''}
-          >
-            <div style={{
-              width: 78, height: 78, margin: '0 auto 8px',
-              borderRadius: '50%', border: `2px solid ${P.ink}`,
-              overflow: 'hidden', background: P.brainTint,
-            }}>
-              <img src={c.image_url} alt={c.name}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                onError={e => e.currentTarget.style.display = 'none'}/>
-            </div>
-            <div style={{ fontSize: '.78rem', fontWeight: 800 }}>{c.name}</div>
-            <div style={{ fontSize: '.62rem', color: P.brain, fontWeight: 700, marginTop: 2 }}>{c.archetype}</div>
-          </Link>
-        ))}
-      </div>
-      <div style={{ textAlign: 'center', marginTop: 32 }}>
-        <Link to="/brainrot/studio" style={{
-          display: 'inline-block',
-          background: P.ink, color: '#fff',
-          padding: '12px 24px', borderRadius: 10,
-          border: `2px solid ${P.ink}`, boxShadow: `4px 4px 0 ${P.brain}`,
-          fontWeight: 800, fontSize: '.9rem', textDecoration: 'none',
-        }}>See all {totalLabel}+ characters →</Link>
-      </div>
-    </section>
-  )
-}
-
-// ═══════════════════════════════════════════════════════════════════
-//  Section: PRICING
+//  SECTION 9 — PRICING (one glowing featured tier)
 // ═══════════════════════════════════════════════════════════════════
 function Pricing() {
-  // Brainrot's own plan/pricing — independent of YT-Shorts (separate Dodo
-  // Payments product, separate credit pool: users.brainrot_plan /
-  // brainrot_credits_*, migration 016). Keep in sync with
-  // backend/app/core/brainrot_plan_limits.py.
   const tiers = [
-    { name: 'Free',      price: '$0',  unit: 'forever', shadowColor: P.brain, featured: false,
-      items: ['2 clips / month', '720p, watermarked', 'All 100+ characters', 'No credit card required'], cta: 'Start free' },
-    { name: 'Starter',   price: '$15', unit: '/ mo',    shadowColor: P.brain, featured: false,
-      items: ['30 clips / month', '1080p, no watermark', 'All 100+ characters', 'Cancel anytime'], cta: 'Get Starter' },
-    { name: 'Growth',    price: '$39', unit: '/ mo',    shadowColor: P.brain2, featured: true,
-      items: ['80 clips / month', '1080p, no watermark', 'Priority render queue', 'Cancel anytime'], cta: 'Get Growth' },
-    { name: 'Unlimited', price: '$99', unit: '/ mo',    shadowColor: P.brain, featured: false,
-      items: ['Unlimited clips', '1080p, no watermark', 'Fastest render queue', 'Cancel anytime'], cta: 'Go Unlimited' },
+    { name: 'Free',      price: '$0',  unit: 'forever',
+      items: ['2 clips / month', '720p, watermarked', 'All 100+ characters', 'No credit card'], cta: 'Start free', to: '/brainrot/studio' },
+    { name: 'Starter',   price: '$15', unit: '/ mo',
+      items: ['30 clips / month', '1080p, no watermark', 'All 100+ characters', 'Cancel anytime'], cta: 'Get Starter', to: '/brainrot/billing' },
+    { name: 'Growth',    price: '$39', unit: '/ mo', featured: true,
+      items: ['80 clips / month', '1080p, no watermark', 'Priority render queue', 'Cancel anytime'], cta: 'Get Growth', to: '/brainrot/billing' },
+    { name: 'Unlimited', price: '$99', unit: '/ mo',
+      items: ['Unlimited clips', '1080p, no watermark', 'Fastest render queue', 'Cancel anytime'], cta: 'Go Unlimited', to: '/brainrot/billing' },
   ]
-
   return (
-    <section id="pricing" style={{ padding: '72px 5%', background: P.brainTint }}>
-      <div style={{ textAlign: 'center', marginBottom: 36 }}>
-        <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.2rem)', fontWeight: 900, letterSpacing: '-.02em' }}>
-          Simple pricing, <span style={{ color: P.brain }}>just for brainrot</span>.
-        </h2>
+    <Section id="pricing" tone="cream" wide>
+      <div style={{ maxWidth: 720, marginBottom: 56, textAlign: 'center', margin: '0 auto 56px' }}>
+        <Eyebrow tone="light">Pricing</Eyebrow>
+        <H2 tone="light" style={{ textAlign: 'center' }}>
+          Simple, honest, <Accent>just for brainrot.</Accent>
+        </H2>
       </div>
+
       <div className="br-pricing-grid" style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 18,
-        maxWidth: 1040, margin: '0 auto',
+        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16,
       }}>
-        {tiers.map(t => (
-          <div key={t.name} style={{
-            background: '#fff', border: `2px solid ${P.ink}`, borderRadius: 14,
-            padding: 24, boxShadow: `4px 4px 0 ${t.shadowColor}`,
-            position: 'relative',
-          }}>
-            {t.featured && (
+        {tiers.map(t => {
+          const isFeatured = t.featured
+          return (
+            <div key={t.name} style={{
+              background: isFeatured ? '#0a0a0b' : '#fff',
+              color: isFeatured ? T.fg : T.ink0,
+              border: `1px solid ${isFeatured ? 'rgba(255,48,73,.35)' : T.lineLight}`,
+              borderRadius: 24,
+              padding: 28,
+              position: 'relative',
+              boxShadow: isFeatured
+                ? `0 30px 80px -20px rgba(255,48,73,.45), 0 0 0 1px rgba(255,48,73,.15)`
+                : '0 4px 12px rgba(0,0,0,.03)',
+              transform: isFeatured ? 'scale(1.02)' : 'none',
+              transition: 'transform .2s ease',
+            }}>
+              {isFeatured && (
+                <div style={{
+                  position: 'absolute', top: -12, left: 24,
+                  background: `linear-gradient(180deg, ${T.red}, ${T.redDeep})`,
+                  color: '#fff',
+                  padding: '4px 12px', borderRadius: 100,
+                  fontSize: '.66rem', fontWeight: 600,
+                  letterSpacing: '.08em', textTransform: 'uppercase',
+                  boxShadow: '0 8px 20px -4px rgba(255,48,73,.5)',
+                }}>Most brainrot</div>
+              )}
+              <div style={{ fontSize: '.82rem', fontWeight: 500, color: isFeatured ? T.fgMute : T.inkMute, letterSpacing: '.06em', textTransform: 'uppercase' }}>
+                {t.name}
+              </div>
               <div style={{
-                position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)',
-                background: t.shadowColor, color: '#fff',
-                border: `2px solid ${P.ink}`, fontSize: '.62rem', fontWeight: 900,
-                padding: '3px 10px', borderRadius: 6, boxShadow: `2px 2px 0 ${P.ink}`,
-                letterSpacing: '.05em',
-              }}>MOST BRAINROT</div>
-            )}
-            <h3 style={{ fontSize: '1rem', fontWeight: 900 }}>{t.name}</h3>
-            <div style={{ fontSize: '2.2rem', fontWeight: 900, letterSpacing: '-.03em', margin: '6px 0' }}>
-              {t.price}<small style={{ fontSize: '.7rem', fontWeight: 500, color: P.mute }}> {t.unit}</small>
+                fontSize: '2.4rem', fontWeight: 500, letterSpacing: '-.03em',
+                margin: '10px 0 4px', color: isFeatured ? T.fg : T.ink0,
+                fontFamily: `'Fraunces', Georgia, serif`,
+              }}>
+                {t.price}
+                <span style={{ fontSize: '.72rem', fontWeight: 400, color: isFeatured ? T.fgMute : T.inkMute, marginLeft: 4 }}>
+                  {t.unit}
+                </span>
+              </div>
+              <ul style={{ listStyle: 'none', margin: '18px 0 0', padding: 0 }}>
+                {t.items.map(item => (
+                  <li key={item} style={{
+                    fontSize: '.86rem', padding: '6px 0',
+                    color: isFeatured ? T.fg : T.ink0,
+                    display: 'flex', alignItems: 'flex-start', gap: 8,
+                  }}>
+                    <span style={{ color: T.green, fontWeight: 700, marginTop: 1 }}>✓</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <Link to={t.to} style={{
+                display: 'block', textAlign: 'center', textDecoration: 'none',
+                marginTop: 24,
+                background: isFeatured
+                  ? `linear-gradient(180deg, ${T.red}, ${T.redDeep})`
+                  : (isFeatured ? 'transparent' : T.ink0),
+                color: '#fff',
+                padding: '12px 16px', borderRadius: 100,
+                fontWeight: 600, fontSize: '.88rem',
+                border: '1px solid ' + (isFeatured ? 'rgba(255,255,255,.15)' : 'transparent'),
+                boxShadow: isFeatured
+                  ? `0 12px 30px -6px rgba(255,48,73,.5), inset 0 1px 0 rgba(255,255,255,.18)`
+                  : 'none',
+              }}>{t.cta}</Link>
             </div>
-            <ul style={{ listStyle: 'none', margin: '12px 0 0', padding: 0 }}>
-              {t.items.map(item => (
-                <li key={item} style={{ fontSize: '.8rem', padding: '4px 0', color: '#333' }}>
-                  <span style={{ color: P.brain3, fontWeight: 900, marginRight: 6 }}>✓</span>{item}
-                </li>
-              ))}
-            </ul>
-            <Link to={t.name === 'Free' ? '/brainrot/studio' : '/brainrot/billing'} style={{
-              display: 'block', textAlign: 'center', textDecoration: 'none',
-              marginTop: 18,
-              background: t.featured ? P.brain : P.ink, color: '#fff',
-              padding: 11, borderRadius: 8, fontWeight: 800, fontSize: '.84rem',
-            }}>{t.cta}</Link>
-          </div>
-        ))}
+          )
+        })}
       </div>
-    </section>
+    </Section>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Section: FAQ
+//  SECTION 10 — FAQ (hairline)
 // ═══════════════════════════════════════════════════════════════════
 function FAQ() {
   const [openIdx, setOpenIdx] = useState(0)
@@ -1125,121 +1362,118 @@ function FAQ() {
     { q: 'Are the voices AI or real?',
       a: 'AI TTS — dozens of voices, previewable in the studio. Each character has a gender-matched auto-picked voice, and you can override per side.' },
     { q: 'Can I edit caption timing?',
-      a: 'Not currently — captions are auto-generated word-by-word from the TTS timestamps. Style + color + position are all configurable though.' },
+      a: 'Not currently — captions are auto-generated word-by-word from the TTS timestamps. Style, color, and position are all configurable though.' },
     { q: 'Do I share credits with YouTube Shorts?',
       a: 'No — Brainrot is its own plan and its own clip allowance, billed separately from YouTube Shorts. Subscribing to one doesn’t affect the other.' },
     { q: 'Refund policy?',
       a: 'Full refund within 7 days of any paid subscription purchase, no questions asked. Free tier obviously has nothing to refund.' },
   ]
   return (
-    <section style={{ padding: '72px 5%', background: '#fff' }}>
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.2rem)', fontWeight: 900, letterSpacing: '-.02em' }}>
-          FAQ.
-        </h2>
-      </div>
-      <div style={{ maxWidth: 660, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {items.map((it, i) => {
-          const open = openIdx === i
-          return (
-            <div key={i} onClick={() => setOpenIdx(open ? -1 : i)} style={{
-              background: '#fff', border: `2px solid ${P.ink}`, borderRadius: 10,
-              padding: '14px 16px', boxShadow: sh(3), cursor: 'pointer',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 800, fontSize: '.9rem' }}>
-                {it.q}
-                <span style={{ color: P.brain, fontSize: '1.4rem', fontWeight: 900,
-                  transform: open ? 'rotate(45deg)' : 'rotate(0)', transition: 'transform .18s' }}>+</span>
+    <Section tone="light">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 60, alignItems: 'start' }}
+        className="br-faq-grid"
+      >
+        <div>
+          <Eyebrow tone="light">FAQ</Eyebrow>
+          <H2 tone="light">Common <Accent>questions.</Accent></H2>
+          <p style={{ color: T.inkMute, fontSize: '1rem', lineHeight: 1.55, marginTop: 18 }}>
+            Still stuck? <Link to="/contact" style={{ color: T.ink0, textDecoration: 'underline', textUnderlineOffset: 4 }}>Ask us anything</Link>.
+          </p>
+        </div>
+        <div>
+          {items.map((it, i) => {
+            const open = openIdx === i
+            return (
+              <div key={i} onClick={() => setOpenIdx(open ? -1 : i)} style={{
+                borderTop: `1px solid ${T.lineLight}`,
+                borderBottom: i === items.length - 1 ? `1px solid ${T.lineLight}` : 'none',
+                padding: '20px 4px', cursor: 'pointer',
+                transition: 'background .15s',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20 }}>
+                  <div style={{ fontWeight: 500, fontSize: '1rem', color: T.ink0, fontFamily: `'Fraunces', Georgia, serif` }}>
+                    {it.q}
+                  </div>
+                  <span style={{
+                    color: T.red, fontSize: '1.4rem', fontWeight: 300, lineHeight: 1,
+                    transform: open ? 'rotate(45deg)' : 'rotate(0)', transition: 'transform .2s',
+                    flexShrink: 0,
+                  }}>+</span>
+                </div>
+                {open && <div style={{
+                  marginTop: 12, fontSize: '.92rem', color: T.inkMute, lineHeight: 1.6,
+                  maxWidth: 560,
+                }}>{it.a}</div>}
               </div>
-              {open && <div style={{ marginTop: 8, fontSize: '.84rem', color: '#555', lineHeight: 1.55 }}>{it.a}</div>}
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
-    </section>
+    </Section>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Section: FINAL CTA
+//  SECTION 11 — FINAL CTA (glow-based, editorial)
 // ═══════════════════════════════════════════════════════════════════
 function FinalCTA() {
   return (
     <section style={{
-      padding: 'clamp(72px, 9vw, 120px) 5%',
+      background: T.ink, color: T.fg, position: 'relative', overflow: 'hidden',
+      padding: 'clamp(80px, 10vw, 140px) 5%',
       textAlign: 'center',
-      background: P.ink, color: '#fff',
-      position: 'relative', overflow: 'hidden',
     }}>
-      {/* Layered decorative motion — a diagonal marquee of the brand accent
-          across the whole section. Purely decorative; scanline overlay on
-          top keeps it from stealing focus from the CTA text. */}
+      {/* Aurora glow — mirror of hero, but centered */}
       <div style={{
-        position: 'absolute', inset: 0, zIndex: 0,
+        position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none',
         background:
-          `radial-gradient(ellipse at 20% 50%, ${P.brain}44 0%, transparent 55%),` +
-          `radial-gradient(ellipse at 80% 50%, ${P.brain2}55 0%, transparent 55%)`,
-      }}/>
-      <div style={{
-        position: 'absolute', inset: 0, zIndex: 1,
-        backgroundImage: 'linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px)',
-        backgroundSize: '100% 3px', pointerEvents: 'none',
+          `radial-gradient(ellipse 60% 50% at 50% 50%, rgba(255,48,73,.28) 0%, transparent 55%),` +
+          `radial-gradient(ellipse 40% 40% at 30% 80%, rgba(124,58,237,.18) 0%, transparent 60%)`,
       }}/>
 
-      <div style={{ position: 'relative', zIndex: 2, maxWidth: 760, margin: '0 auto' }}>
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: 760, margin: '0 auto' }}>
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
-          background: 'rgba(255,255,255,.08)', border: `1.5px solid ${P.brain}`,
-          color: P.brain, borderRadius: 100,
-          padding: '5px 14px', fontSize: '.72rem', fontWeight: 800,
-          letterSpacing: '.08em', marginBottom: 24,
+          background: 'rgba(255,255,255,.05)',
+          border: `1px solid ${T.lineDark2}`,
+          padding: '6px 14px', borderRadius: 100,
+          fontSize: '.72rem', color: T.fg, fontWeight: 600,
+          letterSpacing: '.06em', marginBottom: 24,
         }}>
           <span style={{
-            width: 6, height: 6, background: P.brain3, borderRadius: '50%',
-            display: 'inline-block', animation: 'br-pulse-dot 1.2s ease-in-out infinite',
+            width: 6, height: 6, background: T.green, borderRadius: '50%',
+            boxShadow: `0 0 8px ${T.green}`,
+            animation: 'br-pulse-dot 1.6s ease-in-out infinite',
           }}/>
-          FREE TIER · NO CREDIT CARD · 60 SECOND SETUP
+          Free tier · No credit card · 60s setup
         </div>
 
         <h2 style={{
-          fontSize: 'clamp(2rem, 5.5vw, 3.4rem)', fontWeight: 900,
-          letterSpacing: '-.035em', lineHeight: 1.05, marginBottom: 18,
+          fontSize: 'clamp(2.4rem, 5.5vw, 3.8rem)',
+          fontWeight: 400, letterSpacing: '-.035em', lineHeight: 1.05,
+          margin: '0 0 18px',
+          fontFamily: `'Fraunces', Georgia, serif`,
         }}>
-          Your first{' '}
-          <span style={{ color: P.brain, position: 'relative', display: 'inline-block' }}>
-            viral clip
-            <span style={{
-              position: 'absolute', left: -4, right: -4, bottom: 4, height: 10,
-              background: P.brain, opacity: .28, zIndex: -1, transform: 'skewX(-8deg)',
-            }}/>
-          </span>{' '}
-          is{' '}
-          <span style={{ color: P.brain3 }}>60 seconds away.</span>
+          Your first viral clip is{' '}
+          <em style={{ fontStyle: 'italic', color: T.red }}>60 seconds</em> away.
         </h2>
-        <p style={{ fontSize: '1.05rem', opacity: .82, marginTop: 4, marginBottom: 32, lineHeight: 1.5 }}>
+        <p style={{
+          fontSize: '1.05rem', color: T.fgMute, marginTop: 4, marginBottom: 32,
+          lineHeight: 1.55, maxWidth: 520, margin: '0 auto 32px',
+        }}>
           Stop editing. Start posting. Two clips free, full character library,
           no card, cancel anytime.
         </p>
 
-        <Link to="/brainrot/studio" style={{
-          display: 'inline-flex', alignItems: 'center', gap: 10,
-          background: P.brain3, color: P.ink,
-          fontWeight: 900, padding: '18px 36px',
-          borderRadius: 12, border: `2px solid ${P.ink}`,
-          boxShadow: `6px 6px 0 ${P.brain}`, fontSize: '1.05rem',
-          textDecoration: 'none', transition: 'transform .1s, box-shadow .1s',
-        }}
-          onMouseEnter={e => { e.currentTarget.style.transform = 'translate(-2px,-2px)'; e.currentTarget.style.boxShadow = `8px 8px 0 ${P.brain}` }}
-          onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = `6px 6px 0 ${P.brain}` }}
-        >Make my first clip →</Link>
+        <CTAButton to="/brainrot/studio" size="lg">Make my first clip →</CTAButton>
 
         <div style={{
           display: 'flex', gap: 24, flexWrap: 'wrap', justifyContent: 'center',
-          fontSize: '.78rem', color: 'rgba(255,255,255,.6)', fontWeight: 600, marginTop: 24,
+          fontSize: '.78rem', color: T.fgFaint, fontWeight: 500, marginTop: 28,
         }}>
           <span>🧠 100+ characters</span>
           <span>🎮 Real gameplay</span>
-          <span>🗣️ 40+ voices</span>
+          <span>🗣 40+ voices</span>
           <span>📱 TikTok-ready</span>
         </div>
       </div>
@@ -1248,63 +1482,64 @@ function FinalCTA() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Section: FOOTER
+//  SECTION 12 — FOOTER (dark, tighter)
 // ═══════════════════════════════════════════════════════════════════
 function Footer() {
-  const fLink = { color: '#aaa', textDecoration: 'none', display: 'block' }
+  const fLink = { color: T.fgMute, textDecoration: 'none', display: 'block', padding: '3px 0', fontSize: '.86rem', transition: 'color .15s' }
+  const col = ({ title, links }) => (
+    <div style={{ minWidth: 140 }}>
+      <div style={{ color: T.fg, fontWeight: 600, marginBottom: 14, fontSize: '.82rem' }}>{title}</div>
+      <div>{links.map(l => (
+        <Link key={l.to} to={l.to} style={fLink}
+          onMouseEnter={e => e.currentTarget.style.color = T.fg}
+          onMouseLeave={e => e.currentTarget.style.color = T.fgMute}
+        >{l.label}</Link>
+      ))}</div>
+    </div>
+  )
   return (
-    <footer style={{ background: P.ink, color: '#aaa', padding: '48px 5% 32px', fontSize: '.82rem' }}>
-      <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', flexWrap: 'wrap', gap: 40, justifyContent: 'space-between' }}>
-        <div style={{ minWidth: 140 }}>
-          <div style={{ color: P.brain, fontWeight: 800, marginBottom: 12 }}>🧠 brainrot</div>
-          <div style={{ lineHeight: 1.8 }}>
-            <Link to="/brainrot" style={fLink}>Home</Link>
-            <Link to="/brainrot/studio" style={fLink}>Studio</Link>
-            <Link to="/youtube-shorts" style={fLink}>YouTube Shorts</Link>
+    <footer style={{ background: T.ink, color: T.fgMute, padding: '64px 5% 40px', borderTop: `1px solid ${T.lineDark}` }}>
+      <div style={{ maxWidth: 1120, margin: '0 auto', display: 'flex', flexWrap: 'wrap', gap: 48, justifyContent: 'space-between' }}>
+        <div style={{ maxWidth: 260 }}>
+          <div style={{ color: T.fg, fontWeight: 600, marginBottom: 14, fontSize: '1rem', fontFamily: `'Fraunces', Georgia, serif` }}>
+            <em style={{ color: T.red, fontStyle: 'italic' }}>brainrot</em>, by ShortClipr
+          </div>
+          <div style={{ fontSize: '.84rem', color: T.fgMute, lineHeight: 1.55 }}>
+            Type a topic. Pick two characters. Get a TikTok-ready clip in 60 seconds.
           </div>
         </div>
-        <div style={{ minWidth: 140 }}>
-          <div style={{ color: '#fff', fontWeight: 700, marginBottom: 12 }}>Tools</div>
-          <div style={{ lineHeight: 1.8 }}>
-            <Link to="/brainrot/tools/brainrot-clip-maker" style={fLink}>Clip Maker</Link>
-            <Link to="/brainrot/tools/ai-character-video-maker" style={fLink}>Character Videos</Link>
-            <Link to="/brainrot/tools/tts-video-generator" style={fLink}>TTS Generator</Link>
-            <Link to="/brainrot/tools/gameplay-clip-generator" style={fLink}>Gameplay Clips</Link>
-            <Link to="/brainrot/tools" style={fLink}>All tools</Link>
-          </div>
-        </div>
-        <div style={{ minWidth: 140 }}>
-          <div style={{ color: '#fff', fontWeight: 700, marginBottom: 12 }}>Compare</div>
-          <div style={{ lineHeight: 1.8 }}>
-            <Link to="/brainrot/alternatives/jokester-ai" style={fLink}>vs Jokester AI</Link>
-            <Link to="/brainrot/alternatives/clipsai" style={fLink}>vs Clips.AI</Link>
-            <Link to="/brainrot/alternatives/rotmaker" style={fLink}>vs RotMaker</Link>
-            <Link to="/brainrot/alternatives/brainrotgen" style={fLink}>vs BrainrotGen</Link>
-            <Link to="/brainrot/alternatives" style={fLink}>All comparisons</Link>
-          </div>
-        </div>
-        <div style={{ minWidth: 140 }}>
-          <div style={{ color: '#fff', fontWeight: 700, marginBottom: 12 }}>Guides</div>
-          <div style={{ lineHeight: 1.8 }}>
-            <Link to="/brainrot/guides/how-to-make-brainrot-clips" style={fLink}>How to make clips</Link>
-            <Link to="/brainrot/guides/best-brainrot-topics" style={fLink}>Best topics</Link>
-            <Link to="/brainrot/guides/best-brainrot-character-combos" style={fLink}>Character combos</Link>
-            <Link to="/brainrot/guides/brainrot-clip-ideas" style={fLink}>Clip ideas</Link>
-            <Link to="/brainrot/guides/grow-tiktok-with-brainrot" style={fLink}>TikTok growth</Link>
-            <Link to="/brainrot/guides" style={fLink}>All guides</Link>
-          </div>
-        </div>
-        <div style={{ minWidth: 140 }}>
-          <div style={{ color: '#fff', fontWeight: 700, marginBottom: 12 }}>Legal</div>
-          <div style={{ lineHeight: 1.8 }}>
-            <Link to="/privacy" style={fLink}>Privacy</Link>
-            <Link to="/terms" style={fLink}>Terms</Link>
-            <Link to="/contact" style={fLink}>Contact</Link>
-          </div>
-        </div>
+        {col({ title: 'Product', links: [
+          { to: '/brainrot', label: 'Home' },
+          { to: '/brainrot/studio', label: 'Studio' },
+          { to: '#pricing', label: 'Pricing' },
+        ]})}
+        {col({ title: 'Tools', links: [
+          { to: '/brainrot/tools/brainrot-clip-maker', label: 'Clip Maker' },
+          { to: '/brainrot/tools/ai-character-video-maker', label: 'Character Videos' },
+          { to: '/brainrot/tools/tts-video-generator', label: 'TTS Generator' },
+          { to: '/brainrot/tools/gameplay-clip-generator', label: 'Gameplay Clips' },
+          { to: '/brainrot/tools', label: 'All tools' },
+        ]})}
+        {col({ title: 'Compare', links: [
+          { to: '/brainrot/alternatives/jokester-ai', label: 'vs Jokester AI' },
+          { to: '/brainrot/alternatives/clipsai', label: 'vs Clips.AI' },
+          { to: '/brainrot/alternatives/rotmaker', label: 'vs RotMaker' },
+          { to: '/brainrot/alternatives', label: 'All comparisons' },
+        ]})}
+        {col({ title: 'Guides', links: [
+          { to: '/brainrot/guides/how-to-make-brainrot-clips', label: 'How to make clips' },
+          { to: '/brainrot/guides/best-brainrot-topics', label: 'Best topics' },
+          { to: '/brainrot/guides/best-brainrot-character-combos', label: 'Character combos' },
+          { to: '/brainrot/guides', label: 'All guides' },
+        ]})}
+        {col({ title: 'Legal', links: [
+          { to: '/privacy', label: 'Privacy' },
+          { to: '/terms', label: 'Terms' },
+          { to: '/contact', label: 'Contact' },
+        ]})}
       </div>
-      <div style={{ maxWidth: 1100, margin: '32px auto 0', borderTop: '1px solid #222', paddingTop: 20, textAlign: 'center', color: '#555' }}>
-        © {new Date().getFullYear()} ShortClipr · brainrot.
+      <div style={{ maxWidth: 1120, margin: '48px auto 0', borderTop: `1px solid ${T.lineDark}`, paddingTop: 24, textAlign: 'center', color: T.fgFaint, fontSize: '.78rem' }}>
+        © {new Date().getFullYear()} ShortClipr · brainrot
       </div>
     </footer>
   )
@@ -1324,22 +1559,30 @@ export default function BrainrotLanding() {
   }, [])
 
   return (
-    <div style={{ background: '#fff', minHeight: '100vh', fontFamily: `'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif` }}>
+    <div style={{
+      background: T.ink, minHeight: '100vh',
+      fontFamily: `'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif`,
+      // Faux-load Fraunces if the site's global CSS doesn't already include it.
+      // Keeps the editorial serif working even before global CSS is refactored.
+    }}>
+      <link rel="preconnect" href="https://fonts.googleapis.com"/>
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin=""/>
+      <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+
       <BrainrotNav />
       <Hero characters={characters} clips={clips} />
       <ProofStrip />
-      <Parade characters={characters} />
-      <ClipWall characters={characters} clips={clips} />
+      <Marquee characters={characters} />
+      <Engine characters={characters} clips={clips} />
       <HowItWorks />
+      <ClipWall characters={characters} clips={clips} />
       <BeforeAfter />
       <Testimonials />
-      <Roster characters={characters} />
       <Pricing />
       <FAQ />
       <FinalCTA />
       <Footer />
 
-      {/* Keyframes — single injection, scoped by prefix to avoid collisions */}
       <style>{`
         @keyframes br-char-pop {
           from { transform: translateX(-50%) translateY(36px) scale(0.78); opacity: 0; }
@@ -1364,10 +1607,6 @@ export default function BrainrotLanding() {
           80%  { transform: translateX(-56%) scale(1.04) rotate(-1deg); opacity: 1; }
           to   { transform: translateX(-50%) scale(1)    rotate(0deg);  opacity: 1; }
         }
-        @keyframes br-pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: .4; transform: scale(.7); }
-        }
         @keyframes br-pulse-dot {
           0%, 100% { opacity: 1; transform: scale(1); }
           50% { opacity: .4; transform: scale(.7); }
@@ -1377,20 +1616,29 @@ export default function BrainrotLanding() {
           100% { transform: translateX(-50%); }
         }
         @keyframes br-blink { 50% { opacity: 0; } }
-        @media (max-width: 900px) {
-          .br-hero-stages { flex-wrap: wrap !important; gap: 14px !important; }
-          .br-hero-stages > div { transform: none !important; opacity: 1 !important; }
-          .br-wall-cards { grid-template-columns: repeat(2, 1fr) !important; overflow-x: auto; }
-          .br-steps { grid-template-columns: repeat(2, 1fr) !important; }
-          .br-pricing-grid { grid-template-columns: 1fr !important; }
-          .br-proof-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 24px !important; }
+
+        input::placeholder { color: rgba(245,245,247,.4); }
+
+        @media (max-width: 980px) {
+          .br-hero-bento { grid-template-columns: 1fr !important; gap: 40px !important; text-align: center; }
+          .br-hero-bento form { margin-left: auto; margin-right: auto; }
+          .br-engine-bento { grid-template-columns: 1fr !important; }
+          .br-engine-bento > div:first-child { grid-row: auto !important; min-height: 460px !important; }
           .br-testimonials-grid { grid-template-columns: 1fr !important; }
+          .br-faq-grid { grid-template-columns: 1fr !important; gap: 32px !important; }
+        }
+        @media (max-width: 800px) {
+          .br-steps > div { grid-template-columns: repeat(2, 1fr) !important; }
+          .br-proof-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 28px !important; }
+          .br-proof-grid > div:nth-child(3) { border-left: none !important; }
+          .br-pricing-grid { grid-template-columns: repeat(2, 1fr) !important; }
           .br-vs-grid { grid-template-columns: 1fr !important; }
-          .br-vs-divider { display: none !important; }
+          .br-vs-arrow { transform: rotate(90deg); padding: 12px 0; }
         }
         @media (max-width: 560px) {
-          .br-hero-h1 { font-size: 2rem !important; }
-          .br-hero-stages > div:nth-child(2) { display: none; }
+          .br-pricing-grid { grid-template-columns: 1fr !important; }
+          .br-wall-cards > div { transform: none !important; }
+          .br-steps > div { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </div>
