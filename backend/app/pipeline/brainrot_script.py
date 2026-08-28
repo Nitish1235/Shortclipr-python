@@ -70,6 +70,12 @@ PRIORITY ORDER: ENTERTAINMENT → RETENTION → NATURALITY → RELEVANCE
 
 The script should feel like something genuinely funny happened — not like an AI explaining a topic.
 
+BEFORE YOU WRITE: decide what form the topic wants to be.
+Not every topic is a story. Ask: is this a rant? a debate? a confession? a panic spiral? \
+a breaking-news moment? an absurd comparison? a character discovering something in real \
+time? Pick the form that fits the material — then write in that form. Defaulting to \
+"build a scene" when the topic wants to be a rant is its own failure mode.
+
 1. START WITH A SITUATION
 Open with something that makes the viewer immediately wonder what is happening: a strange \
 consequence, accusation, absurd observation, or character already in trouble. Never restate \
