@@ -9,12 +9,9 @@ YouTube flow:
 TikTok flow (Content Posting API v2):
   1. GET  /social/auth/tiktok              → returns TikTok OAuth URL
   2. GET  /social/auth/tiktok/callback     → exchanges code → stores access+refresh tokens
-  3. POST /social/publish/tiktok           → publishes clips via FILE_UPLOAD
-                                              (PULL_FROM_URL would need TikTok
-                                              to verify ownership of the GCS
-                                              domain, which we don't own —
-                                              see _publish_one_tiktok)
-  4. POST /social/publish/tiktok/status    → polls publish_id status
+  3. POST /social/publish/tiktok           → publishes clips directly (video.publish)
+  4. POST /social/upload/tiktok            → saves clips to creator drafts inbox (video.upload)
+  5. POST /social/publish/tiktok/status    → polls publish_id status
 
 Utility:
   GET  /social/status  → returns { youtube: bool, tiktok: bool } for the calling user
@@ -52,8 +49,11 @@ TIKTOK_AUTH_URL    = "https://www.tiktok.com/v2/auth/authorize/"
 TIKTOK_TOKEN_URL   = "https://open.tiktokapis.com/v2/oauth/token/"
 TIKTOK_REFRESH_URL = "https://open.tiktokapis.com/v2/oauth/token/"
 TIKTOK_PUBLISH_URL = "https://open.tiktokapis.com/v2/post/publish/video/init/"
+TIKTOK_DRAFT_URL   = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/"
 TIKTOK_STATUS_URL  = "https://open.tiktokapis.com/v2/post/publish/status/fetch/"
-TIKTOK_SCOPES      = "user.info.basic,video.publish"
+# video.upload = save to creator drafts inbox; video.publish = post directly.
+# Both scopes are requested so one TikTok connection covers both actions.
+TIKTOK_SCOPES      = "user.info.basic,video.publish,video.upload"
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -474,6 +474,42 @@ _TIKTOK_MIN_CHUNK_BYTES = 5 * 1024 * 1024     # TikTok's documented chunk-size f
 _TIKTOK_MAX_CHUNK_BYTES = 64 * 1024 * 1024    # TikTok's documented chunk-size ceiling
 
 
+async def _tiktok_fetch_video_bytes(item: PublishItem) -> bytes:
+    """Fetch clip bytes from GCS. Raises RuntimeError on failure."""
+    async with httpx.AsyncClient(timeout=_GCS_FETCH_TIMEOUT) as client:
+        resp = await client.get(item.video_url)
+        if resp.status_code != 200:
+            raise RuntimeError(f"GCS returned {resp.status_code}")
+        if len(resp.content) > _MAX_VIDEO_BYTES:
+            raise RuntimeError(f"Clip too large ({len(resp.content) // (1024*1024)} MB)")
+        return resp.content
+
+
+async def _tiktok_chunk_upload(upload_url: str, video_bytes: bytes,
+                                chunk_size: int, total_chunk_count: int,
+                                clip_id: str) -> None:
+    """PUT video bytes to TikTok's upload URL in chunks. Raises RuntimeError on failure."""
+    video_size = len(video_bytes)
+    async with httpx.AsyncClient(timeout=120) as client:
+        for chunk_idx in range(total_chunk_count):
+            start = chunk_idx * chunk_size
+            end   = min(start + chunk_size, video_size) - 1
+            chunk = video_bytes[start:end + 1]
+            put_resp = await client.put(
+                upload_url,
+                content=chunk,
+                headers={
+                    "Content-Type":  "video/mp4",
+                    "Content-Range": f"bytes {start}-{end}/{video_size}",
+                },
+            )
+            if put_resp.status_code not in (200, 201, 206):
+                raise RuntimeError(
+                    f"TikTok upload PUT failed (chunk {chunk_idx + 1}/{total_chunk_count}): "
+                    f"HTTP {put_resp.status_code} {put_resp.text[:300]}"
+                )
+
+
 def _tiktok_chunk_plan(video_size: int) -> tuple[int, int]:
     """
     (chunk_size, total_chunk_count) per TikTok's FILE_UPLOAD rules.
@@ -508,13 +544,7 @@ async def _publish_one_tiktok(item: PublishItem, access_token: str) -> dict:
     Returns a result dict with status, publish_id (on success), or error.
     """
     try:
-        async with httpx.AsyncClient(timeout=_GCS_FETCH_TIMEOUT) as client:
-            gcs_resp = await client.get(item.video_url)
-            if gcs_resp.status_code != 200:
-                raise RuntimeError(f"GCS returned {gcs_resp.status_code}")
-            video_bytes = gcs_resp.content
-            if len(video_bytes) > _MAX_VIDEO_BYTES:
-                raise RuntimeError(f"Clip too large ({len(video_bytes) // (1024*1024)} MB)")
+        video_bytes = await _tiktok_fetch_video_bytes(item)
     except Exception as exc:
         logger.error(f"GCS fetch failed for TikTok clip {item.clip_id}: {exc}")
         return {"clip_id": item.clip_id, "status": "failed", "error": str(exc)}
@@ -598,27 +628,9 @@ async def _publish_one_tiktok(item: PublishItem, access_token: str) -> dict:
         logger.error(f"TikTok publish-init for {item.clip_id} returned no upload_url")
         return {"clip_id": item.clip_id, "status": "failed", "error": "No upload_url returned by TikTok"}
 
-    # Upload the actual bytes — one PUT per chunk, each with the byte range
-    # TikTok expects for that chunk.
+    # Upload the actual bytes in chunks.
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
-            for chunk_idx in range(total_chunk_count):
-                start = chunk_idx * chunk_size
-                end = min(start + chunk_size, video_size) - 1
-                chunk = video_bytes[start:end + 1]
-                put_resp = await client.put(
-                    upload_url,
-                    content=chunk,
-                    headers={
-                        "Content-Type":  "video/mp4",
-                        "Content-Range": f"bytes {start}-{end}/{video_size}",
-                    },
-                )
-                if put_resp.status_code not in (200, 201, 206):
-                    raise RuntimeError(
-                        f"TikTok upload PUT failed (chunk {chunk_idx + 1}/{total_chunk_count}): "
-                        f"HTTP {put_resp.status_code} {put_resp.text[:300]}"
-                    )
+        await _tiktok_chunk_upload(upload_url, video_bytes, chunk_size, total_chunk_count, item.clip_id)
     except Exception as exc:
         logger.error(f"TikTok file upload failed for {item.clip_id}: {exc}")
         return {"clip_id": item.clip_id, "status": "failed", "error": str(exc)}
@@ -665,6 +677,130 @@ async def tiktok_publish_status(body: TikTokStatusRequest, current_user: Current
         "status":     data.get("data", {}).get("status", "UNKNOWN"),
         "raw":        data,
     }
+
+
+@router.post("/upload/tiktok")
+async def upload_to_tiktok_draft(body: PublishRequest, current_user: CurrentUser):
+    """
+    Save clips to the creator's TikTok drafts inbox via Content Posting API v2
+    (video.upload scope). The video appears in the creator's TikTok app inbox —
+    they can edit title, cover, effects, and post at any time. No privacy
+    settings or publishing options apply; the creator controls those when posting.
+
+    Requires video.upload scope — included in the TikTok OAuth flow since
+    TIKTOK_SCOPES was updated. Users who connected before this change need to
+    reconnect TikTok to grant the new scope.
+    """
+    if not body.clips:
+        return {"results": []}
+
+    tokens = await _get_social_tokens(current_user.user_id)
+    tt_tokens = tokens.get("tiktok")
+
+    if not tt_tokens or not tt_tokens.get("access_token"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="TikTok account not connected. Connect TikTok first.",
+        )
+
+    access_token = tt_tokens["access_token"]
+    results = []
+
+    for item in body.clips:
+        result = await _upload_one_tiktok_draft(item, access_token)
+
+        if result.get("tiktok_error_code") in (10101, 10102):
+            try:
+                new_tt = await _tiktok_refresh_token(current_user.user_id, tt_tokens)
+                tokens["tiktok"] = new_tt
+                await _save_social_tokens(current_user.user_id, tokens)
+                access_token = new_tt["access_token"]
+                tt_tokens    = new_tt
+                result = await _upload_one_tiktok_draft(item, access_token)
+            except HTTPException as exc:
+                result = {"clip_id": item.clip_id, "status": "failed", "error": exc.detail}
+
+        results.append(result)
+
+    return {"results": results}
+
+
+async def _upload_one_tiktok_draft(item: PublishItem, access_token: str) -> dict:
+    """
+    Upload a single clip to the creator's TikTok drafts inbox (video.upload).
+    Unlike video.publish, no privacy level or interaction settings are sent —
+    the creator sets those when they choose to post from the TikTok app.
+    """
+    try:
+        video_bytes = await _tiktok_fetch_video_bytes(item)
+    except Exception as exc:
+        logger.error(f"GCS fetch failed for TikTok draft clip {item.clip_id}: {exc}")
+        return {"clip_id": item.clip_id, "status": "failed", "error": str(exc)}
+
+    video_size = len(video_bytes)
+    chunk_size, total_chunk_count = _tiktok_chunk_plan(video_size)
+
+    init_payload = {
+        "post_info": {
+            "title": item.title[:150] if item.title else "",
+        },
+        "source_info": {
+            "source":             "FILE_UPLOAD",
+            "video_size":          video_size,
+            "chunk_size":          chunk_size,
+            "total_chunk_count":   total_chunk_count,
+        },
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                TIKTOK_DRAFT_URL,
+                json=init_payload,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type":  "application/json; charset=UTF-8",
+                },
+            )
+            data = resp.json()
+    except Exception as exc:
+        logger.error(f"TikTok draft-init network error for clip {item.clip_id}: {exc}")
+        return {"clip_id": item.clip_id, "status": "failed", "error": str(exc)}
+
+    logger.debug(f"TikTok draft-init response for {item.clip_id}: {resp.status_code} {data}")
+
+    err      = data.get("error", {})
+    err_code = err.get("code", 0)
+
+    if not (resp.status_code == 200 and err_code == "ok"):
+        msg = err.get("message", "Unknown TikTok error")
+        logger.error(f"TikTok draft-init failed for {item.clip_id}: code={err_code} msg={msg}")
+        if err_code in (10101, 10102):
+            return {"clip_id": item.clip_id, "status": "failed",
+                    "error": msg, "tiktok_error_code": err_code}
+        if "scope" in msg.lower() or err_code == "access_token_invalid":
+            msg = (
+                "video.upload scope not granted. Please disconnect and reconnect TikTok "
+                "to allow draft uploads."
+            )
+        return {"clip_id": item.clip_id, "status": "failed", "error": msg,
+                "tiktok_error_code": err_code}
+
+    upload_url = data.get("data", {}).get("upload_url", "")
+    publish_id = data.get("data", {}).get("publish_id", "")
+    if not upload_url:
+        return {"clip_id": item.clip_id, "status": "failed",
+                "error": "No upload_url returned by TikTok"}
+
+    try:
+        await _tiktok_chunk_upload(upload_url, video_bytes, chunk_size, total_chunk_count, item.clip_id)
+    except Exception as exc:
+        logger.error(f"TikTok draft file upload failed for {item.clip_id}: {exc}")
+        return {"clip_id": item.clip_id, "status": "failed", "error": str(exc)}
+
+    logger.info(f"TikTok draft uploaded clip {item.clip_id} → publish_id={publish_id}")
+    return {"clip_id": item.clip_id, "status": "success", "publish_id": publish_id,
+            "draft": True}
 
 
 @router.delete("/disconnect/tiktok")
