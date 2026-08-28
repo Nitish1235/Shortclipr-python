@@ -1,15 +1,13 @@
 """
 api_stage.py — API-side pipeline steps for the split-worker architecture.
 
-DEPRECATED: YouTube shorts service is disabled so not useful
-This module is kept for reference but YouTube clip generation is no longer active.
-
 Runs on the "API Worker" Cloud Run service (4 vCPU + 2GB, ~12 concurrent):
-  1. Extract video ID (YouTube - DISABLED)
-  2. Fetch video metadata (title, duration) (YouTube - DISABLED)
+  1. Extract video ID
+  2. Fetch video metadata (title, duration)
   3. Resolve gateway window
   4. Reserve video-minutes (if jobs.py couldn't pre-flight due to failed prefetch)
-  5. Fetch transcript + stream URL (concurrent) (YouTube - DISABLED)
+  5. Fetch transcript + stream URL (concurrent) — proxy-cheap resolves the
+     stream URL; the FFmpeg stage then pulls DASH bytes via Proxy-Seller ISP
   6. Apply gateway + free-tier transcript caps
   7. Run GPT viral-clip detection
 

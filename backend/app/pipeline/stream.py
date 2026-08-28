@@ -174,6 +174,8 @@ _WEB_USER_AGENT = (
 _STREAM_USER_AGENTS = {
     "InnerTube ANDROID+proxy": _ANDROID_HEADERS["User-Agent"],
     "yt-dlp+tv_embedded+proxy": CLIENTS["TV"]["headers"]["User-Agent"],
+    "yt-dlp+android_music+proxy": _WEB_USER_AGENT,
+    "yt-dlp+android_creator+proxy": _WEB_USER_AGENT,
     "yt-dlp+android+proxy": _ANDROID_HEADERS["User-Agent"],
     "yt-dlp+ios+proxy": CLIENTS["IOS"]["headers"]["User-Agent"],
     "yt-dlp+android-constrained+proxy": _ANDROID_HEADERS["User-Agent"],
@@ -597,6 +599,16 @@ def _fmt(height: int) -> str:
     vp9 1080p both available still got served av01 1080p by this selector
     with the `!=` form. `!^=` correctly excludes every av01.* variant.
 
+    protocol=https is REQUIRED on every tier — as of late 2026 YouTube's
+    tv_embedded client returns BOTH direct fMP4 URLs (protocol=https, with
+    an MP4 sidx box the DASH downloader parses for byte-range slicing) AND
+    m3u8_native HLS manifests for the SAME height/codec pair. yt-dlp's
+    format ranker often picks the HLS variant when both are available, and
+    downloader.py's `_probe_full_sidx` then fails with "sidx box not found"
+    because HLS playlists carry no MP4 boxes at all. Restricting to
+    protocol=https forces the direct fMP4 variant, which is what the
+    downstream DASH slicer needs.
+
     Deliberately STRICT — every tier excludes av01, with NO unconstrained
     fallback at the end (that's _fmt_unconstrained()/_fmt_relaxed()'s job,
     used as explicit later tiers in the broader fallback chains). Letting
@@ -617,10 +629,10 @@ def _fmt(height: int) -> str:
     keeping audio sidx-compatible; only tier 3 gives up that guarantee.
     """
     return (
-        f"bestvideo[height<={height}][ext=mp4][vcodec!^=av01]+bestaudio[ext=m4a]"
-        f"/bestvideo[height<={height}][vcodec!^=av01]+bestaudio[ext=m4a]"
-        f"/bestvideo[height<={height}][vcodec!^=av01]+bestaudio"
-        f"/best[height<={height}][vcodec!^=av01]"
+        f"bestvideo[height<={height}][ext=mp4][vcodec!^=av01][protocol=https]+bestaudio[ext=m4a][protocol=https]"
+        f"/bestvideo[height<={height}][vcodec!^=av01][protocol=https]+bestaudio[ext=m4a][protocol=https]"
+        f"/bestvideo[height<={height}][vcodec!^=av01][protocol=https]+bestaudio[protocol=https]"
+        f"/best[height<={height}][vcodec!^=av01][protocol=https]"
     )
 
 
@@ -628,19 +640,30 @@ def _fmt_unconstrained() -> str:
     """
     Most permissive format selector - no height or extension constraints.
     Used as final fallback when all else fails.
+
+    Still pins protocol=https on the preferred tiers so the DASH downloader
+    can slice a sidx (HLS variants have no sidx box) — see _fmt() docstring.
+    The trailing `/best` stays unconstrained as the true last resort so we
+    never fail to return SOME URL.
     """
-    return "bestvideo[vcodec!^=av01]+bestaudio/best"
+    return "bestvideo[vcodec!^=av01][protocol=https]+bestaudio[protocol=https]/bestvideo[vcodec!^=av01]+bestaudio/best"
 
 
 def _fmt_relaxed(height: int) -> str:
     """
     Relaxed format selector - no extension constraint.
     Used as an additional fallback when strict mp4 selector fails.
+
+    protocol=https on the leading tiers so the DASH downloader gets a
+    direct fMP4 URL (with sidx) instead of an HLS manifest — see _fmt()
+    docstring. The trailing bare `/best` intentionally has no protocol
+    constraint so this tier can still accept HLS as a genuine last resort
+    for a given client.
     """
     return (
-        f"bestvideo[height<={height}][vcodec!^=av01]+bestaudio"
-        f"/best[height<={height}][vcodec!^=av01]"
-        f"/bestvideo[vcodec!^=av01]+bestaudio"
+        f"bestvideo[height<={height}][vcodec!^=av01][protocol=https]+bestaudio[protocol=https]"
+        f"/best[height<={height}][vcodec!^=av01][protocol=https]"
+        f"/bestvideo[vcodec!^=av01][protocol=https]+bestaudio[protocol=https]"
         f"/best"
     )
 
@@ -664,19 +687,23 @@ def _fmt_high_quality(min_height: int = 1080, max_height: int | None = None) -> 
         h_filter = f"[height>={min_height}]"
         h_filter_best = ""
 
+    # protocol=https on every tier — YouTube now returns both direct fMP4
+    # AND m3u8_native HLS variants for the same height/codec on tv_embedded,
+    # and yt-dlp often picks HLS. HLS has no MP4 sidx box, so downloader.py
+    # can't byte-range-slice it. See _fmt() docstring for the full story.
     return (
         # Tier 1: exact tier, strict mp4+m4a (best for DASH byte-range slicing)
-        f"bestvideo{h_filter}[ext=mp4][vcodec!^=av01]+bestaudio[ext=m4a]"
+        f"bestvideo{h_filter}[ext=mp4][vcodec!^=av01][protocol=https]+bestaudio[ext=m4a][protocol=https]"
         # Tier 2: same but any container
-        f"/bestvideo{h_filter}[vcodec!^=av01]+bestaudio[ext=m4a]"
+        f"/bestvideo{h_filter}[vcodec!^=av01][protocol=https]+bestaudio[ext=m4a][protocol=https]"
         # Tier 3: any audio container
-        f"/bestvideo{h_filter}[vcodec!^=av01]+bestaudio"
+        f"/bestvideo{h_filter}[vcodec!^=av01][protocol=https]+bestaudio[protocol=https]"
         # Tier 4: single-stream progressive
-        f"/best{h_filter}[vcodec!^=av01]"
+        f"/best{h_filter}[vcodec!^=av01][protocol=https]"
         # Tier 5: best available non-AV1 within max cap (or uncapped)
-        f"/bestvideo{h_filter_best}[vcodec!^=av01]+bestaudio[ext=m4a]"
-        f"/bestvideo{h_filter_best}[vcodec!^=av01]+bestaudio"
-        f"/best[vcodec!^=av01]"
+        f"/bestvideo{h_filter_best}[vcodec!^=av01][protocol=https]+bestaudio[ext=m4a][protocol=https]"
+        f"/bestvideo{h_filter_best}[vcodec!^=av01][protocol=https]+bestaudio[protocol=https]"
+        f"/best[vcodec!^=av01][protocol=https]"
     )
 
 
@@ -690,16 +717,34 @@ async def _resolve_stream_url(
     chain: list[tuple[str, object]] = [
         # 1. InnerTube ANDROID + proxy  (~2-10s, highest priority)
         ("InnerTube ANDROID+proxy", lambda: _innertube_android_stream(video_id, h, session_id, proxy_override)),
-        # 2-4. yt-dlp + tv_embedded/android/ios client + proxy — all using
-        # _fmt(h) (AV1-excluded), NOT a bare "best" selector. "best" has no
-        # codec filter at all, so for any video where the chosen client's
-        # best-at-this-height format happens to be AV1, these tiers would
-        # silently hand back an AV1 stream and the LATER InnerTube clients
-        # (which DO avoid AV1, see _pick_best_stream) would never get a
-        # chance to find a clean one. AV1-permissive selectors stay
-        # reserved for the explicit last-resort tiers below (6).
+        # 2-5. yt-dlp + tv_embedded/android_music/android/ios client + proxy
+        # — all using _fmt(h) (AV1-excluded), NOT a bare "best" selector.
+        # "best" has no codec filter at all, so for any video where the
+        # chosen client's best-at-this-height format happens to be AV1,
+        # these tiers would silently hand back an AV1 stream and the LATER
+        # InnerTube clients (which DO avoid AV1, see _pick_best_stream)
+        # would never get a chance to find a clean one. AV1-permissive
+        # selectors stay reserved for the explicit last-resort tiers below (7).
         ("yt-dlp+tv_embedded+proxy", lambda: _ytdlp_stream(
             video_id, _fmt(h), client="tv_embedded", label="yt-dlp+tv_embedded", session_id=session_id,
+            proxy_override=proxy_override,
+        )),
+        # android_music / android_creator added 2026-08 as extra yt-dlp
+        # tiers alongside tv_embedded — YouTube tightened bot detection hard
+        # enough that InnerTube ANDROID/TV/IOS (below) fail every request in
+        # production (LOGIN_REQUIRED / status=ERROR / HTTP 500), leaving
+        # tv_embedded as the only method that actually worked; a
+        # single-method chain meant any tv_embedded hiccup took the whole
+        # job down. Both verified independently (2026-08-28) to still return
+        # direct fMP4 (sidx-parseable) 1080p URLs that download cleanly
+        # through both proxy-cheap and Proxy-Seller. See get_stream_urls
+        # docstring for the full picture.
+        ("yt-dlp+android_music+proxy", lambda: _ytdlp_stream(
+            video_id, _fmt(h), client="android_music", label="yt-dlp+android_music", session_id=session_id,
+            proxy_override=proxy_override,
+        )),
+        ("yt-dlp+android_creator+proxy", lambda: _ytdlp_stream(
+            video_id, _fmt(h), client="android_creator", label="yt-dlp+android_creator", session_id=session_id,
             proxy_override=proxy_override,
         )),
         ("yt-dlp+android+proxy", lambda: _ytdlp_stream(
@@ -710,17 +755,17 @@ async def _resolve_stream_url(
             video_id, _fmt(h), client="ios", label="yt-dlp+ios", session_id=session_id,
             proxy_override=proxy_override,
         )),
-        # 5. yt-dlp + android client + relaxed format (no ext=mp4 constraint).
-        # Tries non-AV1 variants first, same as tiers 2-4, but its own
+        # yt-dlp + android client + relaxed format (no ext=mp4 constraint).
+        # Tries non-AV1 variants first, same as the tiers above, but its own
         # trailing bare `/best` means THIS tier can accept AV1 if none of
         # those variants match for this client — intentional, one tier
         # earlier than the universal last-resort below, not a regression
-        # of the original bug (4 strict, AV1-free attempts already ran first).
+        # of the original bug (the strict, AV1-free attempts already ran first).
         ("yt-dlp+android-constrained+proxy", lambda: _ytdlp_stream(
             video_id, _fmt_relaxed(h), client="android", label="yt-dlp+android-constrained", session_id=session_id,
             proxy_override=proxy_override,
         )),
-        # 6. yt-dlp unconstrained (any client, any format) — explicit final
+        # yt-dlp unconstrained (any client, any format) — explicit final
         # last resort, AV1 permitted here ONLY (see _fmt_unconstrained docstring).
         ("yt-dlp+unconstrained+proxy", lambda: _ytdlp_stream(
             video_id, _fmt_unconstrained(), label="yt-dlp+unconstrained", session_id=session_id,
@@ -808,47 +853,62 @@ async def get_stream_urls(
     that will download them (Proxy-Seller ISP), avoiding IP-bound signature
     mismatches.
 
-    Tries yt-dlp (tv_embedded, with audio) FIRST — in production all three
-    InnerTube clients (ANDROID/TV/IOS) were consistently getting blocked or
-    rejected before ever reaching yt-dlp, so every job paid for 3 guaranteed
-    failures (~8s) before landing on the one path that actually works. If
-    yt-dlp fails too, falls back to InnerTube ANDROID → TV → IOS, then
-    finally to the video-only chain (get_stream_url) as a last resort.
+    Tries yt-dlp (tv_embedded, then android_music, then android_creator —
+    all with audio) FIRST — in production all three InnerTube clients
+    (ANDROID/TV/IOS) were consistently getting blocked or rejected before
+    ever reaching yt-dlp, so every job paid for 3 guaranteed failures (~8s)
+    before landing on the one path that actually works. android_music and
+    android_creator were added as extra yt-dlp tiers (2026-08) after
+    YouTube tightened bot detection on the InnerTube ANDROID/TV/IOS
+    endpoints hard enough that all three fail every request (LOGIN_REQUIRED
+    / status=ERROR / HTTP 500) — without a second/third yt-dlp fallback, ANY
+    tv_embedded hiccup took down the whole job with no real fallback left
+    (InnerTube TV/IOS were dead weight). If all three yt-dlp tiers fail,
+    falls back to InnerTube ANDROID → TV → IOS anyway (cheap, ~10s total,
+    and may recover if YouTube's InnerTube-side block lifts), then finally
+    to the video-only chain (get_stream_url) as a last resort.
     """
     h = int(quality.rstrip("p"))
-
-    # ── 1. yt-dlp + tv_embedded + audio (now first — see docstring) ────
-    proxy = proxy_override or get_proxycheap_proxy(purpose="stream-ytdlp-tv_embedded")
-    opts = _ytdlp_base_opts(proxy)
-    opts["format"] = _fmt(h)
-    opts["extractor_args"] = {"youtube": {"player_client": ["tv_embedded"]}}
     loop = asyncio.get_running_loop()
-    try:
-        info = await loop.run_in_executor(
-            _YTDLP_POOL,
-            _ytdlp_run_sync,
-            opts,
-            f"https://www.youtube.com/watch?v={video_id}",
-        )
-        video_url = _pick_stream_ytdlp(info)
-        if video_url:
-            audio_url = _pick_audio_ytdlp(info)
-            if not audio_url and not _ytdlp_result_has_embedded_audio(info):
-                # tv_embedded matched a video-only format (no bestaudio pair,
-                # no embedded audio either) — don't ship this clip silently
-                # muted just because THIS proxy IP's format list lacked a
-                # combo; make one explicit attempt via the audio resolver.
-                audio_url = await _backfill_missing_audio(video_id, session_id, proxy_override)
-            logger.info(
-                f"[{video_id}] stream+audio ← yt-dlp tv_embedded "
-                f"(audio={'separate' if audio_url else 'none'})"
-            )
-            return video_url, audio_url, _WEB_USER_AGENT
-        logger.warning(f"[{video_id}] yt-dlp tv_embedded returned no video URL; trying InnerTube clients")
-    except Exception as ytdlp_exc:
-        logger.warning(f"[{video_id}] yt-dlp tv_embedded failed ({ytdlp_exc}); trying InnerTube clients")
 
-    # ── 2. InnerTube ANDROID → TV → IOS — video+audio resolved in ONE
+    # ── 1-3. yt-dlp + tv_embedded, android_music, android_creator — all
+    # with audio, tried in order (see docstring for why these tiers exist) ──
+    for client, label in (
+        ("tv_embedded", "yt-dlp tv_embedded"),
+        ("android_music", "yt-dlp android_music"),
+        ("android_creator", "yt-dlp android_creator"),
+    ):
+        proxy = proxy_override or get_proxycheap_proxy(purpose=f"stream-ytdlp-{client}")
+        opts = _ytdlp_base_opts(proxy)
+        opts["format"] = _fmt(h)
+        opts["extractor_args"] = {"youtube": {"player_client": [client]}}
+        try:
+            info = await loop.run_in_executor(
+                _YTDLP_POOL,
+                _ytdlp_run_sync,
+                opts,
+                f"https://www.youtube.com/watch?v={video_id}",
+            )
+            video_url = _pick_stream_ytdlp(info)
+            if video_url:
+                audio_url = _pick_audio_ytdlp(info)
+                if not audio_url and not _ytdlp_result_has_embedded_audio(info):
+                    # This client matched a video-only format (no bestaudio
+                    # pair, no embedded audio either) — don't ship this clip
+                    # silently muted just because THIS proxy IP's format
+                    # list lacked a combo; make one explicit attempt at the
+                    # dedicated audio resolver.
+                    audio_url = await _backfill_missing_audio(video_id, session_id, proxy_override)
+                logger.info(
+                    f"[{video_id}] stream+audio ← {label} "
+                    f"(audio={'separate' if audio_url else 'none'})"
+                )
+                return video_url, audio_url, _WEB_USER_AGENT
+            logger.warning(f"[{video_id}] {label} returned no video URL; trying next method")
+        except Exception as ytdlp_exc:
+            logger.warning(f"[{video_id}] {label} failed ({ytdlp_exc}); trying next method")
+
+    # ── 4. InnerTube ANDROID → TV → IOS — video+audio resolved in ONE
     # call so both CDN URLs share the same proxy exit IP (required for
     # IP-bound URLs) ─────────────────────────────────────────────────
     _clients = [
@@ -887,13 +947,13 @@ async def get_stream_urls(
             logger.warning(f"[{video_id}] get_stream_urls InnerTube {client_name} failed ({exc}); trying next client")
             last_exc = exc
 
-    # ── 3. All else failed — video-only chain as the final fallback ────
+    # ── 5. All else failed — video-only chain as the final fallback ────
     # get_stream_url()'s own internal chain only ever returns (url, user_agent)
     # — even when one of its yt-dlp attempts happened to also resolve audio,
     # that info is discarded. Rather than silently ship video-only clips,
     # make ONE more explicit attempt at a separate audio stream via the
     # dedicated audio resolver below before giving up on audio entirely.
-    logger.warning(f"[{video_id}] yt-dlp + all InnerTube clients failed ({last_exc}); falling back to video-only chain")
+    logger.warning(f"[{video_id}] yt-dlp (tv_embedded, android_music, android_creator) + all InnerTube clients failed ({last_exc}); falling back to video-only chain")
     video_url, user_agent = await get_stream_url(video_id, quality, session_id, proxy_override)
 
     audio_url = await _backfill_missing_audio(video_id, session_id, proxy_override)

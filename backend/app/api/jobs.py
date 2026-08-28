@@ -201,18 +201,12 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
     concurrent submissions to double-spend the same remaining quota.
     """
     # ── 1. Validate YouTube URL ────────────────────────────────
-    # YouTube shorts service is disabled so not useful
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="YouTube clip generation is currently disabled. Please use other services.",
-    )
-
-    # video_id = extract_video_id(body.youtube_url)
-    # if not video_id:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-    #         detail="Invalid YouTube URL — paste a valid youtube.com or youtu.be link.",
-    #     )
+    video_id = extract_video_id(body.youtube_url)
+    if not video_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid YouTube URL — paste a valid youtube.com or youtu.be link.",
+        )
 
     # ── 1b. Concurrent job limit ───────────────────────────────
     active_count = await db.count_active_jobs(current_user.user_id)

@@ -33,7 +33,7 @@ from pathlib import Path
 from app.core.config import get_settings
 from app.core.email import send_email
 from app.core.email_templates import clips_ready_email_html
-from app.core.proxy import get_proxycheap_proxy, get_proxyseller_proxy, url_is_ip_bound
+from app.core.proxy import get_proxycheap_proxy, get_proxyseller_proxy
 from app.db import supabase as db
 from app.pipeline.ai_clipper import ClipTimestamp
 from app.pipeline.captions import (
@@ -518,23 +518,24 @@ async def _dash_download_with_refresh(
     last = (stream_url, audio_url, user_agent, ps_proxy_0)
 
     # ── Attempt 1: cached URLs + Proxy-Seller (pool IP #0) ──
-    # Skip when the URL is IP-bound (YouTube now binds all CDN URLs to the
-    # exit IP that resolved them). The cached URL was resolved via proxy-cheap
-    # in the API stage — its exit IP will never match Proxy-Seller, so this
-    # attempt would 403 unconditionally. Detect and skip it to go straight
-    # to attempt 2 (re-resolve + download via the same Proxy-Seller IP).
-    if url_is_ip_bound(stream_url):
-        logger.info(f"[{job_id}] Cached URL is IP-bound — skipping attempt 1, going to re-resolve")
-    else:
-        try:
-            return await download_all_clips_parallel(
-                stream_url, clip_ranges, job_dir,
-                audio_url=audio_url, user_agent=user_agent,
-                proxy_url=ps_proxy_0,
-                max_concurrent=3,
-            )
-        except Exception as exc1:
-            logger.warning(f"[{job_id}] DASH attempt 1 failed (cached URLs + Proxy-Seller #0): {exc1}")
+    # This is the intended fast path: URLs were resolved via proxy-cheap in
+    # the API stage, DASH bytes are pulled via Proxy-Seller ISP here. Even
+    # when the URL is signed with `ip=<proxy-cheap IP>` in sparams, YouTube's
+    # tv_embedded CDN currently accepts cross-IP requests (verified 2026-08 —
+    # a proxy-cheap-signed URL downloads cleanly through Proxy-Seller). If
+    # this ever tightens back up, the try/except below catches the 403 and
+    # falls through to attempt 2 (re-resolve via Proxy-Seller). We used to
+    # short-circuit on url_is_ip_bound() here, which cost every job a wasted
+    # ~10-30s re-resolution round trip for no gain.
+    try:
+        return await download_all_clips_parallel(
+            stream_url, clip_ranges, job_dir,
+            audio_url=audio_url, user_agent=user_agent,
+            proxy_url=ps_proxy_0,
+            max_concurrent=3,
+        )
+    except Exception as exc1:
+        logger.warning(f"[{job_id}] DASH attempt 1 failed (cached URLs + Proxy-Seller #0): {exc1}")
 
     # ── Attempt 2: resolve + download via Proxy-Seller pool IP #1 (rotated) ──
     ps_proxy_1 = get_proxyseller_proxy(job_id, attempt=1)
