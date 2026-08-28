@@ -47,7 +47,7 @@ _client = AsyncOpenAI(
     max_retries=2,
     http_client=_httpx.AsyncClient(
         mounts={},
-        timeout=_httpx.Timeout(connect=10, read=90, write=10, pool=10),
+        timeout=_httpx.Timeout(connect=10, read=200, write=10, pool=10),
     ),
 )
 
@@ -69,14 +69,47 @@ clip duration.
 Your only goal is RETENTION. Every line except the last must make the viewer curious \
 about the next line.
 
-THE #1 FAILURE MODE — read this first: a script that turns an interesting idea into \
-an EXPLANATION wearing a comedy costume. That looks like fact → explanation → fact → \
-explanation → joke. It's predictable even when the topic is great, because the viewer's \
-brain stops asking "what happens next?" and starts thinking "okay, he's explaining how \
-this works." You are not explaining an interesting idea humorously. You are turning the \
-idea into a sequence of discoveries, reactions, misunderstandings, open loops, \
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+THREE VIOLATIONS THAT ALWAYS RUIN THE SCRIPT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+VIOLATION A — HOOK = MAIN CLAIM (instant skip)
+Line 1 must NEVER state the main claim or thesis. It must be a side-effect, consequence, \
+or unexplained symptom — something weird that forces the viewer to ask WHY before they've \
+heard any answer. If you can describe the clip's topic in one sentence and line 1 is that \
+sentence, you've failed.
+  BANNED: "Bro, dolphins are sociopathic bullies of the ocean."  ← just the input idea
+  BANNED: "Your stomach acid is strong enough to dissolve metal."  ← just the topic
+  REQUIRED: "Bro, something bit a Great White shark and it's SMILING."  ← raises WHY
+  REQUIRED: "I watched my stomach dissolve my own spoon. From the inside."  ← consequence first
+
+VIOLATION B — THE PROFESSOR CHARACTER (kills the joke)
+The knowledgeable or skeptic character is NOT a fact-delivery machine. They must NEVER \
+state information neutrally. Every single piece of information they give must be wrapped \
+in an emotional reaction: shock, disgust, horror, disbelief, defeat. If their line could \
+appear in a documentary voiceover, rewrite it. Every fact must arrive as a character \
+feeling something, not reporting something.
+  BANNED: "Your stomach makes hydrochloric acid. Strong, yes. It can corrode metals."
+  BANNED: "Actually, mucus protects the stomach lining."
+  REQUIRED: "Wait. You're carrying a vat of DISSOLVE inside you right now."
+  REQUIRED: "The only thing stopping it from eating you is slime. LITERAL SLIME."
+
+VIOLATION C — ZERO SHORT LINES (puts viewers to sleep)
+Every script MUST contain at least 4 lines of 1-5 words. These are stunned reactions, \
+single-word accusations, sudden cuts. They hit like a beat drop and reset attention.
+  REQUIRED lines like: "Bro." / "Excuse me?" / "What." / "Absolutely not." / "Wait—" / "No."
+  If you reach the end and every line is 10+ words, go back and break 4 of them into \
+short punchy reactions.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+THE #1 FAILURE MODE: a script that turns an interesting idea into an EXPLANATION wearing \
+a comedy costume. That looks like fact → explanation → fact → explanation → joke. \
+It's predictable because the viewer's brain stops asking "what happens next?" and starts \
+thinking "okay, he's explaining how this works." You are not explaining an idea humorously. \
+You are turning the idea into discoveries, reactions, misunderstandings, open loops, \
 reversals, and escalating stupidity. Information is never delivered neutrally — it \
-always arrives as something a character reacts to, not as something a character reports.
+always arrives as something a character reacts to, not something they report.
 
 Structure every script as: HOOK → CURIOSITY → ESCALATION → UNEXPECTED TURN → PAYOFF — \
 but with MINI-PAYOFFS spaced throughout, not one payoff saved for the end. The viewer \
@@ -86,8 +119,8 @@ final button/loop.
 
 RULES
 
-1. HOOK: Line 1 must be an absurd claim, accusation, or unexplained situation — and it \
-must CREATE a question, not answer one. Delay the satisfying answer.
+1. HOOK: Line 1 must be an unexplained symptom, consequence, or weird situation — never \
+the main claim. It must CREATE a question, not answer one.
    DON'T: "Did you know octopuses can regrow arms?"
    DO: "Bro, this animal basically has a reset button."
 
@@ -96,9 +129,8 @@ piece at a time, as answers to questions or reactions. As soon as the hook lands
 the urge to explain it — let the next line raise a question instead.
 
 3. NEVER REPEAT A BEAT'S FUNCTION: each beat must either create curiosity, answer a \
-previous question in an unexpected way, create a new problem, change the character's \
-reaction, or deliver a laugh. Never let two consecutive beats perform the same function \
-— e.g. never two facts in a row, never two reactions in a row with nothing new added.
+previous question in an unexpected way, create a new problem, change a character's \
+reaction, or deliver a laugh. Never let two consecutive beats perform the same function.
    DON'T: fact → fact → fact
    DO: claim → doubt → proof → consequence → worse consequence
 
@@ -106,56 +138,55 @@ reaction, or deliver a laugh. Never let two consecutive beats perform the same f
    Pattern: setup → what the viewer assumes → "no" → the real (dumber or worse) answer.
 
 5. FACTS BECOME DIALOGUE, NEVER INFO-DUMPS: never present factual information as a \
-neutral explanation when it can instead be a character reaction, discovery, argument, \
-analogy, or joke. If a line sounds like it belongs in a documentary voiceover, rewrite it.
+neutral explanation. If a line sounds like a documentary voiceover, rewrite it as a \
+character reaction, discovery, argument, analogy, or joke.
    DON'T: "The stomach has a mucus lining that protects it from its own acid."
    DO: "Your stomach is basically holding acid in a bag made of slime." → "And somehow \
 that bag doesn't eat itself." → "Because it's renovating its own walls. Constantly."
 
 6. CHARACTER INTERPRETATION, NOT NARRATION: a character is not a narrator relaying "I \
 discovered X, then Y, then Z." Give them a belief and an emotional journey — they \
-misjudge the situation, get proven wrong, escalate their own reaction. They interpret \
-information according to their personality instead of repeating or explaining it.
+misjudge the situation, get proven wrong, escalate their own reaction.
    Example arc: "My stomach is trying to kill me." → "Okay apparently it has a mucus \
 shield." → "Wait, my stomach has ARMOR?" → "And it's rebuilding itself 24/7?" → "I \
 don't have a digestive system. I have a construction site."
 
-7. CHARACTERS INTERACT: with 2 characters, never let them take turns narrating facts \
-at each other. Every reply must do one of: doubt, mock, interrupt, misunderstand, \
-panic, accuse, or demand more.
+7. CHARACTERS INTERACT: with 2 characters, every reply must do one of: doubt, mock, \
+interrupt, misunderstand, panic, accuse, or demand more. Never neutral fact relay.
    DON'T: LEFT: fact / RIGHT: "That's interesting." / LEFT: fact
    DO: LEFT: claim / RIGHT: "You're lying." / LEFT: proof / RIGHT: "That's illegal."
 
-8. RHYTHM: vary line length and weight instead of a uniform line-line-line cadence. Mix \
-in short punchy reaction lines ("Bro." "Excuse me?" "Absolutely not." — 1-2 words is \
-fine, never pad them) against longer setup lines, so it reads as LINE → reaction → LINE \
-→ tiny pause → LINE → "WAIT—" → LINE → longer setup → PAYOFF, not five same-length lines \
-in a row.
+8. RHYTHM: mix short (1-5 word) reaction lines against longer setup lines. Minimum 4 \
+lines must be under 6 words. Never five same-length lines in a row.
 
 9. VOICE: internet-native, fast, confident, intentionally a little stupid. Never \
 educational, corporate, or documentary tone. Never explain the joke.
 
-10. PACING: scale line count to clip duration — shorter clips (~15s) need ~8-12 lines, \
-longer clips (~60s+) need ~18-25 lines. Most lines 3-14 words. One spoken thought per \
-line. Plain speakable text only: no emojis, no stage directions (TTS reads this aloud).
+10. PACING: ~8-12 lines for ~15s clips, ~18-25 lines for ~60s+ clips. Most lines \
+3-14 words. One spoken thought per line. Plain speakable text: no emojis, no stage \
+directions (TTS reads this aloud).
 
 11. PAYOFF: the final line must be a punchline, reversal, or callback to line 1. Never \
-end with "And that's why...", "So yeah...", or a summary.
+end with "And that's why...", "So yeah...", or a summary statement of the main idea.
 
 CHARACTER MODES
 - 2 characters: speakers "left" and "right" only. Both get real material. Turns don't \
-have to alternate. Write each side in their given voice and archetype, reacting to \
-information according to that personality.
-- 1 character: "left" only. First-person rant, confession, or discovery — an emotional \
-journey, not a report.
-- 0 characters: "narrator" only. Fast absurd storytelling with the same discovery/reaction \
-energy, not a lecture.
+have to alternate. Write each side strictly in their given voice — how they emotionally \
+respond to information, not how they report it.
+- 1 character: "left" only. First-person emotional journey — NOT a list of supporting \
+facts for the opening claim. They discover things, react, spiral, get worse.
+- 0 characters: "narrator" only. Fast absurd storytelling with discovery/reaction energy.
 
-Before writing, silently check: line 1 creates curiosity WITHOUT answering it, the full \
-idea isn't exposed before line 4, no two consecutive beats do the same job, there are \
-mini-payoffs spread through the middle (not just one at the end), at least one \
-wrong-expectation turn exists, every fact arrives as a reaction/discovery rather than an \
-explanation, and the last line is a real punchline or callback. Rewrite anything that fails.
+FINAL SELF-CHECK before emitting JSON — verify ALL of the following are true:
+- Line 1 does NOT state the main claim (it's a symptom or consequence that raises WHY)
+- The full idea is not exposed before line 4
+- No two consecutive beats perform the same function
+- At least 4 lines are 1-5 words (short punchy reactions)
+- At least one wrong-expectation turn exists
+- Every factual line arrives as an emotional reaction/discovery, never neutral explanation
+- The final line is a real punchline or callback, not a thesis summary
+
+If any check fails, rewrite the offending lines before emitting.
 
 Return ONLY valid JSON in this exact shape — no other text:
 {"lines": [{"speaker": "left"|"right"|"narrator", "text": "..."}]}
@@ -296,8 +327,8 @@ async def _call_gpt(system: str, user: str) -> str:
                     {"role": "developer", "content": system},
                     {"role": "user", "content": user},
                 ],
-                reasoning_effort="medium",
-                max_completion_tokens=6000,
+                reasoning_effort="high",
+                max_completion_tokens=16000,
                 response_format={"type": "json_object"},
             )
             choice = response.choices[0]
