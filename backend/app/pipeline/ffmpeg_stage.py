@@ -535,7 +535,8 @@ async def _dash_download_with_refresh(
             max_concurrent=3,
         )
     except Exception as exc1:
-        logger.warning(f"[{job_id}] DASH attempt 1 failed (cached URLs + Proxy-Seller #0): {exc1}")
+        exc1_str = str(exc1) or f"{type(exc1).__name__} (no message)"
+        logger.warning(f"[{job_id}] DASH attempt 1 failed (cached URLs + Proxy-Seller #0): {exc1_str}")
 
     # ── Attempt 2: resolve + download via Proxy-Seller pool IP #1 (rotated) ──
     ps_proxy_1 = get_proxyseller_proxy(job_id, attempt=1)
@@ -554,7 +555,8 @@ async def _dash_download_with_refresh(
                 max_concurrent=3,
             )
         except Exception as exc2:
-            logger.warning(f"[{job_id}] DASH attempt 2 failed (Proxy-Seller #1 resolve + DASH): {exc2}")
+            exc2_str = str(exc2) or f"{type(exc2).__name__} (no message)"
+            logger.warning(f"[{job_id}] DASH attempt 2 failed (Proxy-Seller #1 resolve + DASH): {exc2_str}")
 
     # ── Attempt 3: resolve + download via proxy-cheap (matching, not mixed) ──
     # proxy-cheap is a single rotating-residential gateway (one fixed
@@ -584,7 +586,10 @@ async def _dash_download_with_refresh(
                     max_concurrent=3,
                 )
             except Exception as exc3:
-                logger.warning(f"[{job_id}] DASH attempt 3 (try {pc_attempt + 1}/2) failed (proxy-cheap resolve + DASH): {exc3}")
+                exc3_str = str(exc3) or f"{type(exc3).__name__} (no message)"
+                logger.warning(f"[{job_id}] DASH attempt 3 (try {pc_attempt + 1}/2) failed (proxy-cheap resolve + DASH): {exc3_str}")
+                if pc_attempt == 0:
+                    await asyncio.sleep(4)  # Dead proxy-cheap node; let the rotating gateway pick a healthy one
 
     # All DASH attempts exhausted — hand the caller the last coherent
     # (proxy, URL) pairing so its full-source fallback doesn't repeat the

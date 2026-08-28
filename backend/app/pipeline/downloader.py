@@ -474,7 +474,7 @@ async def _retry_transient(coro_factory, retries=2, backoff=2.0, label=""):
     raise last_exc
 
 
-async def _download_full_track(client: httpx.AsyncClient, url: str, headers: dict, out_path: Path) -> None:
+async def _download_full_track(url: str, headers: dict, out_path: Path, proxy_url: str | None = None) -> None:
     """
     Stream an entire (non-range) track to disk.
 
@@ -484,14 +484,46 @@ async def _download_full_track(client: httpx.AsyncClient, url: str, headers: dic
     to find. Audio tracks are small (a few MB to a few tens of MB even for
     long videos), so downloading the whole thing is cheap next to falling
     all the way back to a full-source VIDEO download.
+
+    Uses its own client with a 300s read timeout — the shared clip client
+    only has a 60s timeout, which can expire mid-download on a slow proxy
+    node (the shared client is also unsuitable here since proxy-cheap is a
+    rotating gateway and each new connection may land on a different exit
+    IP, so we own the full lifecycle instead of reusing a pool connection).
+    Retries up to 3 times with 5s backoff on transient proxy errors
+    (dead/slow proxy-cheap nodes that time out before sending data).
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    async with client.stream("GET", url, headers=headers) as resp:
-        if resp.status_code not in (200, 206):
-            raise RuntimeError(f"Full track download failed: HTTP {resp.status_code}")
-        with open(out_path, "wb") as f:
-            async for chunk in resp.aiter_bytes():
-                f.write(chunk)
+    timeout = httpx.Timeout(300.0, connect=20.0)
+    client_kwargs: dict = {"timeout": timeout, "follow_redirects": True}
+    if proxy_url:
+        client_kwargs["proxy"] = proxy_url
+
+    _RETRIES = 3
+    last_exc: Exception | None = None
+    for attempt in range(_RETRIES):
+        try:
+            async with httpx.AsyncClient(**client_kwargs) as dl_client:
+                async with dl_client.stream("GET", url, headers=headers) as resp:
+                    if resp.status_code not in (200, 206):
+                        raise RuntimeError(f"Full track download failed: HTTP {resp.status_code}")
+                    with open(out_path, "wb") as f:
+                        async for chunk in resp.aiter_bytes():
+                            f.write(chunk)
+            return
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            last_exc = exc
+            exc_str = str(exc) or f"{type(exc).__name__} (no message)"
+            if attempt + 1 < _RETRIES:
+                logger.warning(
+                    f"Full track download failed (attempt {attempt + 1}/{_RETRIES}): "
+                    f"{exc_str} — retrying in 5s"
+                )
+                await asyncio.sleep(5)
+            else:
+                raise RuntimeError(f"Full track download failed after {_RETRIES} attempts: {exc_str}") from exc
 
 
 async def _trim_local_track(src_path: Path, start: float, duration: float, out_path: Path) -> None:
@@ -587,13 +619,14 @@ async def download_all_clips_parallel(
 
             if isinstance(a_result, Exception) or not a_result[1]:
                 reason = a_result if isinstance(a_result, Exception) else "sidx parsed but had zero segments"
+                reason_str = str(reason) or f"{type(reason).__name__} (no message)"
                 logger.warning(
-                    f"Audio sidx unusable ({reason}) — likely a non-MP4 container "
+                    f"Audio sidx unusable ({reason_str}) — likely a non-MP4 container "
                     f"(e.g. WebM/Opus); falling back to a full audio download for this track"
                 )
                 a_init_end, a_segs = None, None
                 audio_full_path = out_dir / "_audio_full.tmp"
-                await _download_full_track(client, audio_url, headers, audio_full_path)
+                await _download_full_track(audio_url, headers, audio_full_path, proxy_url=proxy_url)
             else:
                 a_init_end, a_segs = a_result
         else:
