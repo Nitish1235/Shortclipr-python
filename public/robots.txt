@@ -1,13 +1,10 @@
 User-agent: *
 Allow: /
-
-# YouTube Shorts product is disabled — block all its paths from crawling.
-# Combined with the 301 redirects in nginx.conf, this drops existing
-# indexed pages as fast as possible and prevents new impressions.
-Disallow: /youtube-shorts
-Disallow: /youtube-shorts/
-
-# Internal / protected paths — never index
+Disallow: /youtube-shorts/dashboard
+Disallow: /youtube-shorts/editor
+Disallow: /youtube-shorts/clips
+Disallow: /youtube-shorts/lab
+Disallow: /youtube-shorts/settings
 Disallow: /billing
 Disallow: /admin
 Disallow: /payment/
