@@ -25,6 +25,33 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
+# ── YouTube-native range parameter ─────────────────────────────────────────────
+
+def _yt_range_url(url: str, start: int, end: int) -> str:
+    """
+    Append YouTube's native &range=START-END query parameter instead of using
+    HTTP Range: headers for byte-range access.
+
+    YouTube CDN blocks HTTP Range headers for deep byte offsets (e.g. a segment
+    at byte 50_000_000 in a 1080p file) as an anti-scraping measure — it returns
+    HTTP 403 for those. It does NOT block requests that use the &range= query
+    parameter, because that is how YouTube's own player fetches DASH segments
+    (Google's QUIC/HTTP player never sends Range headers; it always appends
+    &range= to the CDN URL). Using the native YouTube approach means the CDN
+    treats the request like a real player's DASH fetch.
+
+    The server responds with HTTP 200 (or 206) containing ONLY the requested
+    bytes — functionally identical to a Range response from our perspective.
+
+    Strips any pre-existing &range= from the URL first so we don't stack them
+    (yt-dlp occasionally includes &range=0- in some format URLs).
+    """
+    import re
+    base = re.sub(r"[&?]range=[^&]*", "", url)
+    sep = "&" if "?" in base else "?"
+    return f"{base}{sep}range={start}-{end}"
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 async def _probe_range_support(client: httpx.AsyncClient, url: str, headers: dict) -> int:
@@ -318,8 +345,7 @@ async def _probe_full_sidx(client: httpx.AsyncClient, url: str, headers: dict) -
     extent = None
     probe_data = b""
     for range_end in (8_191, 65_535, 1_048_575):
-        probe_headers = {**headers, "Range": f"bytes=0-{range_end}"}
-        resp = await client.get(url, headers=probe_headers)
+        resp = await client.get(_yt_range_url(url, 0, range_end), headers=headers)
         if resp.status_code not in (200, 206):
             raise RuntimeError(f"sidx probe failed: HTTP {resp.status_code}")
         probe_data = resp.content
@@ -339,8 +365,7 @@ async def _probe_full_sidx(client: httpx.AsyncClient, url: str, headers: dict) -
             # Box header found but its entry table extends past what we've
             # fetched — common on long videos. Re-probe with the exact size.
             logger.info(f"sidx box ({sidx_size} bytes) exceeds probe ({len(probe_data)} bytes) — re-probing")
-            probe_headers = {**headers, "Range": f"bytes=0-{needed + 1023}"}
-            resp = await client.get(url, headers=probe_headers)
+            resp = await client.get(_yt_range_url(url, 0, needed + 1023), headers=headers)
             probe_data = resp.content
 
     return probe_data
@@ -379,10 +404,10 @@ async def _fetch_clip_segments_for_url(
         f"seg_start={actual_start_t:.2f}s"
     )
 
-    # Fetch init segment + clip data concurrently
+    # Fetch init segment + clip data concurrently using YouTube-native &range= params.
     init_resp, segs_resp = await asyncio.gather(
-        client.get(url, headers={**headers, "Range": f"bytes=0-{init_end-1}"}),
-        client.get(url, headers={**headers, "Range": f"bytes={seg_start_b}-{seg_end_b}"}),
+        client.get(_yt_range_url(url, 0, init_end - 1), headers=headers),
+        client.get(_yt_range_url(url, seg_start_b, seg_end_b), headers=headers),
     )
     for r in (init_resp, segs_resp):
         if r.status_code not in (200, 206):
@@ -650,12 +675,15 @@ async def download_all_clips_parallel(
                         raise RuntimeError(f"No segments for clip {start}-{end}s")
                     sb, eb = relevant[0]["start_b"], relevant[-1]["end_b"]
                     actual_t = relevant[0]["start_t"]
-                    # Sequential fetches — init then segments — to halve peak
+                    # Use YouTube-native &range= query params (not HTTP Range headers).
+                    # YouTube CDN blocks Range headers for deep byte offsets as anti-
+                    # scraping but honours &range= since that's how its own player
+                    # fetches DASH segments. Sequential fetches still halve peak
                     # connections per clip through the proxy.
-                    init_r = await client.get(url, headers={**headers, "Range": f"bytes=0-{init_end-1}"})
+                    init_r = await client.get(_yt_range_url(url, 0, init_end - 1), headers=headers)
                     if init_r.status_code not in (200, 206):
                         raise RuntimeError(f"Init fetch failed HTTP {init_r.status_code}")
-                    seg_r = await client.get(url, headers={**headers, "Range": f"bytes={sb}-{eb}"})
+                    seg_r = await client.get(_yt_range_url(url, sb, eb), headers=headers)
                     if seg_r.status_code not in (200, 206):
                         raise RuntimeError(f"Segment fetch failed HTTP {seg_r.status_code}")
                     out_path.parent.mkdir(parents=True, exist_ok=True)
