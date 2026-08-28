@@ -1159,7 +1159,7 @@ export default function Dashboard() {
                                 opacity: ytPubbing ? 0.7 : 1,
                               }}
                             >
-                              <YTLogo size={10} />{ytPubbing ? '…' : ytDone ? ' ✓' : ''}
+                              <YTLogo size={10} /><span style={{fontSize:'.5rem'}}>{ytPubbing ? '…' : ytDone ? '✓' : 'Post'}</span>
                             </button>
                             {/* TikTok: publish + draft split */}
                             <div style={{ flex:1, display:'flex', gap:2 }}>
@@ -1177,7 +1177,7 @@ export default function Dashboard() {
                                   opacity: ttPubbing ? 0.7 : 1,
                                 }}
                               >
-                                <TTLogo size={9} />{ttPubbing ? '…' : ttDone ? '✓' : '↑'}
+                                <TTLogo size={9} /><span style={{fontSize:'.5rem'}}>{ttPubbing ? '…' : ttDone ? '✓' : 'Post'}</span>
                               </button>
                               <button
                                 onClick={e => handleDraftTT(e, clip)}
@@ -1193,7 +1193,7 @@ export default function Dashboard() {
                                   opacity: ttDrafting ? 0.7 : 1,
                                 }}
                               >
-                                <TTLogo size={9} />{ttDrafting ? '…' : ttDraft ? '✓' : '📋'}
+                                <TTLogo size={9} /><span style={{fontSize:'.5rem'}}>{ttDrafting ? '…' : ttDraft ? '✓' : 'Draft'}</span>
                               </button>
                             </div>
                             <button
@@ -1240,21 +1240,21 @@ export default function Dashboard() {
             background:'#fff5f5', color:'#dc2626', border:'1px solid #fca5a5',
             borderRadius:7, padding:'7px 16px', fontWeight:700, fontSize:'.76rem', cursor:'pointer',
           }}>
-            <YTLogo size={14} /> YouTube
+            <YTLogo size={14} /> Publish to YouTube
           </button>
           <button onClick={handleBulkPublishTT} style={{
             display:'flex', alignItems:'center', gap:7,
             background:'#faf5ff', color:'#7c3aed', border:'1px solid #e9d5ff',
             borderRadius:7, padding:'7px 16px', fontWeight:700, fontSize:'.76rem', cursor:'pointer',
           }}>
-            <TTLogo size={14} /> TikTok Publish
+            <TTLogo size={14} /> Post to TikTok
           </button>
           <button onClick={handleBulkDraftTT} style={{
             display:'flex', alignItems:'center', gap:7,
             background:'#fff', color:'#7c3aed', border:'1px solid #e9d5ff',
             borderRadius:7, padding:'7px 16px', fontWeight:700, fontSize:'.76rem', cursor:'pointer',
           }}>
-            <TTLogo size={14} /> TikTok Draft
+            <TTLogo size={14} /> Save TikTok Draft
           </button>
           <div style={{ width:1, height:20, background:'#e5e7eb' }}/>
           <button onClick={() => setSelectedClipIds(new Set())} style={{
@@ -1483,7 +1483,7 @@ export default function Dashboard() {
                             cursor: publishingTT.has(modalClipId) ? 'default' : 'pointer',
                           }}
                         >
-                          {publishingTT.has(modalClipId) ? 'Uploading…' : '↑ Publish to TikTok'}
+                          {publishingTT.has(modalClipId) ? 'Uploading…' : 'Publish to TikTok'}
                         </button>
                       )}
                       {/* Save as draft */}
@@ -1501,7 +1501,7 @@ export default function Dashboard() {
                             cursor: draftingTT.has(modalClipId) ? 'default' : 'pointer',
                           }}
                         >
-                          {draftingTT.has(modalClipId) ? 'Saving…' : '📋 Save as Draft'}
+                          {draftingTT.has(modalClipId) ? 'Saving…' : 'Save to TikTok Drafts'}
                         </button>
                       )}
                     </>) : (
