@@ -91,6 +91,8 @@ export default function Dashboard() {
   const [publishingYT, setPublishingYT] = useState(new Set())
   const [publishedTT, setPublishedTT] = useState(new Set())
   const [publishingTT, setPublishingTT] = useState(new Set())
+  const [draftedTT,   setDraftedTT]   = useState(new Set())
+  const [draftingTT,  setDraftingTT]  = useState(new Set())
   // Per-clip topic + hashtags (optional, used when publishing)
   const [clipMeta, setClipMeta] = useState({}) // { [clipId]: { topic: '', hashtags: '' } }
   const updateClipMeta = (clipId, field, value) =>
@@ -507,6 +509,70 @@ export default function Dashboard() {
       } else { showToast('TikTok bulk publish failed', 'error') }
     } catch { showToast('TikTok bulk publish failed', 'error') }
     setPublishingTT(new Set())
+  }
+
+  const handleDraftTT = async (e, clip) => {
+    e.stopPropagation()
+    if (!requirePlan('Save TikTok Draft')) return
+    if (!ttConnected) { handleConnectTikTok(); return }
+    const clipId = clip.clip_id || clip.id
+    const meta = clipMeta[clipId] || {}
+    const hashStr = meta.hashtags ? ' ' + meta.hashtags.trim() : ''
+    const baseTitle = clip.top_title || currentJob?.video_title || 'Short Clip'
+    const titleStr = baseTitle.slice(0, 150 - hashStr.length) + hashStr
+    setDraftingTT(prev => new Set([...prev, clipId]))
+    try {
+      const token = localStorage.getItem('sc_token')
+      const res = await fetch(`${API_BASE}/social/upload/tiktok`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ clips: [{ clip_id: clipId, video_url: clip.video_url, title: titleStr }] })
+      })
+      const data = await res.json()
+      const result = data.results?.[0]
+      if (res.ok && result?.status === 'success') {
+        setDraftedTT(prev => new Set([...prev, clipId]))
+        showToast('Saved to TikTok drafts! Edit and post from the TikTok app.')
+      } else if (res.status === 400 && data.detail?.includes('not connected')) {
+        localStorage.removeItem('tt_connected'); setTtConnected(false); handleConnectTikTok()
+      } else {
+        showToast(result?.error || data.detail || 'TikTok draft failed', 'error')
+      }
+    } catch { showToast('TikTok draft failed', 'error') }
+    setDraftingTT(prev => { const n = new Set(prev); n.delete(clipId); return n })
+  }
+
+  const handleBulkDraftTT = async () => {
+    if (!requirePlan('Save TikTok Draft')) return
+    if (!ttConnected) { handleConnectTikTok(); return }
+    const sel = filteredClips.filter(c =>
+      selectedClipIds.has(c.clip_id || c.id) && !draftedTT.has(c.clip_id || c.id)
+    )
+    if (!sel.length) return
+    setDraftingTT(new Set(sel.map(c => c.clip_id || c.id)))
+    try {
+      const token = localStorage.getItem('sc_token')
+      const res = await fetch(`${API_BASE}/social/upload/tiktok`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          clips: sel.map(c => {
+            const cId = c.clip_id || c.id
+            const meta = clipMeta[cId] || {}
+            const hashStr = meta.hashtags ? ' ' + meta.hashtags.trim() : ''
+            const base = c.top_title || currentJob?.video_title || 'Short Clip'
+            return { clip_id: cId, video_url: c.video_url, title: base.slice(0, 150 - hashStr.length) + hashStr }
+          })
+        })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const ids = (data.results || []).filter(r => r.status === 'success').map(r => r.clip_id)
+        setDraftedTT(prev => new Set([...prev, ...ids]))
+        showToast(`${ids.length} clip${ids.length !== 1 ? 's' : ''} saved to TikTok drafts!`)
+      } else { showToast('TikTok bulk draft failed', 'error') }
+    } catch { showToast('TikTok bulk draft failed', 'error') }
+    setDraftingTT(new Set())
   }
 
   // ── Modal ──────────────────────────────────────────────────────
@@ -956,9 +1022,11 @@ export default function Dashboard() {
                       const isSel     = selectedClipIds.has(clipId)
                       const ytDone    = publishedYT.has(clipId)
                       const ttDone    = publishedTT.has(clipId)
+                      const ttDraft   = draftedTT.has(clipId)
                       const ytPubbing = publishingYT.has(clipId)
                       const ttPubbing = publishingTT.has(clipId)
-                      const allDone   = ytDone && ttDone
+                      const ttDrafting = draftingTT.has(clipId)
+                      const allDone   = ytDone && (ttDone || ttDraft)
                       const urgent    = currentJob && isUrgent(currentJob.created_at)
                       const dur = clip.duration
                         ? `${Math.floor(clip.duration/60)}:${String(Math.round(clip.duration%60)).padStart(2,'0')}`
@@ -1093,22 +1161,41 @@ export default function Dashboard() {
                             >
                               <YTLogo size={10} />{ytPubbing ? '…' : ytDone ? ' ✓' : ''}
                             </button>
-                            <button
-                              onClick={e => handlePublishTT(e, clip)}
-                              disabled={ttPubbing || ttDone}
-                              title={ttDone ? 'Published to TikTok' : ttConnected ? 'Publish to TikTok' : 'Connect TikTok to publish'}
-                              style={{
-                                flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:3,
-                                padding:'5px 4px', borderRadius:7, fontSize:'.6rem', fontWeight:700,
-                                border: ttDone ? '1px solid #d8b4fe' : '1px solid #e9d5ff',
-                                background: ttDone ? '#faf5ff' : '#fdf4ff',
-                                color: ttDone ? '#7c3aed' : '#9333ea',
-                                cursor: (ttPubbing || ttDone) ? 'default' : 'pointer',
-                                opacity: ttPubbing ? 0.7 : 1,
-                              }}
-                            >
-                              <TTLogo size={10} />{ttPubbing ? '…' : ttDone ? ' ✓' : ''}
-                            </button>
+                            {/* TikTok: publish + draft split */}
+                            <div style={{ flex:1, display:'flex', gap:2 }}>
+                              <button
+                                onClick={e => handlePublishTT(e, clip)}
+                                disabled={ttPubbing || ttDone}
+                                title={ttDone ? 'Published to TikTok' : 'Publish to TikTok'}
+                                style={{
+                                  flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:2,
+                                  padding:'5px 2px', borderRadius:7, fontSize:'.55rem', fontWeight:700,
+                                  border: ttDone ? '1px solid #d8b4fe' : '1px solid #e9d5ff',
+                                  background: ttDone ? '#faf5ff' : '#fdf4ff',
+                                  color: ttDone ? '#7c3aed' : '#9333ea',
+                                  cursor: (ttPubbing || ttDone) ? 'default' : 'pointer',
+                                  opacity: ttPubbing ? 0.7 : 1,
+                                }}
+                              >
+                                <TTLogo size={9} />{ttPubbing ? '…' : ttDone ? '✓' : '↑'}
+                              </button>
+                              <button
+                                onClick={e => handleDraftTT(e, clip)}
+                                disabled={ttDrafting || ttDraft}
+                                title={ttDraft ? 'Saved to TikTok drafts' : 'Save to TikTok drafts'}
+                                style={{
+                                  flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:2,
+                                  padding:'5px 2px', borderRadius:7, fontSize:'.55rem', fontWeight:700,
+                                  border: ttDraft ? '1px solid #d8b4fe' : '1px solid #e9d5ff',
+                                  background: ttDraft ? '#faf5ff' : '#fdf4ff',
+                                  color: ttDraft ? '#7c3aed' : '#9333ea',
+                                  cursor: (ttDrafting || ttDraft) ? 'default' : 'pointer',
+                                  opacity: ttDrafting ? 0.7 : 1,
+                                }}
+                              >
+                                <TTLogo size={9} />{ttDrafting ? '…' : ttDraft ? '✓' : '📋'}
+                              </button>
+                            </div>
                             <button
                               onClick={e => handleSingleDownload(e, clip)}
                               title={isPaid ? 'Download MP4' : canFreeDownload(clip) ? 'Download free (feedback reward)' : 'Upgrade to download'}
@@ -1160,7 +1247,14 @@ export default function Dashboard() {
             background:'#faf5ff', color:'#7c3aed', border:'1px solid #e9d5ff',
             borderRadius:7, padding:'7px 16px', fontWeight:700, fontSize:'.76rem', cursor:'pointer',
           }}>
-            <TTLogo size={14} /> TikTok
+            <TTLogo size={14} /> TikTok Publish
+          </button>
+          <button onClick={handleBulkDraftTT} style={{
+            display:'flex', alignItems:'center', gap:7,
+            background:'#fff', color:'#7c3aed', border:'1px solid #e9d5ff',
+            borderRadius:7, padding:'7px 16px', fontWeight:700, fontSize:'.76rem', cursor:'pointer',
+          }}>
+            <TTLogo size={14} /> TikTok Draft
           </button>
           <div style={{ width:1, height:20, background:'#e5e7eb' }}/>
           <button onClick={() => setSelectedClipIds(new Set())} style={{
@@ -1372,24 +1466,45 @@ export default function Dashboard() {
                       {ttConnected ? '● Connected' : 'Not connected'}
                     </span>
                   </div>
-                  <div style={{ padding:'11px 13px' }}>
-                    {publishedTT.has(modalClipId) ? (
-                      <div style={{ fontSize:'.74rem', color:'#7c3aed', fontWeight:600 }}>✓ Queued on TikTok</div>
-                    ) : ttConnected ? (
-                      <button
-                        onClick={e => handlePublishTT(e, modalClip)}
-                        disabled={publishingTT.has(modalClipId)}
-                        style={{
-                          width:'100%', padding:'7px 16px', borderRadius:7, fontSize:'.75rem', fontWeight:700,
-                          background: publishingTT.has(modalClipId) ? '#f3f4f6' : '#faf5ff',
-                          color: publishingTT.has(modalClipId) ? '#9ca3af' : '#7c3aed',
-                          border: `1px solid ${publishingTT.has(modalClipId) ? '#d1d5db' : '#e9d5ff'}`,
-                          cursor: publishingTT.has(modalClipId) ? 'default' : 'pointer',
-                        }}
-                      >
-                        {publishingTT.has(modalClipId) ? 'Uploading…' : 'Publish to TikTok'}
-                      </button>
-                    ) : (
+                  <div style={{ padding:'11px 13px', display:'flex', flexDirection:'column', gap:6 }}>
+                    {ttConnected ? (<>
+                      {/* Publish directly */}
+                      {publishedTT.has(modalClipId) ? (
+                        <div style={{ fontSize:'.74rem', color:'#7c3aed', fontWeight:600 }}>✓ Published to TikTok</div>
+                      ) : (
+                        <button
+                          onClick={e => handlePublishTT(e, modalClip)}
+                          disabled={publishingTT.has(modalClipId)}
+                          style={{
+                            width:'100%', padding:'7px 16px', borderRadius:7, fontSize:'.75rem', fontWeight:700,
+                            background: publishingTT.has(modalClipId) ? '#f3f4f6' : '#faf5ff',
+                            color: publishingTT.has(modalClipId) ? '#9ca3af' : '#7c3aed',
+                            border: `1px solid ${publishingTT.has(modalClipId) ? '#d1d5db' : '#e9d5ff'}`,
+                            cursor: publishingTT.has(modalClipId) ? 'default' : 'pointer',
+                          }}
+                        >
+                          {publishingTT.has(modalClipId) ? 'Uploading…' : '↑ Publish to TikTok'}
+                        </button>
+                      )}
+                      {/* Save as draft */}
+                      {draftedTT.has(modalClipId) ? (
+                        <div style={{ fontSize:'.74rem', color:'#7c3aed', fontWeight:600 }}>✓ Saved to TikTok drafts</div>
+                      ) : (
+                        <button
+                          onClick={e => handleDraftTT(e, modalClip)}
+                          disabled={draftingTT.has(modalClipId)}
+                          style={{
+                            width:'100%', padding:'7px 16px', borderRadius:7, fontSize:'.75rem', fontWeight:700,
+                            background: draftingTT.has(modalClipId) ? '#f3f4f6' : '#fff',
+                            color: draftingTT.has(modalClipId) ? '#9ca3af' : '#7c3aed',
+                            border: `1px solid ${draftingTT.has(modalClipId) ? '#d1d5db' : '#e9d5ff'}`,
+                            cursor: draftingTT.has(modalClipId) ? 'default' : 'pointer',
+                          }}
+                        >
+                          {draftingTT.has(modalClipId) ? 'Saving…' : '📋 Save as Draft'}
+                        </button>
+                      )}
+                    </>) : (
                       <button
                         onClick={handleConnectTikTok}
                         style={{
