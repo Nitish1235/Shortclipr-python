@@ -12,9 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-# YouTube shorts service is disabled so not useful
-# from app.api import admin_email, admin_marketing, admin_tiktok, auth, brainrot, editor, admin, feedback, internal, jobs, payments, social, webhooks, youtube
-from app.api import admin_email, admin_marketing, admin_tiktok, auth, brainrot, editor, admin, feedback, internal, jobs, payments, social, webhooks
+from app.api import admin_email, admin_marketing, admin_tiktok, auth, brainrot, editor, admin, feedback, internal, jobs, payments, social, webhooks, youtube
 from app.core.config import get_settings
 
 
@@ -62,7 +60,8 @@ async def lifespan(app: FastAPI):
             _logger.error(
                 f"STARTUP: Cannot reach api.openai.com — {e}. "
                 f"If HTTPS_PROXY is set in Cloud Run env vars it may be routing "
-                f"OpenAI traffic through a restricted proxy. Unset it or scope it appropriately."
+                f"OpenAI traffic through a restricted proxy. Unset it or scope it "
+                f"to YouTube domains only."
             )
     else:
         _logger.error("STARTUP: OPENAI_API_KEY is not set — AI clipper will fail")
@@ -118,8 +117,7 @@ app.include_router(auth.router)
 app.include_router(jobs.router)
 app.include_router(brainrot.router)
 app.include_router(payments.router)
-# YouTube shorts service is disabled so not useful
-# app.include_router(youtube.router)
+app.include_router(youtube.router)
 app.include_router(webhooks.router)
 app.include_router(social.router)
 # Include the new editor router

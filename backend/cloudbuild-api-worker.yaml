@@ -3,8 +3,7 @@ substitutions:
   # the trigger for each additional region. Image is always built/pushed to
   # the SAME us-central1 Artifact Registry repo regardless of deploy region.
   _REGION: 'us-central1'
-  # vCPU per instance. API workers are I/O bound (waiting on OpenAI).
-  # YouTube shorts service is disabled so not useful
+  # vCPU per instance. API workers are I/O bound (waiting on YouTube / OpenAI),
   # so we run ~12 concurrent requests per instance on 4 vCPU. Regional quota
   # of 20,000m CPU → 20000/4000 = 5 max instances per region.
   _CPU: '4'
@@ -52,10 +51,9 @@ steps:
       - '8080'
 
       # ── Resources ────────────────────────────────────────────────────────
-      # API workers are I/O bound (OpenAI API).
-      # YouTube shorts service is disabled so not useful
-      # 2Gi is generous — a single API job holds ~100-200MB (GPT response),
-      # so 2Gi safely handles ~12 concurrent jobs with margin.
+      # API workers are I/O bound (YouTube API, OpenAI API, transcript fetch).
+      # 2Gi is generous — a single API job holds ~100-200MB (transcript +
+      # GPT response), so 2Gi safely handles ~12 concurrent jobs with margin.
       - '--memory'
       - '2Gi'
       - '--cpu'

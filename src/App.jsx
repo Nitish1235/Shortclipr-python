@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -134,15 +134,16 @@ function LandingPage() {
   )
 }
 
-// Redirects /youtube-shorts/tools/:slug → /brainrot/tools/:slug (etc.)
-function SlugRedirect({ base }) {
-  const { slug } = useParams()
-  return <Navigate to={`${base}/${slug}`} replace />
-}
-
-// `fallback` is where a logged-out visitor gets bounced to.
-// All protected routes now default to /brainrot since YT-Shorts is disabled.
-function ProtectedRoute({ children, fallback = '/brainrot' }) {
+// `fallback` is where a logged-out visitor gets bounced to. Defaults to
+// /youtube-shorts since that's correct for every YT-Shorts protected route
+// (dashboard, clips, editor, lab, billing, admin) — but it must NOT be
+// hardcoded, because this same component also guards /brainrot/studio.
+// Without an explicit fallback there, a logged-out user clicking any
+// brainrot CTA ("Get started", "Make a clip", etc.) would land on the
+// YouTube-Shorts dashboard instead of back on the brainrot product they
+// were actually trying to use — see the /brainrot/studio route below,
+// which passes fallback="/brainrot".
+function ProtectedRoute({ children, fallback = '/youtube-shorts' }) {
   const { user, loading } = useAuth()
   if (loading) return (
     <div style={{
@@ -178,8 +179,8 @@ export default function App() {
         <BrowserRouter>
           <ScrollToTop />
           <Routes>
-            {/* Root — send everyone to brainrot */}
-            <Route path="/"                      element={<Navigate to="/brainrot" replace />} />
+            {/* Root — client-side safety net; nginx 301s the actual HTTP request */}
+            <Route path="/"                      element={<Navigate to="/youtube-shorts" replace />} />
 
             {/* Company-wide / account-level — not product-specific, stay at root */}
             <Route path="/privacy"               element={<Privacy />} />
@@ -191,26 +192,30 @@ export default function App() {
             <Route path="/careers"               element={<Careers />} />
             <Route path="/dmca"                  element={<DMCA />} />
             <Route path="/payment/success"       element={<PaymentSuccess />} />
-            <Route path="/billing"               element={<ProtectedRoute fallback="/brainrot"><BrainrotBilling /></ProtectedRoute>} />
+            <Route path="/billing"               element={<ProtectedRoute><Billing /></ProtectedRoute>} />
 
             {/* Admin — no separate auth guard on frontend, backend enforces admin check */}
             <Route path="/admin"                 element={<ProtectedRoute><Admin /></ProtectedRoute>} />
             <Route path="/admin/marketing-editor" element={<ProtectedRoute><AdminMarketingEditor /></ProtectedRoute>} />
 
-            {/* ── YouTube Shorts → Brainrot redirects (product disabled) ── */}
-            <Route path="/youtube-shorts"                      element={<Navigate to="/brainrot" replace />} />
-            <Route path="/youtube-shorts/login"                element={<Navigate to="/brainrot" replace />} />
-            <Route path="/youtube-shorts/tools"                element={<Navigate to="/brainrot/tools" replace />} />
-            <Route path="/youtube-shorts/tools/:slug"          element={<SlugRedirect base="/brainrot/tools" />} />
-            <Route path="/youtube-shorts/alternatives"         element={<Navigate to="/brainrot/alternatives" replace />} />
-            <Route path="/youtube-shorts/alternatives/:slug"   element={<SlugRedirect base="/brainrot/alternatives" />} />
-            <Route path="/youtube-shorts/guides"               element={<Navigate to="/brainrot/guides" replace />} />
-            <Route path="/youtube-shorts/guides/:slug"         element={<SlugRedirect base="/brainrot/guides" />} />
-            <Route path="/youtube-shorts/dashboard"            element={<Navigate to="/brainrot/studio" replace />} />
-            <Route path="/youtube-shorts/clips"                element={<Navigate to="/brainrot/studio" replace />} />
-            <Route path="/youtube-shorts/editor/:jobId/:clipId" element={<Navigate to="/brainrot/studio" replace />} />
-            <Route path="/youtube-shorts/lab"                  element={<Navigate to="/brainrot/studio" replace />} />
-            <Route path="/youtube-shorts/settings"             element={<Navigate to="/brainrot/settings" replace />} />
+            {/* ── YouTube Shorts product ────────────────────────── */}
+            <Route path="/youtube-shorts"                      element={<LandingPage />} />
+            <Route path="/youtube-shorts/login"                element={<Login />} />
+
+            {/* SEO programmatic landing pages */}
+            <Route path="/youtube-shorts/tools"                 element={<ToolsIndex />} />
+            <Route path="/youtube-shorts/tools/:slug"           element={<ToolLanding />} />
+            <Route path="/youtube-shorts/alternatives"          element={<AlternativesIndex />} />
+            <Route path="/youtube-shorts/alternatives/:slug"    element={<AlternativeLanding />} />
+            <Route path="/youtube-shorts/guides"                element={<GuidesIndex />} />
+            <Route path="/youtube-shorts/guides/:slug"          element={<GuideArticle />} />
+
+            {/* Protected — user must be logged in */}
+            <Route path="/youtube-shorts/dashboard"             element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/youtube-shorts/clips"                 element={<ProtectedRoute><ClipsHistory /></ProtectedRoute>} />
+            <Route path="/youtube-shorts/editor/:jobId/:clipId" element={<ProtectedRoute><Editor /></ProtectedRoute>} />
+            <Route path="/youtube-shorts/lab"                   element={<ProtectedRoute><Lab /></ProtectedRoute>} />
+            <Route path="/youtube-shorts/settings"              element={<ProtectedRoute><Settings /></ProtectedRoute>} />
 
             {/* ── Brainrot Clips Maker product ──────────────────── */}
             <Route path="/brainrot"          element={<BrainrotLanding />} />

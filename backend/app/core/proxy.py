@@ -98,27 +98,26 @@ def _get_proxyseller_proxy_url(session_id: str | None = None) -> str:
     return f"http://{user}:{password}@{host}:{port}"
 
 
-# YouTube shorts service is disabled so not useful
-# def get_youtube_proxy(session_id: str | None = None, purpose: str = "req") -> str | None:
-#     """
-#     Return the best available proxy for YouTube requests (transcript + stream).
-#
-#     Priority: Proxy-Seller ISP (static, stable, less likely to be blocked)
-#     → proxy-cheap rotating residential (fallback if Proxy-Seller not configured).
-#
-#     When session_id is provided and Proxy-Seller is available, the proxy is
-#     chosen deterministically via MD5(session_id) % pool_size — same IP for
-#     the entire job across API stage (transcript/stream) and FFmpeg stage
-#     (DASH downloads). This avoids IP-bound URL mismatches.
-#
-#     When falling back to proxy-cheap, each call gets a fresh IP (rotating
-#     gateway port, or a random pick from PROXY_PORTS — see get_proxy_url).
-#     """
-#     s = get_settings()
-#     proxies = _parse_proxyseller_list(s.PROXYSELLER_PROXIES)
-#     if s.PROXYSELLER_USER and s.PROXYSELLER_PASS and proxies:
-#         return get_proxyseller_proxy(session_id)
-#     return get_proxycheap_proxy(purpose=purpose)
+def get_youtube_proxy(session_id: str | None = None, purpose: str = "req") -> str | None:
+    """
+    Return the best available proxy for YouTube requests (transcript + stream).
+
+    Priority: Proxy-Seller ISP (static, stable, less likely to be blocked)
+    → proxy-cheap rotating residential (fallback if Proxy-Seller not configured).
+
+    When session_id is provided and Proxy-Seller is available, the proxy is
+    chosen deterministically via MD5(session_id) % pool_size — same IP for
+    the entire job across API stage (transcript/stream) and FFmpeg stage
+    (DASH downloads). This avoids IP-bound URL mismatches.
+
+    When falling back to proxy-cheap, each call gets a fresh IP (rotating
+    gateway port, or a random pick from PROXY_PORTS — see get_proxy_url).
+    """
+    s = get_settings()
+    proxies = _parse_proxyseller_list(s.PROXYSELLER_PROXIES)
+    if s.PROXYSELLER_USER and s.PROXYSELLER_PASS and proxies:
+        return get_proxyseller_proxy(session_id)
+    return get_proxycheap_proxy(purpose=purpose)
 
 
 def get_proxycheap_proxy(purpose: str = "req") -> str | None:
