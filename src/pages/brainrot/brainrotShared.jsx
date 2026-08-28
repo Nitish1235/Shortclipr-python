@@ -457,4 +457,22 @@ export const GUIDE_MEDIA = {
     color: T.amber,
     tag: 'Prompts',
   },
+  'brainrot-caption-styles': {
+    charIds: ['prof-umbra', 'deb-from-hr'],
+    gameplay: 'minecraft',
+    color: T.green,
+    tag: 'Captions',
+  },
+  'monetize-brainrot-clips': {
+    charIds: ['brent-callahan', 'boris-hoggard'],
+    gameplay: 'gta',
+    color: T.amber,
+    tag: 'Monetization',
+  },
+  'best-gameplay-footage-brainrot': {
+    charIds: ['sgt-waffles', 'big-marv'],
+    gameplay: 'subway_surfers',
+    color: T.red,
+    tag: 'Gameplay',
+  },
 }

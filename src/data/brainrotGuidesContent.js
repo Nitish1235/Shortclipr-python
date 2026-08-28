@@ -598,6 +598,348 @@ const brainrotGuidesContent = {
     related: ['brainrot-clip-maker', 'tiktok-brainrot-maker', 'ai-dialogue-generator'],
     relatedAlt: ['viralclips', 'memeclip'],
   },
+
+  'brainrot-caption-styles': {
+    slug: 'brainrot-caption-styles',
+    category: 'Production',
+    badge: 'Style Guide',
+    readTime: '7 min read',
+    updated: 'Updated 2025',
+    metaTitle: 'Brainrot Caption Styles — Karaoke, Hormozi, MrBeast Ranked (2025) | ShortClipr',
+    metaDescription:
+      'Every trending brainrot caption style, ranked — karaoke word-by-word, Hormozi bold boxed, MrBeast bouncy, neon, and 12 more. Which style fits which clip and how to burn them in.',
+    keywords:
+      'brainrot captions, tiktok caption styles, karaoke captions, hormozi captions, mrbeast captions, trending tiktok captions, caption style tiktok, viral captions brainrot, tiktok text overlay',
+    h1: 'Brainrot Caption Styles — Every Trending Look, Ranked by Retention',
+    subhead:
+      'Captions in the brainrot format are not subtitles — they are the visual signature. Here are the 16 caption styles trending on TikTok right now, which retention rate each pulls, and how to pick the right one for your clip.',
+    intro:
+      'Most creators pick a caption style once and stick with it forever. That leaves retention on the table. Different caption styles behave differently on different content: word-by-word karaoke highlights beat static captions on fast-paced debate clips, while a bold Hormozi box outperforms karaoke on advice content where the caption itself is the punchline. Caption style is one of the highest-leverage small optimizations available in short-form video, and it is trivially easy to A/B test when the render is one click.',
+    formula: {
+      alt: 'Professor Umbra plus Deb from HR plus 16 trending caption styles plus word-by-word timing equals higher retention',
+      items: [
+        { type: 'char', id: 'prof-umbra',  label: 'The authority' },
+        { type: 'char', id: 'deb-from-hr', label: 'The enforcer' },
+        { type: 'icon', icon: '🎨', label: '16 trending styles' },
+        { type: 'icon', icon: '⏱', label: 'Word-by-word timing' },
+      ],
+      result: { icon: '📈', label: 'Higher retention' },
+    },
+    sections: [
+      {
+        h2: 'Why captions carry brainrot clips more than most creators think',
+        body: [
+          'Around eighty percent of short-form video is watched on mute the first time it appears in a feed. If your captions cannot carry the joke without sound, you have wasted the most-watched three seconds of the clip. This is why the caption style choice is not a cosmetic decision — it is a retention decision. The style determines whether a scroller reads the setup, waits for the punchline, and stays through the character exchange, or scrolls past before ever unmuting.',
+          'The best-performing brainrot clips use captions as a rhythm device. Each new caption is a beat. Word-by-word highlighting turns every syllable into a tiny arrival — the eye keeps returning to the top of the frame because something new is happening there. Static captions cannot do this. They read as "here is a translation of what the voice is saying" instead of "here is the beat of the argument".',
+        ],
+        list: [
+          'Feed-first viewers watch muted — captions must carry meaning alone.',
+          'New words appearing = new attention cues = better retention.',
+          'Contrast between the caption and gameplay backdrop determines legibility.',
+          'Caption position matters — upper-third above characters is the trained TikTok norm.',
+          'Style should match content type — karaoke for debate, boxed for advice.',
+        ],
+      },
+      {
+        h2: 'Word-by-word karaoke — the current default, and why',
+        body: [
+          'The karaoke style, where each word appears (and often changes color) as it is spoken, is the most-used caption style on TikTok in 2025 and the default in every mainstream captioning app. It became the standard because it solves the same three problems at once: it works on mute, it creates a per-word attention beat, and it signals "this creator uses modern tools" to viewers who now visually associate karaoke with professional short-form.',
+          'Karaoke works best on dialogue-heavy content — which is exactly what brainrot is. When two characters exchange lines, each character-turn getting its own highlighted word sequence makes the switch legible without the viewer having to hear the voice change. This is why brainrot creators who moved from static captions to karaoke almost always report a jump in average watch time.',
+        ],
+      },
+      {
+        h2: 'Bold boxed captions — the Hormozi look and when it dominates',
+        body: [
+          'Alex Hormozi\'s bold, all-caps, black-boxed white-text style became a genre unto itself in the last two years. In brainrot, it is the right choice when the caption is the punchline rather than the transcript. If a character delivers a one-liner that lands, a boxed caption freezing the punchline on screen for a second longer than the karaoke word-by-word would allow gives the joke room to hit.',
+          'Boxed captions also outperform karaoke on advice or "hot take" content where the viewer is expected to screenshot and share. A tightly-composed boxed statement is a screenshot; a stream of individual highlighted words is not. If your clip has share intent baked in — advice, controversial claim, education — Hormozi style beats karaoke on save rate.',
+        ],
+      },
+      {
+        h2: 'Oversized bouncy captions — the MrBeast trick for retention',
+        body: [
+          'MrBeast-style captions are large, high-contrast, and lightly animated on entry (a scale bounce, a slight rotation). They are the loudest option in the catalog, which is why they are best used sparingly — the whole point is that they feel like an event. Used on every clip they lose the effect. Used on the key beat of a debate they anchor the retention curve for the entire second half.',
+          'This style particularly rewards vertical topic-splits: on a "iPhone vs Android" clip, the MrBeast caption is best deployed on the closing line where one side wins. On character-single formats (Ohio Lore, Skibidi), it works well on the recurring catchphrase. Never use it on a filler line — you spend the effect and get nothing back.',
+        ],
+      },
+      {
+        h2: 'Color, contrast, and placement — the invisible ranking factor',
+        body: [
+          'Every caption style catalog assumes you will pick the color correctly, and most creators do not. The rule is simple: caption text should have a contrast ratio of at least 4.5:1 against whatever is behind it. Yellow on dark gameplay footage passes easily. White on Fortnite\'s pink/purple gradient does not. When a caption is unreadable for even half a second, viewers scroll — the algorithm reads that as a bad clip.',
+          'Position matters almost as much as color. The trained TikTok norm is upper-third — around 22% from the top — above the character art and below the phone\'s status bar. Captions below the horizontal midline compete with the UI overlay (like button, share button) and register as visually noisy. Above the midline they read cleanly and viewers already look there first, because that is where TikTok\'s own captions live.',
+        ],
+        list: [
+          'Yellow on dark backgrounds (Minecraft, GTA) — the safe default.',
+          'White with black outline — works on almost anything but reads generic.',
+          'Hot pink or electric blue — pops on Subway Surfers and Fortnite backgrounds.',
+          'Butter yellow — a subtler alternative that feels editorial rather than TikTok-native.',
+          'Neon with glow — for reaction and gaming-adjacent debates.',
+        ],
+      },
+      {
+        h2: 'Matching caption style to clip type',
+        body: [
+          'The pairings below come from watching hundreds of brainrot clips and correlating style to average watch time. They are not laws — a good creator can make any style work — but they are the fastest way for a new creator to stop guessing.',
+        ],
+        list: [
+          'Two-character debate → Karaoke word-by-word (rhythm carries the exchange).',
+          'Single-character monologue → Hormozi boxed (punchlines land harder framed).',
+          'Absurd hypothetical → MrBeast bouncy (the visual matches the tone).',
+          'Educational or advice → Hormozi boxed (screenshotable, save-worthy).',
+          'Reaction or gaming take → Neon glow (matches the audience\'s existing aesthetic).',
+          'Storytelling ("Lore" formats) → Typewriter (the pacing feels narrated).',
+        ],
+      },
+    ],
+    howTo: {
+      title: 'Pick and burn in a caption style, step by step',
+      steps: [
+        { title: 'Watch your clip on mute', desc: 'If you cannot follow the argument without sound, the caption style is failing — no matter how pretty it looks.' },
+        { title: 'Preview 2-3 candidate styles', desc: 'ShortClipr\'s studio lets you switch styles live. Test karaoke vs boxed on the same script — the difference is obvious within two seconds.' },
+        { title: 'Check contrast against your gameplay', desc: 'Yellow on Fortnite pink washes out. White on Minecraft green works. Match caption color to gameplay category.' },
+        { title: 'Position captions in the upper-third', desc: 'Around 22% from top is the trained TikTok norm — above the characters, below the status bar. Do not move captions to the bottom.' },
+        { title: 'Test the freeze-frame', desc: 'Scrub to any random second. Is the caption readable? If not, either the color is wrong or the timing is too fast.' },
+        { title: 'Render and post', desc: 'Captions are burned in with an ffmpeg ASS filter — they survive every re-upload, unlike TikTok\'s auto-captions that only exist on the platform.' },
+      ],
+    },
+    takeaways: [
+      'Caption style is a retention decision, not a cosmetic one — pick it after you know the content, not before.',
+      'Karaoke word-by-word is the default in 2025 because it turns each word into an attention beat.',
+      'Bold boxed (Hormozi) beats karaoke on advice and hot-take content because it is screenshot-friendly.',
+      'Oversized bouncy (MrBeast) is a special-occasion style — used on every clip it loses its effect.',
+      'Color contrast against the gameplay backdrop determines whether captions actually get read on mute.',
+    ],
+    faqs: [
+      { q: 'What is the most-used caption style on TikTok right now?', a: 'Word-by-word karaoke highlighting is the current default — it is the built-in style in CapCut, the app most short-form creators use, and it is what viewers now visually associate with modern short-form content.' },
+      { q: 'Do burned-in captions hurt my TikTok reach vs auto-captions?', a: 'No. TikTok\'s algorithm does not penalize burned-in captions, and burned-in text works when clips are re-shared, downloaded, or reposted to YouTube Shorts and Reels — auto-captions do not.' },
+      { q: 'What caption color performs best?', a: 'Yellow on dark gameplay is the classic safe choice with high contrast. Butter yellow reads more editorial. Hot pink and electric blue work well on colorful backgrounds like Subway Surfers or Fortnite.' },
+      { q: 'How much of the frame should captions cover?', a: 'Under twenty percent. Larger captions look like the video was made for a hard-of-hearing audience rather than styled — and they cover the character art that gives brainrot clips their identity.' },
+      { q: 'Can I edit caption timing after render?', a: 'Not currently in the ShortClipr studio — captions are auto-timed to the TTS output word-by-word. Style, color, and position are all configurable before render, though.' },
+    ],
+    related: ['brainrot-clip-maker', 'meme-caption-video-maker', 'tts-video-generator'],
+    relatedAlt: ['clipsai', 'brainrotgen'],
+  },
+
+  'monetize-brainrot-clips': {
+    slug: 'monetize-brainrot-clips',
+    category: 'Growth',
+    badge: 'Monetization Playbook',
+    readTime: '8 min read',
+    updated: 'Updated 2025',
+    metaTitle: 'How to Monetize Brainrot Clips — TikTok Creator Fund, Shorts RPM, Sponsors (2025) | ShortClipr',
+    metaDescription:
+      'The full playbook for making money from brainrot clips — TikTok Creativity Program eligibility, YouTube Shorts RPM, Instagram Play Bonus, sponsorship deals, affiliate links, and cross-platform strategy.',
+    keywords:
+      'monetize brainrot clips, brainrot money, tiktok creator fund brainrot, tiktok creativity program brainrot, make money brainrot, brainrot revenue, brainrot sponsorship, youtube shorts brainrot money, brainrot creator income',
+    h1: 'How to Monetize Brainrot Clips — TikTok, Shorts, and Beyond',
+    subhead:
+      'The honest playbook for turning brainrot views into revenue — TikTok Creativity Program eligibility, YouTube Shorts RPM, sponsorship math, affiliate income, and the realistic monthly mix for a creator posting daily.',
+    intro:
+      'Brainrot is one of the highest-view, lowest-effort content formats a solo creator can produce right now — which makes it look like it should be printing money. Sometimes it is. Most of the time it is not, because the platforms that surface brainrot clips the fastest are also the platforms that pay the least per view. This guide is the counter to every "make $10k a month with AI TikTok" thumbnail — real numbers, real requirements, real monthly revenue mixes for creators posting brainrot daily across TikTok, YouTube Shorts, and Instagram Reels.',
+    formula: {
+      alt: 'Brent Callahan plus Boris Hoggard plus daily posting plus cross-platform distribution equals a realistic monthly revenue mix',
+      items: [
+        { type: 'char', id: 'brent-callahan', label: 'The hustle culture voice' },
+        { type: 'char', id: 'boris-hoggard',  label: 'The realist' },
+        { type: 'icon', icon: '📅', label: 'Daily posting' },
+        { type: 'icon', icon: '🔄', label: 'Cross-platform' },
+      ],
+      result: { icon: '💰', label: 'Real revenue mix' },
+    },
+    sections: [
+      {
+        h2: 'The unglamorous truth about brainrot monetization',
+        body: [
+          'Brainrot clips get more views per creator-hour than almost any other format. That is what makes them attractive. But TikTok — where brainrot goes viral fastest — has some of the lowest per-view payouts in short-form video. The Creativity Program (which replaced the original Creator Fund) pays somewhere between two and five dollars per thousand qualifying views, depending on niche and season, and only counts views on videos longer than one minute. Most viral brainrot clips are thirty to sixty seconds, which means they get the views without generating the payout.',
+          'This is not a reason to give up on brainrot monetization — it is a reason to think about it correctly. Brainrot works as a top-of-funnel content format that generates massive impressions and modest direct payouts, which you then convert to revenue through cross-posting, sponsorships, and off-platform channels. Treat the TikTok payout as a bonus, not the primary line item.',
+        ],
+      },
+      {
+        h2: 'TikTok Creativity Program eligibility and honest RPM',
+        body: [
+          'To enter the Creativity Program (formerly the Creator Fund), you need at least ten thousand followers, one hundred thousand video views in the last thirty days, an eligible country, and — the requirement that catches most brainrot creators — videos longer than one minute. Sub-minute clips are excluded entirely from Creativity Program monetization.',
+          'This changes the strategy. If you are optimizing for TikTok payout, extend your clip runtime past sixty seconds. This means longer dialogue exchanges (twelve to fifteen back-and-forth lines instead of six to eight), slower pacing, and multiple gameplay backgrounds within a single clip. Expected RPMs on qualifying brainrot content in 2025 sit around two to four dollars per thousand views, meaning a clip that hits one million views generates roughly two to four thousand dollars — real money, but only for clips that hit that ceiling.',
+        ],
+        list: [
+          '10,000+ followers minimum.',
+          '100,000+ video views in trailing 30 days.',
+          'Videos must be longer than one minute.',
+          'Eligible country (US, UK, France, Germany, Japan, Brazil currently).',
+          'Account in good standing (no community-guideline strikes).',
+        ],
+      },
+      {
+        h2: 'YouTube Shorts RPM — the higher-paying second home',
+        body: [
+          'YouTube Shorts pays significantly better per view than TikTok — commonly two to three times the RPM for equivalent content. This is because YouTube distributes AdSense revenue to Shorts creators from a shared pool proportional to watch time, and YouTube\'s CPMs are higher than TikTok\'s. Brainrot content that generates one to five thousand dollars a month on TikTok often generates three to ten thousand on the same clips reposted to YouTube Shorts.',
+          'The catch is that you need to be in the YouTube Partner Program, which requires a thousand subscribers plus either ten million Shorts views in ninety days, or four thousand hours of long-form watch time — meaningful barriers, but achievable for a brainrot channel posting daily. Once in, cross-posting existing clips takes almost no additional effort, since the render is already vertical, captioned, and platform-neutral.',
+        ],
+      },
+      {
+        h2: 'Instagram Reels and the Play Bonus reality',
+        body: [
+          'Instagram\'s Reels Play Bonus program was the third leg of the tripod, but Meta ended it as an ongoing program in early 2023 and now only invites specific creators. For most brainrot creators, Reels is a distribution channel — you post there for reach and follower growth, not direct payouts. It matters because Reels-native audiences convert to affiliate links and off-platform channels well, and it is a five-second lift to cross-post existing renders.',
+          'Do not skip Reels because there is no direct payout. Skipping it means walking away from the platform\'s discovery for content that already exists in the right format.',
+        ],
+      },
+      {
+        h2: 'Sponsorships, affiliate links, and off-platform income',
+        body: [
+          'Once a brainrot channel has a following, sponsorships and affiliate revenue routinely dwarf platform payouts. Sponsored brainrot slots — where a brand pays to be referenced by name in a character debate — typically pay two hundred to two thousand dollars per clip for mid-tier accounts and five to twenty thousand for accounts above a hundred thousand followers. Affiliate links (in bio, in clip comments, in TikTok Shop) convert particularly well on brainrot audiences because the format is high-attention and low-suspicion.',
+          'The other high-value channel is off-platform: patrons, custom clip commissions, and paid Discord communities. Brainrot audiences that come for the free clips will pay for character customization, personalized clips, and behind-the-scenes access. This is where the top ten percent of brainrot creators make most of their income.',
+        ],
+        list: [
+          'Mid-tier sponsorship — $200-$2,000 per branded clip.',
+          'Six-figure sponsorship — $5,000-$20,000 per clip.',
+          'TikTok Shop / affiliate links — 5-15% conversion on high-attention formats.',
+          'Custom brainrot commissions — $50-$500 per personalized clip.',
+          'Discord subscription — $5-$10/mo per member for BTS access.',
+        ],
+      },
+      {
+        h2: 'What a realistic monthly revenue mix looks like',
+        body: [
+          'Below is a rough mix for a brainrot creator posting five clips per week across TikTok, YouTube Shorts, and Reels, with a hundred to three hundred thousand combined followers and a couple of sponsorship deals per month. Numbers are ranges because everything scales with view velocity, niche, and season.',
+        ],
+        list: [
+          'TikTok Creativity Program — $200-$1,500/mo (only if clips are 60+ sec).',
+          'YouTube Shorts AdSense — $800-$4,000/mo (higher RPM, lower reach).',
+          'Instagram Reels — $0 direct, but drives affiliate + email list growth.',
+          'Sponsorships — $500-$5,000/mo (one to three deals).',
+          'Affiliate / TikTok Shop — $200-$2,000/mo (varies wildly by niche).',
+          'Off-platform (Discord, commissions) — $200-$3,000/mo.',
+          'Realistic monthly total — $1,900-$15,500 depending on scale.',
+        ],
+      },
+    ],
+    howTo: {
+      title: 'Set up brainrot monetization, step by step',
+      steps: [
+        { title: 'Extend your clip runtime past 60 seconds', desc: 'This is the single change that unlocks TikTok Creativity Program eligibility. Longer dialogue, slower pacing, multi-scene gameplay.' },
+        { title: 'Hit the eligibility thresholds', desc: '10k followers + 100k views/30 days on TikTok. 1k subs + 10M Shorts views/90 days on YouTube. Post consistently before touching monetization apps.' },
+        { title: 'Cross-post every render to YouTube Shorts', desc: 'Higher RPM than TikTok, same render, five-second lift. This alone often doubles monthly payout.' },
+        { title: 'Add a link-in-bio funnel', desc: 'Route audience to affiliate links, an email newsletter, or a Discord — anywhere you can build direct relationships that survive an algorithm change.' },
+        { title: 'Pitch sponsors after 50k followers', desc: 'Cold-email brands in your niche with view stats and a sample sponsored clip. Rates start at $200-$500 per slot at 50k, scale from there.' },
+        { title: 'Track everything by platform', desc: 'Log which platform generated which revenue line by month. Doubling down on the winner beats adding a new channel.' },
+      ],
+    },
+    takeaways: [
+      'TikTok\'s per-view payout on brainrot is low — treat it as top-of-funnel, not the revenue centerpiece.',
+      'Clips must be over 60 seconds to qualify for the TikTok Creativity Program at all.',
+      'YouTube Shorts pays 2-3x TikTok RPMs on the same clips — cross-posting is the fastest revenue multiplier.',
+      'Sponsorships and affiliate income routinely dwarf direct platform payouts above 50k followers.',
+      'A daily-posting mid-tier brainrot creator can realistically clear $2k-$15k/mo across all channels.',
+    ],
+    faqs: [
+      { q: 'Do brainrot clips qualify for the TikTok Creator Fund?', a: 'The original Creator Fund was replaced by the Creativity Program in 2023. Brainrot clips qualify only if they are longer than one minute — most viral brainrot is under that, so most brainrot views generate no direct TikTok payout.' },
+      { q: 'How many views do I need to make $1,000 a month from brainrot?', a: 'Rough math: if you can average $3 RPM combined across TikTok (60s+ clips) and YouTube Shorts, you need about 333,000 monetized views. Realistically, hitting that means posting 4-5 clips a week and cross-posting every render.' },
+      { q: 'Are sponsorships allowed on brainrot content?', a: 'Yes — TikTok and YouTube both allow branded content as long as it is disclosed. Native sponsorship (a character in the debate mentioning the brand) is legal, but must be tagged as sponsored/paid partnership.' },
+      { q: 'Do I need an LLC or business entity for brainrot monetization?', a: 'Not immediately, but once you cross a few thousand dollars a month it makes tax filing significantly easier and separates business income from personal. Consult a CPA — this guide is not tax advice.' },
+      { q: 'What niche is most profitable for brainrot?', a: 'Finance, tech, and fitness debate clips tend to attract the highest-paying sponsors because those brands have the biggest customer-acquisition budgets. General humor and pop culture get more views but lower sponsorship rates.' },
+    ],
+    related: ['brainrot-clip-maker', 'tiktok-brainrot-maker', 'ai-character-video-maker'],
+    relatedAlt: ['jokester-ai', 'rotmaker'],
+  },
+
+  'best-gameplay-footage-brainrot': {
+    slug: 'best-gameplay-footage-brainrot',
+    category: 'Production',
+    badge: 'Production Guide',
+    readTime: '6 min read',
+    updated: 'Updated 2025',
+    metaTitle: 'Best Gameplay Footage for Brainrot Clips — Subway Surfers, Minecraft, GTA Ranked (2025) | ShortClipr',
+    metaDescription:
+      'Which gameplay category performs best on brainrot clips — Subway Surfers, Minecraft parkour, GTA V, Fortnite, Rocket League. Ranked by retention data and matched to topic types.',
+    keywords:
+      'brainrot gameplay footage, subway surfers brainrot, minecraft parkour brainrot, gta brainrot, best gameplay for brainrot, fortnite brainrot, gameplay background tiktok, gameplay clip generator, satisfying gameplay tiktok',
+    h1: 'Best Gameplay Footage for Brainrot — Ranked by Retention',
+    subhead:
+      'Gameplay footage decides the first three seconds of a brainrot clip. Here are the six categories creators actually use, ranked by average watch-through rate, and which topic types they pair with best.',
+    intro:
+      'Every brainrot creator eventually asks the same question: "Does it matter which gameplay I pick, or is Subway Surfers just always the answer?" The honest answer is that it matters — but not for the reason most creators think. Gameplay does not decide whether the clip is entertaining; the dialogue does. Gameplay decides whether a scroller stops long enough to read the first caption. Different footage attracts different sub-audiences, holds attention differently, and pairs better with some topics than others. Getting this pairing right is a small optimization, but it stacks with everything else.',
+    formula: {
+      alt: 'Sergeant Waffles plus Big Marv plus continuous motion plus visual variety equals a scroll-stopping first three seconds',
+      items: [
+        { type: 'char', id: 'sgt-waffles', label: 'The energy' },
+        { type: 'char', id: 'big-marv',    label: 'The gravitas' },
+        { type: 'icon', icon: '🎮', label: 'Continuous motion' },
+        { type: 'icon', icon: '✨', label: 'Visual variety' },
+      ],
+      result: { icon: '⏱', label: 'First-3s retention' },
+    },
+    sections: [
+      {
+        h2: 'Why gameplay matters more than the topic in the first three seconds',
+        body: [
+          'The first three seconds of a short-form clip decide whether the viewer stays. Before they process the topic, before they hear a voice, before they read a caption — they see the background. That first impression is entirely gameplay. This is why creators who obsess over the perfect topic and cheap out on gameplay footage often underperform: they lose the scroller before the joke even starts.',
+          'Good gameplay footage for brainrot has three qualities. It is continuous — no loading screens, no menus, no pauses. It is satisfying — the eye wants to follow the motion for its own sake. And it is visually stable enough that the caption and characters overlaid on top stay legible. Every category below meets these criteria; they differ in which sub-audience they attract and which topics they suit.',
+        ],
+      },
+      {
+        h2: 'Subway Surfers — the default, and why it earned it',
+        body: [
+          'Subway Surfers is the most-used gameplay background on brainrot for a reason: it hits all three criteria harder than anything else. The motion is horizontal and constant. The color palette is bright and saturated, which makes captions in any color pop. The character moves right-to-left, which pairs with left-to-right reading direction and reinforces caption reading rather than fighting it. And the audience associates it with short-form video already, so it primes viewer expectations correctly.',
+          'It pairs best with everyday debates — food, technology, lifestyle, pop culture — because its energy is broad and non-committal. It does not push the clip toward any particular subculture. Use it as the default whenever the topic is universal and you want maximum reach.',
+        ],
+      },
+      {
+        h2: 'Minecraft parkour — cozy, consistent, endlessly rewatchable',
+        body: [
+          'Minecraft parkour footage has a cozy, nostalgic quality that Subway Surfers lacks. The green and brown palette reads as calm rather than kinetic, which makes it a better fit for storytelling-heavy formats ("Lore" clips) and monologue-style single-character content. The block-jumping motion is rhythmic in a way that pairs with typewriter or word-pop caption styles particularly well.',
+          'Its main strength is average watch time on longer clips. Because the palette is easier on the eyes than Subway Surfers, viewers can watch a Minecraft-backed brainrot clip for ninety seconds without feeling visually fatigued. If you are extending clips past sixty seconds for TikTok Creativity Program eligibility, Minecraft is the safer background choice.',
+        ],
+      },
+      {
+        h2: 'GTA V — for edgy debates and adult humor',
+        body: [
+          'GTA driving footage skews the audience older and edgier. The purple-blue night-driving palette pulls attention toward the character art rather than competing with it, which is why so many "hot take" brainrot clips use it. It is the right choice for topics that lean adult — nightlife, dating, work culture, money — where the audience you want is not the same audience that watches Subway Surfers-backed content.',
+          'The tradeoff is reach. GTA-backed clips do not spread as broadly on TikTok\'s all-ages algorithm as Subway Surfers-backed ones. You trade audience size for audience quality — which is often the right trade for monetization-focused creators (see the monetization guide) since older audiences convert better to sponsorships and affiliate links.',
+        ],
+      },
+      {
+        h2: 'Fortnite, Rocket League, and the specialist choices',
+        body: [
+          'Fortnite build fights, Rocket League aerials, and parkour compilations all pull in a distinctly gaming-adjacent audience. If your brainrot content is about gaming, tech, or content creation itself, these backgrounds signal "one of us" to the viewer and generate significantly higher comment rates from that subculture. Outside those niches, they underperform Subway Surfers — the same principle as GTA, but more extreme.',
+          'Rocket League is the most-underused of the three. Its palette is bright, its motion is fast, and its audience is younger and heavier on the platform. If your content sits somewhere between mainstream and gaming-native, Rocket League is a smart middle ground that most creators overlook.',
+        ],
+        list: [
+          'Fortnite — for gaming-adjacent, competitive, and Gen-Z-native topics.',
+          'Rocket League — bright, fast, underused by non-gaming brainrot creators.',
+          'Parkour compilations — kinetic, works well for high-energy arguments.',
+          'Trackmania / racing — an emerging alternative to Subway Surfers, cleaner motion.',
+        ],
+      },
+      {
+        h2: 'Matching gameplay to topic vibe',
+        body: [
+          'The mapping below comes from watching hundreds of brainrot clips across categories and correlating gameplay choice to retention curves. It is not a rulebook — a bold creator can break every pairing and win. But if you are starting out or picking on a tight schedule, it is the fastest way to stop guessing.',
+        ],
+        list: [
+          'Universal debate (iPhone vs Android) → Subway Surfers.',
+          'Storytelling / lore format → Minecraft parkour.',
+          'Adult humor / hot takes / money → GTA V.',
+          'Gaming or tech debate → Fortnite or Rocket League.',
+          'Absurd hypothetical → Rocket League (high energy, off-kilter).',
+          'Cozy or nostalgic topic → Minecraft.',
+        ],
+      },
+    ],
+    takeaways: [
+      'Gameplay decides the first three seconds — the topic decides the next thirty. Both matter.',
+      'Subway Surfers is the mainstream default because it is bright, kinetic, and audience-neutral.',
+      'Minecraft is the better choice for clips over 60 seconds — the palette causes less viewer fatigue.',
+      'GTA and Fortnite narrow the audience but improve engagement rate within their subcultures.',
+      'Rocket League is the most-underused option — bright, fast, and it signals "I know what I\'m doing" to a younger audience.',
+    ],
+    faqs: [
+      { q: 'Do I need to record gameplay myself, or can I use footage from other creators?', a: 'Gameplay footage in brainrot is typically re-used from a curated library — the same footage often powers thousands of clips. ShortClipr maintains a library of admin-uploaded gameplay that is pre-trimmed, split into ≤120-second clips, and reframed to 9:16 vertical.' },
+      { q: 'Does the algorithm care which gameplay I use?', a: 'The algorithm cares about retention. Different gameplay pulls retention curves differently by audience, so indirectly yes — but no platform explicitly rewards or penalizes any specific gameplay category.' },
+      { q: 'Can I use my own gameplay recording?', a: 'ShortClipr\'s current studio uses the curated library. Custom gameplay uploads are on the roadmap for higher-tier plans — the constraint is that footage needs to be 9:16 reframed and split into playable segments, which we handle server-side.' },
+      { q: 'How often should I rotate gameplay backgrounds?', a: 'Rotate weekly, not per-clip. A single gameplay category across a whole week gives your feed visual consistency; changing every clip makes the account feel scattered.' },
+      { q: 'Is there a copyright issue with gameplay footage?', a: 'Gameplay footage used in transformative short-form video (over dialogue, with characters and captions overlaid) generally falls under fair use, and the major game studios (Rockstar, Mojang, Epic) permit it in their content policies. Never use footage that includes copyrighted music or other creators\' commentary tracks.' },
+    ],
+    related: ['gameplay-clip-generator', 'brainrot-clip-maker', 'ai-character-video-maker'],
+    relatedAlt: ['rotmaker', 'clipsai'],
+  },
 }
 
 export const brainrotGuideSlugs = Object.keys(brainrotGuidesContent)
