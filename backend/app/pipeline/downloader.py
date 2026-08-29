@@ -17,6 +17,7 @@ Two strategies:
 
 import asyncio
 import logging
+import re
 import struct
 from pathlib import Path
 
@@ -32,24 +33,37 @@ def _yt_range_url(url: str, start: int, end: int) -> str:
     Append YouTube's native &range=START-END query parameter instead of using
     HTTP Range: headers for byte-range access.
 
-    YouTube CDN blocks HTTP Range headers for deep byte offsets (e.g. a segment
-    at byte 50_000_000 in a 1080p file) as an anti-scraping measure — it returns
-    HTTP 403 for those. It does NOT block requests that use the &range= query
-    parameter, because that is how YouTube's own player fetches DASH segments
-    (Google's QUIC/HTTP player never sends Range headers; it always appends
-    &range= to the CDN URL). Using the native YouTube approach means the CDN
-    treats the request like a real player's DASH fetch.
-
     The server responds with HTTP 200 (or 206) containing ONLY the requested
     bytes — functionally identical to a Range response from our perspective.
 
     Strips any pre-existing &range= from the URL first so we don't stack them
     (yt-dlp occasionally includes &range=0- in some format URLs).
     """
-    import re
     base = re.sub(r"[&?]range=[^&]*", "", url)
     sep = "&" if "?" in base else "?"
     return f"{base}{sep}range={start}-{end}"
+
+
+def _yt_sq_url(url: str, sq: int) -> str:
+    """
+    Build a per-segment URL using YouTube's &sq=N (segment sequence) parameter.
+
+    YouTube's web DASH player fetches segments individually via &sq=N rather
+    than by byte range. The CDN accepts &sq=N requests without enforcing the
+    "start from byte 0" or sequential-byte-access requirement that causes HTTP
+    403s on &range=START-END when START is a large non-zero offset (i.e. the
+    clip is mid-video). Used as fallback when a merged &range= fetch 403s.
+
+    sq is 1-indexed: sidx segment index 0 → sq=1, index 1 → sq=2, etc.
+    """
+    base = re.sub(r"[&?]range=[^&]*", "", url)
+    # If &range= was the first (only) query param, ? was stripped with it —
+    # the leftover leading & needs to become ?.
+    if "?" not in base and "&" in base:
+        idx = base.index("&")
+        base = base[:idx] + "?" + base[idx + 1:]
+    sep = "&" if "?" in base else "?"
+    return f"{base}{sep}sq={sq}"
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -390,13 +404,15 @@ async def _fetch_clip_segments_for_url(
     probe_data = await _probe_full_sidx(client, url, headers)
     init_end, segments = _parse_sidx(probe_data)
 
-    relevant = [s for s in segments if s["end_t"] > clip_start and s["start_t"] < clip_end]
+    # Track original indices for &sq=N fallback (sq = index + 1, 1-based)
+    relevant = [(i, s) for i, s in enumerate(segments)
+                if s["end_t"] > clip_start and s["start_t"] < clip_end]
     if not relevant:
         raise RuntimeError(f"No segments found for clip {clip_start}-{clip_end}s")
 
-    seg_start_b = relevant[0]["start_b"]
-    seg_end_b   = relevant[-1]["end_b"]
-    actual_start_t = relevant[0]["start_t"]  # PTS of first sample in this fMP4
+    seg_start_b = relevant[0][1]["start_b"]
+    seg_end_b   = relevant[-1][1]["end_b"]
+    actual_start_t = relevant[0][1]["start_t"]
 
     logger.info(
         f"DASH {clip_start:.0f}-{clip_end:.0f}s: {len(relevant)} segs, "
@@ -404,21 +420,45 @@ async def _fetch_clip_segments_for_url(
         f"seg_start={actual_start_t:.2f}s"
     )
 
-    # Fetch init segment + clip data concurrently using YouTube-native &range= params.
-    init_resp, segs_resp = await asyncio.gather(
-        client.get(_yt_range_url(url, 0, init_end - 1), headers=headers),
-        client.get(_yt_range_url(url, seg_start_b, seg_end_b), headers=headers),
-    )
-    for r in (init_resp, segs_resp):
-        if r.status_code not in (200, 206):
-            raise RuntimeError(f"Segment fetch failed: HTTP {r.status_code}")
+    # Init segment is always from byte 0 — works even when deep-offset requests fail.
+    init_resp = await client.get(_yt_range_url(url, 0, init_end - 1), headers=headers)
+    if init_resp.status_code not in (200, 206):
+        raise RuntimeError(f"Segment fetch failed: HTTP {init_resp.status_code}")
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "wb") as f:
-        f.write(init_resp.content)
-        f.write(segs_resp.content)
+    # Try fetching all clip segments as one merged &range= request (fast path).
+    segs_resp = await client.get(_yt_range_url(url, seg_start_b, seg_end_b), headers=headers)
 
-    return actual_start_t
+    if segs_resp.status_code in (200, 206):
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_path, "wb") as f:
+            f.write(init_resp.content)
+            f.write(segs_resp.content)
+        return actual_start_t
+
+    if segs_resp.status_code == 403:
+        # YouTube CDN sometimes rejects &range=START-END when START is a large
+        # non-zero offset (deep mid-video content) even with the query-param form.
+        # Fall back to &sq=N — individual segments by sequence number, which is
+        # how YouTube's own web DASH player accesses VOD segments without needing
+        # sequential byte-access state.
+        body_preview = segs_resp.content[:300].decode(errors="ignore")
+        logger.warning(
+            f"Merged &range={seg_start_b}-{seg_end_b} got 403 "
+            f"(cdn_body={body_preview!r}) — falling back to &sq=N per-segment fetch"
+        )
+        seg_data = bytearray()
+        for idx, _s in relevant:
+            sq_r = await client.get(_yt_sq_url(url, idx + 1), headers=headers)
+            if sq_r.status_code not in (200, 206):
+                raise RuntimeError(f"Segment fetch failed: HTTP {sq_r.status_code} (sq={idx+1})")
+            seg_data.extend(sq_r.content)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_path, "wb") as f:
+            f.write(init_resp.content)
+            f.write(bytes(seg_data))
+        return actual_start_t
+
+    raise RuntimeError(f"Segment fetch failed: HTTP {segs_resp.status_code}")
 
 
 async def _parse_sidx_from_url(
@@ -670,27 +710,53 @@ async def download_all_clips_parallel(
                 output   = out_dir / f"clip_{i:02d}_raw.mp4"
 
                 async def _dl_track(url, init_end, segs, out_path):
-                    relevant = [s for s in segs if s["end_t"] > start and s["start_t"] < end]
+                    # Track indices for &sq=N fallback (sq = index + 1, 1-based)
+                    relevant = [(i, s) for i, s in enumerate(segs)
+                                if s["end_t"] > start and s["start_t"] < end]
                     if not relevant:
                         raise RuntimeError(f"No segments for clip {start}-{end}s")
-                    sb, eb = relevant[0]["start_b"], relevant[-1]["end_b"]
-                    actual_t = relevant[0]["start_t"]
-                    # Use YouTube-native &range= query params (not HTTP Range headers).
-                    # YouTube CDN blocks Range headers for deep byte offsets as anti-
-                    # scraping but honours &range= since that's how its own player
-                    # fetches DASH segments. Sequential fetches still halve peak
-                    # connections per clip through the proxy.
+                    sb, eb = relevant[0][1]["start_b"], relevant[-1][1]["end_b"]
+                    actual_t = relevant[0][1]["start_t"]
+
+                    # Init segment: always from byte 0, never 403s.
                     init_r = await client.get(_yt_range_url(url, 0, init_end - 1), headers=headers)
                     if init_r.status_code not in (200, 206):
                         raise RuntimeError(f"Init fetch failed HTTP {init_r.status_code}")
+
+                    # Fast path: one merged &range= request for all clip segments.
                     seg_r = await client.get(_yt_range_url(url, sb, eb), headers=headers)
-                    if seg_r.status_code not in (200, 206):
-                        raise RuntimeError(f"Segment fetch failed HTTP {seg_r.status_code}")
-                    out_path.parent.mkdir(parents=True, exist_ok=True)
-                    with open(out_path, "wb") as f:
-                        f.write(init_r.content)
-                        f.write(seg_r.content)
-                    return actual_t
+                    if seg_r.status_code in (200, 206):
+                        out_path.parent.mkdir(parents=True, exist_ok=True)
+                        with open(out_path, "wb") as f:
+                            f.write(init_r.content)
+                            f.write(seg_r.content)
+                        return actual_t
+
+                    if seg_r.status_code == 403:
+                        # YouTube CDN blocks &range=START-END when START is a large
+                        # non-zero offset even with the query-param form. Fall back
+                        # to &sq=N — YouTube's web DASH player fetches segments this
+                        # way and the CDN does not apply sequential byte enforcement.
+                        body_preview = seg_r.content[:300].decode(errors="ignore")
+                        logger.warning(
+                            f"Merged &range={sb}-{eb} got 403 "
+                            f"(cdn_body={body_preview!r}) — falling back to &sq=N"
+                        )
+                        seg_data = bytearray()
+                        for idx, _s in relevant:
+                            sq_r = await client.get(_yt_sq_url(url, idx + 1), headers=headers)
+                            if sq_r.status_code not in (200, 206):
+                                raise RuntimeError(
+                                    f"Segment fetch failed HTTP {sq_r.status_code} (sq={idx+1})"
+                                )
+                            seg_data.extend(sq_r.content)
+                        out_path.parent.mkdir(parents=True, exist_ok=True)
+                        with open(out_path, "wb") as f:
+                            f.write(init_r.content)
+                            f.write(bytes(seg_data))
+                        return actual_t
+
+                    raise RuntimeError(f"Segment fetch failed HTTP {seg_r.status_code}")
 
                 async def _dl_audio_track():
                     if audio_full_path is not None:
