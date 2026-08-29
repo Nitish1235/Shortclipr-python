@@ -493,103 +493,118 @@ async def _dash_download_with_refresh(
     DASH download with IP-aware cascading fallbacks.
 
     The core problem: stream URLs are IP-bound — the CDN signature covers
-    the exit IP that resolved them. If we resolve via one proxy (IP-A)
-    but download via another (IP-B), the CDN returns 403. Every attempt
-    below keeps its resolve-proxy and download-proxy IDENTICAL for exactly
-    this reason.
+    the exit IP that resolved them. If we resolve via one proxy (IP-A) but
+    download via another (IP-B), the CDN returns 403 on real segment data
+    (byte-0 probes still succeed either way, which is why sidx parsing
+    looks fine right up until the actual clip bytes are fetched).
+
+    Verified 2026-08-29 against a live production failure: a proxy-cheap-
+    resolved URL downloaded a deep, non-zero byte range cleanly through
+    proxy-cheap (HTTP 200, real moof/mdat data) but 403'd through
+    Proxy-Seller's static ISP IPs on the SAME range — both via &range= and
+    the &sq=N fallback, across two different pool IPs in production. The
+    "cross-IP tolerance" this used to rely on (proxy-cheap-signed URL
+    downloading cleanly through Proxy-Seller) is gone; Proxy-Seller's small
+    static pool reads as flagged for this in a way proxy-cheap's rotating
+    residential IPs are not. So proxy-cheap now goes FIRST; Proxy-Seller is
+    kept only as a last-resort attempt in case proxy-cheap's whole gateway
+    is unreachable.
 
     Fallback chain:
 
-      1. Cached URLs (from API stage, resolved via proxy-cheap there) +
-         Proxy-Seller DASH, pool IP #0 — fast path, only succeeds when the
-         URL isn't IP-bound at all.
-      2. Proxy-Seller stream resolve (pool IP #1 — DIFFERENT from attempt 1,
-         in case #0 specifically is degraded/blocklisted for the
-         page/InnerTube resolution endpoints, which YouTube bot-detects
-         more aggressively than raw CDN byte-range requests) → download via
-         that SAME pool IP #1.
-      3. proxy-cheap stream resolve → proxy-cheap DASH download (matching
-         proxy both ends — used when Proxy-Seller gets bot-blocked on
-         resolution).
-      4. Caller's full-source fallback, using whichever pairing from above
+      1. Cached URL (from API stage, already resolved via proxy-cheap) +
+         a fresh proxy-cheap connection for the DASH download — matches the
+         resolve proxy, no re-resolution round trip needed.
+      2. Same cached URL, retry via proxy-cheap once more — proxy-cheap is
+         a rotating gateway and occasionally hands out a dead upstream node
+         (surfaces as connect timeout / "Tunnel connection failed"); a
+         fresh connection likely lands on a healthy one.
+      3. Re-resolve + download via proxy-cheap (2 tries) — covers the case
+         where the cached URL itself expired, not just a bad proxy node.
+      4. Re-resolve + download via Proxy-Seller (pool IP #0) — last resort,
+         since Proxy-Seller may still be usable for videos it isn't
+         flagged for.
+      5. Caller's full-source fallback, using whichever pairing from above
          was the LAST one actually attempted (see DashDownloadFailed).
     """
-    ps_proxy_0 = get_proxyseller_proxy(job_id, attempt=0)
-    last = (stream_url, audio_url, user_agent, ps_proxy_0)
+    pc_proxy_0 = get_proxycheap_proxy(purpose=f"dash-download-{job_id[:8]}")
+    last = (stream_url, audio_url, user_agent, pc_proxy_0)
 
-    # ── Attempt 1: cached URLs + Proxy-Seller (pool IP #0) ──
-    # This is the intended fast path: URLs were resolved via proxy-cheap in
-    # the API stage, DASH bytes are pulled via Proxy-Seller ISP here. Even
-    # when the URL is signed with `ip=<proxy-cheap IP>` in sparams, YouTube's
-    # tv_embedded CDN currently accepts cross-IP requests (verified 2026-08 —
-    # a proxy-cheap-signed URL downloads cleanly through Proxy-Seller). If
-    # this ever tightens back up, the try/except below catches the 403 and
-    # falls through to attempt 2 (re-resolve via Proxy-Seller). We used to
-    # short-circuit on url_is_ip_bound() here, which cost every job a wasted
-    # ~10-30s re-resolution round trip for no gain.
-    try:
-        return await download_all_clips_parallel(
-            stream_url, clip_ranges, job_dir,
-            audio_url=audio_url, user_agent=user_agent,
-            proxy_url=ps_proxy_0,
-            max_concurrent=3,
-        )
-    except Exception as exc1:
-        exc1_str = str(exc1) or f"{type(exc1).__name__} (no message)"
-        logger.warning(f"[{job_id}] DASH attempt 1 failed (cached URLs + Proxy-Seller #0): {exc1_str}")
-
-    # ── Attempt 2: resolve + download via Proxy-Seller pool IP #1 (rotated) ──
-    ps_proxy_1 = get_proxyseller_proxy(job_id, attempt=1)
-    if ps_proxy_1:
+    # ── Attempt 1: cached URL + proxy-cheap (fresh connection) ──
+    if pc_proxy_0:
         try:
-            logger.info(f"[{job_id}] Re-resolving stream URLs through Proxy-Seller pool IP #1")
-            stream_url, audio_url, user_agent = await get_stream_urls(
-                video_id, quality=quality, session_id=job_id,
-                proxy_override=ps_proxy_1,
-            )
-            last = (stream_url, audio_url, user_agent, ps_proxy_1)
             return await download_all_clips_parallel(
                 stream_url, clip_ranges, job_dir,
                 audio_url=audio_url, user_agent=user_agent,
-                proxy_url=ps_proxy_1,
+                proxy_url=pc_proxy_0,
+                max_concurrent=3,
+            )
+        except Exception as exc1:
+            exc1_str = str(exc1) or f"{type(exc1).__name__} (no message)"
+            logger.warning(f"[{job_id}] DASH attempt 1 failed (cached URL + proxy-cheap): {exc1_str}")
+
+        # ── Attempt 2: same cached URL, retry via a fresh proxy-cheap connection ──
+        await asyncio.sleep(4)  # let the rotating gateway pick a different upstream node
+        pc_proxy_retry = get_proxycheap_proxy(purpose=f"dash-download-retry-{job_id[:8]}")
+        try:
+            last = (stream_url, audio_url, user_agent, pc_proxy_retry)
+            return await download_all_clips_parallel(
+                stream_url, clip_ranges, job_dir,
+                audio_url=audio_url, user_agent=user_agent,
+                proxy_url=pc_proxy_retry,
                 max_concurrent=3,
             )
         except Exception as exc2:
             exc2_str = str(exc2) or f"{type(exc2).__name__} (no message)"
-            logger.warning(f"[{job_id}] DASH attempt 2 failed (Proxy-Seller #1 resolve + DASH): {exc2_str}")
+            logger.warning(f"[{job_id}] DASH attempt 2 failed (cached URL + proxy-cheap retry): {exc2_str}")
 
-    # ── Attempt 3: resolve + download via proxy-cheap (matching, not mixed) ──
-    # proxy-cheap is a single rotating-residential gateway (one fixed
-    # host:port) — every new TCP connection through it lands on a
-    # different upstream residential IP transparently, and that pool
-    # occasionally hands out a dead/unreachable node, surfacing as
-    # "Tunnel connection failed: 500" from the gateway itself (not a
-    # YouTube-side block — the account has plenty of bandwidth/concurrency
-    # headroom, confirmed on the proxy-cheap dashboard). A retry opens a
-    # fresh connection and very likely lands on a healthy node, so this is
-    # the one tier worth retrying — Proxy-Seller (attempts 1-2) uses
-    # dedicated static IPs where a retry wouldn't change anything.
-    pc_proxy = get_proxycheap_proxy(purpose=f"dash-resolve-{job_id[:8]}")
-    if pc_proxy:
-        for pc_attempt in range(2):
-            try:
-                logger.info(f"[{job_id}] Re-resolving stream URLs through proxy-cheap (try {pc_attempt + 1}/2)")
-                stream_url, audio_url, user_agent = await get_stream_urls(
-                    video_id, quality=quality, session_id=job_id,
-                    proxy_override=pc_proxy,
-                )
-                last = (stream_url, audio_url, user_agent, pc_proxy)
-                return await download_all_clips_parallel(
-                    stream_url, clip_ranges, job_dir,
-                    audio_url=audio_url, user_agent=user_agent,
-                    proxy_url=pc_proxy,
-                    max_concurrent=3,
-                )
-            except Exception as exc3:
-                exc3_str = str(exc3) or f"{type(exc3).__name__} (no message)"
-                logger.warning(f"[{job_id}] DASH attempt 3 (try {pc_attempt + 1}/2) failed (proxy-cheap resolve + DASH): {exc3_str}")
-                if pc_attempt == 0:
-                    await asyncio.sleep(4)  # Dead proxy-cheap node; let the rotating gateway pick a healthy one
+    # ── Attempt 3: re-resolve + download via proxy-cheap (2 tries) ──
+    # Covers the case where the cached URL itself expired rather than a
+    # bad proxy node. Also the entry point when proxy-cheap isn't configured
+    # at all in this environment (pc_proxy_0 is None) — get_proxycheap_proxy
+    # is re-checked fresh on each try below.
+    for pc_attempt in range(2):
+        pc_proxy = get_proxycheap_proxy(purpose=f"dash-resolve-{job_id[:8]}")
+        if not pc_proxy:
+            break
+        try:
+            logger.info(f"[{job_id}] Re-resolving stream URLs through proxy-cheap (try {pc_attempt + 1}/2)")
+            stream_url, audio_url, user_agent = await get_stream_urls(
+                video_id, quality=quality, session_id=job_id,
+                proxy_override=pc_proxy,
+            )
+            last = (stream_url, audio_url, user_agent, pc_proxy)
+            return await download_all_clips_parallel(
+                stream_url, clip_ranges, job_dir,
+                audio_url=audio_url, user_agent=user_agent,
+                proxy_url=pc_proxy,
+                max_concurrent=3,
+            )
+        except Exception as exc3:
+            exc3_str = str(exc3) or f"{type(exc3).__name__} (no message)"
+            logger.warning(f"[{job_id}] DASH attempt 3 (try {pc_attempt + 1}/2) failed (proxy-cheap resolve + DASH): {exc3_str}")
+            if pc_attempt == 0:
+                await asyncio.sleep(4)  # Dead proxy-cheap node; let the rotating gateway pick a healthy one
+
+    # ── Attempt 4: re-resolve + download via Proxy-Seller (last resort) ──
+    ps_proxy = get_proxyseller_proxy(job_id, attempt=0)
+    if ps_proxy:
+        try:
+            logger.info(f"[{job_id}] Re-resolving stream URLs through Proxy-Seller (last resort)")
+            stream_url, audio_url, user_agent = await get_stream_urls(
+                video_id, quality=quality, session_id=job_id,
+                proxy_override=ps_proxy,
+            )
+            last = (stream_url, audio_url, user_agent, ps_proxy)
+            return await download_all_clips_parallel(
+                stream_url, clip_ranges, job_dir,
+                audio_url=audio_url, user_agent=user_agent,
+                proxy_url=ps_proxy,
+                max_concurrent=3,
+            )
+        except Exception as exc4:
+            exc4_str = str(exc4) or f"{type(exc4).__name__} (no message)"
+            logger.warning(f"[{job_id}] DASH attempt 4 failed (Proxy-Seller resolve + DASH): {exc4_str}")
 
     # All DASH attempts exhausted — hand the caller the last coherent
     # (proxy, URL) pairing so its full-source fallback doesn't repeat the
