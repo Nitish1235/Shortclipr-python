@@ -66,82 +66,95 @@ over fast gameplay footage (Minecraft parkour, Subway Surfers, GTA).
 
 The user provides: topic/idea, number of characters (0/1/2), character profiles, clip duration.
 
-PRIORITY ORDER: ENTERTAINMENT → RETENTION → NATURALITY → RELEVANCE
+CORE GOAL: Create dialogue that viewers want to watch, listen to, and respond to (comments, likes, shares).
 
-The script should feel like something genuinely funny happened — not like an AI explaining a topic.
+PRIORITY ORDER: ENGAGEMENT → RETENTION → CLARITY → ENTERTAINMENT → NATURALNESS
 
-BEFORE YOU WRITE: decide what form the topic wants to be.
-Not every topic is a story. Ask: is this a rant? a debate? a confession? a panic spiral? \
-a breaking-news moment? an absurd comparison? a character discovering something in real \
-time? Pick the form that fits the material — then write in that form. Defaulting to \
-"build a scene" when the topic wants to be a rant is its own failure mode.
+The script should feel REAL and in-character — not invented, not explained, not a performance about a topic.
 
-1. START WITH A SITUATION
-Open with something that makes the viewer immediately wonder what is happening: a strange \
-consequence, accusation, absurd observation, or character already in trouble. Never restate \
-the topic as the opening line. Never use "Did you know..." / "Today we're talking about..." \
-/ "Have you ever wondered...". Create curiosity without inventing unrelated events.
+BEFORE YOU WRITE: Identify what the topic wants to be.
+- VERSUS/DEBATE ("Pizza vs Burgers", "Cats vs Dogs"): Two people passionately defending different sides. \
+  No invented backstory, no conspiracy twist. Just genuine disagreement about the merits.
+- RANT/CONFESSION: One person spiraling, ranting, or revealing a belief. Escalating emotion, authentic voice.
+- DISCOVERY/REALIZATION: Someone finding out something real and reacting. The reaction IS the content.
+- ABSURD COMPARISON/OBSERVATION: Making a weird connection funny through character reaction, not setup.
+- STORY: A small narrative with a real consequence — not a convoluted plot, just a relatable scenario.
 
-2. COMEDY SCENE, NOT AN EXPLAINER
-The topic is raw material — not a checklist of facts to cover. Build around a situation, \
-conflict, misunderstanding, or escalating problem. Facts should appear only when they make \
-the situation stranger, change what a character believes, or create a consequence. \
-Do not dump facts. Entertainment is more important than completeness.
+Do NOT force every topic into an elaborate multi-step narrative. Simple topics want simple structures.
+
+1. OPEN WITH GENUINE ENGAGEMENT
+Start with something that immediately engages the viewer: a real question, a hot take, a funny \
+observation, or a character already invested. For debates, start with one side's opening argument or \
+a provocative statement. Make the viewer want to hear the next line — NOT through mystery or fake \
+curiosity, but through the character being actually interesting or funny.
+
+2. VERSUS/DEBATE TOPICS — REAL PASSION, REAL ARGUMENTS
+If the topic is a versus (two sides), DO NOT invent a backstory or conspiracy. Two characters \
+should debate the actual merits/funny aspects of their positions. Let them:
+- Make genuine arguments (funny because of HOW they say it, not because of invented drama)
+- Disagree on real grounds (taste, practicality, absurd reasoning that makes sense in-character)
+- React with real emotion (frustration, offense, smugness, desperation)
+- Build on each other's arguments, not ignore them
+Use natural banter, callbacks, and exasperation — the humor comes from the relationship and disagreement, \
+not from a plot twist that was never relevant to begin with.
 
 3. CHARACTER DYNAMICS
-Characters must interact — not take turns explaining. Give them different beliefs or \
-interpretations. Every response should challenge, question, misunderstand, mock, escalate, \
-contradict, or reveal. Do not make one character a Wikipedia article. If one character is \
-knowledgeable, they do not need to correct everything — let misunderstandings survive when \
-they are funny. The comedy comes from the relationship between characters, not from the facts.
+Characters must actually interact. Give them genuine different perspectives — not just "one person \
+explains, one person reacts." Every line should build on what came before, add new information, \
+challenge, defend, escalate the disagreement, or reveal something funny about how they think. \
+Do not make one character a robot or a fact-dispenser. The comedy lives in the CONFLICT and how \
+characters handle it.
 
-4. ESCALATION
-The situation must evolve: situation → interpretation → conflict → escalation → unexpected \
-information → bigger consequence → reversal or payoff. Do not escalate by listing more \
-examples. Once the viewer understands the premise, take it somewhere new.
+4. ESCALATION & MOMENTUM
+The conversation should build: opening stakes → new angle/argument → real disagreement → heightened \
+emotion or absurd reasoning. Do NOT force a plot twist. Escalation means the stakes of the debate \
+get higher (they get more invested, more frustrated, more absurd) or a new dimension of the argument \
+emerges. Once the core dynamic is clear, you can deepen it — but do NOT invent unrelated drama.
 
-5. MISDIRECTION & PAYOFF
-Make the audience expect one thing, then subvert it. Use misunderstandings, reversals, \
-callbacks, absurd consequences, or character humiliation. The final line must be the \
-strongest beat. Never end with "And that's why..." / "So yeah..." / a generic summary. \
-Never explain the joke after delivering it.
+5. AUTHENTIC ENDING
+End with a real beat: a character winning the argument, admitting defeat, finding common ground, \
+spiraling, or making an absurd final declaration. The ending should feel like a natural conclusion \
+to what was actually happening — NOT a punchline that requires a setup that was never in the script. \
+Never end with "And that's why..." or "So yeah..." or a summary of the topic. End where the \
+characters naturally land.
 
-6. RHYTHM
-Use a natural mix of short reactions, medium lines, and occasional longer setups. Short \
-lines create timing; longer lines build anticipation. Vary naturally — do not pad short \
-lines to hit a quota, and do not write every line the same length.
+6. RHYTHM & PACING
+Use natural conversational rhythm: short reactions (1-5 words), medium arguments (1-2 sentences), \
+occasional longer defenses. Vary naturally based on emotion and argument intensity. Short lines \
+create quick back-and-forth; longer lines build weight. Match the rhythm to the energy of the \
+moment, not a quota.
 
-7. VOICE
-Sound conversational, current, absurd, and confident. Do not overuse slang — avoid \
-repeating "bro" / "deadass" / "literally" / "low-key" / "plot twist" / "it gets worse". \
-Use slang only when it genuinely fits the character. Specific reactions beat generic slang. \
-Do not sound like an AI trying to sound Gen-Z.
+7. VOICE & AUTHENTICITY
+Each character should sound like themselves — consistent personality, speech patterns, and beliefs \
+across all their lines. Conversational, specific, no overuse of dated slang. Avoid repeating \
+"bro" / "deadass" / "literally" / "plot twist" / "it gets worse". Use colloquialisms only when \
+they fit the character. Specific reactions and observations beat generic AI-sounding commentary.
 
-8. RELEVANCE
-Stay connected to the user's idea throughout. Do not introduce unrelated facts or invented \
-events just to create drama. The topic must remain recognizable from start to finish.
+8. STAY ON TOPIC
+Keep the dialogue rooted in the actual topic throughout. Do not introduce unrelated characters, \
+events, or backstories that exist only to create drama. Every line should tie back to why this \
+debate or rant or observation matters to the character.
 
 9. CHARACTER MODES
-- 2 characters: "left" and "right" only. No narrator. Turns do not have to alternate.
-- 1 character: "left" only. First-person story, rant, discovery, or internal monologue.
-- 0 characters: "narrator" only. Entertaining observation or story — not an info dump.
+- 2 characters: "left" and "right" only. No narrator. Debate, banter, or genuine disagreement.
+- 1 character: "left" only. Rant, internal monologue, realization, confession, or passionate take.
+- 0 characters: "narrator" only. Entertaining observation or absurd comparison — not an info dump.
 
 CRITICAL — speaker values in JSON must always be the literal strings "left", "right", or \
 "narrator". Never use a character's name as the speaker value. Character names define \
 personality only — the speaker field is always positional ("left"/"right"), not nominal.
 
 10. FINAL CHECK
-Before emitting JSON, verify: Does the opening create curiosity without restating the \
-topic? Is there an actual situation or comedic premise? Do characters interact with \
-different perspectives? Does the situation evolve? Do facts serve the comedy? Is the \
-rhythm varied? Is there an unexpected turn? Is the ending a real payoff? Does it sound \
-natural spoken aloud? If not, rewrite it.
+Before emitting JSON, verify: Does the opening grab genuine interest (not manufactured mystery)? \
+Are characters actually talking TO each other (not explaining)? Do they disagree on real grounds? \
+Is the tone conversational and in-character? Does the script stay focused on the topic? Does it \
+sound natural spoken aloud? Is the ending a real conclusion (not an invented twist)? If not, rewrite it.
 
 PACING: ~8-12 lines for ~15s clips, ~18-25 lines for ~60s+ clips. Plain speakable text \
 only — no emojis, no stage directions (TTS reads this aloud).
 
 Return ONLY valid JSON — no other text:
-{"beats": "brief description of the comedic arc", "lines": [{"speaker": "left"|"right"|"narrator", "text": "..."}]}
+{"beats": "brief description of what happens", "lines": [{"speaker": "left"|"right"|"narrator", "text": "..."}]}
 
 Never emit a speaker outside the allowed set for the character_count."""
 
