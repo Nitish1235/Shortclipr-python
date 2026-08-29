@@ -69,6 +69,9 @@ export default function Dashboard() {
   const location = useLocation()
   const navigate = useNavigate()
 
+  // Social publishing is beta — only available to the allowlisted account
+  const socialEnabled = user?.email === 'jainnitish432@gmail.com'
+
   // Jobs & clips
   const [jobs, setJobs]               = useState([])
   const [loading, setLoading]         = useState(true)
@@ -635,49 +638,60 @@ export default function Dashboard() {
             <div style={{ display:'flex', alignItems:'center', gap:'16px', minHeight:'44px', flexWrap:'wrap' }}>
               {/* Platform pills */}
               <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
-                {ytConnected ? (
+                {socialEnabled ? (<>
+                  {ytConnected ? (
+                    <div style={{
+                      display:'flex', alignItems:'center', gap:'6px',
+                      padding:'5px 12px', borderRadius:'8px',
+                      border:'1px solid #fca5a5', background:'#fff5f5',
+                      fontSize:'.72rem', fontWeight:700, color:'#dc2626',
+                    }}>
+                      <YTLogo size={14} />
+                      <span style={{ width:6, height:6, borderRadius:'50%', background:'#4ade80', display:'inline-block' }}/>
+                      Connected
+                    </div>
+                  ) : (
+                    <button onClick={handleConnectYouTube} style={{
+                      display:'flex', alignItems:'center', gap:'6px',
+                      padding:'5px 12px', borderRadius:'8px',
+                      border:'1px solid #fca5a5', background:'#fff5f5',
+                      fontSize:'.72rem', fontWeight:700, color:'#dc2626',
+                      cursor:'pointer',
+                    }}>
+                      <YTLogo size={14} /> Connect YouTube
+                    </button>
+                  )}
+                  {ttConnected ? (
+                    <div style={{
+                      display:'flex', alignItems:'center', gap:'6px',
+                      padding:'5px 12px', borderRadius:'8px',
+                      border:'1px solid #e9d5ff', background:'#faf5ff',
+                      fontSize:'.72rem', fontWeight:700, color:'#7c3aed',
+                    }}>
+                      <TTLogo size={14} />
+                      <span style={{ width:6, height:6, borderRadius:'50%', background:'#4ade80', display:'inline-block' }}/>
+                      Connected
+                    </div>
+                  ) : (
+                    <button onClick={handleConnectTikTok} style={{
+                      display:'flex', alignItems:'center', gap:'6px',
+                      padding:'5px 12px', borderRadius:'8px',
+                      border:'1px solid #e9d5ff', background:'#faf5ff',
+                      fontSize:'.72rem', fontWeight:700, color:'#7c3aed',
+                      cursor:'pointer',
+                    }}>
+                      <TTLogo size={14} /> Connect TikTok
+                    </button>
+                  )}
+                </>) : (
                   <div style={{
                     display:'flex', alignItems:'center', gap:'6px',
                     padding:'5px 12px', borderRadius:'8px',
-                    border:'1px solid #fca5a5', background:'#fff5f5',
-                    fontSize:'.72rem', fontWeight:700, color:'#dc2626',
+                    border:'1px solid #e5e7eb', background:'#f9fafb',
+                    fontSize:'.72rem', fontWeight:700, color:'#9ca3af',
                   }}>
-                    <YTLogo size={14} />
-                    <span style={{ width:6, height:6, borderRadius:'50%', background:'#4ade80', display:'inline-block' }}/>
-                    Connected
+                    📲 Social publishing — coming soon
                   </div>
-                ) : (
-                  <button onClick={handleConnectYouTube} style={{
-                    display:'flex', alignItems:'center', gap:'6px',
-                    padding:'5px 12px', borderRadius:'8px',
-                    border:'1px solid #fca5a5', background:'#fff5f5',
-                    fontSize:'.72rem', fontWeight:700, color:'#dc2626',
-                    cursor:'pointer',
-                  }}>
-                    <YTLogo size={14} /> Connect YouTube
-                  </button>
-                )}
-                {ttConnected ? (
-                  <div style={{
-                    display:'flex', alignItems:'center', gap:'6px',
-                    padding:'5px 12px', borderRadius:'8px',
-                    border:'1px solid #e9d5ff', background:'#faf5ff',
-                    fontSize:'.72rem', fontWeight:700, color:'#7c3aed',
-                  }}>
-                    <TTLogo size={14} />
-                    <span style={{ width:6, height:6, borderRadius:'50%', background:'#4ade80', display:'inline-block' }}/>
-                    Connected
-                  </div>
-                ) : (
-                  <button onClick={handleConnectTikTok} style={{
-                    display:'flex', alignItems:'center', gap:'6px',
-                    padding:'5px 12px', borderRadius:'8px',
-                    border:'1px solid #e9d5ff', background:'#faf5ff',
-                    fontSize:'.72rem', fontWeight:700, color:'#7c3aed',
-                    cursor:'pointer',
-                  }}>
-                    <TTLogo size={14} /> Connect TikTok
-                  </button>
                 )}
               </div>
 
@@ -1145,6 +1159,7 @@ export default function Dashboard() {
 
                           {/* Action buttons row */}
                           <div style={{ display:'flex', gap:4 }}>
+                            {socialEnabled ? (<>
                             <button
                               onClick={e => handlePublishYT(e, clip)}
                               disabled={ytPubbing || ytDone}
@@ -1196,6 +1211,13 @@ export default function Dashboard() {
                                 <TTLogo size={9} /><span style={{fontSize:'.5rem'}}>{ttDrafting ? '…' : ttDraft ? '✓' : 'Draft'}</span>
                               </button>
                             </div>
+                            </>) : (
+                              <div title="Social publishing coming soon" style={{
+                                flex:1, display:'flex', alignItems:'center', justifyContent:'center',
+                                padding:'5px 4px', borderRadius:7, fontSize:'.5rem', fontWeight:700,
+                                border:'1px solid #e5e7eb', background:'#f9fafb', color:'#9ca3af',
+                              }}>Coming soon</div>
+                            )}
                             <button
                               onClick={e => handleSingleDownload(e, clip)}
                               title={isPaid ? 'Download MP4' : canFreeDownload(clip) ? 'Download free (feedback reward)' : 'Upgrade to download'}
@@ -1235,6 +1257,7 @@ export default function Dashboard() {
             background: isPaid ? '#111' : '#cf1322', color:'#fff', border:'none',
             borderRadius:7, padding:'7px 16px', fontWeight:700, fontSize:'.76rem', cursor:'pointer',
           }}>{isPaid ? '⬇ Download' : '💳 Upgrade to Download'}</button>
+          {socialEnabled && (<>
           <button onClick={handleBulkPublishYT} style={{
             display:'flex', alignItems:'center', gap:7,
             background:'#fff5f5', color:'#dc2626', border:'1px solid #fca5a5',
@@ -1256,6 +1279,7 @@ export default function Dashboard() {
           }}>
             <TTLogo size={14} /> Save TikTok Draft
           </button>
+          </>)}
           <div style={{ width:1, height:20, background:'#e5e7eb' }}/>
           <button onClick={() => setSelectedClipIds(new Set())} style={{
             background:'none', border:'none', color:'#6b7280', cursor:'pointer', fontSize:'.76rem',
@@ -1410,6 +1434,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* YouTube publish section */}
+                {socialEnabled ? (
                 <div style={{ border:'1px solid #e5e7eb', borderRadius:10, overflow:'hidden' }}>
                   <div style={{ padding:'9px 13px', background:'#fafafa', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', gap:8 }}>
                     <YTLogo size={16} />
@@ -1452,8 +1477,15 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
+                ) : (
+                <div style={{ border:'1px solid #e5e7eb', borderRadius:10, padding:'11px 13px', background:'#f9fafb', display:'flex', alignItems:'center', gap:8 }}>
+                  <YTLogo size={14} />
+                  <span style={{ fontSize:'.74rem', color:'#9ca3af', fontWeight:600 }}>YouTube Shorts — coming soon</span>
+                </div>
+                )}
 
                 {/* TikTok section */}
+                {socialEnabled ? (
                 <div style={{ border:'1px solid #e5e7eb', borderRadius:10, overflow:'hidden' }}>
                   <div style={{ padding:'9px 13px', background:'#fafafa', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', gap:8 }}>
                     <TTLogo size={16} />
@@ -1517,6 +1549,12 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
+                ) : (
+                <div style={{ border:'1px solid #e5e7eb', borderRadius:10, padding:'11px 13px', background:'#f9fafb', display:'flex', alignItems:'center', gap:8 }}>
+                  <TTLogo size={14} />
+                  <span style={{ fontSize:'.74rem', color:'#9ca3af', fontWeight:600 }}>TikTok — coming soon</span>
+                </div>
+                )}
 
                 {/* Download */}
                 <button onClick={e => { handleSingleDownload(e, modalClip); if (isPaid || canFreeDownload(modalClip)) closeModal() }} style={{
