@@ -43,7 +43,7 @@ def _clean(text: str) -> str:
 
 import httpx
 
-from app.core.proxy import get_proxycheap_proxy
+from app.core.proxy import get_proxycheap_proxy, get_proxyseller_proxy
 from app.pipeline.stream import call_player_api
 
 logger = logging.getLogger(__name__)
@@ -150,8 +150,25 @@ async def get_transcript(video_id: str, language: str = "en", session_id: str | 
         logger.warning(f"[{video_id}] yt-dlp subs+proxy failed: {e}")
         errors.append(f"ytdlp: {e}")
 
+    # ── Method 4: emergency Proxy-Seller fallback ──────────────
+    # Methods 1-3 all route through proxy-cheap. If proxy-cheap's gateway is
+    # entirely down (quota exhausted — see proxy.py docstring), all three
+    # fail identically and transcript extraction dies completely. This is a
+    # tiny JSON call, so briefly borrowing a Proxy-Seller IP here costs
+    # nothing against its unlimited-bandwidth budget.
+    try:
+        proxy = get_proxyseller_proxy(session_id)
+        entries = await _innertube_android_proxy(video_id, lang_code, session_id, proxy_override=proxy)
+        if entries:
+            logger.info(f"[{video_id}] transcript ← InnerTube ANDROID+proxyseller-emergency ({len(entries)} entries)")
+            return entries
+        errors.append("proxyseller-emergency: empty result")
+    except Exception as e:
+        logger.warning(f"[{video_id}] Proxy-Seller emergency transcript fallback failed: {e}")
+        errors.append(f"proxyseller-emergency: {e}")
+
     raise RuntimeError(
-        f"[{video_id}] All 3 transcript methods failed — {'; '.join(errors)}"
+        f"[{video_id}] All 4 transcript methods failed — {'; '.join(errors)}"
     )
 
 
@@ -334,12 +351,16 @@ async def _ytta_proxy(video_id: str, lang_code: str | None, session_id: str | No
 
 # ── Method 2: InnerTube ANDROID + proxy-cheap ─────────────────
 
-async def _innertube_android_proxy(video_id: str, lang_code: str | None, session_id: str | None = None) -> list[TranscriptEntry]:
+async def _innertube_android_proxy(
+    video_id: str, lang_code: str | None, session_id: str | None = None, proxy_override: str | None = None
+) -> list[TranscriptEntry]:
     """
     Fetch caption track list via InnerTube ANDROID player call, then download
-    the timedtext URL — both via the SAME proxy-cheap rotating residential proxy.
+    the timedtext URL — both via the SAME proxy (proxy-cheap by default;
+    proxy_override lets the method-4 emergency fallback route through
+    Proxy-Seller instead when proxy-cheap's gateway is unreachable).
     """
-    proxy = get_proxycheap_proxy(purpose="transcript-innertube")
+    proxy = proxy_override or get_proxycheap_proxy(purpose="transcript-innertube")
     data = await call_player_api(video_id, client_name="ANDROID", proxy_url=proxy)
 
     ps = data.get("playabilityStatus", {})

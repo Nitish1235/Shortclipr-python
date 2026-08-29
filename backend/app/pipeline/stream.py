@@ -1,19 +1,28 @@
 """
 stream.py — Step 3 of the ShortClipr pipeline.
 
-Stream URL extraction: 6-method fallback chain, all via proxy-cheap.
+Stream URL extraction: multi-method fallback chain, all via proxy-cheap.
 
-Priority order (fastest → broadest compatibility):
-  1. InnerTube ANDROID + proxy-cheap        (~2-10s, highest priority)
-  2. yt-dlp + proxy-cheap + tv_embedded     (~15-30s, very reliable)
-  3. yt-dlp + proxy-cheap + android client
-  4. yt-dlp + proxy-cheap + ios client
-  5. yt-dlp + proxy-cheap + android (height-constrained format)
-  6. yt-dlp + proxy-cheap (relaxed, no format constraints)
+Priority order (most reliable → broadest compatibility, 2026-08 rework):
+  1. yt-dlp + proxy-cheap + mweb          (PO-token-backed — see below)
+  2. yt-dlp + proxy-cheap + tv            (no PO token required at all)
+  3. yt-dlp + proxy-cheap + tv_embedded   (long-time workhorse)
+  4. yt-dlp + proxy-cheap + web           (PO-token-backed)
+  5. yt-dlp + proxy-cheap + android_music / android_creator
+  6. yt-dlp + proxy-cheap (relaxed → unconstrained last resorts)
 
-NOTE: mweb/web InnerTube clients are intentionally excluded — they
-require a PoToken that yt-dlp cannot supply, and consistently fail
-with "Requested format is not available" regardless of proxy/region.
+PO tokens: the bgutil-ytdlp-pot-provider plugin (requirements.txt) +
+its node sidecar (Dockerfile, 127.0.0.1:4416) auto-generate BotGuard
+proof-of-origin tokens per request. That unlocks the web/mweb clients —
+previously excluded here ("require a PoToken that yt-dlp cannot supply")
+— which per yt-dlp's PO Token Guide are the RECOMMENDED server-side
+tiers. If the sidecar is down/unconfigured, those tiers fail fast and
+the chain falls through to tv/tv_embedded (pre-POT behavior).
+
+The plain android/ios yt-dlp tiers were REMOVED (2026-08): both clients
+now require device-attestation tokens (DroidGuard-class) that no server
+provider can generate — they had become guaranteed ~5s failures burned
+on every job before the chain reached a working tier.
 
 Fallback triggers on:
   - playabilityStatus != OK  (LOGIN_REQUIRED, SIGN_IN_REQUIRED, etc.)
@@ -35,7 +44,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 
 from app.core.config import get_settings
-from app.core.proxy import get_proxycheap_proxy, get_proxy_url, url_is_ip_bound
+from app.core.proxy import get_proxycheap_proxy, get_proxyseller_proxy, get_proxy_url, url_is_ip_bound
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -173,13 +182,26 @@ _WEB_USER_AGENT = (
 # downloaded with.
 _STREAM_USER_AGENTS = {
     "InnerTube ANDROID+proxy": _ANDROID_HEADERS["User-Agent"],
+    "yt-dlp+mweb+proxy": CLIENTS["MWEB"]["headers"]["User-Agent"],
+    "yt-dlp+tv+proxy": CLIENTS["TV"]["headers"]["User-Agent"],
     "yt-dlp+tv_embedded+proxy": CLIENTS["TV"]["headers"]["User-Agent"],
+    "yt-dlp+web+proxy": _WEB_USER_AGENT,
     "yt-dlp+android_music+proxy": _WEB_USER_AGENT,
     "yt-dlp+android_creator+proxy": _WEB_USER_AGENT,
-    "yt-dlp+android+proxy": _ANDROID_HEADERS["User-Agent"],
-    "yt-dlp+ios+proxy": CLIENTS["IOS"]["headers"]["User-Agent"],
-    "yt-dlp+android-constrained+proxy": _ANDROID_HEADERS["User-Agent"],
+    "yt-dlp+mweb-relaxed+proxy": CLIENTS["MWEB"]["headers"]["User-Agent"],
     "yt-dlp+unconstrained+proxy": _WEB_USER_AGENT,
+}
+
+# Download UA per yt-dlp player client — used by get_stream_urls' client
+# loop so the FFmpeg/DASH download presents the same UA the URL was minted
+# under (same rule as _STREAM_USER_AGENTS above).
+_CLIENT_DOWNLOAD_UA = {
+    "mweb":            CLIENTS["MWEB"]["headers"]["User-Agent"],
+    "tv":              CLIENTS["TV"]["headers"]["User-Agent"],
+    "tv_embedded":     CLIENTS["TV"]["headers"]["User-Agent"],
+    "web":             _WEB_USER_AGENT,
+    "android_music":   _WEB_USER_AGENT,
+    "android_creator": _WEB_USER_AGENT,
 }
 
 # ── Bot / block detection ──────────────────────────────────────
@@ -532,7 +554,27 @@ def _ytdlp_run_sync(opts: dict, video_url: str) -> dict | None:
         return ydl.extract_info(video_url, download=False)
 
 
-def _ytdlp_base_opts(proxy_url: str | None) -> dict:
+# Clients that actually consume a PO token for GVS/player requests (per
+# yt-dlp's PO Token Guide). Only these get the bgutil provider wired in —
+# tv/tv_embedded/android_music/android_creator ignore it, and passing it
+# unconditionally to every client is harmless but pointless overhead.
+_POT_CLIENTS = frozenset({"web", "web_safari", "web_embedded", "mweb"})
+
+
+def _pot_extractor_args() -> dict:
+    """
+    bgutil-ytdlp-pot-provider HTTP-server extractor args — points yt-dlp's
+    POT plugin at the local node sidecar (Dockerfile / start.sh). Empty
+    POT_PROVIDER_URL disables this (plugin then no-ops; POT-gated clients
+    fail and the chain falls through, matching pre-integration behavior).
+    """
+    settings = get_settings()
+    if not settings.POT_PROVIDER_URL:
+        return {}
+    return {"youtubepot-bgutilhttp": {"base_url": [settings.POT_PROVIDER_URL]}}
+
+
+def _ytdlp_base_opts(proxy_url: str | None, client: str | None = None) -> dict:
     opts: dict = {
         "quiet": True,
         "no_warnings": True,
@@ -544,7 +586,11 @@ def _ytdlp_base_opts(proxy_url: str | None) -> dict:
     if proxy_url:
         opts["proxy"] = proxy_url
     # Default to the most permissive client (web) unless overridden later
-    opts["extractor_args"] = {"youtube": {"player_client": ["web"]}}
+    youtube_args: dict = {"player_client": [client or "web"]}
+    extractor_args = {"youtube": youtube_args}
+    if (client or "web") in _POT_CLIENTS:
+        extractor_args.update(_pot_extractor_args())
+    opts["extractor_args"] = extractor_args
     return opts
 
 
@@ -560,10 +606,8 @@ async def _ytdlp_stream(
     import yt_dlp
 
     proxy = proxy_override or get_proxycheap_proxy(purpose=f"stream-ytdlp-{label}")
-    opts = _ytdlp_base_opts(proxy)
+    opts = _ytdlp_base_opts(proxy, client=client)
     opts["format"] = format_str
-    if client:
-        opts["extractor_args"] = {"youtube": {"player_client": [client]}}
 
     loop = asyncio.get_running_loop()
     try:
@@ -715,30 +759,43 @@ async def _resolve_stream_url(
     h = int(quality.rstrip("p"))
 
     chain: list[tuple[str, object]] = [
-        # 1. InnerTube ANDROID + proxy  (~2-10s, highest priority)
+        # 1. yt-dlp + mweb + proxy — PO-token-backed (bgutil sidecar), the
+        # tier yt-dlp's own PO Token Guide recommends first for server-side
+        # use. Falls straight through (fast) if the sidecar is unreachable.
+        ("yt-dlp+mweb+proxy", lambda: _ytdlp_stream(
+            video_id, _fmt(h), client="mweb", label="yt-dlp+mweb", session_id=session_id,
+            proxy_override=proxy_override,
+        )),
+        # 2. InnerTube ANDROID + proxy (~2-10s) — cheap to try, occasionally
+        # still works when InnerTube-side blocks lift.
         ("InnerTube ANDROID+proxy", lambda: _innertube_android_stream(video_id, h, session_id, proxy_override)),
-        # 2-5. yt-dlp + tv_embedded/android_music/android/ios client + proxy
+        # 3. yt-dlp + tv — no PO token required at all, yt-dlp's other
+        # recommended no-auth tier.
+        ("yt-dlp+tv+proxy", lambda: _ytdlp_stream(
+            video_id, _fmt(h), client="tv", label="yt-dlp+tv", session_id=session_id,
+            proxy_override=proxy_override,
+        )),
+        # 4-7. yt-dlp + tv_embedded/web/android_music/android_creator + proxy
         # — all using _fmt(h) (AV1-excluded), NOT a bare "best" selector.
         # "best" has no codec filter at all, so for any video where the
         # chosen client's best-at-this-height format happens to be AV1,
-        # these tiers would silently hand back an AV1 stream and the LATER
-        # InnerTube clients (which DO avoid AV1, see _pick_best_stream)
-        # would never get a chance to find a clean one. AV1-permissive
-        # selectors stay reserved for the explicit last-resort tiers below (7).
+        # these tiers would silently hand back an AV1 stream. AV1-permissive
+        # selectors stay reserved for the explicit last-resort tiers below.
         ("yt-dlp+tv_embedded+proxy", lambda: _ytdlp_stream(
             video_id, _fmt(h), client="tv_embedded", label="yt-dlp+tv_embedded", session_id=session_id,
             proxy_override=proxy_override,
         )),
+        ("yt-dlp+web+proxy", lambda: _ytdlp_stream(
+            video_id, _fmt(h), client="web", label="yt-dlp+web", session_id=session_id,
+            proxy_override=proxy_override,
+        )),
         # android_music / android_creator added 2026-08 as extra yt-dlp
         # tiers alongside tv_embedded — YouTube tightened bot detection hard
-        # enough that InnerTube ANDROID/TV/IOS (below) fail every request in
-        # production (LOGIN_REQUIRED / status=ERROR / HTTP 500), leaving
-        # tv_embedded as the only method that actually worked; a
-        # single-method chain meant any tv_embedded hiccup took the whole
-        # job down. Both verified independently (2026-08-28) to still return
-        # direct fMP4 (sidx-parseable) 1080p URLs that download cleanly
-        # through both proxy-cheap and Proxy-Seller. See get_stream_urls
-        # docstring for the full picture.
+        # enough that InnerTube ANDROID/TV/IOS were failing every request in
+        # production (LOGIN_REQUIRED / status=ERROR / HTTP 500). Both
+        # verified independently (2026-08-28) to still return direct fMP4
+        # (sidx-parseable) 1080p URLs that download cleanly through both
+        # proxy-cheap and Proxy-Seller. See get_stream_urls docstring.
         ("yt-dlp+android_music+proxy", lambda: _ytdlp_stream(
             video_id, _fmt(h), client="android_music", label="yt-dlp+android_music", session_id=session_id,
             proxy_override=proxy_override,
@@ -747,22 +804,13 @@ async def _resolve_stream_url(
             video_id, _fmt(h), client="android_creator", label="yt-dlp+android_creator", session_id=session_id,
             proxy_override=proxy_override,
         )),
-        ("yt-dlp+android+proxy", lambda: _ytdlp_stream(
-            video_id, _fmt(h), client="android", label="yt-dlp+android", session_id=session_id,
-            proxy_override=proxy_override,
-        )),
-        ("yt-dlp+ios+proxy", lambda: _ytdlp_stream(
-            video_id, _fmt(h), client="ios", label="yt-dlp+ios", session_id=session_id,
-            proxy_override=proxy_override,
-        )),
-        # yt-dlp + android client + relaxed format (no ext=mp4 constraint).
-        # Tries non-AV1 variants first, same as the tiers above, but its own
+        # yt-dlp + mweb + relaxed format (no ext=mp4 constraint). Tries
+        # non-AV1 variants first, same as the tiers above, but its own
         # trailing bare `/best` means THIS tier can accept AV1 if none of
-        # those variants match for this client — intentional, one tier
-        # earlier than the universal last-resort below, not a regression
-        # of the original bug (the strict, AV1-free attempts already ran first).
-        ("yt-dlp+android-constrained+proxy", lambda: _ytdlp_stream(
-            video_id, _fmt_relaxed(h), client="android", label="yt-dlp+android-constrained", session_id=session_id,
+        # those variants match — intentional, one tier earlier than the
+        # universal last-resort below.
+        ("yt-dlp+mweb-relaxed+proxy", lambda: _ytdlp_stream(
+            video_id, _fmt_relaxed(h), client="mweb", label="yt-dlp+mweb-relaxed", session_id=session_id,
             proxy_override=proxy_override,
         )),
         # yt-dlp unconstrained (any client, any format) — explicit final
@@ -772,6 +820,25 @@ async def _resolve_stream_url(
             proxy_override=proxy_override,
         )),
     ]
+
+    # Emergency tier — every proxy-cheap-routed attempt above failed. This
+    # is the resolve-only chain (a JSON/API call, not a byte download), so
+    # briefly borrowing a Proxy-Seller IP here is negligible against its
+    # unlimited-bandwidth budget and gives resilience during a proxy-cheap
+    # outage (see proxy.py docstring — a full gateway outage on 2026-08-29
+    # otherwise kills metadata/transcript/stream resolution simultaneously).
+    # Skipped when the caller already pinned a specific proxy (proxy_override
+    # set) — that's the FFmpeg stage re-resolving through a proxy it already
+    # chose deliberately, not a case to second-guess here.
+    if proxy_override is None:
+        chain.append((
+            "yt-dlp+mweb+proxyseller-emergency",
+            lambda: _ytdlp_stream(
+                video_id, _fmt(h), client="mweb", label="yt-dlp+mweb+proxyseller-emergency",
+                session_id=session_id, proxy_override=get_proxyseller_proxy(session_id),
+            ),
+        ))
+        _STREAM_USER_AGENTS["yt-dlp+mweb+proxyseller-emergency"] = CLIENTS["MWEB"]["headers"]["User-Agent"]
 
     last_err: Exception | None = None
     for idx, (label, attempt) in enumerate(chain, 1):
@@ -853,35 +920,30 @@ async def get_stream_urls(
     that will download them (Proxy-Seller ISP), avoiding IP-bound signature
     mismatches.
 
-    Tries yt-dlp (tv_embedded, then android_music, then android_creator —
-    all with audio) FIRST — in production all three InnerTube clients
-    (ANDROID/TV/IOS) were consistently getting blocked or rejected before
-    ever reaching yt-dlp, so every job paid for 3 guaranteed failures (~8s)
-    before landing on the one path that actually works. android_music and
-    android_creator were added as extra yt-dlp tiers (2026-08) after
-    YouTube tightened bot detection on the InnerTube ANDROID/TV/IOS
-    endpoints hard enough that all three fail every request (LOGIN_REQUIRED
-    / status=ERROR / HTTP 500) — without a second/third yt-dlp fallback, ANY
-    tv_embedded hiccup took down the whole job with no real fallback left
-    (InnerTube TV/IOS were dead weight). If all three yt-dlp tiers fail,
-    falls back to InnerTube ANDROID → TV → IOS anyway (cheap, ~10s total,
-    and may recover if YouTube's InnerTube-side block lifts), then finally
-    to the video-only chain (get_stream_url) as a last resort.
+    Tries yt-dlp (mweb, then tv, then tv_embedded, then android_music, then
+    android_creator — all with audio) FIRST. mweb leads because it's
+    PO-token-backed (bgutil sidecar) and per yt-dlp's own PO Token Guide is
+    the recommended server-side tier; tv needs no token at all and is a
+    cheap second try. If those fail, falls to InnerTube ANDROID → TV → IOS
+    anyway (cheap, ~10s total, and may recover if YouTube's InnerTube-side
+    block lifts), then finally to the video-only chain (get_stream_url) as
+    a last resort.
     """
     h = int(quality.rstrip("p"))
     loop = asyncio.get_running_loop()
 
-    # ── 1-3. yt-dlp + tv_embedded, android_music, android_creator — all
-    # with audio, tried in order (see docstring for why these tiers exist) ──
+    # ── 1-5. yt-dlp + mweb, tv, tv_embedded, android_music, android_creator
+    # — all with audio, tried in order (see docstring for why) ──
     for client, label in (
+        ("mweb", "yt-dlp mweb"),
+        ("tv", "yt-dlp tv"),
         ("tv_embedded", "yt-dlp tv_embedded"),
         ("android_music", "yt-dlp android_music"),
         ("android_creator", "yt-dlp android_creator"),
     ):
         proxy = proxy_override or get_proxycheap_proxy(purpose=f"stream-ytdlp-{client}")
-        opts = _ytdlp_base_opts(proxy)
+        opts = _ytdlp_base_opts(proxy, client=client)
         opts["format"] = _fmt(h)
-        opts["extractor_args"] = {"youtube": {"player_client": [client]}}
         try:
             info = await loop.run_in_executor(
                 _YTDLP_POOL,
@@ -903,7 +965,7 @@ async def get_stream_urls(
                     f"[{video_id}] stream+audio ← {label} "
                     f"(audio={'separate' if audio_url else 'none'})"
                 )
-                return video_url, audio_url, _WEB_USER_AGENT
+                return video_url, audio_url, _CLIENT_DOWNLOAD_UA.get(client, _WEB_USER_AGENT)
             logger.warning(f"[{video_id}] {label} returned no video URL; trying next method")
         except Exception as ytdlp_exc:
             logger.warning(f"[{video_id}] {label} failed ({ytdlp_exc}); trying next method")
@@ -998,57 +1060,37 @@ async def get_stream_urls_high_quality(
     cap = max_height or min_height
     logger.info(f"[{video_id}] resolving HQ stream (min={min_height}p, max={max_height or 'uncapped'}p)")
 
-    # ── 1. yt-dlp + tv_embedded with _fmt_high_quality selector ─────────
-    proxy = proxy_override or get_proxycheap_proxy(purpose="stream-ytdlp-hq")
-    opts = _ytdlp_base_opts(proxy)
-    opts["format"] = _fmt_high_quality(min_height, max_height)
-    opts["extractor_args"] = {"youtube": {"player_client": ["tv_embedded"]}}
+    # ── 1-3. yt-dlp + mweb (PO-token-backed), tv (no token needed),
+    # tv_embedded — same HQ selector, in that order. ─────────────────────
     loop = asyncio.get_running_loop()
-    try:
-        info = await loop.run_in_executor(
-            _YTDLP_POOL,
-            _ytdlp_run_sync,
-            opts,
-            f"https://www.youtube.com/watch?v={video_id}",
-        )
-        video_url = _pick_stream_ytdlp(info)
-        if video_url:
-            audio_url = _pick_audio_ytdlp(info)
-            # Log the actual selected height for visibility
-            sel_h = next(
-                (f.get("height") for f in (info.get("requested_formats") or []) if f.get("vcodec", "none") != "none"),
-                "?"
+    for client, label in (("mweb", "mweb"), ("tv", "tv"), ("tv_embedded", "tv_embedded")):
+        proxy = proxy_override or get_proxycheap_proxy(purpose=f"stream-ytdlp-hq-{client}")
+        opts = _ytdlp_base_opts(proxy, client=client)
+        opts["format"] = _fmt_high_quality(min_height, max_height)
+        try:
+            info = await loop.run_in_executor(
+                _YTDLP_POOL,
+                _ytdlp_run_sync,
+                opts,
+                f"https://www.youtube.com/watch?v={video_id}",
             )
-            logger.info(
-                f"[{video_id}] HQ stream ← yt-dlp tv_embedded height={sel_h} "
-                f"(audio={'separate' if audio_url else 'embedded/none'})"
-            )
-            return video_url, audio_url, _WEB_USER_AGENT
-        logger.warning(f"[{video_id}] HQ yt-dlp tv_embedded returned no video URL; trying InnerTube")
-    except Exception as ytdlp_exc:
-        logger.warning(f"[{video_id}] HQ yt-dlp tv_embedded failed ({ytdlp_exc}); trying InnerTube")
+            video_url = _pick_stream_ytdlp(info)
+            if video_url:
+                audio_url = _pick_audio_ytdlp(info)
+                sel_h = next(
+                    (f.get("height") for f in (info.get("requested_formats") or []) if f.get("vcodec", "none") != "none"),
+                    "?"
+                )
+                logger.info(
+                    f"[{video_id}] HQ stream ← yt-dlp {label} height={sel_h} "
+                    f"(audio={'separate' if audio_url else 'embedded/none'})"
+                )
+                return video_url, audio_url, _CLIENT_DOWNLOAD_UA.get(client, _WEB_USER_AGENT)
+            logger.warning(f"[{video_id}] HQ yt-dlp {label} returned no video URL; trying next")
+        except Exception as ytdlp_exc:
+            logger.warning(f"[{video_id}] HQ yt-dlp {label} failed ({ytdlp_exc}); trying next")
 
-    # ── 2. yt-dlp + android client (different player, same HQ selector) ─
-    proxy = proxy_override or get_proxycheap_proxy(purpose="stream-ytdlp-hq-android")
-    opts2 = _ytdlp_base_opts(proxy)
-    opts2["format"] = _fmt_high_quality(min_height, max_height)
-    opts2["extractor_args"] = {"youtube": {"player_client": ["android"]}}
-    try:
-        info2 = await loop.run_in_executor(
-            _YTDLP_POOL,
-            _ytdlp_run_sync,
-            opts2,
-            f"https://www.youtube.com/watch?v={video_id}",
-        )
-        video_url = _pick_stream_ytdlp(info2)
-        if video_url:
-            audio_url = _pick_audio_ytdlp(info2)
-            logger.info(f"[{video_id}] HQ stream ← yt-dlp android (audio={'separate' if audio_url else 'embedded/none'})")
-            return video_url, audio_url, _ANDROID_HEADERS["User-Agent"]
-    except Exception as ytdlp2_exc:
-        logger.warning(f"[{video_id}] HQ yt-dlp android failed ({ytdlp2_exc}); trying InnerTube ANDROID")
-
-    # ── 3. InnerTube ANDROID → TV → IOS with _pick_best_stream_high ─────
+    # ── 4. InnerTube ANDROID → TV → IOS with _pick_best_stream_high ─────
     _clients = [
         ("ANDROID", True,  _ANDROID_HEADERS["User-Agent"]),
         ("TV",      False, CLIENTS["TV"]["headers"]["User-Agent"]),
@@ -1162,21 +1204,25 @@ async def get_video_metadata(video_id: str, session_id: str | None = None) -> di
     Fetch video title, duration, thumbnail.
 
     Order:
-      1. YouTube oEmbed              — public endpoint, no proxy, fastest
-                                        (no duration field — InnerTube below
-                                        is always needed for an actual duration)
-      2. InnerTube ANDROID, WITH proxy — full metadata including duration
-      3. InnerTube ANDROID, no proxy   — fallback, if #2 fails (proxy down/
-                                          unconfigured) or returns empty
+      1. YouTube oEmbed                    — public endpoint, no proxy,
+                                              fastest (no duration field —
+                                              InnerTube below is always
+                                              needed for an actual duration)
+      2. InnerTube ANDROID + proxy-cheap    — full metadata including duration
+      3. InnerTube ANDROID + Proxy-Seller   — emergency fallback ONLY, if #2
+                                              fails outright (proxy-cheap
+                                              gateway down/quota-exhausted —
+                                              see proxy.py docstring). A tiny
+                                              JSON call, negligible against
+                                              Proxy-Seller's unlimited budget.
 
-    #2 used to run without a proxy first ("low-risk, no IP rotation
-    needed"), but in production this runs from a Cloud Run datacenter IP,
-    which YouTube blocks/rate-limits far more aggressively than a
-    residential IP — the no-proxy attempt was silently failing on every
+    Cloud Run datacenter IPs are blocked/rate-limited far more aggressively
+    by YouTube than a residential IP, so #2 always needs a proxy — a
+    no-proxy attempt was previously tried here and silently failed every
     request in production, falling back to oEmbed's hardcoded duration=0
-    every time (visible as "0:00" everywhere duration is shown, e.g. the
-    minutes-gateway slider never appearing since it has nothing to set a
-    range over). Proxy-first fixes that; #3 is just a safety net.
+    every time (visible as "0:00" everywhere duration is shown). #3 exists
+    for the case where proxy-cheap itself is unreachable, not just YouTube
+    blocking that particular IP.
     """
     # ── 1. oEmbed (fast, no proxy) ─────────────────────────────
     oembed_url = f"https://www.youtube.com/oembed?url=https://youtu.be/{video_id}&format=json"
@@ -1212,6 +1258,23 @@ async def get_video_metadata(video_id: str, session_id: str | None = None) -> di
             }
     except Exception as e:
         logger.warning(f"[{video_id}] InnerTube ANDROID metadata failed (proxy={'yes' if proxy_url else 'no'}): {e}")
+
+    # ── 3. InnerTube ANDROID — emergency Proxy-Seller fallback ──────
+    try:
+        ps_proxy = get_proxyseller_proxy(session_id)
+        data = await call_player_api(video_id, client_name="ANDROID", proxy_url=ps_proxy)
+        details = data.get("videoDetails", {})
+        if details:
+            logger.info(f"[{video_id}] Metadata duration resolved via InnerTube+proxyseller-emergency")
+            return {
+                "title":     details.get("title", "")     or (oembed_meta or {}).get("title", ""),
+                "channel":   details.get("author", "")    or (oembed_meta or {}).get("channel", ""),
+                "thumbnail": _best_thumbnail(details, video_id),
+                "duration":  int(details.get("lengthSeconds", 0)),
+                "video_id":  video_id,
+            }
+    except Exception as e:
+        logger.warning(f"[{video_id}] InnerTube ANDROID+proxyseller-emergency metadata failed: {e}")
 
     # oEmbed succeeded but InnerTube didn't — return oEmbed data (duration=0)
     if oembed_meta:

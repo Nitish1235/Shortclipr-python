@@ -206,6 +206,11 @@ def _ytdlp_download_sync(video_id: str, output_path: Path, proxy_url: str | None
         "/best[height<=1080][vcodec!=av01]/best"
     )
 
+    # mweb — PO-token-backed (bgutil sidecar, see stream.py) rather than the
+    # old "android" client, which now requires device-attestation tokens no
+    # server-side provider can generate and fails every request.
+    from app.pipeline.stream import _pot_extractor_args
+
     opts: dict = {
         "quiet": True,
         "no_warnings": True,
@@ -214,7 +219,7 @@ def _ytdlp_download_sync(video_id: str, output_path: Path, proxy_url: str | None
         "outtmpl": str(output_path),
         "format": format_str or default_format,
         "merge_output_format": "mp4",
-        "extractor_args": {"youtube": {"player_client": ["android"]}},
+        "extractor_args": {"youtube": {"player_client": ["mweb"]}, **_pot_extractor_args()},
         "concurrent_fragment_downloads": 4,
     }
     if proxy_url:

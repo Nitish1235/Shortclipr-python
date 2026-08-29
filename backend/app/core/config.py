@@ -200,6 +200,14 @@ class Settings(BaseSettings):
 
     RECONCILE_STUCK_MINUTES: int = 10  # applies to API-stage timeouts; FFmpeg stage uses 3× this
 
+    # ── PO Token provider (bgutil sidecar) ─────────────────────
+    # HTTP server that generates BotGuard proof-of-origin tokens for the
+    # web/mweb yt-dlp player clients. Runs as a node process inside the same
+    # container (see Dockerfile + start.sh) — default is the sidecar's local
+    # address. Set empty to disable (yt-dlp then skips POT and the mweb/web
+    # tiers fail through to the tv/tv_embedded tiers, i.e. pre-POT behavior).
+    POT_PROVIDER_URL: str = "http://127.0.0.1:4416"
+
     # ── InnerTube ──────────────────────────────────────────────
     INNERTUBE_API_KEY: str = "AIzaSyA8eiZmM1FaSbwzBlGmbW3ILtKBNJI41zQ"
     INNERTUBE_API_BASE: str = "https://www.youtube.com/youtubei/v1"

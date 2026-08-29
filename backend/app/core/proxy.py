@@ -1,15 +1,31 @@
 """
 proxy.py — Proxy URL helpers.
 
-Two providers:
-  • Proxy-Seller ISP  — 10 static ISP IPs, used for DASH segment downloads.
-                        Chosen deterministically via MD5(session_id) % pool
-                        so all byte-range requests within one job share an IP.
-  • proxy-cheap       — rotating residential (get_proxycheap_proxy /
-                        get_proxy_url). Used for transcript + stream URL
-                        resolution (shortclipr-worker-ai) and as the FFmpeg
-                        worker's fallback when Proxy-Seller is bot-blocked
-                        (full-source download retry, DASH re-resolve).
+Two providers, split strictly by BANDWIDTH, not by "which is more reliable":
+
+  • Proxy-Seller ISP  — 10 static ISP IPs, UNLIMITED bandwidth. Used for
+                        EVERY actual video-byte download: DASH segment
+                        downloads and the full-source fallback (ffmpeg_stage.py,
+                        extractor.py). Chosen deterministically via
+                        MD5(session_id [+ attempt]) % pool so all byte-range
+                        requests within one job share an IP (CDN URLs are
+                        often IP-bound — resolve and download must use the
+                        SAME proxy or the CDN 403s on real segment data).
+
+  • proxy-cheap       — rotating residential, CAPPED bandwidth (2GB/mo as of
+                        2026-08). Used ONLY for lightweight JSON/API calls:
+                        metadata, transcript, and stream-URL *resolution*
+                        (never the resulting video bytes) in api_stage.py /
+                        stream.py / transcript.py.
+
+  Never route byte downloads through proxy-cheap. On 2026-08-29,
+  ffmpeg_stage.py's DASH downloader used proxy-cheap FIRST for actual clip
+  bytes — this burned its 2GB quota within hours, and once exhausted the
+  gateway refused ALL connections (not just downloads), cascading into
+  metadata/transcript/stream-resolution failures across every job even
+  though those calls are individually tiny. Fixed by moving all DASH/
+  full-source byte downloads to Proxy-Seller exclusively — see
+  ffmpeg_stage.py's _dash_download_with_refresh docstring.
 
 DataImpulse was retired (its account ran out of traffic quota — 407
 TRAFFIC_EXHAUSTED — and proxy-cheap covers every role it used to fill).

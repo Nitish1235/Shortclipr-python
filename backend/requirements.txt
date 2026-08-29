@@ -23,8 +23,15 @@ youtube-transcript-api==1.2.4
 ## Video Stream Extraction
 # NOTE: YouTube breaks old yt-dlp every few months. Keep this current — a stale
 # pin manifests as "Requested format is not available" / "Failed to extract any
-# player response" on every client. Verified working: 2026.06.09.
-yt-dlp==2026.6.9
+# player response" on every client. Latest stable as of 2026-08: 2026.08.19.
+yt-dlp==2026.8.19
+# PO Token provider plugin — auto-generates BotGuard proof-of-origin tokens so
+# the web/mweb player clients (the most reliable tiers, previously unusable —
+# "require a PoToken that yt-dlp cannot supply") work from datacenter IPs.
+# Needs the bgutil HTTP server sidecar running (see Dockerfile — node process
+# on 127.0.0.1:4416). Without the sidecar the plugin logs a warning and yt-dlp
+# proceeds without POT (mweb/web tiers then fail → chain falls through to tv).
+bgutil-ytdlp-pot-provider==1.3.2
 
 ## Google Cloud
 google-cloud-storage==2.18.2
