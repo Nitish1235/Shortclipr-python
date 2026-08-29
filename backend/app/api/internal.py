@@ -27,7 +27,6 @@ from app.api.editor import _burn_and_upload_from_url
 from app.core.config import get_settings
 from app.db import supabase as db
 from app.pipeline.api_stage import run_api_stage
-from app.pipeline.brainrot_stage import run_brainrot_stage
 from app.pipeline.captions import Caption
 from app.pipeline.ffmpeg_stage import run_ffmpeg_stage
 from app.pipeline.orchestrator import run_pipeline
@@ -109,14 +108,46 @@ class InternalBrainrotApiStageRequest(BaseModel):
 
 @router.post("/brainrot-api-stage/run", status_code=202)
 async def internal_run_brainrot_api_stage(body: InternalBrainrotApiStageRequest, x_internal_secret: str = Header(default="")):
-    """Brainrot API stage: script generation → TTS → upload audio to GCS → update scene_plan → status='api_done'.
-    Dispatched by watcher.
+    """Brainrot script stage: script generation only → draft scene_plan →
+    status='awaiting_review'. No TTS, no credit reserved. Dispatched by
+    watcher on job creation.
+
+    NOTE: split-worker dispatch for the stage AFTER this one (confirm —
+    see /brainrot-confirm-stage/run below) is not yet wired into
+    watcher/dispatcher.py — it has no claim query for a confirmed job, so
+    in split-worker mode a job would currently sit at 'awaiting_review'
+    forever once the user confirms. Single-service mode (see
+    app/api/brainrot.py's dispatch) handles all three stages correctly.
     """
     _require_internal_secret(x_internal_secret)
     from app.pipeline.brainrot_stage import run_brainrot_api_stage
     asyncio.create_task(
         run_brainrot_api_stage(body.job_id),
         name=f"br-api-{body.job_id[:8]}",
+    )
+    return {"status": "accepted"}
+
+
+class InternalBrainrotConfirmStageRequest(BaseModel):
+    job_id: str
+
+
+@router.post("/brainrot-confirm-stage/run", status_code=202)
+async def internal_run_brainrot_confirm_stage(body: InternalBrainrotConfirmStageRequest, x_internal_secret: str = Header(default="")):
+    """Brainrot confirm stage: TTS the (possibly user-edited) scene_plan →
+    status='api_done' → runs the FFmpeg stage directly. Dispatched by
+    POST /brainrot/jobs/{id}/confirm, which reserves the credit first.
+    See the caveat on /brainrot-api-stage/run above — nothing in
+    watcher/dispatcher.py claims jobs to hit this endpoint yet; it only
+    exists so single-service mode and this endpoint share one code path
+    (app/pipeline/brainrot_stage.py::run_brainrot_confirm_stage) rather
+    than duplicating the dispatch logic.
+    """
+    _require_internal_secret(x_internal_secret)
+    from app.pipeline.brainrot_stage import run_brainrot_confirm_stage
+    asyncio.create_task(
+        run_brainrot_confirm_stage(body.job_id),
+        name=f"br-confirm-{body.job_id[:8]}",
     )
     return {"status": "accepted"}
 

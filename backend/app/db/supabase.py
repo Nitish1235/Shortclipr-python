@@ -348,6 +348,30 @@ async def set_brainrot_post_meta(job_id: str, post_title: str, post_hashtags: li
     )
 
 
+async def set_brainrot_reserved_credits(job_id: str, reserved_credits: int) -> None:
+    """Patches `reserved_credits` into payload at CONFIRM time, not job
+    creation — the new script-review flow no longer reserves a credit
+    until the user actually approves the dialogue and asks for the render,
+    so this is written once, right after that reservation succeeds. Same
+    merge-only-these-keys pattern as set_brainrot_post_meta."""
+    patch = {"reserved_credits": reserved_credits}
+    await _execute(
+        "UPDATE brainrot_jobs SET payload = payload || $1::jsonb, updated_at=$2 WHERE job_id=$3",
+        patch, _now(), job_id,
+    )
+
+
+async def set_job_awaiting_review(job_id: str) -> None:
+    """Script stage finished — dialogue is written and waiting for the user
+    to read/edit/regenerate it before anything expensive (TTS, render,
+    credit spend) happens. Distinct from set_job_api_done_brainrot, which
+    now only fires after the user confirms (see set_job_api_done_brainrot)."""
+    await _execute(
+        "UPDATE brainrot_jobs SET status='awaiting_review', updated_at=NOW() WHERE job_id=$1",
+        job_id,
+    )
+
+
 async def set_job_api_done_brainrot(job_id: str) -> None:
     """API stage finished for a brainrot job. Sets status to api_done to trigger FFmpeg dispatch."""
     await _execute(

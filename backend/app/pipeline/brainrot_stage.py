@@ -1,27 +1,54 @@
 """
-brainrot_stage.py — top-level pipeline entrypoint for the Brainrot Clips Maker,
-dispatched by the watcher to POST /internal/brainrot-stage/run (see
-app/api/internal.py), same shape as ffmpeg_stage.py::run_ffmpeg_stage.
+brainrot_stage.py — top-level pipeline entrypoints for the Brainrot Clips Maker.
 
-Flow:
-  1. Load the job row (payload JSONB written by POST /brainrot/jobs)
-  2. generate_scene_plan() — AI dialogue timeline (brainrot_script.py)
-  3. TTS every line in parallel (bounded concurrency), build a sequential
-     timeline from the REAL audio durations (no interpolated timestamps)
-  4. Download character assets + music/SFX from GCS. The gameplay clip and
-     TTS line audio are handed to ffmpeg as GCS URLs directly (no local
-     download) — see the "streamed render" comment in
-     _run_brainrot_ffmpeg_stage for why, and its fallback for what happens
-     if that fails mid-render.
-  5. brainrot_composite.render() — one ffmpeg pass
-  6. Upload the finished clip, mark the job complete
+Three stages now, not two — the script/dialogue is written, then the user
+reviews and can edit or regenerate it for free, and only once they confirm
+does anything expensive (TTS, render) or billable (credit reservation)
+happen:
 
-Credits: a brainrot job reserves exactly 1 credit at submission time
-(POST /brainrot/jobs — see reserved_credits in the payload). If the job
-fails at either stage below, _fail_and_refund() releases it in full —
-same reserve/release primitive jobs.py + ffmpeg_stage.py use for YouTube
-Shorts, just without the partial-refund math since a brainrot job only
-ever produces one clip (all-or-nothing, not N-requested/M-delivered).
+  1. SCRIPT STAGE (run_brainrot_api_stage → _execute_brainrot_script_stage)
+     Dispatched immediately at job creation (POST /brainrot/jobs), before
+     any credit is reserved. generate_scene_plan() writes the dialogue
+     (brainrot_script.py), saved as an untimed draft scene_plan
+     [{speaker, text}] — no start/end/audio_url yet, since no TTS has run.
+     Job lands in status='awaiting_review' and just waits there.
+
+  2. REVIEW (no pipeline code runs here at all)
+     The user reads the draft in the Studio UI, edits lines directly
+     (PATCH /brainrot/jobs/{id}/script), asks for a full regenerate (POST
+     .../regenerate-script, re-runs stage 1), or previews one line's voice
+     (POST .../preview-line, a stateless one-off TTS call that never
+     touches the job row). All free — no credit reserved yet, nothing
+     rendered.
+
+  3. CONFIRM STAGE (run_brainrot_confirm_stage → _execute_brainrot_confirm_stage)
+     Dispatched by POST /brainrot/jobs/{id}/confirm, which is also where
+     the 1 credit actually gets reserved (see reserved_credits in the
+     payload — written now, not at job creation). TTS's every line from
+     whatever the job's scene_plan currently holds (the user's edits, if
+     any), replaces the draft with the final timed scene_plan, flips
+     status to 'api_done', then runs the FFmpeg stage exactly as before:
+     download character assets + music/SFX from GCS (gameplay clip + TTS
+     audio are streamed to ffmpeg as GCS URLs directly, no local download
+     — see the "streamed render" comment in _run_brainrot_ffmpeg_stage),
+     composite.render() in one ffmpeg pass, upload, mark complete.
+
+Credits: reserved at CONFIRM time now (not job creation), refunded in full
+by _fail_and_refund() if the confirm or FFmpeg stage fails — same reserve/
+release primitive jobs.py + ffmpeg_stage.py use for YouTube Shorts. The
+script stage never reserves anything, so a failure there is always
+refund-free by construction (reserved_credits reads 0 from the payload
+until confirm writes it).
+
+Split-worker mode note: the watcher/dispatcher.py + internal.py wiring for
+the split-worker deployment path has NOT been updated for the new confirm
+stage as of this change — it still only knows how to dispatch the script
+stage (on job creation) and the FFmpeg stage (on 'api_done'). Single-
+service mode (asyncio.create_task, used when FFMPEG_WORKER_URLS is unset —
+confirmed the case in production as of this session) dispatches all three
+stages directly and works end-to-end. Split-worker mode needs a new
+/internal/brainrot-confirm-stage/run endpoint + a matching claim query in
+dispatcher.py before it would pick up a confirmed job at all.
 """
 import asyncio
 import logging
@@ -91,35 +118,102 @@ async def _step(job_id: str, name: str):
 
 
 async def run_brainrot_api_stage(job_id: str) -> None:
+    """Script stage — dispatched at job creation, before any credit is
+    reserved. See the module docstring's 3-stage breakdown. Kept this
+    function's name (rather than renaming to run_brainrot_script_stage)
+    since /internal/brainrot-api-stage/run (split-worker mode) already
+    calls it by this name."""
     try:
         await asyncio.wait_for(
-            _execute_brainrot_api_stage(job_id),
+            _execute_brainrot_script_stage(job_id),
             timeout=BRAINROT_STAGE_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
-        logger.error(f"[{job_id}] Brainrot API stage timed out")
+        logger.error(f"[{job_id}] Brainrot script stage timed out")
         await _fail_and_refund(job_id, "Script generation took too long.")
     except Exception as exc:
-        logger.exception(f"[{job_id}] Brainrot API stage failed: {exc}")
+        logger.exception(f"[{job_id}] Brainrot script stage failed: {exc}")
         await _fail_and_refund(job_id, _friendly_error(str(exc)))
+
+
+async def run_brainrot_confirm_stage(job_id: str) -> None:
+    """Confirm stage — dispatched by POST /brainrot/jobs/{id}/confirm,
+    AFTER that endpoint has already reserved the credit. Prefetches
+    characters/music concurrently with TTS (same rationale the old
+    run_brainrot_stage used for the script+TTS pairing — neither prefetch
+    target depends on TTS output either), then runs TTS-and-finalize, then
+    (only in single-service mode — see module docstring) the FFmpeg stage
+    directly, sequentially, in-process."""
+    row = await db.get_brainrot_job(job_id)
+    if not row:
+        logger.error(f"[{job_id}] Brainrot job not found at confirm stage start")
+        return
+    payload = row["payload"]
+
+    with tempfile.TemporaryDirectory(prefix=f"brainrot_prefetch_{job_id}_") as prefetch_dir_str:
+        prefetch_task = asyncio.create_task(
+            _prefetch_shared_assets(payload, Path(prefetch_dir_str)),
+            name=f"brainrot-prefetch-{job_id[:8]}",
+        )
+
+        try:
+            await asyncio.wait_for(
+                _execute_brainrot_confirm_stage(job_id),
+                timeout=BRAINROT_STAGE_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"[{job_id}] Brainrot confirm stage timed out")
+            await _fail_and_refund(job_id, "Voice synthesis took too long.")
+        except Exception as exc:
+            logger.exception(f"[{job_id}] Brainrot confirm stage failed: {exc}")
+            await _fail_and_refund(job_id, _friendly_error(str(exc)))
+
+        job = await db.get_brainrot_job(job_id)
+        if not job or job.get("status") != "api_done":
+            prefetch_task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await prefetch_task
+            return
+
+        try:
+            prefetched = await prefetch_task
+        except Exception as exc:
+            logger.warning(f"[{job_id}] Asset prefetch failed ({exc}) — falling back to fetching in the FFmpeg stage")
+            prefetched = None
+
+        await run_brainrot_ffmpeg_stage(job_id, prefetched=prefetched)
+
+
+async def run_brainrot_full_auto(job_id: str) -> None:
+    """Runs script -> confirm -> FFmpeg back-to-back with no review pause —
+    for callers that already reserved the credit at job creation and don't
+    want a human-in-the-loop step (currently: only the admin bulk-create
+    tool, app/api/brainrot.py::_create_bulk_job, which is meant to run
+    unattended). Regular user-facing job creation dispatches
+    run_brainrot_api_stage alone instead and stops at 'awaiting_review' for
+    the Studio's script review screen — see the module docstring."""
+    await run_brainrot_api_stage(job_id)
+    job = await db.get_brainrot_job(job_id)
+    if not job or job.get("status") != "awaiting_review":
+        return  # script stage failed — already refunded by run_brainrot_api_stage
+    await run_brainrot_confirm_stage(job_id)
 
 
 @dataclass
 class _PrefetchedAssets:
     """Characters + music, already downloaded to local disk before the
-    FFmpeg stage even starts — see _prefetch_shared_assets / run_brainrot_stage."""
+    FFmpeg stage even starts — see _prefetch_shared_assets / run_brainrot_confirm_stage."""
     characters: list
     music_path: object  # Path | None
 
 
 async def _prefetch_shared_assets(payload: dict, tmp_dir: Path) -> "_PrefetchedAssets":
     """Characters + music are fully known from the job's payload at creation
-    time — nothing about them depends on the script or TTS output that the
-    API stage produces. Kicking their download off concurrently with
-    generate_scene_plan()/TTS (see run_brainrot_stage) instead of waiting
-    for the whole API stage to finish hides their download time entirely
-    behind however long script+TTS already take, rather than adding it on
-    top afterward in the FFmpeg stage."""
+    time — nothing about them depends on the script or TTS output. Kicking
+    their download off concurrently with TTS (see run_brainrot_confirm_stage)
+    instead of waiting for the confirm stage to finish hides their download
+    time entirely behind however long TTS already takes, rather than adding
+    it on top afterward in the FFmpeg stage."""
     characters, music_path = await asyncio.gather(
         _fetch_characters(payload, tmp_dir),
         _fetch_optional_asset(payload.get("music_url"), tmp_dir, "music"),
@@ -148,10 +242,15 @@ async def _fail_and_refund(job_id: str, message: str) -> None:
     ffmpeg) with those values long out of scope — this stays correct no
     matter which stage or which line inside it actually raised.
 
-    Safe to call once per job: the API stage and FFmpeg stage run strictly
-    sequentially (run_brainrot_stage / the watcher only dispatches the
-    FFmpeg stage after the API stage reaches 'api_done'), so a job can only
-    ever fail in one of them, never both — no double-refund risk."""
+    Safe to call once per job: the three stages run strictly sequentially
+    and gated (script stage completes to 'awaiting_review' before the user
+    can confirm; confirm stage completes to 'api_done' before the FFmpeg
+    stage — or the watcher, in split-worker mode — will touch the job), so
+    a job can only ever fail in one stage at a time, never two at once —
+    no double-refund risk. The script stage never has anything reserved to
+    refund (reserved_credits is 0 in the payload until the confirm
+    endpoint writes it), so calling this after a script-stage failure is
+    always a no-op on the credit side, just the status flip."""
     await db.fail_brainrot_job(job_id, message)
     try:
         row = await db.get_brainrot_job(job_id)
@@ -173,57 +272,6 @@ async def _fail_and_refund(job_id: str, message: str) -> None:
         logger.exception(f"[{job_id}] Failed to refund credits after job failure — needs manual reconciliation")
 
 
-async def run_brainrot_stage(job_id: str) -> None:
-    """
-    Single-service pipeline: run the API stage (script + TTS) and prefetch
-    characters/music concurrently — not sequentially — since the latter are
-    fully known from the payload at job-creation time and don't depend on
-    anything the API stage produces. Only safe here (not in
-    run_brainrot_api_stage/run_brainrot_ffmpeg_stage individually) because
-    this function runs both stages in the same process: the split-worker
-    dispatch path (watcher calling those two separately, on two different
-    machines) has no local disk to share a prefetch across, so it keeps the
-    original self-contained fetch in the FFmpeg stage untouched.
-    """
-    row = await db.get_brainrot_job(job_id)
-    if not row:
-        logger.error(f"[{job_id}] Brainrot job not found at stage start")
-        return
-    payload = row["payload"]
-
-    with tempfile.TemporaryDirectory(prefix=f"brainrot_prefetch_{job_id}_") as prefetch_dir_str:
-        prefetch_task = asyncio.create_task(
-            _prefetch_shared_assets(payload, Path(prefetch_dir_str)),
-            name=f"brainrot-prefetch-{job_id[:8]}",
-        )
-
-        await run_brainrot_api_stage(job_id)
-
-        job = await db.get_brainrot_job(job_id)
-        if not job or job.get("status") != "api_done":
-            # API stage failed — the prefetch is now moot. Drain it before
-            # the tmp dir it's writing into gets torn down on the way out
-            # of this `with` block, and don't let a prefetch-side failure
-            # (e.g. a bad music URL) surface as this job's error instead of
-            # whatever actually failed in the API stage.
-            prefetch_task.cancel()
-            with suppress(asyncio.CancelledError, Exception):
-                await prefetch_task
-            return
-
-        try:
-            prefetched = await prefetch_task
-        except Exception as exc:
-            # A prefetch failure (e.g. a bad/expired music URL) shouldn't
-            # sink a job whose script+TTS already succeeded — fall back to
-            # None and let the FFmpeg stage do its own self-contained fetch,
-            # same as it always has.
-            logger.warning(f"[{job_id}] Asset prefetch failed ({exc}) — falling back to fetching in the FFmpeg stage")
-            prefetched = None
-
-        await run_brainrot_ffmpeg_stage(job_id, prefetched=prefetched)
-
-
 def _friendly_error(raw: str) -> str:
     r = (raw or "").lower()
     if "tts" in r or "unrealspeech" in r or "lemonfox" in r:
@@ -242,42 +290,74 @@ def _friendly_error(raw: str) -> str:
     return f"Something went wrong while creating your clip. {first_line}".rstrip()
 
 
-async def _execute_brainrot_api_stage(job_id: str) -> None:
+async def _execute_brainrot_script_stage(job_id: str) -> None:
+    """Script only — no TTS, no render, no credit reserved. Writes an
+    untimed draft scene_plan [{speaker, text}] and leaves the job at
+    'awaiting_review' for the user to read/edit/regenerate before anything
+    billable happens (see confirm_script below for the whole-script
+    regenerate path, and the module docstring for the full 3-stage shape)."""
     row = await db.get_brainrot_job(job_id)
     if not row:
         raise RuntimeError(f"Brainrot job {job_id} not found")
     payload = row["payload"]
 
+    character_ids: list[str] = payload.get("character_ids", [])
+    character_count = len(character_ids)
+    left_profile, right_profile = _side_profiles(payload)
+
+    async with _step(job_id, "generate_scene_plan"):
+        await db.update_brainrot_job_progress(job_id, 10, "Writing script...", status="generating_script")
+        dialogue_lines = await brainrot_script.generate_scene_plan(
+            payload["script_input"],
+            character_count,
+            duration_seconds=payload.get("duration_seconds", 30),
+            left_profile=left_profile,
+            right_profile=right_profile,
+        )
+        # Post title/hashtags are derived from this first-generated dialogue
+        # — if the user edits lines during review, these aren't regenerated
+        # to match (out of scope for this pass: they're cosmetic metadata,
+        # not the render itself, and staying slightly stale against a
+        # hand-edited line or two is an acceptable trade for not re-running
+        # a GPT call on every edit).
+        post_meta = await brainrot_script.generate_post_meta(dialogue_lines)
+        if post_meta["title"] or post_meta["hashtags"]:
+            await db.set_brainrot_post_meta(job_id, post_meta["title"], post_meta["hashtags"])
+
+    await db.set_brainrot_scene_plan(
+        job_id, [{"speaker": l.speaker, "text": l.text} for l in dialogue_lines],
+    )
+    await db.set_job_awaiting_review(job_id)
+
+
+async def _execute_brainrot_confirm_stage(job_id: str) -> None:
+    """TTS every line from whatever the job's scene_plan currently holds
+    (the AI-written draft, or the user's edited version of it — this
+    function doesn't know or care which) — then replaces it with the final
+    timed scene_plan and flips status to 'api_done' so the FFmpeg stage can
+    pick it up, exactly as the old combined stage used to."""
+    row = await db.get_brainrot_job(job_id)
+    if not row:
+        raise RuntimeError(f"Brainrot job {job_id} not found")
+    payload = row["payload"]
+    draft = row.get("scene_plan") or []
+    if not draft:
+        raise RuntimeError("zero usable dialogue lines — no script to synthesize")
+
+    # scene_plan at this point is the untimed draft {speaker, text} shape
+    # (or the user's edited version of it) — wrap it back into DialogueLine
+    # so _synthesize_timeline (which expects .speaker/.text attributes,
+    # same as the freshly-generated objects it always used to receive)
+    # doesn't need to know or care that these came from storage this time.
+    dialogue_lines = [brainrot_script.DialogueLine(speaker=l["speaker"], text=l["text"]) for l in draft]
+
     with tempfile.TemporaryDirectory(prefix=f"brainrot_{job_id}_") as tmp_dir_str:
         tmp_dir = Path(tmp_dir_str)
-
-        character_ids: list[str] = payload.get("character_ids", [])
-        character_count = len(character_ids)
-        left_profile, right_profile = _side_profiles(payload)
-
-        async with _step(job_id, "generate_scene_plan"):
-            await db.update_brainrot_job_progress(job_id, 10, "Writing script...", status="generating_script")
-            dialogue_lines = await brainrot_script.generate_scene_plan(
-                payload["script_input"],
-                character_count,
-                duration_seconds=payload.get("duration_seconds", 30),
-                left_profile=left_profile,
-                right_profile=right_profile,
-            )
-            # Post title/hashtags are derived from the ACTUAL dialogue just
-            # written above, never from the raw topic the user typed — the
-            # frontend's pre-generated values (seeded from the topic, before
-            # this script existed) were only ever a preview. This call reads
-            # the finished lines and never feeds anything back into them.
-            post_meta = await brainrot_script.generate_post_meta(dialogue_lines)
-            if post_meta["title"] or post_meta["hashtags"]:
-                await db.set_brainrot_post_meta(job_id, post_meta["title"], post_meta["hashtags"])
 
         async with _step(job_id, "synthesize_voices"):
             await db.update_brainrot_job_progress(job_id, 30, "Synthesizing voices...", status="synthesizing_voice")
             timed_lines = await _synthesize_timeline(job_id, dialogue_lines, payload, tmp_dir)
 
-        # The API stage is finished, save the plan and handoff
         await db.set_brainrot_scene_plan(
             job_id, [{"speaker": l.speaker, "text": l.text, "start": l.start, "end": l.end, "audio_url": l.audio_path} for l in timed_lines],
         )
@@ -335,8 +415,8 @@ async def _run_brainrot_ffmpeg_stage(job_id: str, prefetched: "_PrefetchedAssets
         async with _step(job_id, "fetch_assets"):
             await db.update_brainrot_job_progress(job_id, 50, "Downloading assets...", status="rendering")
             if prefetched is not None:
-                # run_brainrot_stage already fetched these concurrently with
-                # script generation + TTS (see _prefetch_shared_assets) —
+                # run_brainrot_confirm_stage already fetched these
+                # concurrently with TTS (see _prefetch_shared_assets) —
                 # nothing left to download here.
                 characters, music_path = prefetched.characters, prefetched.music_path
                 logger.info(f"[{job_id}] using prefetched characters/music (fetched during API stage)")

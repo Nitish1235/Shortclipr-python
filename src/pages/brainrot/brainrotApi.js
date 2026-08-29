@@ -35,6 +35,20 @@ async function postJSON(path, body) {
   return res.json()
 }
 
+async function patchJSON(path, body) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'PATCH', headers: authHeaders(true), body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    let detail = `${path} → ${res.status}`
+    try { detail = (await res.json()).detail || detail } catch { /* ignore */ }
+    const error = new Error(detail)
+    error.status = res.status
+    throw error
+  }
+  return res.json()
+}
+
 async function deleteJSON(path) {
   const res = await fetch(`${API_BASE}${path}`, { method: 'DELETE', headers: authHeaders() })
   if (!res.ok) {
@@ -67,6 +81,12 @@ export const brainrotApi = {
   saveSignatureCast:    (character_ids, label) => postJSON('/brainrot/signature-casts', { character_ids, label }),
   deleteSignatureCast:  (id) => deleteJSON(`/brainrot/signature-casts/${id}`),
 
+  // Creates the job and dispatches the SCRIPT stage only — no credit
+  // reserved, no TTS/render yet. Job lands at status='awaiting_review';
+  // the Studio's script review screen takes over from there. Kept the name
+  // "createJob" (rather than renaming to e.g. generateScript) since the
+  // request/response shape at this endpoint is unchanged — only what
+  // happens server-side after it changed.
   async createJob(options) {
     const res = await fetch(`${API_BASE}/brainrot/jobs`, {
       method: 'POST',
@@ -82,6 +102,12 @@ export const brainrotApi = {
     }
     return res.json()
   },
+
+  // ── Script review — all free, no credit touched until confirmJob ──
+  regenerateScript: (jobId) => postJSON(`/brainrot/jobs/${jobId}/regenerate-script`, {}),
+  updateScript:     (jobId, lines) => patchJSON(`/brainrot/jobs/${jobId}/script`, { lines }),
+  previewLine:      (jobId, speaker, text) => postJSON(`/brainrot/jobs/${jobId}/preview-line`, { speaker, text }),
+  confirmJob:       (jobId) => postJSON(`/brainrot/jobs/${jobId}/confirm`, {}),
 }
 
 export { API_BASE }

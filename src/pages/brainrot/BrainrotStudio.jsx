@@ -10,6 +10,7 @@ import { useAuth } from '../../context/AuthContext'
 import { brainrotApi } from './brainrotApi'
 import { T, card, pill, btn, pressHandlers, FONT } from './brainrotTheme'
 import Logo from '../../components/Logo'
+import { YTLogo, TTLogo } from '../../components/PlatformLogos'
 import PreviewStage from './PreviewStage'
 import { getChemistry } from './chemistry'
 import ErrorModal from './ErrorModal'
@@ -27,7 +28,11 @@ const SPARK_TOPICS = [
 ]
 
 const DURATION_PRESETS = [15, 30, 45, 60, 90, 120]
-const ACTIVE_STATUSES = ['created', 'generating_script', 'synthesizing_voice', 'rendering']
+// 'awaiting_review' included on purpose — a job sitting in the script
+// review screen is still "in progress" from the user's perspective (and
+// still blocks starting a second job), even though nothing is actively
+// running server-side. Mirrors ACTIVE_JOB_STATUSES in backend/app/api/brainrot.py.
+const ACTIVE_STATUSES = ['created', 'generating_script', 'awaiting_review', 'synthesizing_voice', 'rendering']
 const CLIPS_PAGE_SIZE = 24
 // Mirrors MUSIC_DUCK_FACTOR in backend/app/pipeline/brainrot_composite.py —
 // the render ducks music to this fraction of the slider's value whenever a
@@ -135,10 +140,21 @@ export default function BrainrotStudio() {
   const [publishingYT, setPublishingYT] = useState(new Set())
   const [publishedTT,  setPublishedTT]  = useState(new Set())
   const [publishingTT, setPublishingTT] = useState(new Set())
+  const [draftedTT,    setDraftedTT]    = useState(new Set())
+  const [draftingTT,   setDraftingTT]   = useState(new Set())
 
   // ── Job state ───────────────────────────────────────────────────
   const [submitting, setSubmitting] = useState(false)
   const [activeJob, setActiveJob]   = useState(null)   // polled job being generated
+  // Sticky, not derived from activeJob.status directly: regenerating
+  // transiently flips status back to 'generating_script' mid-review, and
+  // gating the ScriptReview screen on the raw status would unmount it (and
+  // lose its local edit state) for that window. Set true the first time
+  // status is observed as 'awaiting_review'; cleared only by
+  // ScriptReview's onConfirmed once the user actually confirms — a later
+  // 'failed' (e.g. a regenerate that errored) deliberately does NOT clear
+  // it, since regenerateScript allows retrying from that exact state.
+  const [reviewMode, setReviewMode] = useState(false)
   const [myClips, setMyClips]       = useState([])
   const [toast, setToast]           = useState(null)
   const [refLoaded, setRefLoaded]   = useState(false)
@@ -472,6 +488,49 @@ export default function BrainrotStudio() {
     setPublishing(prev => { const n = new Set(prev); n.delete(jobId); return n })
   }
 
+  // Save to the creator's TikTok drafts inbox (video.upload) instead of
+  // posting directly — TikTok-only, no privacy/interaction options apply
+  // (the creator sets those when they choose to post from the TikTok app).
+  const doDraft = async (job, opts) => {
+    const jobId = job.job_id
+    setDraftingTT(prev => new Set([...prev, jobId]))
+    try {
+      const token = localStorage.getItem('sc_token')
+      const res = await fetch(`${API_BASE}/social/upload/tiktok`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ clips: [{ clip_id: jobId, video_url: job.output_url, title: opts.title }] }),
+      })
+      const data = await res.json()
+      const result = data.results?.[0]
+      if (res.ok && result?.status === 'success') {
+        setDraftedTT(prev => new Set([...prev, jobId]))
+        showToast('Saved to TikTok drafts — open the TikTok app to finish posting 📥', 'ok')
+      } else if (res.status === 400 && data.detail?.includes('not connected')) {
+        localStorage.removeItem('tt_connected'); setTtConnected(false); connectTT()
+      } else {
+        const err = new Error('draft failed'); err.status = res.status
+        setErrorModal({
+          error: friendlyError(err, {
+            title: "Couldn't save to TikTok drafts",
+            tips: [
+              'TikTok may have rejected the video format or length',
+              'Your connection to TikTok may need to be refreshed (disconnect and reconnect)',
+              'Try again in a moment',
+            ],
+          }),
+          retry: () => doDraft(job, opts),
+        })
+      }
+    } catch (e) {
+      setErrorModal({
+        error: friendlyError(e, { title: "Couldn't save to TikTok drafts" }),
+        retry: () => doDraft(job, opts),
+      })
+    }
+    setDraftingTT(prev => { const n = new Set(prev); n.delete(jobId); return n })
+  }
+
   const showToast = (msg, type = 'info') => {
     setToast({ msg, type }); setTimeout(() => setToast(null), 3200)
   }
@@ -697,12 +756,16 @@ export default function BrainrotStudio() {
       }
       const { job_id } = await brainrotApi.createJob(options)
       if (draftKey) { try { localStorage.removeItem(draftKey) } catch { /* ignore */ } }
-      showToast('Cooking your brainrot clip… 🍳', 'ok')
+      showToast('Writing your script…', 'ok')
       // Optimistic — the authoritative counts land once the job finishes
       // and pollJob resyncs from the server (see below).
       setClipsCounts(prev => ({ ...prev, all: prev.all + 1, active: prev.active + 1 }))
       pollJob(job_id)
-      setView('clips')
+      // No setView('clips') anymore — this now only writes the script
+      // (no credit spent, no render started yet). Stay right here: once
+      // pollJob sees status='awaiting_review', the script review screen
+      // takes over in place of the wizard (see the ScriptReview branch in
+      // the render below), and the user confirms from there when ready.
     } catch (e) {
       setErrorModal({ error: friendlyError(e, { title: 'Could not start your clip' }), retry: generate })
     } finally {
@@ -716,6 +779,7 @@ export default function BrainrotStudio() {
       try {
         const job = await brainrotApi.getJob(jobId)
         setActiveJob(job)
+        if (job.status === 'awaiting_review') setReviewMode(true)
         if (!isActive(job)) {
           clearInterval(pollRef.current); pollRef.current = null
           if (job.status === 'complete') {
@@ -778,6 +842,7 @@ export default function BrainrotStudio() {
           ttConnected={ttConnected}
           onClose={() => setPublishModal(null)}
           onPublish={doPublish}
+          onDraft={doDraft}
         />
       )}
 
@@ -802,7 +867,15 @@ export default function BrainrotStudio() {
           onDisconnect={disconnectSocial} socialEnabled={socialEnabled} />
 
         <div style={{ flex: 1, minWidth: 0 }}>
-      {view === 'clips' ? (
+      {reviewMode && activeJob ? (
+        <ScriptReview
+          job={activeJob}
+          picked={picked}
+          onRefresh={async () => setActiveJob(await brainrotApi.getJob(activeJob.job_id))}
+          onConfirmed={() => { setReviewMode(false); pollJob(activeJob.job_id) }}
+          showToast={showToast}
+        />
+      ) : view === 'clips' ? (
         <ClipsLibrary clips={visibleLibraryClips} counts={clipsCounts}
           filter={clipsFilter} onFilterChange={changeClipsFilter}
           hasMore={clipsHasMore} loadingMore={clipsLoadingMore} onLoadMore={loadMoreClips}
@@ -810,6 +883,7 @@ export default function BrainrotStudio() {
           ytConnected={ytConnected} ttConnected={ttConnected}
           publishedYT={publishedYT} publishingYT={publishingYT}
           publishedTT={publishedTT} publishingTT={publishingTT}
+          draftedTT={draftedTT}
           onPublishYT={publishYT} onPublishTT={publishTT}
           onConnectYT={connectYT} onConnectTT={connectTT}
           onDisconnect={disconnectSocial} socialEnabled={socialEnabled} />
@@ -1691,7 +1765,7 @@ function HashtagInput({ onAdd }) {
 }
 
 // ── Publish modal — shown when user clicks YT or TT on a ClipCard ─
-function PublishModal({ job, platform, ytConnected, ttConnected, onClose, onPublish }) {
+function PublishModal({ job, platform, ytConnected, ttConnected, onClose, onPublish, onDraft }) {
   const isPlatConnected = platform === 'youtube' ? ytConnected : ttConnected
   const tags = job.post_hashtags || []
   const defaultTitle = job.post_title || (job.script_input || '').slice(0, 80) || 'Brainrot Clip'
@@ -1711,6 +1785,7 @@ function PublishModal({ job, platform, ytConnected, ttConnected, onClose, onPubl
   const [noStitch, setNoStitch]   = useState(false)
 
   const [busy, setBusy] = useState(false)
+  const [busyDraft, setBusyDraft] = useState(false)
 
   const fullTitle = hashtags.length
     ? `${title} ${hashtags.join(' ')}`.slice(0, platform === 'youtube' ? 100 : 150)
@@ -1729,6 +1804,15 @@ function PublishModal({ job, platform, ytConnected, ttConnected, onClose, onPubl
       disable_stitch: noStitch,
     })
     setBusy(false)
+    onClose()
+  }
+
+  // TikTok only — saves to the creator's drafts inbox instead of posting
+  // directly. No privacy/interaction options apply to a draft upload.
+  const handleDraft = async () => {
+    setBusyDraft(true)
+    await onDraft(job, { title: fullTitle })
+    setBusyDraft(false)
     onClose()
   }
 
@@ -1753,10 +1837,7 @@ function PublishModal({ job, platform, ytConnected, ttConnected, onClose, onPubl
       }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-          {isYT
-            ? <svg width="20" height="20" viewBox="0 0 24 24" fill={accent}><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-            : <svg width="17" height="20" viewBox="0 0 24 24" fill={accent}><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.26 6.26 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.94a8.17 8.17 0 0 0 4.78 1.52V7.01a4.85 4.85 0 0 1-1.01-.32z"/></svg>
-          }
+          {isYT ? <YTLogo size={20} /> : <TTLogo size={20} />}
           <span style={{ fontSize: '1rem', fontWeight: 800, color: T.ink }}>
             Post to {platformLabel}
           </span>
@@ -1885,19 +1966,36 @@ function PublishModal({ job, platform, ytConnected, ttConnected, onClose, onPubl
         </div>
 
         {/* Submit */}
-        <button onClick={handlePublish} disabled={busy || !isPlatConnected}
+        <button onClick={handlePublish} disabled={busy || busyDraft || !isPlatConnected}
           style={{
             marginTop: 20, width: '100%', padding: '12px',
             background: isPlatConnected ? accent : '#e5e5e5',
             color: isPlatConnected ? '#fff' : '#aaa',
             border: `2px solid ${isPlatConnected ? T.ink : '#e5e5e5'}`,
             borderRadius: 10, fontWeight: 800, fontSize: '.9rem',
-            cursor: isPlatConnected && !busy ? 'pointer' : 'default',
+            cursor: isPlatConnected && !busy && !busyDraft ? 'pointer' : 'default',
             boxShadow: isPlatConnected ? `3px 3px 0 ${T.ink}` : 'none',
             fontFamily: FONT, transition: 'all .12s',
           }}>
           {busy ? 'Publishing…' : `Publish to ${platformLabel} →`}
         </button>
+
+        {/* TikTok only — save to the drafts inbox instead of posting directly */}
+        {!isYT && (
+          <button onClick={handleDraft} disabled={busy || busyDraft || !isPlatConnected}
+            title="Saves to your TikTok drafts inbox — finish posting from the TikTok app whenever you're ready"
+            style={{
+              marginTop: 8, width: '100%', padding: '11px',
+              background: '#fff',
+              color: isPlatConnected ? T.ink : '#aaa',
+              border: `1.5px solid ${isPlatConnected ? T.line : '#e5e5e5'}`,
+              borderRadius: 10, fontWeight: 700, fontSize: '.84rem',
+              cursor: isPlatConnected && !busy && !busyDraft ? 'pointer' : 'default',
+              fontFamily: FONT, transition: 'all .12s',
+            }}>
+            {busyDraft ? 'Saving…' : 'Save to TikTok Drafts (post later from the app)'}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -2063,8 +2161,8 @@ function StudioSideNav({ view, onChange, clipCount, renderingCount, user, ytConn
 // (StudioSideNav) and, on mobile, resurfaced inside "My clips" (see
 // .br-clips-connect in Header's mobile styles) since the bottom tab bar
 // has no room for it.
-const YT_ICON = <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-const TT_ICON = <svg width="13" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.26 6.26 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.94a8.17 8.17 0 0 0 4.78 1.52V7.01a4.85 4.85 0 0 1-1.01-.32z"/></svg>
+const YT_ICON = <YTLogo size={15} />
+const TT_ICON = <TTLogo size={15} />
 
 function PublishConnections({ ytConnected, ttConnected, onConnectYT, onConnectTT, onDisconnect, socialEnabled }) {
   if (!socialEnabled) {
@@ -2479,11 +2577,231 @@ function ProgressCard({ job }) {
   )
 }
 
+// ScriptReview — the new middle screen between "write a topic" and
+// "render." Takes over the whole content area (see the render branch above
+// this component in BrainrotStudio) while job.status === 'awaiting_review'.
+// Nothing here costs a credit or starts a render until Confirm is pressed —
+// regenerate/edit/preview are all free, so the user can iterate as much as
+// they want first.
+//
+// Local `lines` state is the source of truth for what's rendered in the
+// text inputs — NOT job.scene_plan directly, even though job keeps getting
+// refreshed by the parent's background poll every 2.5s. Binding inputs
+// straight to a continuously-polled prop would clobber whatever the user
+// is mid-typing on the next poll tick. `lines` only re-syncs from the
+// server when the incoming scene_plan actually changes (a fresh
+// regenerate), tracked via a fingerprint ref.
+function ScriptReview({ job, picked, onRefresh, onConfirmed, showToast }) {
+  const jobId = job.job_id
+  const [lines, setLines] = useState(() => (job.scene_plan || []).map(l => ({ ...l })))
+  const [regenerating, setRegenerating] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [savingIdx, setSavingIdx] = useState(null)
+  const [previewingIdx, setPreviewingIdx] = useState(null)
+  const linesRef = useRef(lines)
+  const saveTimers = useRef({})
+  const lastSyncedRef = useRef(JSON.stringify(job.scene_plan))
+  const audioRef = useRef(null)
+
+  useEffect(() => {
+    const fingerprint = JSON.stringify(job.scene_plan)
+    if (fingerprint !== lastSyncedRef.current) {
+      lastSyncedRef.current = fingerprint
+      const next = (job.scene_plan || []).map(l => ({ ...l }))
+      linesRef.current = next
+      setLines(next)
+    }
+  }, [job.scene_plan])
+
+  // Cast lookup by side — 'picked' already carries image_url per character
+  // from the roster fetch, no extra request needed for the thumbnails.
+  const charBySide = {}
+  picked.forEach(p => { charBySide[p.side] = p })
+
+  function speakerLabel(speaker) {
+    if (speaker === 'narrator') return 'Narrator'
+    return charBySide[speaker]?.name || (speaker === 'left' ? 'Left' : 'Right')
+  }
+
+  function updateLineText(idx, text) {
+    setLines(prev => {
+      const next = prev.map((l, i) => i === idx ? { ...l, text } : l)
+      linesRef.current = next
+      return next
+    })
+    clearTimeout(saveTimers.current[idx])
+    saveTimers.current[idx] = setTimeout(async () => {
+      setSavingIdx(idx)
+      try {
+        await brainrotApi.updateScript(jobId, linesRef.current.map(l => ({ speaker: l.speaker, text: l.text })))
+      } catch {
+        showToast('Could not save that edit — try again', 'err')
+      } finally {
+        setSavingIdx(null)
+      }
+    }, 600)
+  }
+
+  async function handleRegenerate() {
+    setRegenerating(true)
+    try {
+      await brainrotApi.regenerateScript(jobId)
+      const previous = JSON.stringify(job.scene_plan)
+      let done = false
+      for (let i = 0; i < 40 && !done; i++) {   // ~60s ceiling, 1.5s between checks
+        await new Promise(r => setTimeout(r, 1500))
+        const fresh = await brainrotApi.getJob(jobId)
+        if (fresh.status === 'failed') {
+          showToast(fresh.error_message || 'Regenerate failed', 'err')
+          done = true
+        } else if (fresh.status === 'awaiting_review' && JSON.stringify(fresh.scene_plan) !== previous) {
+          lastSyncedRef.current = JSON.stringify(fresh.scene_plan)
+          const next = (fresh.scene_plan || []).map(l => ({ ...l }))
+          linesRef.current = next
+          setLines(next)
+          done = true
+        }
+        onRefresh()
+      }
+      if (!done) showToast('Regenerate is taking a while — check back in a moment', 'warn')
+    } catch {
+      showToast('Could not regenerate — try again', 'err')
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
+  async function handlePreview(idx) {
+    setPreviewingIdx(idx)
+    try {
+      const { audio_data_url } = await brainrotApi.previewLine(jobId, lines[idx].speaker, lines[idx].text)
+      if (audioRef.current) {
+        audioRef.current.src = audio_data_url
+        await audioRef.current.play().catch(() => {})
+      }
+    } catch {
+      showToast('Voice preview failed', 'err')
+    } finally {
+      setPreviewingIdx(null)
+    }
+  }
+
+  async function handleConfirm() {
+    setConfirming(true)
+    try {
+      await brainrotApi.confirmJob(jobId)
+      showToast('Generating your clip…', 'ok')
+      onConfirmed()
+    } catch (e) {
+      showToast(e.message || 'Could not start the render', 'err')
+    } finally {
+      setConfirming(false)
+    }
+  }
+
+  const busy = regenerating || confirming
+  const hasEmptyLine = lines.some(l => !l.text.trim())
+
+  return (
+    <div style={{ padding: '8px 0 80px', maxWidth: 760 }}>
+      <audio ref={audioRef} style={{ display: 'none' }} />
+
+      {/* ── Section: header ─────────────────────────────────── */}
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ margin: 0, fontWeight: 500, fontSize: 'clamp(1.3rem, 2.2vw, 1.6rem)', letterSpacing: '-.02em', color: T.ink }}>
+          Review the script
+        </h1>
+        <p style={{ margin: '4px 0 0', fontSize: '.82rem', color: T.mute }}>
+          Nothing's rendered yet — edit any line, regenerate the whole thing, or preview a voice. Your credit is only spent once you hit Generate Clip.
+        </p>
+      </div>
+
+      {/* ── Section: cast strip ─────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+        {['left', 'right'].filter(side => charBySide[side]).map(side => (
+          <div key={side} style={{ ...card({ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }) }}>
+            <img src={charBySide[side].image_url} alt={charBySide[side].name}
+              style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover', border: `1px solid ${T.line}` }} />
+            <div>
+              <div style={{ fontSize: '.78rem', fontWeight: 600 }}>{charBySide[side].name}</div>
+              <div style={{ fontSize: '.68rem', color: T.mute }}>{side === 'left' ? 'Left' : 'Right'}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Section: dialogue lines ──────────────────────────── */}
+      <div style={{ ...card({ padding: 4 }), marginBottom: 20 }}>
+        {lines.map((line, idx) => {
+          const char = charBySide[line.speaker]
+          return (
+            <div key={idx} style={{
+              display: 'flex', gap: 10, alignItems: 'flex-start', padding: '12px 14px',
+              borderBottom: idx < lines.length - 1 ? `1px solid ${T.lineSoft}` : 'none',
+            }}>
+              {char ? (
+                <img src={char.image_url} alt={char.name}
+                  style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover', flexShrink: 0, border: `1px solid ${T.line}` }} />
+              ) : (
+                <div style={{
+                  width: 28, height: 28, borderRadius: 6, flexShrink: 0, background: T.lineSoft,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '.65rem', color: T.mute,
+                }}>🎙</div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '.68rem', fontWeight: 600, color: T.mute, marginBottom: 3 }}>
+                  {speakerLabel(line.speaker)}
+                  {savingIdx === idx && <span style={{ marginLeft: 6, fontWeight: 400 }}>saving…</span>}
+                </div>
+                <textarea
+                  value={line.text}
+                  onChange={e => updateLineText(idx, e.target.value)}
+                  rows={2}
+                  disabled={busy}
+                  style={{
+                    width: '100%', border: `1px solid ${T.lineSoft}`, borderRadius: 6, padding: '6px 8px',
+                    fontSize: '.85rem', fontFamily: FONT, color: T.ink, resize: 'vertical', background: T.paper,
+                  }}
+                />
+              </div>
+              <button
+                onClick={() => handlePreview(idx)}
+                disabled={busy || previewingIdx !== null || !line.text.trim()}
+                {...pressHandlers}
+                title="Preview this line's voice"
+                style={{
+                  ...pill(T.lineSoft, { padding: '6px 10px', cursor: 'pointer', flexShrink: 0, marginTop: 16 }),
+                  opacity: previewingIdx === idx ? 0.6 : 1,
+                }}
+              >
+                {previewingIdx === idx ? '…' : '🔊'}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* ── Section: actions ─────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={handleRegenerate} disabled={busy} {...pressHandlers}
+          style={{ ...btn(T.paper2, T.ink, { border: `1px solid ${T.line}`, flex: 1 }), cursor: busy ? 'not-allowed' : 'pointer' }}>
+          {regenerating ? 'Regenerating…' : '🔄 Regenerate all'}
+        </button>
+        <button onClick={handleConfirm} disabled={busy || hasEmptyLine || lines.length === 0} {...pressHandlers}
+          style={{ ...btn(T.ink, '#fff', { flex: 2 }), cursor: (busy || hasEmptyLine) ? 'not-allowed' : 'pointer' }}>
+          {confirming ? 'Starting…' : '✅ Looks good — Generate Clip'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 const STATUS_META = {
   complete:            { label: 'Ready',      color: T.green },
   failed:              { label: 'Failed',     color: T.red },
   created:             { label: 'Queued',     color: T.mute },
   generating_script:   { label: 'Writing',    color: T.blue },
+  awaiting_review:     { label: 'Reviewing',  color: T.blue },
   synthesizing_voice:  { label: 'Voicing',    color: T.blue },
   rendering:           { label: 'Rendering',  color: T.blue },
 }
@@ -2494,7 +2812,7 @@ const LIBRARY_FILTERS = [
 ]
 
 function ClipsLibrary({ clips, counts, filter, onFilterChange, hasMore, loadingMore, onLoadMore,
-  onCreate, ytConnected, ttConnected, publishedYT, publishingYT, publishedTT, publishingTT,
+  onCreate, ytConnected, ttConnected, publishedYT, publishingYT, publishedTT, publishingTT, draftedTT,
   onPublishYT, onPublishTT, onConnectYT, onConnectTT, onDisconnect, socialEnabled }) {
 
   return (
@@ -2590,6 +2908,7 @@ function ClipsLibrary({ clips, counts, filter, onFilterChange, hasMore, loadingM
                 ytConnected={ytConnected} ttConnected={ttConnected}
                 publishedYT={publishedYT} publishingYT={publishingYT}
                 publishedTT={publishedTT} publishingTT={publishingTT}
+                draftedTT={draftedTT}
                 onPublishYT={onPublishYT} onPublishTT={onPublishTT}
                 socialEnabled={socialEnabled} />
             ))}
@@ -2611,12 +2930,13 @@ function ClipsLibrary({ clips, counts, filter, onFilterChange, hasMore, loadingM
   )
 }
 
-function ClipCard({ job, ytConnected, ttConnected, publishedYT, publishingYT, publishedTT, publishingTT, onPublishYT, onPublishTT, socialEnabled }) {
+function ClipCard({ job, ytConnected, ttConnected, publishedYT, publishingYT, publishedTT, publishingTT, draftedTT, onPublishYT, onPublishTT, socialEnabled }) {
   const meta = STATUS_META[job.status] || STATUS_META.created
   const jid = job.job_id
   const isComplete = job.status === 'complete' && job.output_url
   const ytDone = publishedYT?.has(jid)
   const ttDone = publishedTT?.has(jid)
+  const ttDraftDone = draftedTT?.has(jid)
   const ytBusy = publishingYT?.has(jid)
   const ttBusy = publishingTT?.has(jid)
   return (
@@ -2709,22 +3029,27 @@ function ClipCard({ job, ytConnected, ttConnected, publishedYT, publishingYT, pu
               <span style={{ display: 'inline-block', width: 10, height: 10, border: '1.5px solid #ccc', borderTopColor: '#333', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
             ) : ytDone ? '✓ YT' : (
               <>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                <YTLogo size={11} />
                 {ytConnected ? 'YT' : 'YT+'}
               </>
             )}
           </button>
-          {/* TikTok publish */}
+          {/* TikTok publish (or save as draft — both live in the modal) */}
           <button
             onClick={() => onPublishTT && onPublishTT(job)}
             disabled={ttDone || ttBusy}
-            title={ttDone ? 'Published to TikTok' : ttConnected ? 'Publish to TikTok' : 'Connect TikTok'}
+            title={
+              ttDone ? 'Published to TikTok'
+              : ttDraftDone ? 'Saved to TikTok Drafts — open to publish for real'
+              : ttConnected ? 'Publish to TikTok, or save as a draft'
+              : 'Connect TikTok'
+            }
             style={{
               flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
               padding: '6px 4px', borderRadius: 7, border: '1.5px solid',
-              borderColor: ttDone ? '#16a34a' : '#e5e5e5',
-              background: ttDone ? '#f0fdf4' : '#fff',
-              color: ttDone ? '#16a34a' : '#333',
+              borderColor: ttDone ? '#16a34a' : ttDraftDone ? '#c4b5fd' : '#e5e5e5',
+              background: ttDone ? '#f0fdf4' : ttDraftDone ? '#faf5ff' : '#fff',
+              color: ttDone ? '#16a34a' : ttDraftDone ? '#7c3aed' : '#333',
               fontSize: '.65rem', fontWeight: 600, cursor: ttDone ? 'default' : 'pointer',
               fontFamily: FONT,
             }}>
@@ -2732,8 +3057,8 @@ function ClipCard({ job, ytConnected, ttConnected, publishedYT, publishingYT, pu
               <span style={{ display: 'inline-block', width: 10, height: 10, border: '1.5px solid #ccc', borderTopColor: '#333', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
             ) : ttDone ? '✓ TT' : (
               <>
-                <svg width="10" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.26 6.26 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.94a8.17 8.17 0 0 0 4.78 1.52V7.01a4.85 4.85 0 0 1-1.01-.32z"/></svg>
-                {ttConnected ? 'TT' : 'TT+'}
+                <TTLogo size={11} />
+                {ttDraftDone ? 'Draft ✓' : ttConnected ? 'TT' : 'TT+'}
               </>
             )}
           </button>

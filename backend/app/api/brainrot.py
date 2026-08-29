@@ -35,7 +35,7 @@ from app.api.deps import CurrentUser
 from app.core.config import get_settings
 from app.db import supabase as db
 from app.pipeline.brainrot_characters import get_character_by_id, get_character_roster
-from app.pipeline.brainrot_stage import run_brainrot_stage
+from app.pipeline.brainrot_stage import run_brainrot_api_stage, run_brainrot_confirm_stage, run_brainrot_full_auto
 from app.pipeline.animation_catalog import DEFAULT_ENTRY, DEFAULT_EXIT, MOTIONS, valid_motion
 from app.pipeline.captions import VALID_COLORS, VALID_STYLES
 from app.pipeline.voice_catalog import SAMPLE_TEXT, default_voice_for_gender, list_voices
@@ -51,7 +51,12 @@ DEFAULT_CAPTION_Y = 0.82
 
 # Statuses shown as "rendering" in the Studio — mirrors the frontend's
 # ACTIVE_STATUSES in BrainrotStudio.jsx. Keep both lists in sync.
-ACTIVE_JOB_STATUSES = {"created", "generating_script", "synthesizing_voice", "rendering"}
+# 'awaiting_review' is deliberately included: a job sitting in the script
+# review screen is still "in progress" from the user's perspective (and
+# still counts against MAX_CONCURRENT_BRAINROT_JOBS_PER_USER via
+# count_active_brainrot_jobs's status NOT IN ('complete','failed') check),
+# even though nothing is actively running server-side while they read/edit.
+ACTIVE_JOB_STATUSES = {"created", "generating_script", "awaiting_review", "synthesizing_voice", "rendering"}
 # Generous recent-history window for the /clips endpoint — see
 # list_brainrot_clips_source. A single user realistically has dozens, not
 # thousands, of brainrot jobs, so this comfortably covers real usage while
@@ -238,29 +243,14 @@ async def create_brainrot_job(body: CreateBrainrotJobRequest, current_user: Curr
     else:
         logger.info("Brainrot job music: none selected (music_asset_id was empty)")
 
-    # Reserve 1 brainrot credit atomically (FOR UPDATE row lock — same
-    # primitive jobs.py uses for YT-Shorts, but against the fully separate
-    # brainrot_credits_used/brainrot_credits_limit pool — see
-    # reserve_brainrot_credits() in db/supabase.py and migration 016).
-    # Deliberately placed AFTER every validation step above so a bad
-    # character/gameplay/audio id 404s without ever touching the user's
-    # balance. A brainrot job always produces exactly one clip, so this is
-    # a flat reserve-1 rather than the variable clip_count YT-Shorts uses.
-    #
-    # The reservation is only ever kept if the clip actually finishes —
-    # brainrot_stage.py refunds it in full on failure at either stage
-    # (script generation, TTS, or FFmpeg render), and the insert below
-    # refunds it too if the job row itself fails to write. Net effect for
-    # the user: a credit is only ever truly spent on a clip that reached them.
-    reserved_credits = await db.reserve_brainrot_credits(current_user.user_id, 1)
-    if reserved_credits < 1:
-        raise HTTPException(
-            status_code=402,
-            detail="Monthly brainrot clip limit reached for your plan. Resets next month — upgrade to continue.",
-        )
-
+    # No credit reservation here anymore — the user hasn't seen a script
+    # yet, let alone approved one, so nothing billable has happened. The
+    # credit is reserved at CONFIRM time instead (POST .../confirm below),
+    # once they've actually accepted the dialogue. reserved_credits starts
+    # at 0 and _fail_and_refund's refund-if-positive check makes a script-
+    # stage failure a no-op on the credit side by construction.
     payload = {
-        "reserved_credits": reserved_credits,
+        "reserved_credits": 0,
         "script_input": opts.script_input.strip(),
         "character_ids": [p["character_id"] for p in character_positions],
         "character_positions": character_positions,
@@ -280,11 +270,10 @@ async def create_brainrot_job(body: CreateBrainrotJobRequest, current_user: Curr
         "post_hashtags": opts.post_hashtags,
     }
 
-    try:
-        row = await db.insert_brainrot_job(current_user.user_id, payload)
-    except Exception:
-        await db.release_brainrot_credits(current_user.user_id, reserved_credits)
-        raise
+    # No reservation to unwind on an insert failure anymore — nothing was
+    # reserved yet (see the comment above), so this can just raise straight
+    # through instead of the old try/except release-then-reraise dance.
+    row = await db.insert_brainrot_job(current_user.user_id, payload)
     job_id = str(row["job_id"])
 
     split_worker_mode = bool(settings.FFMPEG_WORKER_URLS.strip())
@@ -293,10 +282,170 @@ async def create_brainrot_job(body: CreateBrainrotJobRequest, current_user: Curr
         # the watcher's poll loop picks up 'created' rows on its own cadence.
         logger.info(f"[{job_id}] Brainrot job created — queued for watcher poll pickup")
     else:
-        asyncio.create_task(run_brainrot_stage(job_id), name=f"brainrot-{job_id[:8]}")
-        logger.info(f"[{job_id}] Brainrot job created — running in-process (single-service mode)")
+        # Script stage only — stops at 'awaiting_review' for the Studio's
+        # review screen. POST .../confirm dispatches run_brainrot_confirm_stage
+        # once the user approves (or edits) the dialogue.
+        asyncio.create_task(run_brainrot_api_stage(job_id), name=f"brainrot-{job_id[:8]}")
+        logger.info(f"[{job_id}] Brainrot job created — running script stage in-process (single-service mode)")
 
     return {"job_id": job_id, "status": row["status"]}
+
+
+# ── Script review: edit / regenerate / preview / confirm ────────
+# The new middle phase between job creation and rendering — see
+# brainrot_stage.py's module docstring for the full 3-stage shape. Every
+# endpoint here except confirm is completely free (no credit touched, no
+# TTS/render run) so the user can iterate on the dialogue as much as they
+# want before committing to a render.
+
+class ScriptLine(BaseModel):
+    speaker: str
+    text: str
+
+    @field_validator("speaker")
+    @classmethod
+    def validate_speaker(cls, v: str) -> str:
+        if v not in ("left", "right", "narrator"):
+            raise ValueError("speaker must be left, right, or narrator")
+        return v
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("line text can't be empty")
+        return v[:500]
+
+
+class UpdateScriptRequest(BaseModel):
+    lines: list[ScriptLine]
+
+    @field_validator("lines")
+    @classmethod
+    def non_empty(cls, v: list["ScriptLine"]) -> list["ScriptLine"]:
+        if not v:
+            raise ValueError("script needs at least one line")
+        return v
+
+
+def _require_owned_job(job: dict | None, user_id: str) -> dict:
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if str(job["user_id"]) != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    return job
+
+
+@router.patch("/jobs/{job_id}/script")
+async def update_brainrot_script(job_id: str, body: UpdateScriptRequest, current_user: CurrentUser):
+    """Saves the user's hand-edited dialogue directly — no AI call, instant,
+    free. Only valid while awaiting review; once confirmed, scene_plan gets
+    overwritten with the final timed lines and editing no longer applies."""
+    job = _require_owned_job(await db.get_brainrot_job(job_id), current_user.user_id)
+    if job["status"] != "awaiting_review":
+        raise HTTPException(status_code=409, detail="Script can only be edited while awaiting review")
+
+    lines = [{"speaker": l.speaker, "text": l.text} for l in body.lines]
+    await db.set_brainrot_scene_plan(job_id, lines)
+    return {"scene_plan": lines}
+
+
+@router.post("/jobs/{job_id}/regenerate-script", status_code=202)
+async def regenerate_brainrot_script(job_id: str, current_user: CurrentUser):
+    """Re-runs the script stage from scratch against the same topic/cast,
+    overwriting whatever draft (AI-written or hand-edited) currently sits
+    in scene_plan. Free — no credit touched, callable as many times as the
+    user wants. Also allowed as a retry when the script stage itself
+    previously failed (e.g. a transient GPT error) — checked via
+    reserved_credits still being 0, which is only true for a job that
+    never made it past the script stage in the first place."""
+    job = _require_owned_job(await db.get_brainrot_job(job_id), current_user.user_id)
+    already_confirmed = (job.get("payload") or {}).get("reserved_credits", 0) > 0
+    if job["status"] not in ("awaiting_review",) and not (job["status"] == "failed" and not already_confirmed):
+        raise HTTPException(status_code=409, detail="Can only regenerate while awaiting review")
+
+    asyncio.create_task(run_brainrot_api_stage(job_id), name=f"brainrot-regen-{job_id[:8]}")
+    return {"status": "regenerating"}
+
+
+class PreviewLineRequest(BaseModel):
+    speaker: str
+    text: str
+
+    @field_validator("speaker")
+    @classmethod
+    def validate_speaker(cls, v: str) -> str:
+        if v not in ("left", "right", "narrator"):
+            raise ValueError("speaker must be left, right, or narrator")
+        return v
+
+
+@router.post("/jobs/{job_id}/preview-line")
+async def preview_brainrot_line(job_id: str, body: PreviewLineRequest, current_user: CurrentUser):
+    """One-off TTS for a single line so the user can hear delivery before
+    committing to a render. Never persisted, never touches the job row or
+    scene_plan — returned as a data: URL rather than uploaded to GCS, since
+    this audio has no reason to exist past the response (no upload, no
+    cleanup, no orphaned-file risk)."""
+    job = _require_owned_job(await db.get_brainrot_job(job_id), current_user.user_id)
+    payload = job["payload"]
+    text = body.text.strip()[:500]
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+
+    from app.pipeline import tts, voice_catalog
+
+    voice_left = payload.get("voice_left", "")
+    voice_right = payload.get("voice_right", "")
+    voice = voice_right if body.speaker == "right" else voice_left
+    voice_entry = voice_catalog.find_voice(voice) if voice else None
+    provider = voice_entry.provider if voice_entry else "unrealspeech"
+    locale = voice_entry.locale if voice_entry else "en-US"
+
+    try:
+        audio_bytes, duration = await tts.synthesize(text, voice, provider, locale=locale)
+    except Exception as exc:
+        logger.warning(f"[{job_id}] Line preview TTS failed: {exc}")
+        raise HTTPException(status_code=502, detail="Voice preview failed — try again")
+
+    import base64
+    audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+    return {"audio_data_url": f"data:audio/mpeg;base64,{audio_b64}", "duration": duration}
+
+
+@router.post("/jobs/{job_id}/confirm", status_code=202)
+async def confirm_brainrot_job(job_id: str, current_user: CurrentUser):
+    """The user has read/edited the dialogue and wants the actual clip. This
+    is where the 1 credit is reserved — nothing before this point ever
+    touched the user's balance (see reserved_credits=0 at creation, above)."""
+    job = _require_owned_job(await db.get_brainrot_job(job_id), current_user.user_id)
+    if job["status"] != "awaiting_review":
+        raise HTTPException(status_code=409, detail="Job isn't awaiting review")
+    if not (job.get("scene_plan") or []):
+        raise HTTPException(status_code=400, detail="No script to render — write or generate one first")
+
+    reserved_credits = await db.reserve_brainrot_credits(current_user.user_id, 1)
+    if reserved_credits < 1:
+        raise HTTPException(
+            status_code=402,
+            detail="Monthly brainrot clip limit reached for your plan. Resets next month — upgrade to continue.",
+        )
+    await db.set_brainrot_reserved_credits(job_id, reserved_credits)
+    await db.update_brainrot_job_progress(job_id, 20, "Starting voice synthesis...", status="synthesizing_voice")
+
+    split_worker_mode = bool(settings.FFMPEG_WORKER_URLS.strip())
+    if split_worker_mode:
+        # See brainrot_stage.py's module docstring — dispatcher.py has no
+        # claim query for a confirmed job yet, so this currently stalls in
+        # split-worker mode. Logged so it's visible in production rather
+        # than silently stuck.
+        logger.warning(f"[{job_id}] Brainrot job confirmed in split-worker mode, but no dispatch wiring exists yet — job will stall")
+    else:
+        asyncio.create_task(run_brainrot_confirm_stage(job_id), name=f"brainrot-confirm-{job_id[:8]}")
+        logger.info(f"[{job_id}] Brainrot job confirmed — running confirm+render in-process (single-service mode)")
+
+    return {"job_id": job_id, "status": "synthesizing_voice"}
 
 
 # ── GET /brainrot/jobs/{job_id} ─────────────────────────────────
@@ -386,6 +535,11 @@ def _serialize_brainrot_job(row: dict) -> dict:
         "script_input": payload.get("script_input", ""),
         "post_title": payload.get("post_title", ""),
         "post_hashtags": payload.get("post_hashtags", []),
+        # Draft dialogue while awaiting_review ({speaker,text} per line, no
+        # timing yet), or the final timed lines once confirmed/rendering —
+        # the Studio's review screen and the finished-clip view both read
+        # this same field, just at different points in a line's lifecycle.
+        "scene_plan": row.get("scene_plan") or [],
     }
 
 
@@ -922,7 +1076,13 @@ async def _create_bulk_job(
     if split_worker_mode:
         logger.info(f"[bulk:{job_id}] queued for watcher poll pickup")
     else:
-        asyncio.create_task(run_brainrot_stage(job_id), name=f"brainrot-bulk-{job_id[:8]}")
+        # Bulk generation is meant to run fully unattended — no human
+        # review step makes sense here, so this uses run_brainrot_full_auto
+        # (script -> confirm -> render back to back) rather than the
+        # review-gated run_brainrot_api_stage regular job creation now
+        # dispatches. The credit is already reserved above (line ~1046),
+        # matching what run_brainrot_full_auto expects of its caller.
+        asyncio.create_task(run_brainrot_full_auto(job_id), name=f"brainrot-bulk-{job_id[:8]}")
         logger.info(f"[bulk:{job_id}] running in-process (single-service mode)")
 
     return job_id
