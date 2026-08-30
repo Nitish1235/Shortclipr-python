@@ -1,15 +1,15 @@
 """
 stream.py — Step 3 of the ShortClipr pipeline.
 
-Stream URL extraction: multi-method fallback chain, all via proxy-cheap.
+Stream URL extraction: multi-method fallback chain, all via DataImpulse (rotating residential).
 
 Priority order (most reliable → broadest compatibility, 2026-08 rework):
-  1. yt-dlp + proxy-cheap + mweb          (PO-token-backed — see below)
-  2. yt-dlp + proxy-cheap + tv            (no PO token required at all)
-  3. yt-dlp + proxy-cheap + tv_embedded   (long-time workhorse)
-  4. yt-dlp + proxy-cheap + web           (PO-token-backed)
-  5. yt-dlp + proxy-cheap + android_music / android_creator
-  6. yt-dlp + proxy-cheap (relaxed → unconstrained last resorts)
+  1. yt-dlp + DataImpulse + mweb          (PO-token-backed — see below)
+  2. yt-dlp + DataImpulse + tv            (no PO token required at all)
+  3. yt-dlp + DataImpulse + tv_embedded   (long-time workhorse)
+  4. yt-dlp + DataImpulse + web           (PO-token-backed)
+  5. yt-dlp + DataImpulse + android_music / android_creator
+  6. yt-dlp + DataImpulse (relaxed → unconstrained last resorts)
 
 PO tokens: the bgutil-ytdlp-pot-provider plugin (requirements.txt) +
 its node sidecar (Dockerfile, 127.0.0.1:4416) auto-generate BotGuard
@@ -44,8 +44,8 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 
 from app.core.config import get_settings
-from app.core.proxy import get_dataimpulse_proxy, get_proxyseller_proxy, get_proxy_url, url_is_ip_bound
-# from app.core.proxy import get_dataimpulse_proxy  # Legacy, use get_dataimpulse_proxy instead
+from app.core.proxy import get_dataimpulse_proxy, get_youtube_proxy, get_proxyseller_proxy, get_proxy_url, url_is_ip_bound
+# from app.core.proxy import get_proxycheap_proxy  # Legacy, use get_dataimpulse_proxy instead
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -1243,8 +1243,9 @@ async def get_video_metadata(video_id: str, session_id: str | None = None) -> di
     except Exception as e:
         logger.warning(f"[{video_id}] oEmbed metadata failed: {e}")
 
-    # ── 2. InnerTube ANDROID — with proxy (Cloud Run IPs are blocked without one) ──
-    proxy_url = get_dataimpulse_proxy(purpose="stream-metadata")
+    # ── 2. InnerTube ANDROID — with best-available proxy ──
+    # (Proxy-Seller if configured, else DataImpulse rotating residential)
+    proxy_url = get_youtube_proxy(purpose="metadata")
     try:
         data = await call_player_api(video_id, client_name="ANDROID", proxy_url=proxy_url)
         details = data.get("videoDetails", {})
@@ -1259,23 +1260,6 @@ async def get_video_metadata(video_id: str, session_id: str | None = None) -> di
             }
     except Exception as e:
         logger.warning(f"[{video_id}] InnerTube ANDROID metadata failed (proxy={'yes' if proxy_url else 'no'}): {e}")
-
-    # ── 3. InnerTube ANDROID — emergency Proxy-Seller fallback ──────
-    try:
-        ps_proxy = get_proxyseller_proxy(session_id)
-        data = await call_player_api(video_id, client_name="ANDROID", proxy_url=ps_proxy)
-        details = data.get("videoDetails", {})
-        if details:
-            logger.info(f"[{video_id}] Metadata duration resolved via InnerTube+proxyseller-emergency")
-            return {
-                "title":     details.get("title", "")     or (oembed_meta or {}).get("title", ""),
-                "channel":   details.get("author", "")    or (oembed_meta or {}).get("channel", ""),
-                "thumbnail": _best_thumbnail(details, video_id),
-                "duration":  int(details.get("lengthSeconds", 0)),
-                "video_id":  video_id,
-            }
-    except Exception as e:
-        logger.warning(f"[{video_id}] InnerTube ANDROID+proxyseller-emergency metadata failed: {e}")
 
     # oEmbed succeeded but InnerTube didn't — return oEmbed data (duration=0)
     if oembed_meta:
