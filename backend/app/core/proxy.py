@@ -1,7 +1,7 @@
 """
 proxy.py — Proxy URL helpers.
 
-Two providers, split strictly by BANDWIDTH, not by "which is more reliable":
+Three providers, split strictly by BANDWIDTH and USE CASE:
 
   • Proxy-Seller ISP  — 10 static ISP IPs, UNLIMITED bandwidth. Used for
                         EVERY actual video-byte download: DASH segment
@@ -12,23 +12,22 @@ Two providers, split strictly by BANDWIDTH, not by "which is more reliable":
                         often IP-bound — resolve and download must use the
                         SAME proxy or the CDN 403s on real segment data).
 
-  • proxy-cheap       — rotating residential, CAPPED bandwidth (2GB/mo as of
-                        2026-08). Used ONLY for lightweight JSON/API calls:
-                        metadata, transcript, and stream-URL *resolution*
-                        (never the resulting video bytes) in api_stage.py /
-                        stream.py / transcript.py.
+  • DataImpulse       — rotating residential. Used ONLY for lightweight JSON/API
+                        calls: metadata, transcript, and stream-URL *resolution*
+                        (never the resulting video bytes) in stream.py /
+                        transcript.py.
 
-  Never route byte downloads through proxy-cheap. On 2026-08-29,
-  ffmpeg_stage.py's DASH downloader used proxy-cheap FIRST for actual clip
-  bytes — this burned its 2GB quota within hours, and once exhausted the
-  gateway refused ALL connections (not just downloads), cascading into
-  metadata/transcript/stream-resolution failures across every job even
-  though those calls are individually tiny. Fixed by moving all DASH/
+  • proxy-cheap       — (LEGACY — commented out, kept for fallback/reference).
+                        Was rotating residential with CAPPED bandwidth. Caused
+                        cascading failures when quota exhausted on 2026-08-29.
+
+  Never route byte downloads through rotating residential proxies. On 2026-08-29,
+  ffmpeg_stage.py's DASH downloader used proxy-cheap for actual clip bytes —
+  this burned its 2GB quota within hours, and once exhausted the gateway refused
+  ALL connections (not just downloads), cascading into metadata/transcript/
+  stream-resolution failures across every job. Fixed by moving all DASH/
   full-source byte downloads to Proxy-Seller exclusively — see
   ffmpeg_stage.py's _dash_download_with_refresh docstring.
-
-DataImpulse was retired (its account ran out of traffic quota — 407
-TRAFFIC_EXHAUSTED — and proxy-cheap covers every role it used to fill).
 
 Returns None when the relevant provider is not configured (dev mode).
 """
@@ -58,19 +57,20 @@ def use_proxyseller_proxy() -> None:
 
 def validate_proxy_env() -> None:
     """
-    Validate proxy environment variables.
-    PROXY_PORT=0 is valid — it means 'use PROXY_PORTS range for rotation'.
-    Raises ValueError only if host/user/pass are missing.
+    Validate proxy environment variables (DataImpulse rotating residential).
+    Optional — dev mode can run without proxy. Logs warning if not configured.
     """
     s = get_settings()
-    if not s.PROXY_HOST or not s.PROXY_HOST.strip():
-        raise ValueError("PROXY_HOST must be set.")
-    if not s.PROXY_USER or not s.PROXY_USER.strip():
-        raise ValueError("PROXY_USER must be set.")
-    if not s.PROXY_PASS or not s.PROXY_PASS.strip():
-        raise ValueError("PROXY_PASS must be set.")
-    if s.PROXY_PORT < 0:
-        raise ValueError(f"PROXY_PORT must be >= 0 (0 = use PROXY_PORTS rotation). Got '{s.PROXY_PORT}'.")
+    if not s.DATAIMPULSE_HOST or not s.DATAIMPULSE_HOST.strip():
+        _logger.warning("[proxy.py] DATAIMPULSE_HOST not configured — pipeline will run without proxy")
+        return
+    if not s.DATAIMPULSE_USER or not s.DATAIMPULSE_USER.strip():
+        _logger.warning("[proxy.py] DATAIMPULSE_USER not configured — pipeline will run without proxy")
+        return
+    if not s.DATAIMPULSE_PASS or not s.DATAIMPULSE_PASS.strip():
+        _logger.warning("[proxy.py] DATAIMPULSE_PASS not configured — pipeline will run without proxy")
+        return
+    _logger.info(f"[proxy.py] DataImpulse proxy configured: {s.DATAIMPULSE_HOST}:{s.DATAIMPULSE_PORT}")
 
 
 
@@ -119,38 +119,64 @@ def get_youtube_proxy(session_id: str | None = None, purpose: str = "req") -> st
     Return the best available proxy for YouTube requests (transcript + stream).
 
     Priority: Proxy-Seller ISP (static, stable, less likely to be blocked)
-    → proxy-cheap rotating residential (fallback if Proxy-Seller not configured).
+    → DataImpulse rotating residential (fallback if Proxy-Seller not configured).
 
     When session_id is provided and Proxy-Seller is available, the proxy is
     chosen deterministically via MD5(session_id) % pool_size — same IP for
     the entire job across API stage (transcript/stream) and FFmpeg stage
     (DASH downloads). This avoids IP-bound URL mismatches.
 
-    When falling back to proxy-cheap, each call gets a fresh IP (rotating
-    gateway port, or a random pick from PROXY_PORTS — see get_proxy_url).
+    When falling back to DataImpulse, each call gets a fresh IP from the
+    rotating residential pool.
     """
     s = get_settings()
     proxies = _parse_proxyseller_list(s.PROXYSELLER_PROXIES)
     if s.PROXYSELLER_USER and s.PROXYSELLER_PASS and proxies:
         return get_proxyseller_proxy(session_id)
-    return get_proxycheap_proxy(purpose=purpose)
+    return get_dataimpulse_proxy(purpose=purpose)
 
 
-def get_proxycheap_proxy(purpose: str = "req") -> str | None:
+def get_dataimpulse_proxy(purpose: str = "req") -> str | None:
     """
-    Proxy-Cheap rotating residential — transcript + stream URL resolution
-    (shortclipr-worker-ai). Each call gets a fresh IP: either the rotating
-    gateway host:port (PROXY_PORT fixed, IP rotates server-side per
-    connection) or a random port drawn from PROXY_PORTS when PROXY_PORT=0.
+    DataImpulse rotating residential — transcript + stream URL resolution.
+    Each call gets a fresh IP from DataImpulse's rotating residential pool.
 
-    Returns None if PROXY_HOST/USER/PASS are not configured.
+    Returns None if DATAIMPULSE_HOST/USER/PASS are not configured.
     """
-    url = get_proxy_url()
-    if url:
-        _logger.info(f"[proxy.py] Proxy-Cheap rotating — purpose={purpose}")
-    else:
-        _logger.warning(f"[proxy.py] Proxy-Cheap not configured — {purpose} running without residential proxy")
+    s = get_settings()
+    host = s.DATAIMPULSE_HOST.strip() if s.DATAIMPULSE_HOST else ""
+    user = s.DATAIMPULSE_USER.strip() if s.DATAIMPULSE_USER else ""
+    password = s.DATAIMPULSE_PASS.strip() if s.DATAIMPULSE_PASS else ""
+    port = s.DATAIMPULSE_PORT if s.DATAIMPULSE_PORT else 823
+
+    if not host or not user or not password:
+        _logger.warning(f"[proxy.py] DataImpulse not configured — {purpose} running without proxy")
+        return None
+
+    user_encoded = quote_plus(user)
+    password_encoded = quote_plus(password)
+
+    url = f"http://{user_encoded}:{password_encoded}@{host}:{port}"
+    _logger.info(f"[proxy.py] DataImpulse rotating — host={host}:{port}, purpose={purpose}")
     return url
+
+
+# ── Legacy proxy-cheap (commented out — use DataImpulse instead) ────
+# def get_proxycheap_proxy(purpose: str = "req") -> str | None:
+#     """
+#     Proxy-Cheap rotating residential — transcript + stream URL resolution
+#     (shortclipr-worker-ai). Each call gets a fresh IP: either the rotating
+#     gateway host:port (PROXY_PORT fixed, IP rotates server-side per
+#     connection) or a random port drawn from PROXY_PORTS when PROXY_PORT=0.
+#
+#     Returns None if PROXY_HOST/USER/PASS are not configured.
+#     """
+#     url = get_proxy_url()
+#     if url:
+#         _logger.info(f"[proxy.py] Proxy-Cheap rotating — purpose={purpose}")
+#     else:
+#         _logger.warning(f"[proxy.py] Proxy-Cheap not configured — {purpose} running without residential proxy")
+#     return url
 
 
 def get_proxyseller_proxy(session_id: str | None = None, attempt: int = 0) -> str | None:

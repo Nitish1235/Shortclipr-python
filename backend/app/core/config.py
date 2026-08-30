@@ -222,12 +222,18 @@ class Settings(BaseSettings):
     PROXYSELLER_PASS: str = ""
     PROXYSELLER_PROXIES: str = ""   # comma-separated host:port pairs (10 ISP IPs)
 
+    # ── DataImpulse (rotating residential) — transcript + stream URL ─
+    DATAIMPULSE_HOST: str = ""
+    DATAIMPULSE_PORT: int = 823
+    DATAIMPULSE_USER: str = ""
+    DATAIMPULSE_PASS: str = ""
+
     # ── Legacy proxy-cheap (kept for fallback / admin test lab) ───
-    PROXY_HOST: str = ""
-    PROXY_USER: str = ""
-    PROXY_PASS: str = ""
-    PROXY_PORT: int = 8080
-    PROXY_PORTS: str = ""
+    # PROXY_HOST: str = ""
+    # PROXY_USER: str = ""
+    # PROXY_PASS: str = ""
+    # PROXY_PORT: int = 8080
+    # PROXY_PORTS: str = ""
 
 
 @lru_cache

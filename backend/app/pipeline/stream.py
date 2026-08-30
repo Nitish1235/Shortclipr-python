@@ -44,7 +44,8 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 
 from app.core.config import get_settings
-from app.core.proxy import get_proxycheap_proxy, get_proxyseller_proxy, get_proxy_url, url_is_ip_bound
+from app.core.proxy import get_dataimpulse_proxy, get_proxyseller_proxy, get_proxy_url, url_is_ip_bound
+# from app.core.proxy import get_dataimpulse_proxy  # Legacy, use get_dataimpulse_proxy instead
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -531,7 +532,7 @@ def _ytdlp_result_has_embedded_audio(info: dict | None) -> bool:
 async def _innertube_android_stream(
     video_id: str, target_height: int, session_id: str | None = None, proxy_override: str | None = None
 ) -> str:
-    proxy = proxy_override or get_proxycheap_proxy(purpose="stream-innertube")
+    proxy = proxy_override or get_dataimpulse_proxy(purpose="stream-innertube")
     data = await call_player_api(video_id, client_name="ANDROID", send_params=True, proxy_url=proxy)
 
     blocked, reason = _innertube_is_blocked(data)
@@ -605,7 +606,7 @@ async def _ytdlp_stream(
 ) -> str:
     import yt_dlp
 
-    proxy = proxy_override or get_proxycheap_proxy(purpose=f"stream-ytdlp-{label}")
+    proxy = proxy_override or get_dataimpulse_proxy(purpose=f"stream-ytdlp-{label}")
     opts = _ytdlp_base_opts(proxy, client=client)
     opts["format"] = format_str
 
@@ -941,7 +942,7 @@ async def get_stream_urls(
         ("android_music", "yt-dlp android_music"),
         ("android_creator", "yt-dlp android_creator"),
     ):
-        proxy = proxy_override or get_proxycheap_proxy(purpose=f"stream-ytdlp-{client}")
+        proxy = proxy_override or get_dataimpulse_proxy(purpose=f"stream-ytdlp-{client}")
         opts = _ytdlp_base_opts(proxy, client=client)
         opts["format"] = _fmt(h)
         try:
@@ -981,7 +982,7 @@ async def get_stream_urls(
     last_exc: Exception | None = None
     for client_name, send_params, user_agent in _clients:
         try:
-            proxy = proxy_override or get_proxycheap_proxy(purpose=f"stream-innertube-{client_name}")
+            proxy = proxy_override or get_dataimpulse_proxy(purpose=f"stream-innertube-{client_name}")
             data = await call_player_api(video_id, client_name=client_name, send_params=send_params, proxy_url=proxy)
 
             blocked, reason = _innertube_is_blocked(data)
@@ -1064,7 +1065,7 @@ async def get_stream_urls_high_quality(
     # tv_embedded — same HQ selector, in that order. ─────────────────────
     loop = asyncio.get_running_loop()
     for client, label in (("mweb", "mweb"), ("tv", "tv"), ("tv_embedded", "tv_embedded")):
-        proxy = proxy_override or get_proxycheap_proxy(purpose=f"stream-ytdlp-hq-{client}")
+        proxy = proxy_override or get_dataimpulse_proxy(purpose=f"stream-ytdlp-hq-{client}")
         opts = _ytdlp_base_opts(proxy, client=client)
         opts["format"] = _fmt_high_quality(min_height, max_height)
         try:
@@ -1099,7 +1100,7 @@ async def get_stream_urls_high_quality(
     last_exc: Exception | None = None
     for client_name, send_params, user_agent in _clients:
         try:
-            proxy = proxy_override or get_proxycheap_proxy(purpose=f"stream-innertube-hq-{client_name}")
+            proxy = proxy_override or get_dataimpulse_proxy(purpose=f"stream-innertube-hq-{client_name}")
             data = await call_player_api(video_id, client_name=client_name, send_params=send_params, proxy_url=proxy)
 
             blocked, reason = _innertube_is_blocked(data)
@@ -1167,7 +1168,7 @@ async def get_audio_stream_url(
     # 3. Resolve — fresh IP per client attempt (unless proxy_override pins one)
     for client_name in ["ANDROID", "TV", "IOS"]:
         try:
-            proxy = proxy_override or get_proxycheap_proxy(purpose=f"stream-audio-{client_name}")
+            proxy = proxy_override or get_dataimpulse_proxy(purpose=f"stream-audio-{client_name}")
             data = await call_player_api(video_id, client_name=client_name, send_params=True, proxy_url=proxy)
             url = _pick_best_audio_stream(data)
             if url:
@@ -1243,7 +1244,7 @@ async def get_video_metadata(video_id: str, session_id: str | None = None) -> di
         logger.warning(f"[{video_id}] oEmbed metadata failed: {e}")
 
     # ── 2. InnerTube ANDROID — with proxy (Cloud Run IPs are blocked without one) ──
-    proxy_url = get_proxycheap_proxy(purpose="stream-metadata")
+    proxy_url = get_dataimpulse_proxy(purpose="stream-metadata")
     try:
         data = await call_player_api(video_id, client_name="ANDROID", proxy_url=proxy_url)
         details = data.get("videoDetails", {})

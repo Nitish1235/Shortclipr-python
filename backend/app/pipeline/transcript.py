@@ -43,7 +43,8 @@ def _clean(text: str) -> str:
 
 import httpx
 
-from app.core.proxy import get_proxycheap_proxy, get_proxyseller_proxy
+from app.core.proxy import get_dataimpulse_proxy, get_proxyseller_proxy
+# from app.core.proxy import get_dataimpulse_proxy  # Legacy, use get_dataimpulse_proxy instead
 from app.pipeline.stream import call_player_api
 
 logger = logging.getLogger(__name__)
@@ -337,7 +338,7 @@ def _ytta_fetch_sync(
 
 
 async def _ytta_proxy(video_id: str, lang_code: str | None, session_id: str | None = None) -> list[TranscriptEntry]:
-    proxy = get_proxycheap_proxy(purpose="transcript-ytta")
+    proxy = get_dataimpulse_proxy(purpose="transcript-ytta")
     loop = asyncio.get_running_loop()
     # _TranscriptsDisabledError and _VideoUnavailableError propagate naturally
     return await loop.run_in_executor(
@@ -360,7 +361,7 @@ async def _innertube_android_proxy(
     proxy_override lets the method-4 emergency fallback route through
     Proxy-Seller instead when proxy-cheap's gateway is unreachable).
     """
-    proxy = proxy_override or get_proxycheap_proxy(purpose="transcript-innertube")
+    proxy = proxy_override or get_dataimpulse_proxy(purpose="transcript-innertube")
     data = await call_player_api(video_id, client_name="ANDROID", proxy_url=proxy)
 
     ps = data.get("playabilityStatus", {})
@@ -589,7 +590,7 @@ def _ytdlp_subs_sync(
 
 
 async def _ytdlp_subs_proxy(video_id: str, lang_code: str | None, session_id: str | None = None) -> list[TranscriptEntry]:
-    proxy = get_proxycheap_proxy(purpose="transcript-ytdlp")
+    proxy = get_dataimpulse_proxy(purpose="transcript-ytdlp")
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
         _TRANSCRIPT_POOL,
