@@ -944,9 +944,10 @@ async def get_stream_urls(
     ):
         proxy = proxy_override or get_dataimpulse_proxy(purpose=f"stream-ytdlp-{client}")
         opts = _ytdlp_base_opts(proxy, client=client)
-        # mweb is prone to format matching issues (ext=mp4 constraint too strict) —
-        # use relaxed selector to avoid "Requested format is not available" errors
-        opts["format"] = _fmt_relaxed(h) if client == "mweb" else _fmt(h)
+        # mweb is prone to format matching issues — use most permissive selector.
+        # If it returns AV1, fallback (tv_embedded) will still work. If we use
+        # strict format selector here, mweb fails on many videos unnecessarily.
+        opts["format"] = _fmt_unconstrained() if client == "mweb" else _fmt(h)
         try:
             info = await loop.run_in_executor(
                 _YTDLP_POOL,
