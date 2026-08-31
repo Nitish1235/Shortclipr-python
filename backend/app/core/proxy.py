@@ -219,56 +219,14 @@ def get_proxy_url(session_id: str | None = None) -> str | None:
     """
     Return a proxy URL, or None if proxy is not configured.
 
-    PROXY_PASS is used as-is (including any `_country-XX` geo-targeting suffix).
-    If session_id is provided and PROXY_PORT is unset, it selects a port
-    deterministically based on the MD5 hash of the session_id from PROXY_PORTS,
-    ensuring stable routing within the same job.
+    Priority: Proxy-Seller ISP → DataImpulse rotating residential.
+    Updated 2026-08-31: switched from legacy proxy-cheap to DataImpulse.
     """
     if _proxy_provider.get() == "proxyseller":
         return _get_proxyseller_proxy_url(session_id)
 
-    s = get_settings()
-
-    # Clean leading/trailing whitespaces or newlines (common in Secret Manager)
-    host = s.PROXY_HOST.strip() if s.PROXY_HOST else ""
-    user = quote_plus(s.PROXY_USER.strip()) if s.PROXY_USER else ""
-    password = quote_plus(s.PROXY_PASS.strip()) if s.PROXY_PASS else ""
-
-    if not host or not user:
-        return None
-
-    # Handle port selection
-    port = 8080  # default fallback for proxy-cheap
-    # PROXY_PORT may be an int or str; handle both
-    if s.PROXY_PORT:
-        if isinstance(s.PROXY_PORT, int):
-            port = s.PROXY_PORT
-        else:
-            # Assume string representation
-            proxy_port_str = s.PROXY_PORT.strip()
-            if proxy_port_str:
-                try:
-                    port = int(proxy_port_str)
-                except ValueError as e:
-                    _logger.warning(
-                        f"[proxy.py] Failed to parse PROXY_PORT={repr(s.PROXY_PORT)}: {e}. Falling back to 8080."
-                    )
-                    port = 8080
-    else:
-        ports = _parse_ports(s.PROXY_PORTS)
-        if ports:
-            if session_id:
-                # Deterministic choice from the port pool based on session ID
-                hash_val = int(hashlib.md5(session_id.encode()).hexdigest(), 16)
-                port = ports[hash_val % len(ports)]
-            else:
-                port = random.choice(ports)
-
-    # Log safe metadata to help diagnose configuration issues in production
-    safe_pass = f"{password[:2]}...{password[-2:]} (len={len(password)})" if len(password) > 4 else f"len={len(password)}"
-    _logger.info(f"[proxy.py] Loaded proxy settings — host: {host}, user: {user}, port: {port}, password: {safe_pass}")
-
-    return f"http://{user}:{password}@{host}:{port}"
+    # Use DataImpulse (rotating residential) — primary proxy provider
+    return get_dataimpulse_proxy(purpose="get_proxy_url")
 
 
 def _parse_ports(spec: str) -> list[int]:
