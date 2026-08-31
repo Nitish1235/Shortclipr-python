@@ -157,7 +157,8 @@ def get_dataimpulse_proxy(purpose: str = "req") -> str | None:
     password_encoded = quote_plus(password)
 
     url = f"http://{user_encoded}:{password_encoded}@{host}:{port}"
-    _logger.info(f"[proxy.py] DataImpulse rotating — host={host}:{port}, purpose={purpose}")
+    safe_pass = f"{password_encoded[:3]}...{password_encoded[-2:]}" if len(password_encoded) > 5 else f"len={len(password_encoded)}"
+    _logger.info(f"[proxy.py] DataImpulse rotating — {user_encoded}:{safe_pass}@{host}:{port} (purpose={purpose})")
     return url
 
 
