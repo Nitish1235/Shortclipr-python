@@ -17,6 +17,7 @@ FROM node:22-bookworm-slim AS bgutil_builder
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
+RUN git config --global http.sslVerify false
 RUN git clone --depth 1 --branch 1.3.2 \
         https://github.com/Brainicism/bgutil-ytdlp-pot-provider /src
 
