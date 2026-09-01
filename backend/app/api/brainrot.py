@@ -282,13 +282,24 @@ async def create_brainrot_job(body: CreateBrainrotJobRequest, current_user: Curr
         # the watcher's poll loop picks up 'created' rows on its own cadence.
         logger.info(f"[{job_id}] Brainrot job created — queued for watcher poll pickup")
     else:
-        # Script stage only — stops at 'awaiting_review' for the Studio's
-        # review screen. POST .../confirm dispatches run_brainrot_confirm_stage
-        # once the user approves (or edits) the dialogue.
+        # Claim the row for in-process dispatch BEFORE firing the background
+        # task, synchronously, in this same request. The watcher is a
+        # separate, always-running service — it listens for pg_notify on
+        # EVERY brainrot_jobs insert (trg_brainrot_new fires regardless of
+        # this service's own single-service-mode setting) and independently
+        # polls for status='created' rows to claim. Without this line, the
+        # row sits visibly at 'created' for however long it takes the
+        # background task below to get scheduled and make its own first DB
+        # write — long enough for the watcher to also claim and dispatch
+        # the SAME job's script stage a second time, via its own worker
+        # pool. Flipping status here, before the task even exists, closes
+        # that race: the watcher's claim query (`WHERE status='created'`)
+        # never matches this row.
+        await db.update_brainrot_job_progress(job_id, 5, "Starting...", status="generating_script")
         asyncio.create_task(run_brainrot_api_stage(job_id), name=f"brainrot-{job_id[:8]}")
         logger.info(f"[{job_id}] Brainrot job created — running script stage in-process (single-service mode)")
 
-    return {"job_id": job_id, "status": row["status"]}
+    return {"job_id": job_id, "status": row["status"] if split_worker_mode else "generating_script"}
 
 
 # ── Script review: edit / regenerate / preview / confirm ────────
@@ -1076,6 +1087,13 @@ async def _create_bulk_job(
     if split_worker_mode:
         logger.info(f"[bulk:{job_id}] queued for watcher poll pickup")
     else:
+        # Same race-closing claim as create_brainrot_job above — see that
+        # function's comment. Without this, the watcher (a separate,
+        # always-running service reacting to pg_notify on every insert
+        # regardless of this service's own mode) can independently claim
+        # and dispatch this same 'created' row before the background task
+        # below gets scheduled.
+        await db.update_brainrot_job_progress(job_id, 5, "Starting...", status="generating_script")
         # Bulk generation is meant to run fully unattended — no human
         # review step makes sense here, so this uses run_brainrot_full_auto
         # (script -> confirm -> render back to back) rather than the

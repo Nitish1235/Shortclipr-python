@@ -175,6 +175,16 @@ async def run_brainrot_confirm_stage(job_id: str) -> None:
                 await prefetch_task
             return
 
+        # Claim the row for this in-process FFmpeg dispatch immediately —
+        # same race as the one closed in app/api/brainrot.py's job-creation
+        # dispatch: the watcher independently claims status='api_done' rows
+        # (claim_brainrot_ffmpeg_job) regardless of this service's own
+        # single-service-mode setting, and the row just sat visibly at
+        # 'api_done' for however long _execute_brainrot_confirm_stage's own
+        # DB write took to commit. Flipping status here, before
+        # run_brainrot_ffmpeg_stage is even called, closes that window.
+        await db.update_brainrot_job_progress(job_id, 55, "Starting render...", status="rendering")
+
         try:
             prefetched = await prefetch_task
         except Exception as exc:
