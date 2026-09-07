@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppLayout, { SIDEBAR_W } from '../components/AppLayout'
 import ClipEngine from '../components/ClipEngine'
-import FeedbackModal from '../components/FeedbackModal'
 import SocialProofModal from '../components/SocialProofModal'
 import { YTLogo, TTLogo } from '../components/PlatformLogos'
 
@@ -109,13 +108,7 @@ export default function Dashboard() {
   // Post-queue feedback survey — see FeedbackModal.jsx. Reward state
   // mirrors what the backend enforces (server is authoritative; this is
   // just for showing the right button/lock state without an extra fetch).
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false)
-  const [feedbackJobId, setFeedbackJobId]         = useState(null)
   const [showSocialProofModal, setShowSocialProofModal] = useState(false)
-  const [feedbackReward, setFeedbackReward]       = useState(() => {
-    const jobId = localStorage.getItem('sc_feedback_reward_job_id')
-    return jobId ? { jobId, clipId: localStorage.getItem('sc_feedback_reward_clip_id') || null } : null
-  })
 
   const activeSseJobs = useRef(new Set())
   const clipPollRef   = useRef(null)
@@ -764,10 +757,6 @@ export default function Dashboard() {
                 <ClipEngine onJobCreated={(jobId) => {
                   fetchJobs()
                   setShowGeneratePanel(false)
-                  if (jobId && !user?.has_submitted_feedback && !localStorage.getItem('sc_feedback_skipped')) {
-                    setFeedbackJobId(jobId)
-                    setShowFeedbackModal(true)
-                  }
                 }} />
               </div>
             )}
@@ -1589,27 +1578,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── Post-queue feedback survey ── */}
-      {showFeedbackModal && feedbackJobId && (
-        <FeedbackModal
-          jobId={feedbackJobId}
-          onSkip={() => {
-            localStorage.setItem('sc_feedback_skipped', '1')
-            setShowFeedbackModal(false)
-          }}
-          onSubmitted={() => {
-            localStorage.setItem('sc_feedback_reward_job_id', feedbackJobId)
-            setFeedbackReward({ jobId: feedbackJobId, clipId: null })
-            setShowFeedbackModal(false)
-            setShowSocialProofModal(true)
-            const token = localStorage.getItem('sc_token')
-            if (token) fetchUser(token)
-            showToast('Thanks! A free download is unlocked for this job 🎁')
-          }}
-        />
-      )}
-
-      {/* ── Social proof, shown right after feedback submission ── */}
+      {/* ── Social proof ── */}
       {showSocialProofModal && (
         <SocialProofModal onClose={() => setShowSocialProofModal(false)} />
       )}

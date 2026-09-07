@@ -41,20 +41,6 @@ export default function ClipsHistory() {
 
   const isPaid = user?.plan && user.plan !== 'free'
 
-  // Mirrors Dashboard.jsx's feedback-reward state — see FeedbackModal.jsx.
-  // Free-plan users who submitted the post-queue survey get one clip from
-  // that job unlocked for download; server-side enforcement lives in
-  // editor.py's /clips/{id}/download, this is just button-state UX.
-  const [feedbackReward, setFeedbackReward] = useState(() => {
-    const jobId = localStorage.getItem('sc_feedback_reward_job_id')
-    return jobId ? { jobId, clipId: localStorage.getItem('sc_feedback_reward_clip_id') || null } : null
-  })
-  const canFreeDownload = (clip, jobId) => {
-    if (!feedbackReward || String(feedbackReward.jobId) !== String(jobId)) return false
-    const clipId = String(clip.clip_id || clip.id)
-    return !feedbackReward.clipId || String(feedbackReward.clipId) === clipId
-  }
-
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3500)
@@ -189,8 +175,7 @@ export default function ClipsHistory() {
   const handleDownload = (e, clip, jobId) => {
     e.stopPropagation()
     const clipId = clip.clip_id || clip.id
-    const freeOk = canFreeDownload(clip, jobId)
-    if (!isPaid && !freeOk) { navigate('/billing'); return }
+    if (!isPaid) { navigate('/billing'); return }
     const token = localStorage.getItem('sc_token')
     const a = document.createElement('a')
     a.href = `${API_BASE}/clips/${clipId}/download?token=${token}`
@@ -416,14 +401,14 @@ export default function ClipsHistory() {
                             </div>
                             <button
                               onClick={e => handleDownload(e, clip, job.job_id)}
-                              title={isPaid ? 'Download MP4' : canFreeDownload(clip, job.job_id) ? 'Download free (feedback reward)' : 'Upgrade to download'}
+                              title={isPaid ? 'Download MP4' : 'Upgrade to download'}
                               style={{
                                 padding: '5px 7px', borderRadius: 7,
-                                border: (isPaid || canFreeDownload(clip, job.job_id)) ? '1px solid #e5e7eb' : '1px solid #cf1322',
-                                background: (isPaid || canFreeDownload(clip, job.job_id)) ? '#f9fafb' : '#fef2f2',
-                                color: (isPaid || canFreeDownload(clip, job.job_id)) ? '#374151' : '#cf1322', cursor: 'pointer', fontSize: '.7rem',
+                                border: isPaid ? '1px solid #e5e7eb' : '1px solid #cf1322',
+                                background: isPaid ? '#f9fafb' : '#fef2f2',
+                                color: isPaid ? '#374151' : '#cf1322', cursor: 'pointer', fontSize: '.7rem',
                               }}
-                            >{isPaid ? '⬇' : canFreeDownload(clip, job.job_id) ? '🎁' : '💳'}</button>
+                            >{isPaid ? '⬇' : '💳'}</button>
                           </div>
                         </div>
                       )
@@ -520,11 +505,11 @@ export default function ClipsHistory() {
                 onClick={e => handleDownload(e, modalClip, modalJob?.job_id)}
                 style={{
                   padding: '9px 14px', borderRadius: 9,
-                  border: (isPaid || canFreeDownload(modalClip, modalJob?.job_id)) ? '1px solid #e5e7eb' : '1px solid #cf1322',
-                  background: (isPaid || canFreeDownload(modalClip, modalJob?.job_id)) ? '#f9fafb' : '#cf1322',
-                  color: (isPaid || canFreeDownload(modalClip, modalJob?.job_id)) ? '#374151' : '#fff', cursor: 'pointer', fontSize: '.78rem', fontWeight: 700,
+                  border: isPaid ? '1px solid #e5e7eb' : '1px solid #cf1322',
+                  background: isPaid ? '#f9fafb' : '#cf1322',
+                  color: isPaid ? '#374151' : '#fff', cursor: 'pointer', fontSize: '.78rem', fontWeight: 700,
                 }}
-              >{isPaid ? '⬇ Download' : canFreeDownload(modalClip, modalJob?.job_id) ? '🎁 Free Download' : '💳 Upgrade'}</button>
+              >{isPaid ? '⬇ Download' : '💳 Upgrade'}</button>
             </div>
           </div>
         </div>
