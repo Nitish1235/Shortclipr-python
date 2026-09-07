@@ -27,7 +27,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 
 from pydantic import BaseModel, field_validator
 
@@ -40,9 +40,26 @@ from app.pipeline.animation_catalog import DEFAULT_ENTRY, DEFAULT_EXIT, MOTIONS,
 from app.pipeline.captions import VALID_COLORS, VALID_STYLES
 from app.pipeline.voice_catalog import SAMPLE_TEXT, default_voice_for_gender, list_voices
 
-router = APIRouter(prefix="/brainrot", tags=["brainrot"])
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# ── Kill switch ──────────────────────────────────────────────────
+# Brainrot is fully offline for now — every route on this router
+# (including /brainrot/admin/*) rejects with 503. Flip to False to bring
+# it back; nothing else needs to change. Matching flag on the frontend:
+# src/App.jsx's BRAINROT_OFFLINE (blocks the routes/links; this flag only
+# blocks the API — flip both together, since one without the other leaves
+# either a dead UI in front of a live API, or a working UI whose every
+# call 503s).
+BRAINROT_OFFLINE = True
+
+
+def _check_brainrot_offline() -> None:
+    if BRAINROT_OFFLINE:
+        raise HTTPException(status_code=503, detail="Brainrot is temporarily unavailable.")
+
+
+router = APIRouter(prefix="/brainrot", tags=["brainrot"], dependencies=[Depends(_check_brainrot_offline)])
 
 VALID_MOTION_MODES = ["turn_based", "always_on"]
 DEFAULT_CAPTION_STYLE = "brainrot"

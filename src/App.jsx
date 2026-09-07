@@ -164,6 +164,34 @@ function ProtectedRoute({ children, fallback = '/youtube-shorts' }) {
   return children
 }
 
+// ── Brainrot kill switch ──────────────────────────────────────────
+// Flip to false to bring the whole product back — nothing else needs to
+// change, every original route below is still intact. Matching flag on
+// the backend: backend/app/api/brainrot.py's BRAINROT_OFFLINE (blocks the
+// API itself; this flag only blocks the frontend routes/links — flip both
+// together, since one without the other leaves either a dead UI in front
+// of a live API, or a working UI whose every call 503s).
+const BRAINROT_OFFLINE = true
+
+function BrainrotOfflinePage() {
+  return (
+    <div style={{
+      minHeight: '100vh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', gap: 12,
+      fontFamily: `'Inter', system-ui, -apple-system, sans-serif`,
+      textAlign: 'center', padding: 24, background: '#fff', color: '#111',
+    }}>
+      <h1 style={{ fontSize: '1.4rem', fontWeight: 600, margin: 0 }}>Brainrot is temporarily unavailable</h1>
+      <p style={{ color: '#888', maxWidth: 420, margin: 0, fontSize: '.92rem' }}>
+        We've taken it offline for now. Check back soon.
+      </p>
+      <a href="/youtube-shorts" style={{ marginTop: 12, color: '#cf1322', fontWeight: 600, fontSize: '.9rem' }}>
+        Go to ShortClipr →
+      </a>
+    </div>
+  )
+}
+
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => {
@@ -217,24 +245,30 @@ export default function App() {
             <Route path="/youtube-shorts/lab"                   element={<ProtectedRoute><Lab /></ProtectedRoute>} />
             <Route path="/youtube-shorts/settings"              element={<ProtectedRoute><Settings /></ProtectedRoute>} />
 
-            {/* ── Brainrot Clips Maker product ──────────────────── */}
-            <Route path="/brainrot"          element={<BrainrotLanding />} />
+            {/* ── Brainrot Clips Maker product — OFFLINE, see BRAINROT_OFFLINE above ── */}
+            {BRAINROT_OFFLINE ? (
+              <Route path="/brainrot/*" element={<BrainrotOfflinePage />} />
+            ) : (
+              <>
+                <Route path="/brainrot"          element={<BrainrotLanding />} />
 
-            {/* Brainrot SEO pages */}
-            <Route path="/brainrot/tools"                element={<BrainrotToolsIndex />} />
-            <Route path="/brainrot/tools/:slug"           element={<BrainrotToolLanding />} />
-            <Route path="/brainrot/alternatives"          element={<BrainrotAlternativesIndex />} />
-            <Route path="/brainrot/alternatives/:slug"    element={<BrainrotAlternativeLanding />} />
-            <Route path="/brainrot/guides"                element={<BrainrotGuidesIndex />} />
-            <Route path="/brainrot/guides/:slug"          element={<BrainrotGuideArticle />} />
+                {/* Brainrot SEO pages */}
+                <Route path="/brainrot/tools"                element={<BrainrotToolsIndex />} />
+                <Route path="/brainrot/tools/:slug"           element={<BrainrotToolLanding />} />
+                <Route path="/brainrot/alternatives"          element={<BrainrotAlternativesIndex />} />
+                <Route path="/brainrot/alternatives/:slug"    element={<BrainrotAlternativeLanding />} />
+                <Route path="/brainrot/guides"                element={<BrainrotGuidesIndex />} />
+                <Route path="/brainrot/guides/:slug"          element={<BrainrotGuideArticle />} />
 
-            {/* Auth */}
-            <Route path="/brainrot/login"    element={<BrainrotLogin />} />
+                {/* Auth */}
+                <Route path="/brainrot/login"    element={<BrainrotLogin />} />
 
-            {/* Protected — user must be logged in */}
-            <Route path="/brainrot/studio"   element={<ProtectedRoute fallback="/brainrot/login"><BrainrotStudio /></ProtectedRoute>} />
-            <Route path="/brainrot/billing"  element={<ProtectedRoute fallback="/brainrot"><BrainrotBilling /></ProtectedRoute>} />
-            <Route path="/brainrot/settings" element={<ProtectedRoute fallback="/brainrot"><BrainrotSettings /></ProtectedRoute>} />
+                {/* Protected — user must be logged in */}
+                <Route path="/brainrot/studio"   element={<ProtectedRoute fallback="/brainrot/login"><BrainrotStudio /></ProtectedRoute>} />
+                <Route path="/brainrot/billing"  element={<ProtectedRoute fallback="/brainrot"><BrainrotBilling /></ProtectedRoute>} />
+                <Route path="/brainrot/settings" element={<ProtectedRoute fallback="/brainrot"><BrainrotSettings /></ProtectedRoute>} />
+              </>
+            )}
           </Routes>
         </BrowserRouter>
       </AuthProvider>
