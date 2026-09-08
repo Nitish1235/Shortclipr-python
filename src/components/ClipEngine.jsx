@@ -1043,7 +1043,7 @@ export default function ClipEngine({ onJobCreated }) {
              <div style={{ fontWeight: 800, fontSize: '1rem', color: '#111', marginBottom: '4px' }}>Starter</div>
              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#111', marginBottom: '12px' }}>$10<span style={{ fontSize: '0.8rem', color: '#666', fontWeight: 500}}>/mo</span></div>
              <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.75rem', color: '#555', lineHeight: 1.8 }}>
-               <li>✓ 75 shorts/mo</li>
+               <li>✓ 50 shorts/mo</li>
                <li>✓ HD vertical exports</li>
                <li>✓ MP4 download</li>
              </ul>
@@ -1054,7 +1054,7 @@ export default function ClipEngine({ onJobCreated }) {
              <div style={{ fontWeight: 800, fontSize: '1rem', color: '#111', marginBottom: '4px' }}>Starter+</div>
              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#111', marginBottom: '12px' }}>$25<span style={{ fontSize: '0.8rem', color: '#666', fontWeight: 500}}>/mo</span></div>
              <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.75rem', color: '#555', lineHeight: 1.8 }}>
-               <li>✓ 200 shorts/mo</li>
+               <li>✓ 180 shorts/mo</li>
                <li>✓ Faster processing</li>
                <li>✓ Clip editor</li>
              </ul>
@@ -1066,7 +1066,7 @@ export default function ClipEngine({ onJobCreated }) {
              <div style={{ fontWeight: 800, fontSize: '1rem', color: '#111', marginBottom: '4px' }}>Pro</div>
              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#cf1322', marginBottom: '12px' }}>$45<span style={{ fontSize: '0.8rem', color: '#666', fontWeight: 500}}>/mo</span></div>
              <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.75rem', color: '#555', lineHeight: 1.8 }}>
-               <li>✓ 400 shorts/mo</li>
+               <li>✓ 350 shorts/mo</li>
                <li>✓ Priority queue</li>
                <li>✓ Batch download</li>
              </ul>
@@ -1077,7 +1077,7 @@ export default function ClipEngine({ onJobCreated }) {
              <div style={{ fontWeight: 800, fontSize: '1rem', color: '#111', marginBottom: '4px' }}>Pro+</div>
              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#111', marginBottom: '12px' }}>$79<span style={{ fontSize: '0.8rem', color: '#666', fontWeight: 500}}>/mo</span></div>
              <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.75rem', color: '#555', lineHeight: 1.8 }}>
-               <li>✓ 800 shorts/mo</li>
+               <li>✓ 700 shorts/mo</li>
                <li>✓ Everything in Pro</li>
                <li>✓ API access</li>
              </ul>

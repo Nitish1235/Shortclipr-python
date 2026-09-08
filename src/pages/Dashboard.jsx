@@ -1607,8 +1607,8 @@ export default function Dashboard() {
             </p>
             <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:24 }}>
               {[
-                { name:'Starter', price:'$10/mo', perks:'75 shorts · Editor · Downloads' },
-                { name:'Pro',     price:'$45/mo', perks:'400 shorts · Priority · Everything' },
+                { name:'Starter', price:'$10/mo', perks:'50 shorts · Editor · Downloads' },
+                { name:'Pro',     price:'$45/mo', perks:'350 shorts · Priority · Everything' },
               ].map(plan => (
                 <div key={plan.name} style={{
                   border:'1px solid #e5e5e5', borderRadius:10, padding:'14px 16px',

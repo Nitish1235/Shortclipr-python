@@ -35,11 +35,11 @@ cap beyond the global default already enforced by JobOptions validators":
 #  users.plan value still resolves correctly (asyncpg would fall through
 #  to `free` for an unknown key). The customer-facing label is set in
 #  src/components/Pricing.jsx and doesn't need to match this key.
-#  ── legacy slider tiers (kept for existing subscribers) ──
-#  starter_100     $10     75    5 hrs (300)    2 hrs (120)
-#  starter_250     $25    200   10 hrs (600)    2 hrs (120)
-#  pro_500         $45    400   18 hrs (1080)   3 hrs (180)
-#  pro_1000        $79    800   35 hrs (2100)   3 hrs (180)
+#  ── legacy slider tiers (kept for existing subscribers) ── (updated 2026-09)
+#  starter_100     $10     50    5 hrs (300)    2 hrs (120)
+#  starter_250     $25    180   10 hrs (600)    2 hrs (120)
+#  pro_500         $45    350   18 hrs (1080)   3 hrs (180)
+#  pro_1000        $79    700   35 hrs (2100)   3 hrs (180)
 #  pro_2000       $145   1500   60 hrs (3600)   3 hrs (180)
 #  starter (leg.)   —     20    5 hrs  (300)    2 hrs (120)
 #  pro     (leg.)   —   ∞/999K 60 hrs (3600)   6 hrs (360)
@@ -82,28 +82,29 @@ PLAN_LIMITS: dict[str, dict] = {
     },
 
     # ── Legacy slider tiers (kept for existing subscribers) ───
+    # Shorts/month lowered 2026-09 — see Pricing.jsx TIERS (`clips`), keep in sync.
     "starter_100": {
-        "credits_limit":       75,
+        "credits_limit":       50,    # was 75
         "video_minutes_limit": 300,   # 5 hrs/month
         "max_video_minutes":   120,   # 2 hrs max single video
     },
     "starter_250": {
-        "credits_limit":       200,
+        "credits_limit":       180,   # was 200
         "video_minutes_limit": 600,   # 10 hrs/month
         "max_video_minutes":   120,
     },
     "pro_500": {
-        "credits_limit":       400,
+        "credits_limit":       350,   # was 400
         "video_minutes_limit": 1080,  # 18 hrs/month
         "max_video_minutes":   180,   # 3 hrs max single video
     },
     "pro_1000": {
-        "credits_limit":       800,
+        "credits_limit":       700,   # was 800
         "video_minutes_limit": 2100,  # 35 hrs/month
         "max_video_minutes":   180,
     },
     "pro_2000": {
-        "credits_limit":       1500,
+        "credits_limit":       1500,  # unchanged (Max)
         "video_minutes_limit": 3600,  # 60 hrs/month
         "max_video_minutes":   180,
     },

@@ -83,8 +83,8 @@ export default function Terms() {
             <h3>5.1 Plan Structure</h3>
             <ul>
               <li><strong>Free:</strong> 2 shorts per month, no credit card required</li>
-              <li><strong>Starter (from $10/month):</strong> 75–200 shorts per month</li>
-              <li><strong>Pro (from $45/month):</strong> 400–1,500 shorts per month</li>
+              <li><strong>Starter (from $10/month):</strong> 50–180 shorts per month</li>
+              <li><strong>Pro (from $45/month):</strong> 350–1,500 shorts per month</li>
             </ul>
             <p>
               Charges are per <strong>video processed</strong>, not per minute of source video.
