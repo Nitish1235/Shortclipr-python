@@ -12,8 +12,6 @@ async job dispatch is routed:
 
 Used by:
   - editor.py            (synchronous caption re-render dispatch)
-  - admin.py              (test lab, admin batch generation)
-  - admin_marketing.py    (marketing video rendering)
 All of these are CPU-heavy FFmpeg work, so they use the FFmpeg-pool helpers.
 """
 

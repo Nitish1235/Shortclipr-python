@@ -30,7 +30,6 @@ from app.pipeline.api_stage import run_api_stage
 from app.pipeline.captions import Caption
 from app.pipeline.ffmpeg_stage import run_ffmpeg_stage
 from app.pipeline.orchestrator import run_pipeline
-from app.pipeline.test_pipeline import run_test_pipeline
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -189,58 +188,6 @@ async def internal_run_gameplay_process(body: InternalGameplayProcessRequest, x_
     return {"status": "accepted"}
 
 
-class InternalTestRequest(BaseModel):
-    job_id: str
-    youtube_url: str
-    quality: str = "1080p"
-
-
-@router.post("/test/run", status_code=202)
-async def internal_run_test(body: InternalTestRequest, x_internal_secret: str = Header(default="")):
-    _require_internal_secret(x_internal_secret)
-    asyncio.create_task(
-        run_test_pipeline(body.job_id, body.youtube_url, body.quality),
-        name=f"test-{body.job_id[:8]}",
-    )
-    return {"status": "accepted"}
-
-
-class InternalMarketingRequest(BaseModel):
-    job_id: str
-    config: dict
-
-
-@router.post("/marketing/render", status_code=202)
-async def internal_run_marketing(body: InternalMarketingRequest, x_internal_secret: str = Header(default="")):
-    _require_internal_secret(x_internal_secret)
-    from app.api.admin_marketing import run_marketing_render
-    asyncio.create_task(
-        run_marketing_render(body.job_id, body.config),
-        name=f"mktg-{body.job_id[:8]}",
-    )
-    return {"status": "accepted"}
-
-
-@router.get("/marketing/jobs/{job_id}", status_code=200)
-async def internal_get_marketing_job(job_id: str, x_internal_secret: str = Header(default="")):
-    _require_internal_secret(x_internal_secret)
-    from app.api.admin_marketing import _marketing_jobs
-    job = _marketing_jobs.get(job_id)
-    if job is None:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Marketing job not found")
-    return job
-
-
-@router.get("/test/jobs/{job_id}", status_code=200)
-async def internal_get_test_job(job_id: str, x_internal_secret: str = Header(default="")):
-    _require_internal_secret(x_internal_secret)
-    from app.pipeline.test_pipeline import get_test_job
-    job = get_test_job(job_id)
-    if job is None:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Test job not found")
-    return job
 
 
 class InternalRenderRequest(BaseModel):

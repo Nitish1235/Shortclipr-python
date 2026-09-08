@@ -41,7 +41,6 @@ import DMCA           from './pages/DMCA'
 import Editor         from './pages/Editor'
 import Lab            from './pages/Lab'
 import Admin          from './pages/Admin'
-import AdminMarketingEditor from './pages/AdminMarketingEditor'
 import BrainrotStudio    from './pages/brainrot/BrainrotStudio'
 import BrainrotLogin     from './pages/brainrot/BrainrotLogin'
 import BrainrotSettings  from './pages/brainrot/BrainrotSettings'
@@ -224,7 +223,6 @@ export default function App() {
 
             {/* Admin — no separate auth guard on frontend, backend enforces admin check */}
             <Route path="/admin"                 element={<ProtectedRoute><Admin /></ProtectedRoute>} />
-            <Route path="/admin/marketing-editor" element={<ProtectedRoute><AdminMarketingEditor /></ProtectedRoute>} />
 
             {/* ── YouTube Shorts product ────────────────────────── */}
             <Route path="/youtube-shorts"                      element={<LandingPage />} />

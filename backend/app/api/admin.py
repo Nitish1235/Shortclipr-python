@@ -13,9 +13,14 @@ Endpoints:
   ADMIN (requires ADMIN_EMAIL in JWT):
     GET  /admin/jobs                — all jobs across all users
     GET  /admin/jobs/{job_id}/clips — clips for any job
+    GET  /admin/jobs/{job_id}/status — poll progress of any job
     POST /admin/showcase/add        — copy clip → showcase folder in GCS
     DELETE /admin/showcase/{name}   — remove from showcase
     GET  /admin/showcase            — list showcase with edit metadata
+    GET  /admin/users/by-email      — look up a user before assigning a job
+    POST /admin/jobs/assign         — generate a clip job and assign it to
+                                       another user by email (support tool
+                                       for retrying failed user jobs)
 """
 
 import asyncio
@@ -29,9 +34,11 @@ from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, get_current_user
 from app.core.config import get_settings
-from app.core.worker_routing import has_ffmpeg_workers, pick_primary_ffmpeg_worker
+from app.core.worker_routing import has_multi_region_workers
 from app.db import supabase as db
-from app.pipeline.test_pipeline import TOTAL_CLIPS, get_test_job, run_test_pipeline
+from app.api.jobs import JobOptions
+from app.pipeline.orchestrator import run_pipeline
+from app.pipeline.stream import extract_video_id, get_video_metadata
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -580,73 +587,127 @@ async def admin_list_gcs_clips(admin: AdminUser):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── ADMIN: Test Lab — batch generation (no AI scoring) ─────────
+# ── ADMIN: Generate & assign a clip job to any user by email ───
+#
+# Support tool: when a user's job fails (proxy issues, YouTube blocks, etc.),
+# the admin can manually generate the clips and hand them to the user as if
+# they'd generated it themselves — same dashboard visibility, same "clips
+# ready" email — by creating a normal job row keyed to the TARGET user's
+# user_id instead of the admin's own. ffmpeg_stage.py's completion email
+# and jobs.py's GET /jobs both key off user_id already, so nothing else
+# needs to change for either of those to "just work".
 
-class TestGenerateRequest(BaseModel):
+@router.get("/admin/users/by-email")
+async def admin_find_user_by_email(email: str, admin: AdminUser):
+    """Admin: look up a user by email before assigning a job to them."""
+    user = await db.get_user_by_email(email.strip().lower())
+    if not user:
+        raise HTTPException(status_code=404, detail="No user with that email")
+    return {
+        "id": str(user["id"]),
+        "email": user["email"],
+        "full_name": user.get("full_name") or "",
+        "plan": user.get("plan") or "free",
+    }
+
+
+class AdminAssignJobRequest(BaseModel):
+    email: str
     youtube_url: str
-    quality: str = "1080p"
+    options: JobOptions = JobOptions()
 
 
-@router.post("/admin/test/generate")
-async def admin_test_generate(body: TestGenerateRequest, admin: AdminUser):
+@router.post("/admin/jobs/assign")
+async def admin_assign_job(body: AdminAssignJobRequest, admin: AdminUser):
     """
-    Admin: kick off a test batch (no AI scoring) — clip count tracks
-    VALID_STYLES + VALID_TEMPLATES, currently 11 + 5 = 16 clips.
+    Admin: generate clips for a YouTube URL and assign the resulting job to
+    another user by email — as a full stand-in for a normal job (same
+    pipeline, same dashboard visibility, same completion email).
 
-    - First block:  sequential 30s segments, one per caption style (VALID_STYLES)
-    - Second block: sequential 30s segments, one per shorts template (VALID_TEMPLATES)
-
-    Returns a job_id to poll via GET /admin/test/jobs/{job_id}.
+    Deliberately skips the credit/video-minutes reservation gates that
+    POST /jobs enforces — this is an admin-comped job and must not eat
+    into the target user's plan quota.
     """
-    job_id = f"test_{uuid.uuid4().hex[:12]}"
+    target_user = await db.get_user_by_email(body.email.strip().lower())
+    if not target_user:
+        raise HTTPException(status_code=404, detail="No user with that email")
+    target_user_id = str(target_user["id"])
 
-    if has_ffmpeg_workers():
-        # Dispatch to a worker — always the SAME (primary) one, not
-        # round-robin, since this admin test pipeline keeps its progress
-        # state in-memory on whichever single instance handles it (see
-        # admin_test_job_status below, which must poll that same instance).
-        target = pick_primary_ffmpeg_worker()
-        async def _dispatch():
-            try:
-                import httpx
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    resp = await client.post(
-                        f"{target.worker_url}/internal/test/run",
-                        json={"job_id": job_id, "youtube_url": body.youtube_url, "quality": body.quality},
-                        headers={"X-Internal-Secret": settings.INTERNAL_TASK_SECRET},
-                    )
-                    resp.raise_for_status()
-            except Exception:
-                logger.exception(f"[{job_id}] Failed to dispatch test batch to worker")
-        asyncio.create_task(_dispatch(), name=f"test-dispatch-{job_id[:8]}")
+    video_id = extract_video_id(body.youtube_url)
+    if not video_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid YouTube URL — paste a valid youtube.com or youtu.be link.",
+        )
+
+    try:
+        video_meta = await get_video_metadata(video_id)
+    except Exception as exc:
+        logger.warning(f"[admin-assign] Metadata prefetch failed for {video_id}: {exc}")
+        video_meta = {"title": "", "duration": 0, "thumbnail": ""}
+
+    options = body.options.model_dump()
+    video_duration_seconds = int(video_meta.get("duration", 0))
+    if video_duration_seconds > 0:
+        options["prefetched_duration"] = video_duration_seconds
+        options["prefetched_title"]    = video_meta.get("title", "")
+    options["plan"] = target_user.get("plan") or "free"
+    # No reserved_credits key — ffmpeg_stage.py's refund-on-failure logic
+    # treats a missing/zero value as "nothing to release", so this is a
+    # true no-cost job from the target user's quota perspective.
+
+    job_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    multi_region = bool(settings.API_WORKER_URLS.strip() or settings.FFMPEG_WORKER_URLS.strip()) or has_multi_region_workers()
+    initial_status = "created" if multi_region else "processing"
+
+    queue_payload = {
+        "job_id": job_id, "user_id": target_user_id,
+        "youtube_url": body.youtube_url, "options": options,
+    } if multi_region else None
+
+    await db._execute(
+        """
+        INSERT INTO jobs
+          (job_id, user_id, youtube_url, status, pipeline_stage, progress,
+           current_step, clip_count, reserved_video_minutes,
+           queue_payload, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,'api',$5,$6,$7,0,$8::jsonb,$9,$9)
+        """,
+        job_id,
+        target_user_id,
+        body.youtube_url,
+        initial_status,
+        0,
+        "Starting pipeline..." if not multi_region else "Queued...",
+        body.options.clip_count,
+        queue_payload,
+        now,
+    )
+
+    if multi_region:
+        pool = await db.get_pool()
+        await pool.execute("SELECT pg_notify('new_job', $1)", job_id)
     else:
-        asyncio.create_task(run_test_pipeline(job_id, body.youtube_url, body.quality))
+        asyncio.create_task(
+            run_pipeline(job_id, target_user_id, body.youtube_url, options),
+            name=f"admin-assign-{job_id[:8]}",
+        )
 
-    logger.info(f"Admin {admin.email} started test batch {job_id} for {body.youtube_url}")
-    return {"job_id": job_id, "total_clips": TOTAL_CLIPS}
+    logger.info(f"Admin {admin.email} generated job {job_id} for {body.email}")
+    return {"job_id": job_id, "assigned_to": body.email}
 
 
-@router.get("/admin/test/jobs/{job_id}")
-async def admin_test_job_status(job_id: str, admin: AdminUser):
-    """Admin: poll progress of a test batch.
-
-    When worker dispatch is configured, the job runs on the (primary)
-    worker and its in-memory state lives there — proxy the request to it.
-    """
-    if has_ffmpeg_workers():
-        target = pick_primary_ffmpeg_worker()
-        import httpx
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                f"{target.worker_url}/internal/test/jobs/{job_id}",
-                headers={"X-Internal-Secret": settings.INTERNAL_TASK_SECRET},
-            )
-        if resp.status_code == 404:
-            raise HTTPException(status_code=404, detail="Test job not found")
-        resp.raise_for_status()
-        return resp.json()
-
-    job = get_test_job(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="Test job not found")
-    return job
+@router.get("/admin/jobs/{job_id}/status")
+async def admin_job_status(job_id: str, admin: AdminUser):
+    """Admin: poll progress of any job (normal /jobs/{id}/stream 404s for non-owners)."""
+    job = await db.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {
+        "status":        job.get("status"),
+        "progress":      job.get("progress", 0),
+        "current_step":  job.get("current_step") or "",
+        "clip_count":    job.get("clip_count", 0),
+        "error_message": job.get("error_message"),
+    }

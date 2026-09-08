@@ -3,13 +3,12 @@ stream.py — Step 3 of the ShortClipr pipeline.
 
 Stream URL extraction: multi-method fallback chain, all via DataImpulse (rotating residential).
 
-Priority order (most reliable → broadest compatibility, 2026-08 rework):
-  1. yt-dlp + DataImpulse + mweb          (PO-token-backed — see below)
-  2. yt-dlp + DataImpulse + tv            (no PO token required at all)
-  3. yt-dlp + DataImpulse + tv_embedded   (long-time workhorse)
-  4. yt-dlp + DataImpulse + web           (PO-token-backed)
-  5. yt-dlp + DataImpulse + android_music / android_creator
-  6. yt-dlp + DataImpulse (relaxed → unconstrained last resorts)
+Priority order (most reliable → fallbacks, 2026-09 rework):
+  1. yt-dlp + DataImpulse + tv_embedded   (reliable workhorse, no PO token)
+  2. yt-dlp + DataImpulse + android_music / android_creator (broadest compat)
+  3. yt-dlp + DataImpulse (relaxed → unconstrained last resorts)
+
+NOTE: mweb/tv removed 2026-09 (consistently fail in production; tv_embedded works reliably)
 
 PO tokens: the bgutil-ytdlp-pot-provider plugin (requirements.txt) +
 its node sidecar (Dockerfile, 127.0.0.1:4416) auto-generate BotGuard
@@ -933,11 +932,9 @@ async def get_stream_urls(
     h = int(quality.rstrip("p"))
     loop = asyncio.get_running_loop()
 
-    # ── 1-5. yt-dlp + mweb, tv, tv_embedded, android_music, android_creator
-    # — all with audio, tried in order (see docstring for why) ──
+    # ── 1-3. yt-dlp clients (tv_embedded works reliably, mweb/tv removed as dead fallbacks)
+    # — all with audio, tried in order ──
     for client, label in (
-        ("mweb", "yt-dlp mweb"),
-        ("tv", "yt-dlp tv"),
         ("tv_embedded", "yt-dlp tv_embedded"),
         ("android_music", "yt-dlp android_music"),
         ("android_creator", "yt-dlp android_creator"),
@@ -1064,10 +1061,9 @@ async def get_stream_urls_high_quality(
     cap = max_height or min_height
     logger.info(f"[{video_id}] resolving HQ stream (min={min_height}p, max={max_height or 'uncapped'}p)")
 
-    # ── 1-3. yt-dlp + mweb (PO-token-backed), tv (no token needed),
-    # tv_embedded — same HQ selector, in that order. ─────────────────────
+    # ── 1. yt-dlp + tv_embedded — reliable workhorse, same HQ selector. ──
     loop = asyncio.get_running_loop()
-    for client, label in (("mweb", "mweb"), ("tv", "tv"), ("tv_embedded", "tv_embedded")):
+    for client, label in (("tv_embedded", "tv_embedded"),):
         proxy = proxy_override or get_dataimpulse_proxy(purpose=f"stream-ytdlp-hq-{client}")
         opts = _ytdlp_base_opts(proxy, client=client)
         opts["format"] = _fmt_high_quality(min_height, max_height)

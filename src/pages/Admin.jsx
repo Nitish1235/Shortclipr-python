@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Logo from '../components/Logo'
-// TODO: replace with real import once brainrot is deployed:
-import BrainrotAdminPanel from './brainrot/BrainrotAdminPanel'
 import AdminTikTokAccounts, { AddToTikTokAccountButton } from './AdminTikTokAccounts'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8080'
@@ -352,185 +350,6 @@ function JobFeedback({ jobId }) {
   )
 }
 
-function GcsClipBrowser() {
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  const check = async () => {
-    setLoading(true)
-    setError('')
-    try {
-      const r = await authFetch('/admin/gcs/clips')
-      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Failed to list clips')
-      setData(await r.json())
-    } catch (e) {
-      setError(e.message)
-      setData(null)
-    }
-    setLoading(false)
-  }
-
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-        <div>
-          <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111' }}>GCS Clip Browser</h2>
-          <p style={{ fontSize: '0.78rem', color: '#999', marginTop: '2px' }}>
-            Lists every clip stored in the bucket (real jobs + test batches), grouped by job.
-          </p>
-        </div>
-        <button onClick={check} disabled={loading} style={{ ...btnRed, padding: '9px 18px', fontSize: '0.78rem' }}>
-          {loading ? 'Checking…' : '🔎 Check All Videos'}
-        </button>
-      </div>
-
-      {error && <div style={{ ...card, borderColor: '#fecaca', background: '#fef2f2', color: '#cf1322', fontSize: '0.82rem', marginBottom: '14px' }}>{error}</div>}
-
-      {data && (
-        <>
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
-            <span style={badge('#16a34a', '#f0fdf4')}>{data.total_jobs} jobs</span>
-            <span style={badge('#cf1322', '#fef2f2')}>{data.total_clips} clips</span>
-          </div>
-          {!data.jobs.length ? (
-            <div style={{ textAlign: 'center', padding: '32px', color: '#aaa' }}>No clips found in GCS yet.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {data.jobs.map(j => (
-                <div key={j.job_id} style={card}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#111', fontFamily: 'monospace' }}>{j.job_id}</span>
-                    {j.is_test && <span style={badge('#ca8a04', '#fefce8')}>TEST BATCH</span>}
-                    <span style={badge('#666', '#f4f4f4')}>{j.clip_count} clips</span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px' }}>
-                    {j.clips.map(c => (
-                      <div key={c.clip_id} style={{ background: '#111', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
-                        <video src={c.video_url} muted controls poster={c.thumbnail_url}
-                          style={{ width: '100%', aspectRatio: '9/16', objectFit: 'cover', display: 'block' }} />
-                        <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', fontSize: '0.62rem', color: '#fff', background: 'rgba(0,0,0,0.6)', borderRadius: '4px', padding: '2px 5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {c.clip_id}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  )
-}
-
-function TestLabGenerator({ showToast }) {
-  const [url, setUrl] = useState('')
-  const [jobId, setJobId] = useState(null)
-  const [job, setJob] = useState(null)
-  const [starting, setStarting] = useState(false)
-
-  useEffect(() => {
-    if (!jobId) return
-    if (job && (job.status === 'completed' || job.status === 'failed')) return
-    const t = setInterval(async () => {
-      const r = await authFetch(`/admin/test/jobs/${jobId}`)
-      if (r.ok) setJob(await r.json())
-    }, 3000)
-    return () => clearInterval(t)
-  }, [jobId, job])
-
-  const start = async (e) => {
-    e.preventDefault()
-    if (!url.trim()) return
-    setStarting(true)
-    setJob(null)
-    try {
-      const r = await authFetch('/admin/test/generate', { method: 'POST', body: JSON.stringify({ youtube_url: url.trim() }) })
-      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Failed to start test batch')
-      const d = await r.json()
-      setJobId(d.job_id)
-      setJob({ status: 'processing', progress: 0, current_step: 'Starting...', clips: [], total_clips: d.total_clips })
-    } catch (e) {
-      showToast(e.message, 'error')
-    }
-    setStarting(false)
-  }
-
-  return (
-    <div>
-      <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111', marginBottom: '8px' }}>16-Clip Test Batch</h2>
-      <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '20px', lineHeight: 1.6 }}>
-        Paste a YouTube URL. No AI scoring — clips are sequential 30s segments from the start of the video.
-        First block cycles through every <strong>caption style</strong> (11) using the crop_fill template.
-        Second block cycles through every <strong>shorts template</strong> (5) using the minimal caption style.
-        All clips include real face tracking and zoom beats.
-      </p>
-
-      <form onSubmit={start} style={{ ...card, marginBottom: '20px' }}>
-        <div style={{ display: 'flex', borderRadius: '8px', border: '2px solid #111', overflow: 'hidden', boxShadow: '2px 2px 0 #cf1322' }}>
-          <input
-            type="url" value={url} onChange={e => setUrl(e.target.value)}
-            placeholder="https://youtube.com/watch?v=..."
-            style={{ flex: 1, padding: '13px 14px', border: 'none', outline: 'none', fontSize: '0.9rem', minWidth: 0 }}
-          />
-          <button type="submit" disabled={starting || (job && job.status === 'processing')} style={{ ...btnRed, borderRadius: '0', border: 'none', padding: '13px 20px', boxShadow: 'none' }}>
-            {starting ? 'Starting…' : '⚡ Generate'}
-          </button>
-        </div>
-      </form>
-
-      {job && (
-        <div style={{ ...card, marginBottom: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.78rem', color: '#666' }}>
-            <span>{job.current_step || '...'}</span>
-            <span>{job.progress || 0}%</span>
-          </div>
-          <div style={{ background: '#f4f4f4', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
-            <div style={{
-              height: '100%', width: `${job.progress || 0}%`,
-              background: job.status === 'failed' ? '#dc2626' : 'linear-gradient(90deg,#cf1322,#ff6b6b)',
-              borderRadius: '4px', transition: 'width 0.5s ease',
-            }} />
-          </div>
-          {job.status === 'failed' && (
-            <div style={{ marginTop: '10px', color: '#dc2626', fontSize: '0.8rem' }}>❌ {job.error}</div>
-          )}
-        </div>
-      )}
-
-      {job && job.clips && job.clips.length > 0 && (
-        <div>
-          {/* Phase 1: caption styles */}
-          <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111', marginBottom: '10px' }}>
-            📝 Caption Styles ({job.clips.filter(c => c.phase === 'caption_style').length}/11)
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-            {job.clips.filter(c => c.phase === 'caption_style').map(c => (
-              <ShortCard key={c.index} clip={c} label={c.style} />
-            ))}
-          </div>
-
-          {/* Phase 2: shorts templates */}
-          {job.clips.some(c => c.phase === 'short_template') && (
-            <>
-              <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111', marginBottom: '10px' }}>
-                🎬 Shorts Templates ({job.clips.filter(c => c.phase === 'short_template').length}/11)
-              </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
-                {job.clips.filter(c => c.phase === 'short_template').map(c => (
-                  <ShortCard key={c.index} clip={c} label={c.template} />
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
 function EmailBroadcast({ showToast }) {
   const [mode, setMode] = useState('subscribers')
   const [query, setQuery] = useState("SELECT email FROM users WHERE plan != 'free'")
@@ -783,138 +602,6 @@ function EmailBroadcast({ showToast }) {
   )
 }
 
-function ShortCard({ clip, label }) {
-  return (
-    <div style={{ ...card, padding: '0', overflow: 'hidden', aspectRatio: '1 / 1', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ position: 'relative', flex: 1, background: '#111', overflow: 'hidden' }}>
-        {clip.error ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#ff6b6b', fontSize: '0.7rem', padding: '8px', textAlign: 'center' }}>
-            ❌ {clip.error}
-          </div>
-        ) : clip.video_url ? (
-          <video src={clip.video_url} muted controls poster={clip.thumbnail_url}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#666', fontSize: '0.78rem' }}>
-            <div style={{ width: '18px', height: '18px', border: '2px solid #333', borderTopColor: '#cf1322', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-          </div>
-        )}
-      </div>
-      <div style={{ padding: '7px 10px', fontSize: '0.72rem', fontWeight: 700, color: '#111', textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {String(label).replace(/_/g, ' ')}
-      </div>
-    </div>
-  )
-}
-
-// ── Brainrot jobs history — parallel to the YT-Shorts "All Jobs" list,
-// kept as its own tab since the two job shapes don't overlap (script/cast/
-// gameplay vs. source video/clip count) ─────────────────────────
-const BRAINROT_STATUS_COLORS = {
-  complete: ['#16a34a', '#f0fdf4'],
-  failed: ['#dc2626', '#fef2f2'],
-  created: ['#ca8a04', '#fefce8'],
-  generating_script: ['#7c3aed', '#f5f3ff'],
-  synthesizing_voice: ['#7c3aed', '#f5f3ff'],
-  rendering: ['#7c3aed', '#f5f3ff'],
-  api_done: ['#7c3aed', '#f5f3ff'],
-}
-
-function BrainrotJobsPanel() {
-  const [jobs, setJobs] = useState([])
-  const [loading, setLoading] = useState(false)
-
-  const fetchJobs = async () => {
-    setLoading(true)
-    try {
-      const r = await authFetch('/brainrot/admin/jobs')
-      const d = await r.json()
-      setJobs(d.jobs || [])
-    } catch { setJobs([]) }
-    setLoading(false)
-  }
-
-  useEffect(() => { fetchJobs() }, [])
-
-  const statusBadge = (status) => {
-    const [color, bg] = BRAINROT_STATUS_COLORS[status] || ['#666', '#f4f4f4']
-    return <span style={{ ...badge(color, bg), textTransform: 'capitalize' }}>{(status || '').replace(/_/g, ' ')}</span>
-  }
-
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-        <div>
-          <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111' }}>Brainrot Jobs</h2>
-          <p style={{ fontSize: '0.78rem', color: '#999', marginTop: '2px' }}>
-            Every brainrot clip generated, across all users.
-          </p>
-        </div>
-        <button onClick={fetchJobs} style={{ ...btnOutline, fontSize: '0.75rem', padding: '6px 12px' }}>
-          🔄 Refresh
-        </button>
-      </div>
-
-      {loading ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#aaa', padding: '20px' }}>
-          <div style={{ width: '18px', height: '18px', border: '2px solid #fecaca', borderTopColor: '#cf1322', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-          Loading jobs…
-        </div>
-      ) : !jobs.length ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: '#aaa' }}>
-          <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🧠</div>
-          <p>No brainrot jobs found.</p>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {jobs.map(job => (
-            <div key={job.job_id} style={{ ...card }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111', marginBottom: '3px' }}>
-                    {job.script_input
-                      ? (job.script_input.length > 90 ? job.script_input.slice(0, 90) + '…' : job.script_input)
-                      : <em style={{ color: '#aaa', fontWeight: 400 }}>No topic recorded</em>}
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: '#999' }}>
-                    {job.user_email || 'unknown user'} · {new Date(job.created_at).toLocaleString()} · {job.character_count} character{job.character_count === 1 ? '' : 's'}
-                    {job.duration_seconds ? ` · ${job.duration_seconds}s` : ''}
-                  </div>
-                  {job.status === 'failed' && job.error_message && (
-                    <div style={{ fontSize: '0.72rem', color: '#dc2626', marginTop: '4px' }}>
-                      {job.error_message}
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                  {statusBadge(job.status)}
-                  {job.status === 'complete' && job.output_url && (
-                    <>
-                      <a href={job.output_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.78rem', color: '#cf1322', fontWeight: 600 }}>
-                        ▶ Watch
-                      </a>
-                      <AddToTikTokAccountButton
-                        clip={{
-                          source: 'brainrot',
-                          job_id: job.job_id,
-                          clip_id: '',
-                          title: job.script_input || 'Brainrot Clip',
-                          video_url: job.output_url,
-                          thumbnail_url: '',
-                        }}
-                      />
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Main Admin Page ────────────────────────────────────────────
 
 export default function Admin() {
@@ -922,7 +609,6 @@ export default function Admin() {
   const navigate = useNavigate()
 
   const [tab, setTab] = useState('showcase') // showcase | jobs | generate
-  const [jobsSubTab, setJobsSubTab] = useState('ytshorts') // ytshorts | brainrot — which job history is shown in the Jobs tab
   const [jobs, setJobs] = useState([])
   const [showcase, setShowcase] = useState([])
   const [library, setLibrary] = useState([])
@@ -932,9 +618,19 @@ export default function Admin() {
   const [loadingLibrary, setLoadingLibrary] = useState(false)
   const [toast, setToast] = useState({ msg: '', type: 'success' })
 
-  // Generate clip state
+  // Generate & assign clip state
   const [genUrl, setGenUrl] = useState('')
+  const [genEmail, setGenEmail] = useState('')
+  const [genClipCount, setGenClipCount] = useState(10)
+  const [genMinDuration, setGenMinDuration] = useState(30)
+  const [genMaxDuration, setGenMaxDuration] = useState(90)
+  const [genAspect, setGenAspect] = useState('9:16')
+  const [genQuality, setGenQuality] = useState('1080p')
+  const [genFoundUser, setGenFoundUser] = useState(null)   // { id, email, full_name, plan }
+  const [genFindingUser, setGenFindingUser] = useState(false)
   const [genLoading, setGenLoading] = useState(false)
+  const [genJobId, setGenJobId] = useState(null)
+  const [genJob, setGenJob] = useState(null)               // { status, progress, current_step, error_message }
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type })
@@ -992,13 +688,70 @@ export default function Admin() {
     }
   }
 
-  // Quick generate — redirects to lab/dashboard with URL pre-filled
-  const handleGenerate = (e) => {
-    e.preventDefault()
-    if (!genUrl.trim()) return
-    sessionStorage.setItem('sc_pending_url', genUrl.trim())
-    navigate('/youtube-shorts/dashboard')
+  // Generate & assign — support tool: admin generates clips and hands
+  // them to a user by email (e.g. retrying a job that failed for them).
+  const handleFindUser = async () => {
+    if (!genEmail.trim()) return
+    setGenFindingUser(true)
+    setGenFoundUser(null)
+    try {
+      const r = await authFetch(`/admin/users/by-email?email=${encodeURIComponent(genEmail.trim())}`)
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}))
+        showToast(e.detail || 'User not found', 'error')
+      } else {
+        setGenFoundUser(await r.json())
+      }
+    } catch {
+      showToast('Failed to look up user', 'error')
+    }
+    setGenFindingUser(false)
   }
+
+  const handleGenerate = async (e) => {
+    e.preventDefault()
+    if (!genUrl.trim() || !genFoundUser) return
+    setGenLoading(true)
+    setGenJob(null)
+    try {
+      const r = await authFetch('/admin/jobs/assign', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: genFoundUser.email,
+          youtube_url: genUrl.trim(),
+          options: {
+            clip_count: genClipCount,
+            min_duration: genMinDuration,
+            max_duration: genMaxDuration,
+            aspect: genAspect,
+            quality: genQuality,
+          },
+        }),
+      })
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}))
+        throw new Error(e.detail || 'Failed to start job')
+      }
+      const d = await r.json()
+      setGenJobId(d.job_id)
+      setGenJob({ status: 'processing', progress: 0, current_step: 'Starting...' })
+    } catch (err) {
+      showToast(err.message, 'error')
+    }
+    setGenLoading(false)
+  }
+
+  useEffect(() => {
+    if (!genJobId) return
+    if (genJob && (genJob.status === 'completed' || genJob.status === 'failed' || genJob.status === 'error')) return
+    const t = setInterval(async () => {
+      try {
+        const r = await authFetch(`/admin/jobs/${genJobId}/status`)
+        if (r.ok) setGenJob(await r.json())
+      } catch { /* keep polling */ }
+    }, 3000)
+    return () => clearInterval(t)
+  }, [genJobId, genJob])
 
   // Status badge helper
   const statusBadge = (status) => {
@@ -1065,9 +818,7 @@ export default function Admin() {
             { key: 'showcase', label: '🎬 Showcase' },
             { key: 'library', label: '📚 Library' },
             { key: 'jobs', label: '📋 All Jobs' },
-            { key: 'generate', label: '⚡ Generate' },
-            { key: 'testlab', label: '🧪 Test Lab' },
-            { key: 'brainrot', label: '🧠 Brainrot' },
+            { key: 'generate', label: '⚡ Generate & Assign' },
             { key: 'tiktok', label: '🎵 TikTok' },
             { key: 'email', label: '📧 Email' },
           ].map(t => (
@@ -1075,9 +826,6 @@ export default function Admin() {
               {t.label}
             </button>
           ))}
-          <button onClick={() => navigate('/admin/marketing-editor')} style={tabStyle(false)}>
-            🎞️ Marketing Editor
-          </button>
         </div>
 
         {/* ── Showcase tab ── */}
@@ -1155,36 +903,6 @@ export default function Admin() {
         {/* ── Jobs tab ── */}
         {tab === 'jobs' && (
           <div>
-            {/* YT-Shorts / Brainrot sub-tabs — the two job tables don't share a
-                shape (source video + clip count vs. script + cast + gameplay),
-                so history is split rather than merged into one mixed list. */}
-            <div style={{
-              display: 'flex', gap: '4px', background: '#f4f4f4',
-              borderRadius: '8px', padding: '3px', width: 'fit-content',
-              marginBottom: '16px',
-            }}>
-              {[
-                { key: 'ytshorts', label: '🎬 YT-Shorts' },
-                { key: 'brainrot', label: '🧠 Brainrot' },
-              ].map(st => (
-                <button key={st.key} onClick={() => setJobsSubTab(st.key)}
-                  style={{
-                    padding: '7px 14px', fontWeight: 700, fontSize: '0.78rem',
-                    background: jobsSubTab === st.key ? '#fff' : 'transparent',
-                    color: jobsSubTab === st.key ? '#111' : '#888',
-                    border: 'none', borderRadius: '6px', cursor: 'pointer',
-                    boxShadow: jobsSubTab === st.key ? '0 1px 3px rgba(0,0,0,.12)' : 'none',
-                    transition: 'all 0.15s',
-                  }}>
-                  {st.label}
-                </button>
-              ))}
-            </div>
-
-            {jobsSubTab === 'brainrot' ? (
-              <BrainrotJobsPanel />
-            ) : (
-              <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
               <div>
                 <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111' }}>All Jobs</h2>
@@ -1258,58 +976,118 @@ export default function Admin() {
                 ))}
               </div>
             )}
-              </>
-            )}
           </div>
         )}
 
-        {/* ── Generate tab ── */}
+        {/* ── Generate & Assign tab ── */}
         {tab === 'generate' && (
           <div style={{ maxWidth: '600px' }}>
             <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111', marginBottom: '8px' }}>
-              Generate New Clips
+              Generate & Assign Clip
             </h2>
             <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '20px', lineHeight: 1.6 }}>
-              Paste a YouTube URL to generate clips via the dashboard. After generation, come back here to the
-              <strong style={{ color: '#cf1322' }}> Jobs tab</strong> to add clips to the showcase.
+              Support tool: generate clips for a YouTube URL and hand them directly to a user — e.g. when their
+              own job failed. The job runs exactly like a normal user job: it shows up in their dashboard and
+              they get the same "clips ready" email, but it doesn't cost them any plan credits.
             </p>
 
             <form onSubmit={handleGenerate} style={{ ...card }}>
               <div style={{ marginBottom: '14px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '8px' }}>
-                  YouTube URL
+                  User email
                 </label>
-                <div style={{ display: 'flex', borderRadius: '8px', border: '2px solid #111', overflow: 'hidden', boxShadow: '2px 2px 0 #cf1322' }}>
+                <div style={{ display: 'flex', gap: '8px' }}>
                   <input
-                    type="url" value={genUrl} onChange={e => setGenUrl(e.target.value)}
-                    placeholder="https://youtube.com/watch?v=..."
-                    style={{ flex: 1, padding: '13px 14px', border: 'none', outline: 'none', fontSize: '0.9rem', minWidth: 0 }}
+                    type="email" value={genEmail}
+                    onChange={e => { setGenEmail(e.target.value); setGenFoundUser(null) }}
+                    placeholder="user@example.com"
+                    style={{ flex: 1, padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #ddd', outline: 'none', fontSize: '0.88rem' }}
                   />
-                  <button type="submit" style={{ ...btnRed, borderRadius: '0', border: 'none', padding: '13px 20px', boxShadow: 'none' }}>
-                    Generate →
+                  <button type="button" onClick={handleFindUser} disabled={genFindingUser || !genEmail.trim()}
+                    style={{ ...btnOutline, fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+                    {genFindingUser ? 'Looking…' : 'Find user'}
                   </button>
                 </div>
+                {genFoundUser && (
+                  <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={badge('#16a34a', '#f0fdf4')}>✓ {genFoundUser.full_name || genFoundUser.email}</span>
+                    <span style={badge('#666', '#f4f4f4')}>{genFoundUser.plan} plan</span>
+                  </div>
+                )}
               </div>
-              <p style={{ fontSize: '0.75rem', color: '#aaa' }}>
-                This will redirect you to the dashboard where you can configure and generate clips.
-                Return here afterward to add the best clips to the showcase.
-              </p>
+
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '8px' }}>
+                  YouTube URL
+                </label>
+                <input
+                  type="url" value={genUrl} onChange={e => setGenUrl(e.target.value)}
+                  placeholder="https://youtube.com/watch?v=..."
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #ddd', outline: 'none', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '14px' }}>
+                <div>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#555', display: 'block', marginBottom: '6px' }}>Clip count</label>
+                  <input type="number" min={1} max={10} value={genClipCount} onChange={e => setGenClipCount(Number(e.target.value))}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #ddd', outline: 'none', fontSize: '0.85rem', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#555', display: 'block', marginBottom: '6px' }}>Quality</label>
+                  <select value={genQuality} onChange={e => setGenQuality(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #ddd', outline: 'none', fontSize: '0.85rem' }}>
+                    {['360p', '480p', '720p', '1080p'].map(q => <option key={q} value={q}>{q}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#555', display: 'block', marginBottom: '6px' }}>Min duration (s)</label>
+                  <input type="number" min={5} value={genMinDuration} onChange={e => setGenMinDuration(Number(e.target.value))}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #ddd', outline: 'none', fontSize: '0.85rem', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#555', display: 'block', marginBottom: '6px' }}>Max duration (s)</label>
+                  <input type="number" min={5} value={genMaxDuration} onChange={e => setGenMaxDuration(Number(e.target.value))}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #ddd', outline: 'none', fontSize: '0.85rem', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#555', display: 'block', marginBottom: '6px' }}>Aspect</label>
+                  <select value={genAspect} onChange={e => setGenAspect(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #ddd', outline: 'none', fontSize: '0.85rem' }}>
+                    {['9:16', '16:9', '1:1'].map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <button type="submit" disabled={genLoading || !genUrl.trim() || !genFoundUser || (genJob && genJob.status === 'processing')}
+                style={{ ...btnRed, width: '100%', padding: '13px', fontSize: '0.88rem' }}>
+                {genLoading ? 'Starting…' : `⚡ Generate & assign to ${genFoundUser ? genFoundUser.email : 'user'}`}
+              </button>
             </form>
 
-            {/* Quick stats */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginTop: '20px' }}>
-              {[
-                { label: 'Showcase videos', val: showcase.length, icon: '🎬' },
-                { label: 'Total jobs', val: jobs.length, icon: '📋' },
-                { label: 'Avg viral score', val: showcase.length ? Math.round(showcase.reduce((s, v) => s + v.viral_score, 0) / showcase.length) : '—', icon: '🔥' },
-              ].map(s => (
-                <div key={s.label} style={{ ...card, textAlign: 'center', padding: '16px' }}>
-                  <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>{s.icon}</div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#cf1322', letterSpacing: '-0.04em' }}>{s.val}</div>
-                  <div style={{ fontSize: '0.68rem', color: '#999', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '2px' }}>{s.label}</div>
+            {genJob && (
+              <div style={{ ...card, marginTop: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.78rem', color: '#666' }}>
+                  <span>{genJob.current_step || '...'}</span>
+                  <span>{genJob.progress || 0}%</span>
                 </div>
-              ))}
-            </div>
+                <div style={{ background: '#f4f4f4', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', width: `${genJob.progress || 0}%`,
+                    background: (genJob.status === 'failed' || genJob.status === 'error') ? '#dc2626' : 'linear-gradient(90deg,#cf1322,#ff6b6b)',
+                    borderRadius: '4px', transition: 'width 0.5s ease',
+                  }} />
+                </div>
+                {(genJob.status === 'failed' || genJob.status === 'error') && (
+                  <div style={{ marginTop: '10px', color: '#dc2626', fontSize: '0.8rem' }}>❌ {genJob.error_message}</div>
+                )}
+                {genJob.status === 'completed' && (
+                  <div style={{ marginTop: '10px', color: '#16a34a', fontSize: '0.85rem', fontWeight: 600 }}>
+                    ✓ Done — {genFoundUser?.email} has been notified and can see the clips in their dashboard.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1318,23 +1096,9 @@ export default function Admin() {
           <EmailBroadcast showToast={showToast} />
         )}
 
-        {/* ── Brainrot tab ── */}
-        {tab === 'brainrot' && (
-          <BrainrotAdminPanel showToast={showToast} />
-        )}
-
         {/* ── TikTok mock accounts tab ── */}
         {tab === 'tiktok' && (
           <AdminTikTokAccounts />
-        )}
-
-        {/* ── Test Lab tab ── */}
-        {tab === 'testlab' && (
-          <div>
-            <TestLabGenerator showToast={showToast} />
-            <hr style={{ border: 'none', borderTop: '1px solid #e5e5e5', margin: '32px 0' }} />
-            <GcsClipBrowser />
-          </div>
         )}
       </div>
 

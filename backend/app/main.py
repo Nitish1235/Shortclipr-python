@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from app.api import admin_email, admin_marketing, admin_tiktok, auth, brainrot, editor, admin, feedback, internal, jobs, payments, social, webhooks, youtube
+from app.api import admin_email, admin_tiktok, auth, brainrot, editor, admin, feedback, internal, jobs, payments, social, webhooks, youtube
 from app.core.config import get_settings
 
 
@@ -125,7 +125,6 @@ app.include_router(editor.router)
 app.include_router(feedback.router)
 app.include_router(admin.router)
 app.include_router(admin_email.router)
-app.include_router(admin_marketing.router)
 app.include_router(admin_tiktok.router)
 app.include_router(internal.router)
 
