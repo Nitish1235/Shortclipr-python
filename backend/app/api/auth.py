@@ -77,6 +77,7 @@ async def google_auth(body: GoogleAuthRequest):
             "video_minutes_limit": get_video_minutes_limit("free"),
             "created_at": datetime.now(timezone.utc),
         })
+        tutorial = await db.get_tutorial_video()
 
         # asyncpg returns UUID columns as uuid.UUID objects — coerce to str for JSON/Pydantic
         user_id = str(user["id"])
@@ -103,6 +104,8 @@ async def google_auth(body: GoogleAuthRequest):
                 "brainrot_credits_used": user.get("brainrot_credits_used", 0),
                 "brainrot_credits_limit": user.get("brainrot_credits_limit", 2),
                 "has_submitted_feedback": await db.has_submitted_feedback(user_id),
+                "is_new_user": bool(user.get("is_new_user")),
+                "tutorial_available": bool(tutorial),
             },
         )
     except HTTPException:

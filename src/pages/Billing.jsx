@@ -8,16 +8,17 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 // DodoPayments is already initialized in Pricing.jsx at bundle load time — do NOT call Initialize() again here
 
 // clips / videoHours / maxVideoHours mirror backend/app/core/plan_limits.py — keep in
-// sync. Same 5-tier "legacy slider" structure as src/components/Pricing.jsx (public
-// landing) — the only tiers with real Dodo products actually created — so a logged-in
-// user viewing /billing sees the same prices/plans they'd see on the landing page.
-// Shorts/month lowered 2026-09 (was 75/200/400/800/1500) — Max unchanged.
+// sync. Same tier structure as src/components/Pricing.jsx (public landing) — the only
+// tiers with real Dodo products actually created — so a logged-in user viewing /billing
+// sees the same prices/plans they'd see on the landing page.
+// Shorts/month lowered 2026-09 (was 75/200/400/800/1500).
+// Max (pro_2000, $145) discontinued — no longer sold; backend still honors existing
+// subscribers (see plan_limits.py / webhooks.py DODO_PLAN_MAP), just not offered here.
 const PLANS = [
   { id: 'starter_100', name: 'Starter',  price: 10,  clips: 50,   videoHours: 5,  maxVideoHours: 2, badge: null,           perks: ['50 shorts/mo', '5 hrs of video/mo (2 hrs max per video)', 'HD 1080p vertical', 'All caption styles'] },
   { id: 'starter_250', name: 'Starter Plus', price: 25,  clips: 180,  videoHours: 10, maxVideoHours: 2, badge: null,           perks: ['180 shorts/mo', '10 hrs of video/mo (2 hrs max per video)', 'HD 1080p vertical', 'All caption styles', 'Priority queue'] },
   { id: 'pro_500',     name: 'Pro',      price: 45,  clips: 350,  videoHours: 18, maxVideoHours: 3, badge: 'Most Popular', perks: ['350 shorts/mo', '18 hrs of video/mo (3 hrs max per video)', 'Everything in Starter', 'Faster processing queue', 'Batch download'] },
   { id: 'pro_1000',    name: 'Pro Plus',  price: 79,  clips: 700,  videoHours: 35, maxVideoHours: 3, badge: null,           perks: ['700 shorts/mo', '35 hrs of video/mo (3 hrs max per video)', 'Everything in Pro', 'Faster processing queue', 'Batch download'] },
-  { id: 'pro_2000',    name: 'Max',      price: 145, clips: 1500, videoHours: 60, maxVideoHours: 3, badge: null,           perks: ['1500 shorts/mo', '60 hrs of video/mo (3 hrs max per video)', 'Everything in Pro', 'Fastest priority queue', 'Dedicated support'] },
 ]
 
 const FEATURES = [
@@ -201,7 +202,7 @@ export default function Billing() {
           </h3>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(175px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))',
             gap: 12, marginBottom: 32,
           }}>
             {PLANS.map(plan => {

@@ -139,7 +139,7 @@ The plan → quota table lives in `backend/app/core/plan_limits.py` — that's t
 | starter_250 | $25 | 200 | 10 hrs | 2 hrs |
 | pro_500 | $45 | 400 | 18 hrs | 3 hrs |
 | pro_1000 | $79 | 800 | 35 hrs | 3 hrs |
-| pro_2000 | $145 | 1500 | 60 hrs | 3 hrs |
+| pro_2000 *(discontinued — kept for existing subscribers)* | $145 | 1500 | 60 hrs | 3 hrs |
 
 ---
 

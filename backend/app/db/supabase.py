@@ -857,7 +857,13 @@ async def get_user_by_email(email: str) -> dict | None:
 
 
 async def upsert_user(user_data: dict) -> dict:
-    """Insert or update user on Google login using atomic upsert."""
+    """Insert or update user on Google login using atomic upsert.
+
+    Returned row includes `is_new_user` (xmax = 0 is true only when THIS
+    statement inserted the row, false when the ON CONFLICT DO UPDATE branch
+    fired) — auth.py uses this to redirect brand-new signups to the
+    onboarding tutorial, never returning logins.
+    """
     from app.core.plan_limits import get_plan_limits  # local import avoids circular dependency at module init
     plan = user_data.get("plan", "free")
     limits = get_plan_limits(plan)
@@ -874,7 +880,7 @@ async def upsert_user(user_data: dict) -> dict:
             avatar_url = EXCLUDED.avatar_url,
             google_sub = EXCLUDED.google_sub,
             updated_at = NOW()
-        RETURNING *
+        RETURNING *, (xmax = 0) AS is_new_user
         """,
         user_data["id"],
         user_data["email"],
@@ -1171,3 +1177,29 @@ async def release_video_minutes(user_id: str, minutes: float) -> None:
         "UPDATE users SET video_minutes_used = GREATEST(0, video_minutes_used - $2) WHERE id=$1",
         user_id, minutes,
     )
+
+
+# ── Onboarding tutorial video (singleton row, id=1) ────────────
+
+async def get_tutorial_video() -> dict | None:
+    """None means no tutorial has been uploaded yet — hidden from users."""
+    return await _fetchrow("SELECT * FROM tutorial_video WHERE id = 1")
+
+
+async def set_tutorial_video(video_url: str, uploaded_by: str) -> dict:
+    return await _fetchrow(
+        """
+        INSERT INTO tutorial_video (id, video_url, uploaded_by, uploaded_at)
+        VALUES (1, $1, $2, NOW())
+        ON CONFLICT (id) DO UPDATE SET
+            video_url   = EXCLUDED.video_url,
+            uploaded_by = EXCLUDED.uploaded_by,
+            uploaded_at = NOW()
+        RETURNING *
+        """,
+        video_url, uploaded_by,
+    )
+
+
+async def clear_tutorial_video() -> None:
+    await _execute("DELETE FROM tutorial_video WHERE id = 1")

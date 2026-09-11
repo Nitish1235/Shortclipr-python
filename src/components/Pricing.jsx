@@ -19,13 +19,14 @@ DodoPayments.Initialize({
 // NOT match the number in the plan key (e.g. starter_100 grants 50, not 100) — that
 // gap is a deliberate margin cut made after the original numbers shipped; this shows
 // what a checkout actually grants today, not the stale sticker number.
-// Shorts/month lowered 2026-09 (was 75/200/400/800/1500) — Max unchanged.
+// Shorts/month lowered 2026-09 (was 75/200/400/800/1500).
+// Max (pro_2000, $145) discontinued — no longer sold; backend still honors existing
+// subscribers (see plan_limits.py / webhooks.py DODO_PLAN_MAP), just not offered here.
 const TIERS = [
   { clips: 50,   price: 10,  label: '50 Shorts',   dodoId: 'starter_100', videoHours: 5,  maxVideoHours: 2, family: 'Starter' },
   { clips: 180,  price: 25,  label: '180 Shorts',  dodoId: 'starter_250', videoHours: 10, maxVideoHours: 2, family: 'Starter Plus' },
   { clips: 350,  price: 45,  label: '350 Shorts',  dodoId: 'pro_500',     videoHours: 18, maxVideoHours: 3, family: 'Pro' },
   { clips: 700,  price: 79,  label: '700 Shorts',  dodoId: 'pro_1000',    videoHours: 35, maxVideoHours: 3, family: 'Pro Plus' },
-  { clips: 1500, price: 145, label: '1500 Shorts', dodoId: 'pro_2000',    videoHours: 60, maxVideoHours: 3, family: 'Max' },
 ]
 
 const FREE_FEATURES = [
@@ -74,7 +75,7 @@ export default function Pricing() {
       const res = await fetch(`${API_BASE}/payments/checkout-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ plan: tier.dodoId, period: 'monthly' }), // starter_100 | starter_250 | pro_500 | pro_1000 | pro_2000
+        body: JSON.stringify({ plan: tier.dodoId, period: 'monthly' }), // starter_100 | starter_250 | pro_500 | pro_1000
       })
       if (!res.ok) {
         const e = await res.json().catch(() => ({}))

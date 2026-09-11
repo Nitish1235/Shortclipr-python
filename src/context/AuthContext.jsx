@@ -47,7 +47,7 @@ export function AuthProvider({ children }) {
       const session = await res.json()
       localStorage.setItem('sc_token', session.access_token)
       setUser(session.user)
-      return true
+      return session.user   // truthy; carries is_new_user/tutorial_available for the caller
     } catch (err) {
       console.error('Login error:', err)
       return false

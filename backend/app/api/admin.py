@@ -21,15 +21,20 @@ Endpoints:
     POST /admin/jobs/assign         — generate a clip job and assign it to
                                        another user by email (support tool
                                        for retrying failed user jobs)
+    GET  /tutorial                  — current onboarding tutorial video, if any
+    POST /admin/tutorial/upload     — upload/replace the tutorial video
+    DELETE /admin/tutorial          — remove the tutorial (hides it from users)
 """
 
 import asyncio
 import logging
+import tempfile
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, get_current_user
@@ -39,6 +44,7 @@ from app.db import supabase as db
 from app.api.jobs import JobOptions
 from app.pipeline.orchestrator import run_pipeline
 from app.pipeline.stream import extract_video_id, get_video_metadata
+from app.pipeline.uploader import _upload_to_gcs
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -711,3 +717,55 @@ async def admin_job_status(job_id: str, admin: AdminUser):
         "clip_count":    job.get("clip_count", 0),
         "error_message": job.get("error_message"),
     }
+
+
+# ── Onboarding tutorial video — single admin-uploaded video ────
+#
+# Hidden from users entirely until the admin uploads one (GET /tutorial
+# returns video_url=None). Once uploaded, the dashboard nav shows a
+# "Tutorial" link, and brand-new signups (see auth.py's is_new_user) are
+# routed there once, right after their first sign-in.
+
+_TUTORIAL_CONTENT_TYPES = {
+    ".mp4":  "video/mp4",
+    ".mov":  "video/quicktime",
+    ".webm": "video/webm",
+}
+
+
+@router.get("/tutorial", tags=["public"])
+async def get_tutorial(current_user: CurrentUser):
+    """Any logged-in user: current onboarding tutorial video, if one exists."""
+    row = await db.get_tutorial_video()
+    return {"video_url": row["video_url"] if row else None}
+
+
+@router.post("/admin/tutorial/upload")
+async def admin_upload_tutorial(admin: AdminUser, file: UploadFile = File(...)):
+    """Admin: upload/replace the onboarding tutorial video."""
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in _TUTORIAL_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
+
+    blob_name = f"tutorial/{uuid.uuid4().hex[:12]}{ext}"
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        tmp.write(await file.read())
+        tmp_path = Path(tmp.name)
+
+    try:
+        loop = asyncio.get_running_loop()
+        url = await loop.run_in_executor(None, _upload_to_gcs, tmp_path, blob_name, _TUTORIAL_CONTENT_TYPES[ext])
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    await db.set_tutorial_video(url, admin.email)
+    logger.info(f"Admin {admin.email} uploaded the onboarding tutorial video")
+    return {"video_url": url}
+
+
+@router.delete("/admin/tutorial")
+async def admin_delete_tutorial(admin: AdminUser):
+    """Admin: remove the tutorial video — hides it from users again."""
+    await db.clear_tutorial_video()
+    logger.info(f"Admin {admin.email} removed the onboarding tutorial video")
+    return {"success": True}

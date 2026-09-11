@@ -46,6 +46,12 @@ const Icon = {
       <line x1="14" y1="8" x2="6" y2="8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   ),
+  tutorial: (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4"/>
+      <path d="M6.5 5.5l4 2.5-4 2.5v-5z" fill="currentColor"/>
+    </svg>
+  ),
 }
 
 const NAV_WORKSPACE = [
@@ -165,6 +171,7 @@ export default function AppLayout({ children }) {
 
   const [ytConn, setYtConn] = useState(localStorage.getItem('yt_connected') === 'true')
   const [ttConn, setTtConn] = useState(localStorage.getItem('tt_connected') === 'true')
+  const [tutorialUrl, setTutorialUrl] = useState(null)
 
   const isPaid    = user?.plan && user.plan !== 'free'
   const used      = user?.credits_used || 0
@@ -187,6 +194,16 @@ export default function AppLayout({ children }) {
         if (d.tiktok) localStorage.setItem('tt_connected', 'true')
         else localStorage.removeItem('tt_connected')
       })
+      .catch(() => {})
+  }, [])
+
+  // Nav item only appears once an admin has actually uploaded a tutorial.
+  useEffect(() => {
+    const token = localStorage.getItem('sc_token')
+    if (!token) return
+    fetch(`${API_BASE}/tutorial`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setTutorialUrl(d?.video_url || null))
       .catch(() => {})
   }, [])
 
@@ -289,7 +306,10 @@ export default function AppLayout({ children }) {
         <nav style={{ flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 0, overflowY: 'auto' }}>
 
           <SectionLabel>Workspace</SectionLabel>
-          {NAV_WORKSPACE.map(item => <NavItem key={item.path} item={item} location={location} />)}
+          {[
+            ...NAV_WORKSPACE,
+            ...(tutorialUrl ? [{ icon: Icon.tutorial, label: 'Tutorial', path: '/youtube-shorts/tutorial', exact: true }] : []),
+          ].map(item => <NavItem key={item.path} item={item} location={location} />)}
 
           <div style={{ marginTop: 16 }}>
             <SectionLabel>Social Accounts</SectionLabel>

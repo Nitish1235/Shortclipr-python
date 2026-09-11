@@ -40,6 +40,7 @@ import Careers        from './pages/Careers'
 import DMCA           from './pages/DMCA'
 import Editor         from './pages/Editor'
 import Lab            from './pages/Lab'
+import Tutorial       from './pages/Tutorial'
 import Admin          from './pages/Admin'
 import BrainrotStudio    from './pages/brainrot/BrainrotStudio'
 import BrainrotLogin     from './pages/brainrot/BrainrotLogin'
@@ -242,6 +243,7 @@ export default function App() {
             <Route path="/youtube-shorts/editor/:jobId/:clipId" element={<ProtectedRoute><Editor /></ProtectedRoute>} />
             <Route path="/youtube-shorts/lab"                   element={<ProtectedRoute><Lab /></ProtectedRoute>} />
             <Route path="/youtube-shorts/settings"              element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            <Route path="/youtube-shorts/tutorial"              element={<ProtectedRoute><Tutorial /></ProtectedRoute>} />
 
             {/* ── Brainrot Clips Maker product — OFFLINE, see BRAINROT_OFFLINE above ── */}
             {BRAINROT_OFFLINE ? (

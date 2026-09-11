@@ -40,7 +40,10 @@ PRODUCT_IDS: dict[str, str] = {
     "starter_250":  settings.DODO_PRODUCT_STARTER_250,
     "pro_500":      settings.DODO_PRODUCT_PRO_500,
     "pro_1000":     settings.DODO_PRODUCT_PRO_1000,
-    "pro_2000":     settings.DODO_PRODUCT_PRO_2000,
+    # pro_2000 ("Max", $145) discontinued — removed from sale, so new checkout
+    # sessions for it are rejected (see PRODUCT_IDS lookup below). Deliberately
+    # NOT removed from plan_limits.py or webhooks.py DODO_PLAN_MAP — existing
+    # subscribers on this plan must keep working.
 }
 
 

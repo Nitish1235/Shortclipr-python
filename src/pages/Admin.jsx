@@ -602,6 +602,102 @@ function EmailBroadcast({ showToast }) {
   )
 }
 
+function TutorialManager({ showToast }) {
+  const [videoUrl, setVideoUrl] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+
+  const fetchTutorial = async () => {
+    setLoading(true)
+    try {
+      const r = await authFetch('/tutorial')
+      const d = await r.json()
+      setVideoUrl(d.video_url || null)
+    } catch { setVideoUrl(null) }
+    setLoading(false)
+  }
+
+  useEffect(() => { fetchTutorial() }, [])
+
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''  // allow re-selecting the same file next time
+    if (!file) return
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      // Not authFetch — it force-sets Content-Type: application/json, which
+      // breaks multipart uploads (the browser must set its own boundary).
+      const r = await fetch(`${API}/admin/tutorial/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token()}` },
+        body: form,
+      })
+      if (!r.ok) {
+        const e2 = await r.json().catch(() => ({}))
+        throw new Error(e2.detail || 'Upload failed')
+      }
+      const d = await r.json()
+      setVideoUrl(d.video_url)
+      showToast('Tutorial video uploaded — now visible to users.')
+    } catch (err) {
+      showToast(err.message, 'error')
+    }
+    setUploading(false)
+  }
+
+  const handleRemove = async () => {
+    const r = await authFetch('/admin/tutorial', { method: 'DELETE' })
+    if (r.ok) {
+      setVideoUrl(null)
+      showToast('Tutorial removed — hidden from users again.')
+    } else {
+      showToast('Failed to remove tutorial', 'error')
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: '600px' }}>
+      <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111', marginBottom: '8px' }}>
+        Onboarding Tutorial
+      </h2>
+      <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '20px', lineHeight: 1.6 }}>
+        Hidden from users until you upload one. Once uploaded, it appears as a "Tutorial" section in every
+        user's dashboard nav, and brand-new signups are taken straight to it right after their first sign-in.
+      </p>
+
+      <div style={card}>
+        {loading ? (
+          <div style={{ color: '#aaa', fontSize: '0.85rem' }}>Loading…</div>
+        ) : videoUrl ? (
+          <>
+            <video src={videoUrl} controls style={{ width: '100%', borderRadius: '8px', background: '#111', marginBottom: '14px' }} />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <label style={{ ...btnOutline, cursor: uploading ? 'default' : 'pointer', opacity: uploading ? 0.6 : 1 }}>
+                {uploading ? 'Uploading…' : 'Replace video'}
+                <input type="file" accept="video/mp4,video/quicktime,video/webm" onChange={handleUpload} disabled={uploading} style={{ display: 'none' }} />
+              </label>
+              <button onClick={handleRemove} style={{ ...btnOutline, borderColor: '#dc2626', color: '#dc2626' }}>
+                Remove
+              </button>
+            </div>
+          </>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '24px' }}>
+            <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📹</div>
+            <p style={{ color: '#999', fontSize: '0.85rem', marginBottom: '16px' }}>No tutorial uploaded yet — not visible to users.</p>
+            <label style={{ ...btnRed, cursor: uploading ? 'default' : 'pointer', opacity: uploading ? 0.6 : 1, display: 'inline-block' }}>
+              {uploading ? 'Uploading…' : 'Upload tutorial video'}
+              <input type="file" accept="video/mp4,video/quicktime,video/webm" onChange={handleUpload} disabled={uploading} style={{ display: 'none' }} />
+            </label>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main Admin Page ────────────────────────────────────────────
 
 export default function Admin() {
@@ -819,6 +915,7 @@ export default function Admin() {
             { key: 'library', label: '📚 Library' },
             { key: 'jobs', label: '📋 All Jobs' },
             { key: 'generate', label: '⚡ Generate & Assign' },
+            { key: 'tutorial', label: '📹 Tutorial' },
             { key: 'tiktok', label: '🎵 TikTok' },
             { key: 'email', label: '📧 Email' },
           ].map(t => (
@@ -1094,6 +1191,11 @@ export default function Admin() {
         {/* ── Email tab ── */}
         {tab === 'email' && (
           <EmailBroadcast showToast={showToast} />
+        )}
+
+        {/* ── Tutorial tab ── */}
+        {tab === 'tutorial' && (
+          <TutorialManager showToast={showToast} />
         )}
 
         {/* ── TikTok mock accounts tab ── */}

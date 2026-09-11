@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../context/AuthContext'
@@ -55,9 +55,15 @@ export default function Login() {
   const [activeIdx, setActiveIdx]   = useState(0)
   const [fading, setFading]         = useState(false)
 
-  // Already logged in → go straight to dashboard
+  // Guards the effect below from double-firing right after a fresh
+  // Google sign-in — set synchronously in handleGoogle before the async
+  // login call, so it's already true by the time setUser() re-renders us.
+  const justSignedInRef = useRef(false)
+
+  // Already logged in → go straight to dashboard (skipped for a signin
+  // that just happened this render pass — handleGoogle decides that one).
   useEffect(() => {
-    if (user) navigate('/youtube-shorts/dashboard', { replace: true })
+    if (user && !justSignedInRef.current) navigate('/youtube-shorts/dashboard', { replace: true })
   }, [user, navigate])
 
   // Cycle testimonials every 5s with a brief fade
@@ -73,8 +79,13 @@ export default function Login() {
   }, [])
 
   const handleGoogle = async (cr) => {
-    const ok = await loginWithGoogleToken(cr.credential)
-    if (ok) navigate('/youtube-shorts/dashboard')
+    justSignedInRef.current = true
+    const result = await loginWithGoogleToken(cr.credential)
+    if (result) {
+      navigate(result.is_new_user && result.tutorial_available
+        ? '/youtube-shorts/tutorial'
+        : '/youtube-shorts/dashboard')
+    }
   }
 
   const handleEmail = async (e) => {
