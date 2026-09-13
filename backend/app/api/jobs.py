@@ -60,6 +60,15 @@ settings = get_settings()   # Fix: was imported but never instantiated → NameE
 MIN_GATEWAY_SECONDS = 60
 
 
+def _min_video_seconds_for_clips(clip_count: int) -> int:
+    """Minimum source video length required to request `clip_count` clips —
+    below this there isn't enough distinct material to cut that many
+    non-overlapping clips from. ~0.7 min of source per requested clip:
+    3 clips → must be >2 min, 5 clips → >3 min, 10 clips → >7 min.
+    Mirrored in api_stage.py's fallback path — keep both in sync."""
+    return int(clip_count * 0.7) * 60
+
+
 # ── Request / response schemas ─────────────────────────────────
 
 class JobOptions(BaseModel):
@@ -291,6 +300,22 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
                 f"({current_user.plan} plan): [{gateway_start_seconds:.0f}s, "
                 f"{old_end:.0f}s] → [{gateway_start_seconds:.0f}s, "
                 f"{gateway_end_seconds:.0f}s] (plan max {max_video_sec // 60} min/video)"
+            )
+
+    # ── 2d. Minimum video length for the requested clip count ──
+    # Reject outright (before reserving anything) rather than clamping —
+    # unlike the plan-cap clamp above, there's no sensible smaller clip_count
+    # to silently substitute here; the user asked for N clips specifically.
+    if video_duration_seconds > 0:
+        min_required = _min_video_seconds_for_clips(body.options.clip_count)
+        if min_required > 0 and billable_seconds <= min_required:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"This video is too short for {body.options.clip_count} clips — "
+                    f"needs more than {min_required // 60} min of video, "
+                    f"got {billable_seconds / 60:.1f} min. Reduce the clip count or pick a longer video."
+                ),
             )
 
     # ── 3. Reserve credits (clips) — the real gate, atomic ─────

@@ -83,6 +83,11 @@ def _friendly_api_error(raw: str) -> str:
 # Below this, a selection is treated as invalid/noise and the full video is used.
 MIN_GATEWAY_SECONDS = 60
 
+
+def _min_video_seconds_for_clips(clip_count: int) -> int:
+    """Mirrors jobs.py's _min_video_seconds_for_clips — keep both in sync."""
+    return int(clip_count * 0.7) * 60
+
 # Cap the API stage at 5 min wall-clock — well above the ~30-60s median but
 # below Cloud Run's default request timeout, so a hung transcript/GPT call
 # fails the stage cleanly instead of holding an instance slot forever.
@@ -183,6 +188,21 @@ async def _execute_api_stage(
                 f"[{gateway_start:.0f}s, {gateway_end:.0f}s] "
                 f"(plan max {max_video_sec // 60} min/video)"
             )
+
+    # ── Fallback minimum-video-length check ────────────────────────
+    # Mirrors jobs.py's STEP 2d — only runs here when jobs.py's own prefetch
+    # failed and deferred this validation to us.
+    if prefetched_duration <= 0:
+        clip_count = options.get("clip_count", 10)
+        min_required = _min_video_seconds_for_clips(clip_count)
+        if min_required > 0 and billable_seconds <= min_required:
+            msg = (
+                f"This video is too short for {clip_count} clips — needs more than "
+                f"{min_required // 60} min of video, got {billable_seconds / 60:.1f} min."
+            )
+            logger.warning(f"[{job_id}] {msg}")
+            await _fail_and_refund(job_id, user_id, options, msg)
+            return
 
     # ── STEP 2d: Fallback video-minutes reservation ────────────────
     # Only runs when jobs.py couldn't pre-flight (metadata prefetch failed).
