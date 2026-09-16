@@ -70,6 +70,10 @@ const FONT_OPTIONS_LIST = [
   { val:'bebas_neue',    label:'Bebas Neue' },
   { val:'poppins',       label:'Poppins' },
   { val:'jakarta',       label:'Plus Jakarta' },
+  { val:'bangers',            label:'Bangers' },
+  { val:'luckiest_guy',       label:'Luckiest Guy' },
+  { val:'permanent_marker',   label:'Permanent Marker' },
+  { val:'caveat',             label:'Caveat (Cursive)' },
 ]
 
 const COLOR_COMBOS = [

@@ -43,7 +43,11 @@ _AVATAR_CONTENT_TYPES = {
     ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
 }
 
-_VALID_SOURCES = ("ytshorts", "brainrot")
+# 'brainrot' kept as an accepted value for any clips filed before the
+# Factloop rebrand (the underlying table is still brainrot_jobs); 'factloop'
+# is what the current UI files new clips under. Both just tag the row —
+# video_url is supplied directly, never re-fetched by this value.
+_VALID_SOURCES = ("ytshorts", "brainrot", "factloop")
 
 
 # ── Serializers ──────────────────────────────────────────────
@@ -177,7 +181,7 @@ async def admin_list_tiktok_account_clips(account_id: str, admin: AdminUser):
 @router.post("/admin/tiktok/accounts/{account_id}/clips")
 async def admin_add_tiktok_account_clip(account_id: str, body: AddAccountClipRequest, admin: AdminUser):
     if body.source not in _VALID_SOURCES:
-        raise HTTPException(status_code=400, detail="source must be 'ytshorts' or 'brainrot'")
+        raise HTTPException(status_code=400, detail="source must be 'ytshorts', 'brainrot', or 'factloop'")
     account = await db.get_tiktok_account(account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")

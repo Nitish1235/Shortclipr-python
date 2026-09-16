@@ -51,6 +51,25 @@ class Settings(BaseSettings):
     # material, not per-user output.  Must be set explicitly (see above).
     BRAINROT_GCS_BUCKET_NAME: str = ""
 
+    # ── Runware (AI image generation) ──────────────────────────
+    # Was only ever read directly out of .env by backend/scripts/
+    # generate_characters.py's own regex-based load_api_key() — wiring it
+    # into Settings here is what lets factloop_image.py (a real app/
+    # module, called at request time) use it like every other provider key.
+    RUNWARE_API_KEY: str = ""
+    RUNWARE_IMAGE_MODEL: str = "runware:101@1"  # FLUX.1 Dev — same model the character pipeline used
+
+    # ── Stock photo search (Factloop per-fact images) ──────────
+    # factloop_stock_images.py tries these, in order, before falling back
+    # to Runware AI generation — real photos of real named subjects (e.g.
+    # "Virat Kohli batting") are usually NOT in these free libraries, so
+    # the AI fallback is the common path for named people; generic-concept
+    # facts (a stadium, a chart, a skyline) hit these free libraries more
+    # often. Any key left blank just skips that provider silently.
+    PEXELS_API_KEY: str = ""
+    UNSPLASH_ACCESS_KEY: str = ""
+    PIXABAY_API_KEY: str = ""
+
     # ── UnrealSpeech (TTS) ─────────────────────────────────────
     UNREALSPEECH_API_KEY: str = ""
 

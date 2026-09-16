@@ -101,69 +101,49 @@ async def internal_run_ffmpeg_stage(body: InternalFfmpegStageRequest, x_internal
     return {"status": "accepted"}
 
 
-class InternalBrainrotApiStageRequest(BaseModel):
+class InternalFactloopApiStageRequest(BaseModel):
     job_id: str
 
+
+# The watcher's brainrot claim queries (claim_brainrot_api_job on
+# status='created', claim_brainrot_ffmpeg_job on status='api_done') are
+# unchanged by the Factloop pivot — they only key off brainrot_jobs.status,
+# not what each stage does internally — so the split-worker dispatch paths
+# still hit these two endpoints; only the target functions changed. The old
+# /brainrot-confirm-stage/run endpoint is gone: Factloop has no confirm
+# stage (the pipeline collapsed to 2 stages), so the claim-query gap that
+# endpoint documented no longer exists.
 
 @router.post("/brainrot-api-stage/run", status_code=202)
-async def internal_run_brainrot_api_stage(body: InternalBrainrotApiStageRequest, x_internal_secret: str = Header(default="")):
-    """Brainrot script stage: script generation only → draft scene_plan →
-    status='awaiting_review'. No TTS, no credit reserved. Dispatched by
-    watcher on job creation.
-
-    NOTE: split-worker dispatch for the stage AFTER this one (confirm —
-    see /brainrot-confirm-stage/run below) is not yet wired into
-    watcher/dispatcher.py — it has no claim query for a confirmed job, so
-    in split-worker mode a job would currently sit at 'awaiting_review'
-    forever once the user confirms. Single-service mode (see
-    app/api/brainrot.py's dispatch) handles all three stages correctly.
-    """
+async def internal_run_factloop_api_stage(body: InternalFactloopApiStageRequest, x_internal_secret: str = Header(default="")):
+    """Factloop generate stage: script + image + TTS → timed scene_plan →
+    status='api_done'. Dispatched by the watcher on job creation
+    (claim_brainrot_api_job). Path kept as /brainrot-api-stage/run so the
+    watcher's existing dispatch URL doesn't need changing."""
     _require_internal_secret(x_internal_secret)
-    from app.pipeline.brainrot_stage import run_brainrot_api_stage
+    from app.pipeline.factloop_stage import run_factloop_api_stage
     asyncio.create_task(
-        run_brainrot_api_stage(body.job_id),
-        name=f"br-api-{body.job_id[:8]}",
+        run_factloop_api_stage(body.job_id),
+        name=f"fl-api-{body.job_id[:8]}",
     )
     return {"status": "accepted"}
 
 
-class InternalBrainrotConfirmStageRequest(BaseModel):
-    job_id: str
-
-
-@router.post("/brainrot-confirm-stage/run", status_code=202)
-async def internal_run_brainrot_confirm_stage(body: InternalBrainrotConfirmStageRequest, x_internal_secret: str = Header(default="")):
-    """Brainrot confirm stage: TTS the (possibly user-edited) scene_plan →
-    status='api_done' → runs the FFmpeg stage directly. Dispatched by
-    POST /brainrot/jobs/{id}/confirm, which reserves the credit first.
-    See the caveat on /brainrot-api-stage/run above — nothing in
-    watcher/dispatcher.py claims jobs to hit this endpoint yet; it only
-    exists so single-service mode and this endpoint share one code path
-    (app/pipeline/brainrot_stage.py::run_brainrot_confirm_stage) rather
-    than duplicating the dispatch logic.
-    """
-    _require_internal_secret(x_internal_secret)
-    from app.pipeline.brainrot_stage import run_brainrot_confirm_stage
-    asyncio.create_task(
-        run_brainrot_confirm_stage(body.job_id),
-        name=f"br-confirm-{body.job_id[:8]}",
-    )
-    return {"status": "accepted"}
-
-
-class InternalBrainrotFfmpegStageRequest(BaseModel):
+class InternalFactloopFfmpegStageRequest(BaseModel):
     job_id: str
 
 
 @router.post("/brainrot-ffmpeg-stage/run", status_code=202)
-async def internal_run_brainrot_ffmpeg_stage(body: InternalBrainrotFfmpegStageRequest, x_internal_secret: str = Header(default="")):
-    """Brainrot FFmpeg stage: Download assets → composite render → upload → status='complete'.
-    """
+async def internal_run_factloop_ffmpeg_stage(body: InternalFactloopFfmpegStageRequest, x_internal_secret: str = Header(default="")):
+    """Factloop render stage: download assets → composite render → upload →
+    status='complete'. Dispatched by the watcher (claim_brainrot_ffmpeg_job)
+    on status='api_done'. Path kept as /brainrot-ffmpeg-stage/run so the
+    watcher's existing dispatch URL doesn't need changing."""
     _require_internal_secret(x_internal_secret)
-    from app.pipeline.brainrot_stage import run_brainrot_ffmpeg_stage
+    from app.pipeline.factloop_stage import run_factloop_ffmpeg_stage
     asyncio.create_task(
-        run_brainrot_ffmpeg_stage(body.job_id),
-        name=f"br-ff-{body.job_id[:8]}",
+        run_factloop_ffmpeg_stage(body.job_id),
+        name=f"fl-ff-{body.job_id[:8]}",
     )
     return {"status": "accepted"}
 

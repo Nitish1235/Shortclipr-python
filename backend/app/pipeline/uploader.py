@@ -140,6 +140,34 @@ async def upload_raw_clip(
 
 
 
+async def upload_generated_image(
+    local_path: Path,
+    job_id: str,
+    slot_id: str = "",
+) -> str:
+    """Upload one of a Factloop job's per-fact images (factloop_image.py) to
+    GCS. Returns public URL. `slot_id` is the fact's stat_key, keeping one
+    blob per fact rather than a single shared image — main bucket (per-user
+    output, not shared library content), included in delete_job_from_gcs's
+    cleanup prefixes below (a whole-prefix delete, so any number of these
+    per job is cleaned up automatically)."""
+    blob_name = f"clips/{job_id}/generated_{slot_id}.png" if slot_id else f"clips/{job_id}/generated.png"
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _upload_to_gcs, local_path, blob_name, "image/png")
+
+
+async def upload_generated_images(images: dict[str, tuple[Path, str]], job_id: str) -> dict[str, dict]:
+    """Uploads every per-fact image from factloop_image.generate_images_for_lines
+    concurrently. Returns {stat_key: {"url": ..., "source": ...}} — `source`
+    ('pexels' | 'unsplash' | 'pixabay' | 'ai') is kept alongside the URL
+    purely for logging/debugging which path each fact's image took."""
+    keys = list(images.keys())
+    urls = await asyncio.gather(*(
+        upload_generated_image(images[k][0], job_id, k) for k in keys
+    ))
+    return {k: {"url": url, "source": images[k][1]} for k, url in zip(keys, urls)}
+
+
 async def upload_tts_audio(
     local_path: Path,
     job_id: str,

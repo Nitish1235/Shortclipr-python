@@ -36,13 +36,21 @@ export const DEFAULT_COLOR = 'white_black'
 // Mirrors FONT_OPTIONS in captions.py — CSS font-family strings.
 // The actual @font-face files are loaded globally via index.html (Google Fonts CDN).
 export const FONT_FAMILIES = {
-  default:       '"Arial Black", Arial, sans-serif',
+  // Was '"Arial Black"' — didn't match what the backend actually burns in for
+  // "default" (Liberation Sans, a plain metric-compatible Arial substitute,
+  // not a heavy display face). Plain Arial/Helvetica is the accurate preview;
+  // boldness still comes from `fontWeight: 800` below, matching the ASS Bold=1 flag.
+  default:       'Arial, Helvetica, sans-serif',
   montserrat:    '"Montserrat", sans-serif',
   archivo_black: '"Archivo Black", sans-serif',
   anton:         '"Anton", sans-serif',
   bebas_neue:    '"Bebas Neue", sans-serif',
   poppins:       '"Poppins", sans-serif',
   jakarta:       '"Plus Jakarta Sans", sans-serif',
+  bangers:            '"Bangers", cursive',
+  luckiest_guy:       '"Luckiest Guy", cursive',
+  permanent_marker:   '"Permanent Marker", cursive',
+  caveat:             '"Caveat", cursive',
 }
 export const DEFAULT_FONT = 'default'
 

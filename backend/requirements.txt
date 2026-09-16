@@ -38,6 +38,12 @@ google-cloud-storage==2.18.2
 google-auth-oauthlib==1.2.1
 google-api-python-client==2.143.0
 
+## AI image generation (Factloop's per-video generated image — factloop_image.py).
+## Previously only used offline by scripts/generate_characters.py (its own
+## requirements-assetgen.txt, never installed into this image); now a real
+## request-time dependency.
+runware==0.5.24
+
 ## Face tracking (smart reframe pan/crop)
 opencv-python-headless==4.10.0.84
 numpy==1.26.4

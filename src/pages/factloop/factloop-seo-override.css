@@ -1,0 +1,17 @@
+/* factloop-seo-override.css — retints the shared seo-landing.css (brand
+   red, used by both YT-Shorts and Brainrot SEO pages) to Factloop's cyan
+   accent, scoped under .fl-seo so the shared stylesheet stays untouched
+   for the other products. */
+
+.fl-seo .seo-badge { color: #06b6d4; }
+.fl-seo .seo-btn-primary { background: #06b6d4; }
+.fl-seo .seo-btn-primary:hover { box-shadow: 4px 4px 0 #111; }
+.fl-seo .seo-btn-secondary:hover { border-color: #06b6d4; color: #06b6d4; }
+.fl-seo .seo-stat-value { color: #06b6d4; }
+.fl-seo .seo-step-num { color: #06b6d4; }
+.fl-seo .seo-table th.us-col, .fl-seo .seo-table td.us-col { color: #0891b2; background: #ecfeff; }
+.fl-seo .seo-why-card { border-left-color: #06b6d4; }
+.fl-seo .seo-cta-band { background: #06b6d4; }
+.fl-seo .seo-cta-band .seo-btn-primary { color: #06b6d4; }
+.fl-seo .seo-howto-num { background: #06b6d4; }
+.fl-seo .seo-crosslink:hover { border-color: #06b6d4; color: #06b6d4; }

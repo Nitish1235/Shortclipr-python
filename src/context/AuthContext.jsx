@@ -81,14 +81,14 @@ export function AuthProvider({ children }) {
     setUser(null)
     // Force hard redirect home to clear all state safely — but "home" has
     // to mean whichever product the user was actually in. This is shared
-    // across both products (brainrot's Sign Out button and BrainrotStudio's
+    // across both products (Factloop's Sign Out button and FactloopStudio's
     // header both call this same logout()), so a hardcoded '/youtube-shorts'
-    // here bounced every brainrot user to the wrong product on sign-out —
+    // here bounced every Factloop user to the wrong product on sign-out —
     // the same bug class as ProtectedRoute's fallback in App.jsx. Read the
     // path at call time (still on the original page, before the redirect)
     // rather than threading a destination prop through every caller.
-    const isBrainrot = window.location.pathname.startsWith('/brainrot')
-    window.location.href = isBrainrot ? '/brainrot' : '/youtube-shorts'
+    const isFactloop = window.location.pathname.startsWith('/factloop')
+    window.location.href = isFactloop ? '/factloop' : '/youtube-shorts'
   }
 
   return (

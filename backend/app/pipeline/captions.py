@@ -270,6 +270,10 @@ FONT_OPTIONS: dict[str, str] = {
     "bebas_neue":    "Bebas Neue",             # tall condensed — word_pop/karaoke punch
     "poppins":       "Poppins ExtraBold",      # rounder, friendlier bold
     "jakarta":       "Plus Jakarta Sans ExtraBold",  # modern, clean SaaS-y bold
+    "bangers":            "Bangers",           # comic/meme bold display — very trending
+    "luckiest_guy":       "Luckiest Guy",      # playful rounded bold — trending on Shorts/TikTok
+    "permanent_marker":   "Permanent Marker",  # bold marker script — legible "cursive" feel
+    "caveat":             "Caveat",            # genuine handwritten cursive/script
 }
 DEFAULT_FONT = "default"
 VALID_FONTS  = list(FONT_OPTIONS.keys())

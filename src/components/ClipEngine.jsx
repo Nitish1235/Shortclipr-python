@@ -156,6 +156,10 @@ const FONT_OPTIONS = [
   { val:'bebas_neue',    label:'Bebas Neue' },
   { val:'poppins',       label:'Poppins' },
   { val:'jakarta',       label:'Plus Jakarta' },
+  { val:'bangers',            label:'Bangers' },
+  { val:'luckiest_guy',       label:'Luckiest Guy' },
+  { val:'permanent_marker',   label:'Permanent Marker' },
+  { val:'caveat',             label:'Caveat (Cursive)' },
 ]
 
 // ── Free-tier caps — mirrors backend/app/core/plan_limits.py "free" plan ──

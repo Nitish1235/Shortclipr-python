@@ -361,6 +361,26 @@ async def set_brainrot_reserved_credits(job_id: str, reserved_credits: int) -> N
     )
 
 
+async def set_brainrot_generated_images(job_id: str, images_by_stat_key: dict) -> None:
+    """Factloop: patches the just-uploaded per-fact image URLs into payload
+    so the FFmpeg stage can find them later. In split-worker mode the
+    FFmpeg stage runs on a different worker than the generate stage, so a
+    plain in-memory handoff won't do — same rationale gameplay_clip_url,
+    music_url, and scene_plan.audio_url are all stored as URLs in the
+    payload/scene_plan today rather than passed in-process. Same
+    merge-only-this-key pattern as set_brainrot_post_meta.
+
+    images_by_stat_key: {stat_key: {"url": ..., "source": "pexels"|"unsplash"|
+    "pixabay"|"ai"}} — one entry per user-supplied fact (see
+    factloop_image.generate_images_for_lines), replacing the old single
+    generated_image_url this used to store before the per-fact rework."""
+    patch = {"generated_images": images_by_stat_key}
+    await _execute(
+        "UPDATE brainrot_jobs SET payload = payload || $1::jsonb, updated_at=$2 WHERE job_id=$3",
+        patch, _now(), job_id,
+    )
+
+
 async def set_job_awaiting_review(job_id: str) -> None:
     """Script stage finished — dialogue is written and waiting for the user
     to read/edit/regenerate it before anything expensive (TTS, render,

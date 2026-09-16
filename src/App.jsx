@@ -53,6 +53,19 @@ import BrainrotAlternativeLanding from './pages/brainrot/BrainrotAlternativeLand
 import BrainrotGuidesIndex from './pages/brainrot/BrainrotGuidesIndex'
 import BrainrotGuideArticle from './pages/brainrot/BrainrotGuideArticle'
 
+// Factloop imports
+import FactloopStudio    from './pages/factloop/FactloopStudio'
+import FactloopLogin     from './pages/factloop/FactloopLogin'
+import FactloopSettings  from './pages/factloop/FactloopSettings'
+import FactloopBilling   from './pages/factloop/FactloopBilling'
+import FactloopLanding from './pages/factloop/FactloopLanding'
+import FactloopToolsIndex from './pages/factloop/FactloopToolsIndex'
+import FactloopToolLanding from './pages/factloop/FactloopToolLanding'
+import FactloopAlternativesIndex from './pages/factloop/FactloopAlternativesIndex'
+import FactloopAlternativeLanding from './pages/factloop/FactloopAlternativeLanding'
+import FactloopGuidesIndex from './pages/factloop/FactloopGuidesIndex'
+import FactloopGuideArticle from './pages/factloop/FactloopGuideArticle'
+
 // SEO landing pages
 import ToolsIndex        from './pages/ToolsIndex'
 import ToolLanding       from './pages/ToolLanding'
@@ -192,6 +205,30 @@ function BrainrotOfflinePage() {
   )
 }
 
+// ── Factloop kill switch ──────────────────────────────────────────
+// Flip to false to bring the whole product online. Matching flag on
+// the backend: backend/app/api/factloop.py's FACTLOOP_OFFLINE.
+const FACTLOOP_OFFLINE = true
+
+function FactloopOfflinePage() {
+  return (
+    <div style={{
+      minHeight: '100vh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', gap: 12,
+      fontFamily: `'Inter', system-ui, -apple-system, sans-serif`,
+      textAlign: 'center', padding: 24, background: '#fff', color: '#111',
+    }}>
+      <h1 style={{ fontSize: '1.4rem', fontWeight: 600, margin: 0 }}>Factloop is temporarily unavailable</h1>
+      <p style={{ color: '#888', maxWidth: 420, margin: 0, fontSize: '.92rem' }}>
+        We've taken it offline for now. Check back soon.
+      </p>
+      <a href="/youtube-shorts" style={{ marginTop: 12, color: '#cf1322', fontWeight: 600, fontSize: '.9rem' }}>
+        Go to ShortClipr →
+      </a>
+    </div>
+  )
+}
+
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => {
@@ -267,6 +304,31 @@ export default function App() {
                 <Route path="/brainrot/studio"   element={<ProtectedRoute fallback="/brainrot/login"><BrainrotStudio /></ProtectedRoute>} />
                 <Route path="/brainrot/billing"  element={<ProtectedRoute fallback="/brainrot"><BrainrotBilling /></ProtectedRoute>} />
                 <Route path="/brainrot/settings" element={<ProtectedRoute fallback="/brainrot"><BrainrotSettings /></ProtectedRoute>} />
+              </>
+            )}
+
+            {/* ── Factloop product — OFFLINE, see FACTLOOP_OFFLINE above ── */}
+            {FACTLOOP_OFFLINE ? (
+              <Route path="/factloop/*" element={<FactloopOfflinePage />} />
+            ) : (
+              <>
+                <Route path="/factloop"          element={<FactloopLanding />} />
+
+                {/* Factloop SEO pages */}
+                <Route path="/factloop/tools"                element={<FactloopToolsIndex />} />
+                <Route path="/factloop/tools/:slug"           element={<FactloopToolLanding />} />
+                <Route path="/factloop/alternatives"          element={<FactloopAlternativesIndex />} />
+                <Route path="/factloop/alternatives/:slug"    element={<FactloopAlternativeLanding />} />
+                <Route path="/factloop/guides"                element={<FactloopGuidesIndex />} />
+                <Route path="/factloop/guides/:slug"          element={<FactloopGuideArticle />} />
+
+                {/* Auth */}
+                <Route path="/factloop/login"    element={<FactloopLogin />} />
+
+                {/* Protected — user must be logged in */}
+                <Route path="/factloop/studio"   element={<ProtectedRoute fallback="/factloop/login"><FactloopStudio /></ProtectedRoute>} />
+                <Route path="/factloop/billing"  element={<ProtectedRoute fallback="/factloop"><FactloopBilling /></ProtectedRoute>} />
+                <Route path="/factloop/settings" element={<ProtectedRoute fallback="/factloop"><FactloopSettings /></ProtectedRoute>} />
               </>
             )}
           </Routes>

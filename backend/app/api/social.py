@@ -166,7 +166,12 @@ def _parse_state(state: str) -> tuple[str, str]:
 
 def _studio_url(product: str, status: str, reason: str = "") -> str:
     """Return the frontend redirect URL for the given product and status."""
-    base = "/brainrot/studio" if product == "brainrot" else "/youtube-shorts/dashboard"
+    if product == "factloop":
+        base = "/factloop/studio"
+    elif product == "brainrot":
+        base = "/brainrot/studio"
+    else:
+        base = "/youtube-shorts/dashboard"
     url = f"{settings.FRONTEND_URL}{base}?status={status}"
     if reason:
         url += f"&reason={reason}"

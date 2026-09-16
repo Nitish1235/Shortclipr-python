@@ -33,6 +33,10 @@ FONT_FILES: dict[str, str] = {
     "bebas_neue":    str(_ASSETS_DIR / "BebasNeue-Regular.ttf"),
     "poppins":       str(_ASSETS_DIR / "Poppins-ExtraBold.ttf"),
     "jakarta":       str(_ASSETS_DIR / "PlusJakartaSans-ExtraBold.ttf"),
+    "bangers":            str(_ASSETS_DIR / "Bangers-Regular.ttf"),
+    "luckiest_guy":       str(_ASSETS_DIR / "LuckiestGuy-Regular.ttf"),
+    "permanent_marker":   str(_ASSETS_DIR / "PermanentMarker-Regular.ttf"),
+    "caveat":             str(_ASSETS_DIR / "Caveat-VariableFont_wght.ttf"),
 }
 
 # ── Title text colour swatches — independent of caption colours ────────

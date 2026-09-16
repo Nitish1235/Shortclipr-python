@@ -69,11 +69,27 @@ COPY migrations/ migrations/
 COPY start.sh    start.sh
 RUN chmod +x start.sh
 
+# Fetch additional trending caption fonts (Bangers, Luckiest Guy, Permanent
+# Marker, Caveat — a script/cursive face) straight from the google/fonts repo
+# into app/assets/fonts/ so both consumers below pick them up: PIL's title_box.py
+# (needs a literal file path, see FONT_FILES there) and the fontconfig registration
+# step right after (glob-copies everything in this directory). -fsSL: fail loudly
+# on a bad response instead of silently baking in a missing font.
+RUN curl -fsSL -o app/assets/fonts/Bangers-Regular.ttf \
+        https://raw.githubusercontent.com/google/fonts/main/ofl/bangers/Bangers-Regular.ttf \
+    && curl -fsSL -o app/assets/fonts/LuckiestGuy-Regular.ttf \
+        https://raw.githubusercontent.com/google/fonts/main/apache/luckiestguy/LuckiestGuy-Regular.ttf \
+    && curl -fsSL -o app/assets/fonts/PermanentMarker-Regular.ttf \
+        https://raw.githubusercontent.com/google/fonts/main/apache/permanentmarker/PermanentMarker-Regular.ttf \
+    && curl -fsSL -o app/assets/fonts/Caveat-VariableFont_wght.ttf \
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/caveat/Caveat%5Bwght%5D.ttf"
+
 # Register bundled caption fonts (Montserrat ExtraBold, Archivo Black, Anton,
-# Bebas Neue, Poppins ExtraBold, Plus Jakarta Sans ExtraBold) + Twemoji Mozilla
-# (COLR colour-emoji font — provides emoji glyphs as a fontconfig fallback so
-# libass renders 🔥💯✅ etc. inline with caption/title text, no overlay needed)
-# with fontconfig so libass can find them by family name in the .ass file.
+# Bebas Neue, Poppins ExtraBold, Plus Jakarta Sans ExtraBold, Bangers,
+# Luckiest Guy, Permanent Marker, Caveat) + Twemoji Mozilla (COLR colour-emoji
+# font — provides emoji glyphs as a fontconfig fallback so libass renders
+# 🔥💯✅ etc. inline with caption/title text, no overlay needed) with
+# fontconfig so libass can find them by family name in the .ass file.
 RUN mkdir -p /usr/share/fonts/truetype/shortclipr \
     && cp app/assets/fonts/*.ttf /usr/share/fonts/truetype/shortclipr/ \
     && fc-cache -fv
