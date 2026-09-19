@@ -18,6 +18,7 @@ Endpoints:
     DELETE /admin/showcase/{name}   — remove from showcase
     GET  /admin/showcase            — list showcase with edit metadata
     GET  /admin/users/by-email      — look up a user before assigning a job
+    POST /admin/users/set-plan      — force-set a user's plan (fix stuck paid users)
     POST /admin/jobs/assign         — generate a clip job and assign it to
                                        another user by email (support tool
                                        for retrying failed user jobs)
@@ -614,6 +615,99 @@ async def admin_find_user_by_email(email: str, admin: AdminUser):
         "email": user["email"],
         "full_name": user.get("full_name") or "",
         "plan": user.get("plan") or "free",
+        "brainrot_plan": user.get("brainrot_plan") or "free",
+        "credits_used": user.get("credits_used", 0),
+        "credits_limit": user.get("credits_limit", 0),
+        "video_minutes_used": user.get("video_minutes_used", 0),
+        "video_minutes_limit": user.get("video_minutes_limit", 0),
+        "brainrot_credits_used": user.get("brainrot_credits_used", 0),
+        "brainrot_credits_limit": user.get("brainrot_credits_limit", 0),
+    }
+
+
+class AdminSetPlanRequest(BaseModel):
+    email: str
+    # Shortclipr plan — pass "free" to downgrade, or any valid plan key to upgrade.
+    # Omit (leave None) to leave unchanged.
+    plan: str | None = None
+    # Brainrot plan — same rules.
+    brainrot_plan: str | None = None
+
+
+@router.post("/admin/users/set-plan")
+async def admin_set_user_plan(body: AdminSetPlanRequest, admin: AdminUser):
+    """
+    Admin: force-set a user's Shortclipr plan, Brainrot plan, or both.
+
+    Primary use-case: a user's payment was cancelled but the webhook was
+    silently dropped (e.g. missing email in Dodo payload) so they're still
+    showing as paid. Call this with plan="free" and/or brainrot_plan="free"
+    to immediately downgrade them.
+
+    Also works in reverse — pass a real plan name to manually grant access
+    (e.g. comp a plan for a support case).
+
+    credits_limit / video_minutes_limit are derived automatically from the
+    plan name using the same PLAN_LIMITS table the webhook uses.
+    credits_used / video_minutes_used are clamped to the new limits so the
+    user is never left in a hard-locked state.
+    """
+    from app.core.plan_limits import PLAN_LIMITS, get_credits_limit, get_video_minutes_limit
+    from app.core.brainrot_plan_limits import BRAINROT_PLAN_LIMITS, get_brainrot_credits_limit
+
+    email = body.email.strip().lower()
+    user = await db.get_user_by_email(email)
+    if not user:
+        raise HTTPException(status_code=404, detail="No user with that email")
+
+    user_id = str(user["id"])
+    kwargs: dict = {}
+
+    if body.plan is not None:
+        if body.plan not in PLAN_LIMITS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown Shortclipr plan '{body.plan}'. Valid: {sorted(PLAN_LIMITS)}",
+            )
+        kwargs["plan"] = body.plan
+        kwargs["credits_limit"] = get_credits_limit(body.plan)
+        kwargs["video_minutes_limit"] = get_video_minutes_limit(body.plan)
+
+    if body.brainrot_plan is not None:
+        if body.brainrot_plan not in BRAINROT_PLAN_LIMITS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown Brainrot plan '{body.brainrot_plan}'. Valid: {sorted(BRAINROT_PLAN_LIMITS)}",
+            )
+        kwargs["brainrot_plan"] = body.brainrot_plan
+        kwargs["brainrot_credits_limit"] = get_brainrot_credits_limit(body.brainrot_plan)
+
+    if not kwargs:
+        raise HTTPException(status_code=422, detail="Supply at least one of: plan, brainrot_plan")
+
+    updated = await db.admin_set_user_plan(user_id, **kwargs)
+    if not updated:
+        raise HTTPException(status_code=500, detail="Update ran but returned no row — check DB logs")
+
+    logger.info(
+        f"Admin {admin.email} force-set plan for {email}: "
+        + ", ".join(f"{k}={v}" for k, v in kwargs.items())
+    )
+    return {
+        "success": True,
+        "email": email,
+        "user_id": user_id,
+        "updated": {k: v for k, v in kwargs.items()},
+        "now": {
+            "plan": updated.get("plan"),
+            "credits_limit": updated.get("credits_limit"),
+            "credits_used": updated.get("credits_used"),
+            "video_minutes_limit": updated.get("video_minutes_limit"),
+            "video_minutes_used": updated.get("video_minutes_used"),
+            "brainrot_plan": updated.get("brainrot_plan"),
+            "brainrot_credits_limit": updated.get("brainrot_credits_limit"),
+            "brainrot_credits_used": updated.get("brainrot_credits_used"),
+        },
     }
 
 

@@ -161,11 +161,9 @@ def _verify_signature(
 
 
 async def _handle_payment_succeeded(payload: dict) -> None:
-    email      = payload.get("customer", {}).get("email", "")
-    product_id = payload.get("product_id", "")
-
     # Prefer the plan we stamped into checkout metadata — the raw product_id
     # Dodo echoes is the prd_… id, which the friendly-name map won't match.
+    product_id = payload.get("product_id", "")
     meta_plan = (payload.get("metadata") or {}).get("plan")
     if meta_plan in PLAN_LIMITS:
         plan_name = meta_plan
@@ -181,21 +179,27 @@ async def _handle_payment_succeeded(payload: dict) -> None:
         plan_name = _FALLBACK_PAID_PLAN
         logger.error(
             f"UNRESOLVED PAID PLAN — product_id={product_id!r}, "
-            f"metadata.plan={meta_plan!r}, email={payload.get('customer', {}).get('email', '')!r}. "
+            f"metadata.plan={meta_plan!r}. "
             f"Granted fallback {_FALLBACK_PAID_PLAN!r}; add this product_id to DODO_PLAN_MAP or "
             f"stamp metadata.plan at checkout to fix. Manual reconciliation likely needed."
         )
 
-    if not email:
-        logger.error("Payment succeeded but no email in payload")
-        return
+    user_id = (payload.get("metadata") or {}).get("user_id")
+    customer = payload.get("customer")
+    email = customer.get("email", "") if isinstance(customer, dict) else ""
 
-    row = await db._fetchrow("SELECT id FROM users WHERE email=$1", email)
+    row = None
+    if user_id:
+        row = await db._fetchrow("SELECT id, email FROM users WHERE id=$1", user_id)
+    if not row and email:
+        row = await db._fetchrow("SELECT id, email FROM users WHERE email=$1", email)
+
     if not row:
-        logger.error(f"No user found for email: {email}")
+        logger.error(f"Payment succeeded but no user found for user_id={user_id}, email={email}")
         return
 
-    user_id          = row["id"]
+    user_id = row["id"]
+    email = row["email"]
     new_credits      = get_credits_limit(plan_name)
     new_video_mins   = get_video_minutes_limit(plan_name)
 
@@ -220,15 +224,22 @@ async def _handle_payment_succeeded(payload: dict) -> None:
 
 
 async def _handle_downgrade(payload: dict) -> None:
-    email = payload.get("customer", {}).get("email", "")
-    if not email:
-        return
+    user_id = (payload.get("metadata") or {}).get("user_id")
+    customer = payload.get("customer")
+    email = customer.get("email", "") if isinstance(customer, dict) else ""
 
-    row = await db._fetchrow("SELECT id FROM users WHERE email=$1", email)
+    row = None
+    if user_id:
+        row = await db._fetchrow("SELECT id, email FROM users WHERE id=$1", user_id)
+    if not row and email:
+        row = await db._fetchrow("SELECT id, email FROM users WHERE email=$1", email)
+
     if not row:
+        logger.error(f"Downgrade failed: no user found for user_id={user_id}, email={email}")
         return
 
     user_id = row["id"]
+    email = row["email"]
     # Also reset credits_used / video_minutes_used, clamped to the new
     # (lower) free-tier limits. Otherwise a paid user who'd already used
     # e.g. 25 of 30 clips on starter_30 would land on free with
@@ -257,9 +268,7 @@ async def _handle_downgrade(payload: dict) -> None:
 # ── Brainrot — mirrors the two handlers above, fully separate pool ──
 
 async def _handle_brainrot_payment_succeeded(payload: dict) -> None:
-    email      = payload.get("customer", {}).get("email", "")
     product_id = payload.get("product_id", "")
-
     meta_plan = (payload.get("metadata") or {}).get("plan")
     if meta_plan in BRAINROT_PLAN_LIMITS:
         plan_name = meta_plan
@@ -269,22 +278,28 @@ async def _handle_brainrot_payment_succeeded(payload: dict) -> None:
         plan_name = _FALLBACK_PAID_BRAINROT_PLAN
         logger.error(
             f"UNRESOLVED PAID BRAINROT PLAN — product_id={product_id!r}, "
-            f"metadata.plan={meta_plan!r}, email={payload.get('customer', {}).get('email', '')!r}. "
+            f"metadata.plan={meta_plan!r}. "
             f"Granted fallback {_FALLBACK_PAID_BRAINROT_PLAN!r}; add this product_id to "
             f"DODO_BRAINROT_PLAN_MAP or stamp metadata.plan at checkout to fix. "
             f"Manual reconciliation likely needed."
         )
 
-    if not email:
-        logger.error("Brainrot payment succeeded but no email in payload")
-        return
+    user_id = (payload.get("metadata") or {}).get("user_id")
+    customer = payload.get("customer")
+    email = customer.get("email", "") if isinstance(customer, dict) else ""
 
-    row = await db._fetchrow("SELECT id FROM users WHERE email=$1", email)
+    row = None
+    if user_id:
+        row = await db._fetchrow("SELECT id, email FROM users WHERE id=$1", user_id)
+    if not row and email:
+        row = await db._fetchrow("SELECT id, email FROM users WHERE email=$1", email)
+
     if not row:
-        logger.error(f"No user found for email: {email}")
+        logger.error(f"Brainrot payment succeeded but no user found for user_id={user_id}, email={email}")
         return
 
     user_id     = row["id"]
+    email       = row["email"]
     new_credits = get_brainrot_credits_limit(plan_name)
 
     await db._execute(
@@ -303,15 +318,22 @@ async def _handle_brainrot_payment_succeeded(payload: dict) -> None:
 
 
 async def _handle_brainrot_downgrade(payload: dict) -> None:
-    email = payload.get("customer", {}).get("email", "")
-    if not email:
-        return
+    user_id = (payload.get("metadata") or {}).get("user_id")
+    customer = payload.get("customer")
+    email = customer.get("email", "") if isinstance(customer, dict) else ""
 
-    row = await db._fetchrow("SELECT id FROM users WHERE email=$1", email)
+    row = None
+    if user_id:
+        row = await db._fetchrow("SELECT id, email FROM users WHERE id=$1", user_id)
+    if not row and email:
+        row = await db._fetchrow("SELECT id, email FROM users WHERE email=$1", email)
+
     if not row:
+        logger.error(f"Brainrot downgrade failed: no user found for user_id={user_id}, email={email}")
         return
 
     user_id = row["id"]
+    email = row["email"]
     # Same clamp-rather-than-lockout reasoning as _handle_downgrade() above.
     free_credits = get_brainrot_credits_limit("free")
     await db._execute(

@@ -876,6 +876,54 @@ async def get_user_by_email(email: str) -> dict | None:
     return await _fetchrow("SELECT * FROM users WHERE email=$1", email)
 
 
+async def admin_set_user_plan(
+    user_id: str,
+    *,
+    plan: str | None = None,
+    credits_limit: int | None = None,
+    video_minutes_limit: int | None = None,
+    brainrot_plan: str | None = None,
+    brainrot_credits_limit: int | None = None,
+) -> dict | None:
+    """Admin-only: force-set a user's Shortclipr and/or Brainrot plan.
+
+    Only the fields you pass (not None) are updated — the rest are left alone.
+    credits_used / video_minutes_used / brainrot_credits_used are clamped to
+    the new limits so the user is never accidentally hard-locked out.
+
+    Returns the updated user row, or None if the user wasn't found.
+    """
+    sets: list[str] = ["updated_at = NOW()"]
+    args: list = []
+
+    def _arg(v) -> str:
+        args.append(v)
+        return f"${len(args)}"
+
+    if plan is not None:
+        sets.append(f"plan = {_arg(plan)}")
+    if credits_limit is not None:
+        p = _arg(credits_limit)
+        sets.append(f"credits_limit = {p}")
+        sets.append(f"credits_used  = LEAST(credits_used, {p})")
+    if video_minutes_limit is not None:
+        p = _arg(video_minutes_limit)
+        sets.append(f"video_minutes_limit = {p}")
+        sets.append(f"video_minutes_used  = LEAST(video_minutes_used, {p})")
+    if brainrot_plan is not None:
+        sets.append(f"brainrot_plan = {_arg(brainrot_plan)}")
+    if brainrot_credits_limit is not None:
+        p = _arg(brainrot_credits_limit)
+        sets.append(f"brainrot_credits_limit = {p}")
+        sets.append(f"brainrot_credits_used  = LEAST(brainrot_credits_used, {p})")
+
+    args.append(user_id)
+    id_placeholder = f"${len(args)}"
+    query = f"UPDATE users SET {', '.join(sets)} WHERE id = {id_placeholder} RETURNING *"
+    return await _fetchrow(query, *args)
+
+
+
 async def upsert_user(user_data: dict) -> dict:
     """Insert or update user on Google login using atomic upsert.
 
