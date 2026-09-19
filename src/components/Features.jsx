@@ -69,7 +69,7 @@ export default function Features() {
         </div>
 
         {/* Feature grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+        <div id="features-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
           {features.map((f) => (
             <div key={f.title} style={{
               background: '#fff',
@@ -116,10 +116,10 @@ export default function Features() {
 
       <style>{`
         @media(max-width:900px){
-          #features div[style*="grid-template-columns: repeat(3"]{grid-template-columns:repeat(2,1fr) !important;}
+          #features-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
         @media(max-width:580px){
-          #features div[style*="grid-template-columns"]{grid-template-columns:1fr !important;}
+          #features-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </section>

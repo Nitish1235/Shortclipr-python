@@ -89,7 +89,7 @@ export default function HowItWorks() {
         </div>
 
         {/* Flow */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0', position: 'relative' }}>
+        <div id="how-it-works-flow" style={{ display: 'flex', alignItems: 'center', gap: '0', position: 'relative' }}>
           {steps.map((step, i) => (
             <div key={step.num} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
 
@@ -166,7 +166,7 @@ export default function HowItWorks() {
 
               {/* Connector Arrow */}
               {i < steps.length - 1 && (
-                <div style={{ width: '56px', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                <div className="step-arrow" style={{ width: '56px', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                   <svg width="56" height="24" viewBox="0 0 56 24" fill="none">
                     <line x1="4" y1="12" x2="44" y2="12" stroke="#e5e5e5" strokeWidth="1.5" strokeDasharray="4 3"/>
                     <polyline points="40,7 52,12 40,17" stroke="#cf1322" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
@@ -211,12 +211,14 @@ export default function HowItWorks() {
       <style>{`
         @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
         @media(max-width:720px){
-          #how-it-works > div > div[style*="display: flex; align-items: center; gap: 0"] {
+          #how-it-works-flow {
             flex-direction: column !important;
+            gap: 16px !important;
           }
-          #how-it-works > div > div[style*="display: flex; align-items: center; gap: 0"] > div {
+          #how-it-works-flow > div {
             width: 100% !important;
           }
+          .step-arrow { display: none !important; }
         }
       `}</style>
     </section>

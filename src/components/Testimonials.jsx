@@ -83,7 +83,7 @@ export default function Testimonials() {
         </div>
 
         {/* Testimonial grid — 3 col */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '18px' }}>
+        <div id="testimonials-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '18px' }}>
           {testimonials.map(t => (
             <div key={t.handle} style={{
               background: '#fff',
@@ -155,10 +155,10 @@ export default function Testimonials() {
 
       <style>{`
         @media(max-width:900px){
-          #testimonials div[style*="grid-template-columns: repeat(3"]{grid-template-columns:repeat(2,1fr) !important;}
+          #testimonials-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
         @media(max-width:560px){
-          #testimonials div[style*="grid-template-columns"]{grid-template-columns:1fr !important;}
+          #testimonials-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </section>

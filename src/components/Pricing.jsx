@@ -127,7 +127,7 @@ export default function Pricing() {
         </div>
 
         {/* Two cards */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1.1fr', gap:'28px', alignItems:'start' }}>
+        <div id="pricing-grid" style={{ display:'grid', gridTemplateColumns:'1fr 1.1fr', gap:'28px', alignItems:'start' }}>
 
           {/* Free card */}
           <div style={{
@@ -248,7 +248,7 @@ export default function Pricing() {
 
       <style>{`
         @media(max-width:700px){
-          #pricing div[style*="grid-template-columns"]{grid-template-columns:1fr !important;}
+          #pricing-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </section>

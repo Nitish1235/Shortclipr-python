@@ -128,7 +128,7 @@ export default function VisualHighlights() {
         </div>
 
         {/* Metrics row */}
-        <div style={{
+        <div id="pipeline-metrics-grid" style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(4, 1fr)',
           gap: '1px',
@@ -158,8 +158,8 @@ export default function VisualHighlights() {
 
       <style>{`
         @media(max-width:640px){
-          #pipeline div[style*="grid-template-columns: repeat(4"] {
-            grid-template-columns: repeat(2,1fr) !important;
+          #pipeline-metrics-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
           }
         }
       `}</style>

@@ -117,7 +117,7 @@ export default function Hero() {
         {/* ── BIG URL INPUT — center, above fold ── */}
         <div style={{ maxWidth: '680px', margin: '0 auto 12px' }}>
           <form onSubmit={handleSubmit}>
-            <div style={{
+            <div id="hero-form-container" style={{
               display: 'flex',
               borderRadius: '14px',
               border: focused ? '2.5px solid #cf1322' : '2px solid #111',
@@ -255,7 +255,7 @@ export default function Hero() {
         }
         @media(max-width:600px){
           #hero form > div { flex-direction:column; border-radius:12px !important; }
-          #hero form > div button { border-radius:0 0 10px 10px !important; padding:14px !important; }
+          #hero form > div button { border-radius:12px !important; padding:14px !important; }
         }
       `}</style>
     </section>

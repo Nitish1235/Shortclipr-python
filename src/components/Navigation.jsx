@@ -173,33 +173,56 @@ export default function Navigation() {
           }}
         >{menuOpen ? '✕' : '☰'}</button>
 
-        {/* Mobile dropdown — Home + sign in/out only */}
+        {/* Mobile dropdown — Full navigation + sign in/out */}
         {menuOpen && (
           <div style={{
             position: 'absolute', top: 'calc(100% + 8px)', right: 0, left: 0,
             background: '#fff', border: '2px solid #111', borderRadius: 12,
-            boxShadow: '4px 4px 0 #cf1322', padding: 8,
-            display: 'flex', flexDirection: 'column', gap: 2, zIndex: 250,
+            boxShadow: '4px 4px 0 #cf1322', padding: '12px 8px',
+            display: 'flex', flexDirection: 'column', gap: 6, zIndex: 250,
           }}>
             <a href="/youtube-shorts"
               onClick={(e) => { setMenuOpen(false); handleNavClick(e, '/youtube-shorts') }}
               style={{
                 color: '#111', fontSize: '.9rem', fontWeight: 700,
-                padding: '12px 14px', borderRadius: 8, textDecoration: 'none', display: 'block',
+                padding: '10px 14px', borderRadius: 8, textDecoration: 'none', display: 'block',
               }}>Home</a>
+            
+            {navLinks.map(({ label, href }) => (
+              <a key={href} href={href}
+                onClick={(e) => { setMenuOpen(false); handleNavClick(e, href) }}
+                style={{
+                  color: '#444', fontSize: '.9rem', fontWeight: 600,
+                  padding: '10px 14px', borderRadius: 8, textDecoration: 'none', display: 'block',
+                }}
+              >{label}</a>
+            ))}
+
+            <div style={{ margin: '8px 4px', height: '1px', background: '#eee' }} />
+
             {user ? (
-              <button onClick={() => { setMenuOpen(false); logout() }} style={{
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                textAlign: 'left', color: '#999', fontSize: '.9rem', fontWeight: 700,
-                padding: '12px 14px', borderRadius: 8,
-              }}>Sign out</button>
+              <>
+                <Link to="/youtube-shorts/dashboard"
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    display: 'block', color: '#cf1322', fontSize: '.9rem', fontWeight: 700,
+                    padding: '10px 14px', borderRadius: 8, textDecoration: 'none',
+                  }}
+                >Dashboard</Link>
+                <button onClick={() => { setMenuOpen(false); logout() }} style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  textAlign: 'left', color: '#999', fontSize: '.9rem', fontWeight: 700,
+                  padding: '10px 14px', borderRadius: 8,
+                }}>Sign out</button>
+              </>
             ) : (
               <Link
                 to="/youtube-shorts/login"
                 onClick={() => setMenuOpen(false)}
                 style={{
                   display: 'block', color: '#cf1322', fontSize: '.9rem', fontWeight: 700,
-                  padding: '12px 14px', borderRadius: 8, textDecoration: 'none',
+                  padding: '10px 14px', borderRadius: 8, textDecoration: 'none',
+                  background: '#fef2f2',
                 }}
               >Sign in →</Link>
             )}

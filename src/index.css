@@ -245,46 +245,18 @@ h1,h2,h3,h4,h5 { line-height: 1.2; letter-spacing: -0.04em; font-weight: 700; co
     gap: 16px !important;
   }
 
-  /* Navigation wrapper fix (scoped to the legacy YT-shorts nav only —
-     do NOT use an inline-style substring selector here, it also matched
-     BrainrotNav's wrapper since both use the same z-index: 200 style and
-     forced its nav into flex-direction: column on mobile) */
-  .sc-nav-wrap > nav {
-    flex-wrap: wrap;
-    justify-content: center !important;
-    padding: 14px !important;
-    gap: 12px !important;
-    flex-direction: column;
-  }
-  /* Hide the nav links on mobile for cleaner look */
-  .sc-nav-wrap > nav > ul {
-    display: none !important;
-  }
-  /* Auth buttons row in Navigation wrapper */
-  .sc-nav-wrap > nav > div:last-child {
-    width: 100%;
-    justify-content: center !important;
-    flex-wrap: wrap;
-    gap: 10px !important;
-    margin-top: 4px;
-  }
-  
   /* Adjust hero layouts */
-  #hero div[style*="display: flex"] {
-    flex-direction: column;
-  }
-  
-  /* Hero URL input form fix */
-  form[style*="display: flex"] {
+  #hero-form-container {
     flex-direction: column !important;
   }
-  form[style*="display: flex"] input {
-    width: 100% !important;
+  
+  #hero-form-container input {
+    margin-bottom: 8px;
     border-radius: 8px !important;
-    margin-bottom: 8px !important;
   }
-  form[style*="display: flex"] button {
-    width: 100% !important;
+  
+  #hero-form-container button {
+    width: 100%;
     border-radius: 8px !important;
   }
 }

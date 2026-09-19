@@ -61,7 +61,7 @@ export default function UseCases() {
         </div>
 
         {/* Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px' }}>
+        <div id="use-cases-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px' }}>
           {cases.map(c => (
             <div key={c.type} style={{
               background: c.bg,
@@ -120,7 +120,7 @@ export default function UseCases() {
 
       <style>{`
         @media(max-width:680px){
-          #use-cases div[style*="grid-template-columns: repeat(2"]{grid-template-columns:1fr !important;}
+          #use-cases-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </section>

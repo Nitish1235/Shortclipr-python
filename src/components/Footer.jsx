@@ -88,7 +88,7 @@ export default function Footer() {
       <div style={{ maxWidth:'1100px', margin:'0 auto' }}>
 
         {/* Top row */}
-        <div style={{
+        <div id="footer-grid" style={{
           display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))',
           gap:'40px', marginBottom:'56px',
         }}>
@@ -145,7 +145,7 @@ export default function Footer() {
 
       <style>{`
         @media(max-width:768px){
-          footer div[style*="grid-template-columns"]{grid-template-columns:1fr 1fr !important;}
+          #footer-grid { grid-template-columns: 1fr 1fr !important; }
         }
       `}</style>
     </footer>
