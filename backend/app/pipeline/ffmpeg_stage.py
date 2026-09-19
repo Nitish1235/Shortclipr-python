@@ -125,6 +125,10 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
 
     # Parse payload
     user_id     = str(payload["user_id"])
+
+    user_info = await db.get_user(user_id)
+    is_marketer = bool(user_info and user_info.get("plan") == "marketer")
+
     youtube_url = row["youtube_url"]
     options     = payload["options"]
     video_id    = payload["video_id"]
@@ -325,6 +329,7 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
                         font=font, title_color=title_color, title_bg=title_bg,
                         title_bg_opacity=title_bg_opacity,
                         job_semaphore=job_encode_semaphore,
+                        is_marketer=is_marketer,
                     )
 
                 thumb_path = job_dir / f"clip_{i:02d}_thumb.jpg"

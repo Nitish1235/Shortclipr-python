@@ -1088,6 +1088,7 @@ async def _encode_reframed_and_captioned(
     title_bg: str = DEFAULT_TITLE_BG,
     title_bg_opacity: float = DEFAULT_TITLE_BG_OPACITY,
     job_semaphore: asyncio.Semaphore | None = None,
+    is_marketer: bool = False,
 ) -> None:
     """One ffmpeg invocation: reframe + (optionally) burn captions, producing
     both the raw reframed output and the captioned output."""
@@ -1095,8 +1096,26 @@ async def _encode_reframed_and_captioned(
     title_color_hex = TITLE_TEXT_COLORS.get(title_color, TITLE_TEXT_COLORS[DEFAULT_TITLE_TEXT_COLOR])
     box_path: Path | None = None
     try:
+        fc = _build_template_filter(template, bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label="reframed_base")
+        extra_inputs: list[str] = []
+        
+        logo_path = Path(__file__).parent.parent / "assets" / "logo.png"
+        if is_marketer and logo_path.exists():
+            extra_inputs.extend(["-i", str(logo_path)])
+            logo_idx = len(extra_inputs) // 2
+            logo_w = int(width * 0.35)
+            # Show watermark until 10 s before the clip ends; guard against clips < 10 s.
+            watermark_end = max(0.0, clip_duration - 10.0)
+            fc += (
+                f";[{logo_idx}:v]format=rgba,colorchannelmixer=aa=0.45,"
+                f"scale={logo_w}:-2[watermark];"
+                f"[reframed_base][watermark]overlay=(W-w)/2:(H*0.75)-(h/2)"
+                f":enable='lte(t,{watermark_end:.3f})'[reframed]"
+            )
+        else:
+            fc += f";[reframed_base]copy[reframed]"
+
         if captions or hook_title:
-            fc = _build_template_filter(template, bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label="reframed")
             ass_content = build_ass_content(
                 captions or [], style, color, h_align, v_align, words_per_line, hook_title,
                 template=template, title_permanent=title_permanent, clip_duration=clip_duration, font=font,
@@ -1107,7 +1126,7 @@ async def _encode_reframed_and_captioned(
                 ass_path = f.name
             safe_ass = ass_path.replace("\\", "/").replace(":", "\\:")
 
-            extra_inputs: list[str] = []
+            box_added = False
             if hook_title and hook_title.strip() and title_bg != "none":
                 hook_duration = compute_hook_duration(title_permanent, clip_duration)
                 hook_x, hook_y, alignment = _hook_position(template)
@@ -1117,13 +1136,15 @@ async def _encode_reframed_and_captioned(
                 if box:
                     box_path, box_w, box_h = box
                     ox, oy = overlay_xy(hook_x, hook_y, alignment, box_w, box_h)
-                    extra_inputs = ["-i", str(box_path)]
+                    extra_inputs.extend(["-i", str(box_path)])
+                    box_idx = len(extra_inputs) // 2
                     fc += (
                         f";[reframed]split=2[rawv][capv0];"
-                        f"[capv0][1:v]overlay={ox}:{oy}:enable='between(t,0,{hook_duration:.3f})'[capv];"
+                        f"[capv0][{box_idx}:v]overlay={ox}:{oy}:enable='between(t,0,{hook_duration:.3f})'[capv];"
                         f"[capv]ass={safe_ass}[capout]"
                     )
-            if not extra_inputs:
+                    box_added = True
+            if not box_added:
                 fc += f";[reframed]split=2[rawv][capv];[capv]ass={safe_ass}[capout]"
 
             cmd = [
@@ -1155,14 +1176,14 @@ async def _encode_reframed_and_captioned(
                 str(captioned_output_path),
             ]
         else:
-            fc = _build_template_filter(template, bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label="out")
             cmd = [
                 "ffmpeg", "-y",
                 "-threads", "1",
                 "-filter_complex_threads", "1",
                 "-i", str(input_path),
+                *extra_inputs,
                 "-filter_complex", fc,
-                "-map", "[out]", "-map", "0:a?",
+                "-map", "[reframed]", "-map", "0:a?",
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
                 "-threads", "1",
                 "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
@@ -1231,6 +1252,7 @@ async def reframe_and_caption(
     title_bg: str = DEFAULT_TITLE_BG,
     title_bg_opacity: float = DEFAULT_TITLE_BG_OPACITY,
     job_semaphore: asyncio.Semaphore | None = None,
+    is_marketer: bool = False,
 ) -> tuple[Path, Path]:
     """
     Reframe a 16:9 clip into the chosen aspect ratio and (if `captions` or
@@ -1285,7 +1307,7 @@ async def reframe_and_caption(
             tpl, bar_color, zoom_beats, width, height,
             captions, style, color, h_align, v_align, words_per_line,
             hook_title, face_track, src_w, src_h, title_permanent, clip_duration, font,
-            title_color, title_bg, title_bg_opacity, job_semaphore,
+            title_color, title_bg, title_bg_opacity, job_semaphore, is_marketer,
         )
     except Exception as exc:
         logger.error(
@@ -1297,7 +1319,7 @@ async def reframe_and_caption(
                 "blur_bg", bar_color, None, width, height,
                 captions, style, color, h_align, v_align, words_per_line,
                 hook_title, None, 0, 0, title_permanent, clip_duration, font,
-                title_color, title_bg, title_bg_opacity, job_semaphore,
+                title_color, title_bg, title_bg_opacity, job_semaphore, False,
             )
         except Exception as exc2:
             raise RuntimeError(

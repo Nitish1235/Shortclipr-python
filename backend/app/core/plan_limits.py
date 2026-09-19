@@ -81,6 +81,13 @@ PLAN_LIMITS: dict[str, dict] = {
         "max_video_minutes":   360,   # 6 hrs max single video
     },
 
+    # ── Marketing Plan (Special internal/marketer tier) ───
+    "marketer": {
+        "credits_limit":       199,
+        "video_minutes_limit": 59940, # 999 hrs/month
+        "max_video_minutes":   59940, # 999 hrs max single video
+    },
+
     # ── Legacy slider tiers (kept for existing subscribers) ───
     # Shorts/month lowered 2026-09 — see Pricing.jsx TIERS (`clips`), keep in sync.
     "starter_100": {
