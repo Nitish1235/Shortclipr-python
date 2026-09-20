@@ -282,6 +282,8 @@ async def download_clip(
     when opening a URL directly (e.g. anchor click / window.open).
     Free users → 403.  Paid users → streamed MP4 with attachment disposition.
     """
+    from fastapi.responses import RedirectResponse
+
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -323,30 +325,8 @@ async def download_clip(
         else:
             _require_plan(user)
 
-    filename = f"ShortClipr_{clip_id.split('-')[0]}.mp4"
-
-    stack = AsyncExitStack()
-    client = await stack.enter_async_context(httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0)))
-    try:
-        upstream = await stack.enter_async_context(client.stream("GET", clip["video_url"]))
-    except httpx.HTTPError as exc:
-        await stack.aclose()
-        raise HTTPException(status_code=502, detail=f"Could not fetch clip file: {exc}")
-
-    if upstream.status_code != 200:
-        await stack.aclose()
-        raise HTTPException(status_code=502, detail=f"Clip file fetch failed: HTTP {upstream.status_code}")
-
-    async def _stream():
-        try:
-            async for chunk in upstream.aiter_bytes(chunk_size=262_144):
-                yield chunk
-        finally:
-            await stack.aclose()
-
-    response_headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
-    content_length = upstream.headers.get("content-length")
-    if content_length:
-        response_headers["Content-Length"] = content_length
-
-    return StreamingResponse(_stream(), media_type="video/mp4", headers=response_headers)
+    # Redirect directly to GCS — the blob has Content-Disposition: attachment
+    # set at upload time (see uploader.py) so the browser will download it.
+    # This avoids proxying large video files through our own server workers,
+    # which caused 502/503 errors when multiple clips were downloaded at once.
+    return RedirectResponse(url=clip["video_url"], status_code=302)

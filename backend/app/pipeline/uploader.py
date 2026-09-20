@@ -343,6 +343,11 @@ def _upload_to_gcs(local_path: Path, blob_name: str, content_type: str, bucket_n
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
 
+    # Set Content-Disposition: attachment on MP4 clips so direct GCS URLs
+    # trigger a browser download instead of inline playback.
+    if content_type == "video/mp4":
+        blob.content_disposition = f'attachment; filename="{blob_name.rsplit("/", 1)[-1]}"'
+
     last_exc: Exception | None = None
     for attempt in range(1, _GCS_UPLOAD_RETRIES + 1):
         try:
