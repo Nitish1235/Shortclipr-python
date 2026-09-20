@@ -230,3 +230,36 @@ async def get_me(current_user: CurrentUser):
         "brainrot_credits_remaining":  max(0, br_limit - br_used),
         "has_submitted_feedback": await db.has_submitted_feedback(str(user["id"])),
     }
+
+
+class CtaSettingsBody(BaseModel):
+    enabled: bool = False
+    pages: list = []
+    color: str = "#FFFFFF"
+
+
+@router.get("/cta-settings")
+async def get_cta_settings(current_user: CurrentUser):
+    """Return the marketer user's saved CTA settings."""
+    data = await db.get_cta_settings(current_user.user_id)
+    if data is None:
+        return {"enabled": False, "pages": _default_cta_pages(), "color": "#FFFFFF"}
+    return data
+
+
+@router.put("/cta-settings")
+async def save_cta_settings(body: CtaSettingsBody, current_user: CurrentUser):
+    """Save the marketer user's CTA settings."""
+    if current_user.plan != "marketer":
+        raise HTTPException(status_code=403, detail="CTA settings are only available on the marketer plan.")
+    await db.save_cta_settings(current_user.user_id, body.model_dump())
+    return {"ok": True}
+
+
+def _default_cta_pages() -> list:
+    return [
+        {"words": ["TURN", "LONG", "VIDEOS"], "animation": "staggered_stack", "x": 50, "y": 50, "font_size": 120},
+        {"words": ["INTO"], "animation": "massive_pop", "x": 50, "y": 50, "font_size": 220},
+        {"words": ["SHORTS"], "animation": "massive_pop", "x": 50, "y": 50, "font_size": 220},
+        {"words": ["NO", "EDITING", "REQUIRED"], "animation": "staggered_stack", "x": 50, "y": 50, "font_size": 120},
+    ]

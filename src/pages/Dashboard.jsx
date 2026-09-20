@@ -5,6 +5,7 @@ import AppLayout, { SIDEBAR_W } from '../components/AppLayout'
 import ClipEngine from '../components/ClipEngine'
 import SocialProofModal from '../components/SocialProofModal'
 import { YTLogo, TTLogo } from '../components/PlatformLogos'
+import CtaBuilder from '../components/CtaBuilder'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
@@ -115,6 +116,7 @@ export default function Dashboard() {
   const [tick, setTick] = useState(0) // drives timer re-renders
 
   const isPaid = user?.plan && user.plan !== 'free'
+  const isMarketer = user?.role === 'marketer' || user?.plan === 'marketer' || user?.is_marketer
   const currentJob = jobs[0] || null          // most-recent job only
   const isActive = isJobActive(currentJob)
 
@@ -802,6 +804,13 @@ export default function Dashboard() {
                   ✓ {hdClips.length} clip{hdClips.length !== 1 ? 's' : ''} ready below — more generating…
                 </div>
               )}
+            </div>
+          )}
+          
+          {/* CTA Builder for Marketer Plan */}
+          {isMarketer && (
+            <div style={{ marginBottom: '20px' }}>
+              <CtaBuilder />
             </div>
           )}
 

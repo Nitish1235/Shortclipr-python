@@ -59,6 +59,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from app.pipeline.cta_overlay import build_cta_ass
+
 from app.core.config import get_settings
 from app.core.proxy import get_proxyseller_proxy
 from app.pipeline.captions import (
@@ -1166,6 +1168,7 @@ async def _encode_reframed_and_captioned(
     title_bg_opacity: float = DEFAULT_TITLE_BG_OPACITY,
     job_semaphore: asyncio.Semaphore | None = None,
     is_marketer: bool = False,
+    cta_settings: dict | None = None,
 ) -> None:
     """One ffmpeg invocation: reframe + (optionally) burn captions, producing
     both the raw reframed output and the captioned output."""
@@ -1180,7 +1183,7 @@ async def _encode_reframed_and_captioned(
         wm_png_path: Path | None = None
         
         if is_marketer and logo_path.exists():
-            wm_png_path = _render_marketer_watermark_png(logo_path, width, opacity=0.45)
+            wm_png_path = _render_marketer_watermark_png(logo_path, width, opacity=0.70)
             
             if wm_png_path:
                 extra_inputs.extend(["-i", str(wm_png_path)])
@@ -1204,12 +1207,32 @@ async def _encode_reframed_and_captioned(
         else:
             fc += f";[reframed_base]copy[reframed]"
 
+        # Determine whether we have a CTA to inject
+        cta_enabled = bool(
+            cta_settings
+            and cta_settings.get("enabled")
+            and cta_settings.get("pages")
+            and clip_duration > 0
+        )
+
         if captions or hook_title:
             ass_content = build_ass_content(
                 captions or [], style, color, h_align, v_align, words_per_line, hook_title,
                 template=template, title_permanent=title_permanent, clip_duration=clip_duration, font=font,
                 title_color=title_color_hex,
             )
+
+            # Inject CTA animation events into the ASS if marketer CTA is enabled
+            if cta_enabled:
+                cta_ass = build_cta_ass(
+                    pages=cta_settings["pages"],
+                    clip_duration=clip_duration,
+                    color_hex=cta_settings.get("color", "#FFFFFF"),
+                )
+                if cta_ass:
+                    cta_events = [line for line in cta_ass.splitlines() if line.startswith("Dialogue:")]
+                    ass_content = ass_content + "\n".join(cta_events) + "\n"
+
             with tempfile.NamedTemporaryFile(suffix=".ass", mode="w", encoding="utf-8", delete=False) as f:
                 f.write(ass_content)
                 ass_path = f.name
@@ -1264,6 +1287,51 @@ async def _encode_reframed_and_captioned(
                 "-c:a", "copy", "-movflags", "+faststart",
                 str(captioned_output_path),
             ]
+        elif cta_enabled:
+            # No captions/hook_title but CTA is enabled — create an ASS file with just the CTA events
+            cta_ass = build_cta_ass(
+                pages=cta_settings["pages"],
+                clip_duration=clip_duration,
+                color_hex=cta_settings.get("color", "#FFFFFF"),
+            )
+            if cta_ass:
+                with tempfile.NamedTemporaryFile(suffix=".ass", mode="w", encoding="utf-8", delete=False) as f:
+                    f.write(cta_ass)
+                    ass_path = f.name
+                safe_ass = ass_path.replace("\\", "/").replace(":", "\\:")
+                fc += f";[reframed]split=2[rawv][capv];[capv]ass={safe_ass}[capout]"
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-threads", "1",
+                    "-filter_complex_threads", "1",
+                    "-i", str(input_path),
+                    *extra_inputs,
+                    "-filter_complex", fc,
+                    "-map", "[rawv]", "-map", "0:a?",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                    "-threads", "1",
+                    "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
+                    str(raw_output_path),
+                    "-map", "[capout]", "-map", "0:a?",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                    "-threads", "1",
+                    "-c:a", "copy", "-movflags", "+faststart",
+                    str(captioned_output_path),
+                ]
+            else:
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-threads", "1",
+                    "-filter_complex_threads", "1",
+                    "-i", str(input_path),
+                    *extra_inputs,
+                    "-filter_complex", fc,
+                    "-map", "[reframed]", "-map", "0:a?",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                    "-threads", "1",
+                    "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
+                    str(raw_output_path),
+                ]
         else:
             cmd = [
                 "ffmpeg", "-y",
@@ -1303,7 +1371,7 @@ async def _encode_reframed_and_captioned(
                 f"{stderr.decode(errors='ignore')[-400:]}"
             )
 
-        if not (captions or hook_title):
+        if not (captions or hook_title or cta_enabled):
             shutil.copy(raw_output_path, captioned_output_path)
 
         for out in (raw_output_path, captioned_output_path):
@@ -1344,6 +1412,7 @@ async def reframe_and_caption(
     title_bg_opacity: float = DEFAULT_TITLE_BG_OPACITY,
     job_semaphore: asyncio.Semaphore | None = None,
     is_marketer: bool = False,
+    cta_settings: dict | None = None,
 ) -> tuple[Path, Path]:
     """
     Reframe a 16:9 clip into the chosen aspect ratio and (if `captions` or
@@ -1379,6 +1448,9 @@ async def reframe_and_caption(
                      can't monopolize it and starve other users' jobs on
                      the same instance. None = no job-level limit (only the
                      global MAX_CONCURRENT_ENCODES semaphore applies).
+        cta_settings: marketer-plan CTA settings dict (enabled, pages, color).
+                     When enabled, the last 10 s of the clip shows the animated
+                     CTA overlay. Pass None or omit to skip.
 
     Returns (raw_output_path, captioned_output_path) on success.
     """
@@ -1399,6 +1471,7 @@ async def reframe_and_caption(
             captions, style, color, h_align, v_align, words_per_line,
             hook_title, face_track, src_w, src_h, title_permanent, clip_duration, font,
             title_color, title_bg, title_bg_opacity, job_semaphore, is_marketer,
+            cta_settings=cta_settings,
         )
     except Exception as exc:
         logger.error(
@@ -1411,6 +1484,7 @@ async def reframe_and_caption(
                 captions, style, color, h_align, v_align, words_per_line,
                 hook_title, None, 0, 0, title_permanent, clip_duration, font,
                 title_color, title_bg, title_bg_opacity, job_semaphore, False,
+                cta_settings=None,
             )
         except Exception as exc2:
             raise RuntimeError(

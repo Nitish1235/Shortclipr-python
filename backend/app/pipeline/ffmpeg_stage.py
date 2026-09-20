@@ -128,6 +128,9 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
 
     user_info = await db.get_user(user_id)
     is_marketer = bool(user_info and user_info.get("plan") == "marketer")
+    cta_settings = user_info.get("cta_settings") if user_info else None
+    if not is_marketer:
+        cta_settings = None  # Only marketer plan gets CTA
 
     youtube_url = row["youtube_url"]
     options     = payload["options"]
@@ -330,6 +333,7 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
                         title_bg_opacity=title_bg_opacity,
                         job_semaphore=job_encode_semaphore,
                         is_marketer=is_marketer,
+                        cta_settings=cta_settings,
                     )
 
                 thumb_path = job_dir / f"clip_{i:02d}_thumb.jpg"

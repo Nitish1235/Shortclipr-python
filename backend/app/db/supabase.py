@@ -876,6 +876,23 @@ async def get_user_by_email(email: str) -> dict | None:
     return await _fetchrow("SELECT * FROM users WHERE email=$1", email)
 
 
+async def get_cta_settings(user_id: str) -> dict | None:
+    """Fetch the user's saved CTA settings blob."""
+    row = await _fetchrow("SELECT cta_settings FROM users WHERE id=$1", user_id)
+    if row is None:
+        return None
+    return row.get("cta_settings")  # already decoded as dict by jsonb codec
+
+
+async def save_cta_settings(user_id: str, settings: dict) -> None:
+    """Persist the user's CTA settings blob."""
+    await _execute(
+        "UPDATE users SET cta_settings=$1, updated_at=NOW() WHERE id=$2",
+        settings,
+        user_id,
+    )
+
+
 async def admin_set_user_plan(
     user_id: str,
     *,
