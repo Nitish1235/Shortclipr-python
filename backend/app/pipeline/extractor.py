@@ -57,6 +57,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from PIL import Image, ImageDraw, ImageFont
+
 from app.core.config import get_settings
 from app.core.proxy import get_proxyseller_proxy
 from app.pipeline.captions import (
@@ -1062,6 +1064,81 @@ async def _maybe(semaphore: asyncio.Semaphore | None):
 #  PUBLIC ENTRY POINT — reframe_and_caption
 # ══════════════════════════════════════════════════════════════
 
+_WATERMARK_FONT_FILE = str(
+    Path(__file__).parent.parent / "assets" / "fonts" / "PlusJakartaSans-ExtraBold.ttf"
+)
+
+
+def _render_marketer_watermark_png(
+    logo_path: Path,
+    canvas_width: int,
+    opacity: float = 0.45,
+) -> Path | None:
+    """
+    Pre-bake logo + 'ShortClipr.com' text into a single RGBA PNG with alpha
+    already applied. Called once per clip (pure PIL, ~2 ms) so FFmpeg only
+    needs ONE overlay filter per frame — no per-frame drawtext cost at all.
+
+    Layout:  [LOGO]  ShortClipr.com   (logo left, text right, shared centre Y)
+
+    Returns the temp PNG path, or None on any error (watermark silently skipped).
+    """
+    try:
+        # ── Load + scale logo ──────────────────────────────────────────────
+        logo_w_px = int(canvas_width * 0.175)   # 17.5% of canvas width
+        logo_img  = Image.open(logo_path).convert("RGBA")
+        aspect    = logo_img.height / logo_img.width
+        logo_h_px = max(1, int(logo_w_px * aspect))
+        logo_img  = logo_img.resize((logo_w_px, logo_h_px), Image.LANCZOS)
+
+        # Apply opacity to the logo alpha channel directly
+        alpha_ch = logo_img.split()[3]
+        alpha_ch = alpha_ch.point(lambda a: int(a * opacity))
+        logo_img.putalpha(alpha_ch)
+
+        # ── Measure brand text ─────────────────────────────────────────────
+        font_size = max(18, logo_w_px // 3)
+        try:
+            font = ImageFont.truetype(_WATERMARK_FONT_FILE, font_size)
+        except Exception:
+            font = ImageFont.load_default(size=font_size)
+
+        probe = Image.new("RGBA", (1, 1))
+        draw  = ImageDraw.Draw(probe)
+        bbox  = draw.textbbox((0, 0), "ShortClipr.com", font=font)
+        text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+
+        # ── Compose combined watermark canvas ─────────────────────────────
+        gap      = 10
+        total_w  = logo_w_px + gap + text_w
+        total_h  = max(logo_h_px, text_h)
+        wm       = Image.new("RGBA", (total_w, total_h), (0, 0, 0, 0))
+
+        # Logo — vertically centered
+        logo_y = (total_h - logo_h_px) // 2
+        wm.paste(logo_img, (0, logo_y), logo_img)
+
+        # Text — vertically centered, white with same opacity
+        text_alpha = int(255 * opacity)
+        text_x     = logo_w_px + gap
+        text_y     = (total_h - text_h) // 2
+        draw_wm    = ImageDraw.Draw(wm)
+        draw_wm.text(
+            (text_x, text_y),
+            "ShortClipr.com",
+            font=font,
+            fill=(255, 255, 255, text_alpha),
+        )
+
+        out = Path(tempfile.mktemp(suffix=".png", prefix="sc_wm_"))
+        wm.save(out, "PNG")
+        return out
+
+    except Exception as exc:
+        logger.warning(f"Watermark pre-render failed (skipping): {exc}")
+        return None
+
+
 async def _encode_reframed_and_captioned(
     input_path: Path,
     raw_output_path: Path,
@@ -1103,14 +1180,48 @@ async def _encode_reframed_and_captioned(
         if is_marketer and logo_path.exists():
             extra_inputs.extend(["-i", str(logo_path)])
             logo_idx = len(extra_inputs) // 2
-            logo_w = int(width * 0.35)
-            # Show watermark until 10 s before the clip ends; guard against clips < 10 s.
-            watermark_end = max(0.0, clip_duration - 10.0)
+
+            # Logo: ~17.5% of canvas width (half the previous 35%)
+            logo_w = int(width * 0.175)
+
+            # Watermark hides for last 10 s. If clip_duration is 0 (unknown at
+            # encode time) or <= 10 s, show for the whole clip.
+            if clip_duration > 10.0:
+                wm_enable = f"lte(t,{clip_duration - 10.0:.3f})"
+            else:
+                wm_enable = "1"   # always visible
+
+            # Brand text font size: roughly logo height equivalent
+            font_size  = max(18, logo_w // 3)
+            # Estimated text width for group centering (Python side, approximate)
+            text_chars = 14   # "ShortClipr.com"
+            text_w_est = int(font_size * 0.58 * text_chars)
+            gap        = 10   # px gap between logo right edge and text left edge
+            group_w    = logo_w + gap + text_w_est
+
+            # Shared vertical center: 25% up from bottom → H * 0.75
+            # - logo_y: uses FFmpeg's real `h`  (actual scaled logo pixel height)
+            # - text_y: uses FFmpeg's real `th` (actual rendered text height)
+            # Both expressions center on the SAME Y axis — no mismatch.
+            logo_x = f"(W-{group_w})/2"
+            logo_y = f"(H*0.75)-(h/2)"
+            text_x = f"(W-{group_w})/2+{logo_w + gap}"
+            text_y = f"(H*0.75)-(th/2)"   # th = actual text height, not an estimate
+
             fc += (
                 f";[{logo_idx}:v]format=rgba,colorchannelmixer=aa=0.45,"
-                f"scale={logo_w}:-2[watermark];"
-                f"[reframed_base][watermark]overlay=(W-w)/2:(H*0.75)-(h/2)"
-                f":enable='lte(t,{watermark_end:.3f})'[reframed]"
+                f"scale={logo_w}:-2[wm_logo];"
+                f"[reframed_base][wm_logo]overlay={logo_x}:{logo_y}"
+                f":enable='{wm_enable}'[wm_base];"
+                # drawtext — white@0.45 opacity, vertically centered with th
+                f"[wm_base]drawtext="
+                f"text='ShortClipr.com':"
+                f"fontsize={font_size}:"
+                f"fontcolor=white@0.45:"
+                f"x={text_x}:"
+                f"y={text_y}:"
+                f"enable='{wm_enable}'"
+                f"[reframed]"
             )
         else:
             fc += f";[reframed_base]copy[reframed]"
