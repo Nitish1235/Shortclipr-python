@@ -218,19 +218,22 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
         )
 
     # ── 1b. Concurrent job limit ───────────────────────────────
-    active_count = await db.count_active_jobs(current_user.user_id)
-    if active_count >= settings.MAX_CONCURRENT_JOBS_PER_USER:
-        limit = settings.MAX_CONCURRENT_JOBS_PER_USER
-        detail = (
-            "You already have a job processing. Wait for it to finish before submitting another."
-            if limit == 1 else
-            f"You already have {active_count} job(s) processing. "
-            f"Wait for them to finish before submitting another."
-        )
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=detail,
-        )
+    # Marketer plan gets unlimited concurrent jobs — they have a high
+    # credit limit and may want to batch-process multiple videos at once.
+    if current_user.plan != "marketer":
+        active_count = await db.count_active_jobs(current_user.user_id)
+        if active_count >= settings.MAX_CONCURRENT_JOBS_PER_USER:
+            limit = settings.MAX_CONCURRENT_JOBS_PER_USER
+            detail = (
+                "You already have a job processing. Wait for it to finish before submitting another."
+                if limit == 1 else
+                f"You already have {active_count} job(s) processing. "
+                f"Wait for them to finish before submitting another."
+            )
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=detail,
+            )
 
     # ── 1c. Free-tier feature caps (clip count / clip length) ──
     # Enforced server-side regardless of what the client sent — the
