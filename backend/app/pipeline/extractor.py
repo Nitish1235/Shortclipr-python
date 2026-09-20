@@ -1189,17 +1189,16 @@ async def _encode_reframed_and_captioned(
                 extra_inputs.extend(["-i", str(wm_png_path)])
                 logo_idx = len(extra_inputs) // 2
                 
-                # Watermark hides for last 10 s. If clip_duration is 0 (unknown at
-                # encode time) or <= 10 s, show for the whole clip.
-                if clip_duration > 10.0:
-                    wm_enable = f"lte(t,{clip_duration - 10.0:.3f})"
-                else:
-                    wm_enable = "1"   # always visible
+                # Watermark visible for the entire clip, start to end.
+                wm_enable = "1"
+                
+                wm_y_pct = 75.0
+                if cta_settings and "watermark_y" in cta_settings:
+                    wm_y_pct = float(cta_settings["watermark_y"])
 
-                # Vertically center at 25% up from bottom → H * 0.75
-                # The PNG is pre-scaled and combined, so we just overlay it centered horizontally
+                # Center horizontally, position vertically based on user setting (default 75%)
                 fc += (
-                    f";[reframed_base][{logo_idx}:v]overlay=(W-w)/2:(H*0.75)-(h/2)"
+                    f";[reframed_base][{logo_idx}:v]overlay=(W-w)/2:(H*{wm_y_pct/100:.3f})-(h/2)"
                     f":enable='{wm_enable}'[reframed]"
                 )
             else:

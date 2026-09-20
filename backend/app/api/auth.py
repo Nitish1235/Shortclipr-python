@@ -236,6 +236,7 @@ class CtaSettingsBody(BaseModel):
     enabled: bool = False
     pages: list = []
     color: str = "#FFFFFF"
+    watermark_y: float = 75.0
 
 
 @router.get("/cta-settings")
@@ -243,7 +244,7 @@ async def get_cta_settings(current_user: CurrentUser):
     """Return the marketer user's saved CTA settings."""
     data = await db.get_cta_settings(current_user.user_id)
     if data is None:
-        return {"enabled": False, "pages": _default_cta_pages(), "color": "#FFFFFF"}
+        return {"enabled": False, "pages": _default_cta_pages(), "color": "#FFFFFF", "watermark_y": 75.0}
     return data
 
 

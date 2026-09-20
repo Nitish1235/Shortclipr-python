@@ -13,6 +13,7 @@ export default function CtaBuilder() {
   const [enabled, setEnabled] = useState(false)
   const [pages, setPages] = useState([])
   const [color, setColor] = useState('#FFFFFF')
+  const [watermarkY, setWatermarkY] = useState(75)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -34,6 +35,7 @@ export default function CtaBuilder() {
         setIsExpanded(data.enabled ?? false)
         setPages(data.pages && data.pages.length > 0 ? data.pages : DEFAULT_PAGES)
         setColor(data.color ?? '#FFFFFF')
+        setWatermarkY(data.watermark_y ?? 75)
       }
     } catch (err) {
       console.error('Failed to fetch CTA settings', err)
@@ -54,7 +56,7 @@ export default function CtaBuilder() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ enabled, pages, color })
+        body: JSON.stringify({ enabled, pages, color, watermark_y: watermarkY })
       })
       if (!res.ok) {
         const err = await res.json()
@@ -204,7 +206,28 @@ export default function CtaBuilder() {
                       </div>
                     ))}
                   </div>
-                ))}
+                ))]}
+                
+                {/* Watermark position indicator */}
+                <div style={{
+                  position: 'absolute',
+                  top: `${watermarkY}%`,
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: 'rgba(255,255,255,0.15)',
+                  border: '1px dashed rgba(255,255,255,0.4)',
+                  borderRadius: '6px',
+                  padding: '3px 8px',
+                  pointerEvents: 'none',
+                  whiteSpace: 'nowrap'
+                }}>
+                  <span style={{ fontSize: '8px', color: '#fff', fontWeight: 700, letterSpacing: '0.05em' }}>
+                    🏷 ShortClipr.com
+                  </span>
+                </div>
               </div>
 
               {/* Page nav dots */}
@@ -235,6 +258,20 @@ export default function CtaBuilder() {
                   value={color}
                   onChange={e => setColor(e.target.value)}
                   style={{ width: '100%', height: '36px', cursor: 'pointer', background: 'transparent', border: 'none' }}
+                />
+              </div>
+
+              {/* Watermark Y slider */}
+              <div style={{ marginTop: '16px' }}>
+                <label style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', color: '#ccc', fontSize: '0.85rem' }}>
+                  <span>Brand Logo Y-Pos</span>
+                  <span>{watermarkY}%</span>
+                </label>
+                <input
+                  type="range" min="0" max="100"
+                  value={watermarkY}
+                  onChange={e => setWatermarkY(parseInt(e.target.value))}
+                  style={{ width: '100%', accentColor: '#ff2d55' }}
                 />
               </div>
             </div>
