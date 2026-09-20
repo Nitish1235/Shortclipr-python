@@ -1177,52 +1177,30 @@ async def _encode_reframed_and_captioned(
         extra_inputs: list[str] = []
         
         logo_path = Path(__file__).parent.parent / "assets" / "logo.png"
+        wm_png_path: Path | None = None
+        
         if is_marketer and logo_path.exists():
-            extra_inputs.extend(["-i", str(logo_path)])
-            logo_idx = len(extra_inputs) // 2
+            wm_png_path = _render_marketer_watermark_png(logo_path, width, opacity=0.45)
+            
+            if wm_png_path:
+                extra_inputs.extend(["-i", str(wm_png_path)])
+                logo_idx = len(extra_inputs) // 2
+                
+                # Watermark hides for last 10 s. If clip_duration is 0 (unknown at
+                # encode time) or <= 10 s, show for the whole clip.
+                if clip_duration > 10.0:
+                    wm_enable = f"lte(t,{clip_duration - 10.0:.3f})"
+                else:
+                    wm_enable = "1"   # always visible
 
-            # Logo: ~17.5% of canvas width (half the previous 35%)
-            logo_w = int(width * 0.175)
-
-            # Watermark hides for last 10 s. If clip_duration is 0 (unknown at
-            # encode time) or <= 10 s, show for the whole clip.
-            if clip_duration > 10.0:
-                wm_enable = f"lte(t,{clip_duration - 10.0:.3f})"
+                # Vertically center at 25% up from bottom → H * 0.75
+                # The PNG is pre-scaled and combined, so we just overlay it centered horizontally
+                fc += (
+                    f";[reframed_base][{logo_idx}:v]overlay=(W-w)/2:(H*0.75)-(h/2)"
+                    f":enable='{wm_enable}'[reframed]"
+                )
             else:
-                wm_enable = "1"   # always visible
-
-            # Brand text font size: roughly logo height equivalent
-            font_size  = max(18, logo_w // 3)
-            # Estimated text width for group centering (Python side, approximate)
-            text_chars = 14   # "ShortClipr.com"
-            text_w_est = int(font_size * 0.58 * text_chars)
-            gap        = 10   # px gap between logo right edge and text left edge
-            group_w    = logo_w + gap + text_w_est
-
-            # Shared vertical center: 25% up from bottom → H * 0.75
-            # - logo_y: uses FFmpeg's real `h`  (actual scaled logo pixel height)
-            # - text_y: uses FFmpeg's real `th` (actual rendered text height)
-            # Both expressions center on the SAME Y axis — no mismatch.
-            logo_x = f"(W-{group_w})/2"
-            logo_y = f"(H*0.75)-(h/2)"
-            text_x = f"(W-{group_w})/2+{logo_w + gap}"
-            text_y = f"(H*0.75)-(th/2)"   # th = actual text height, not an estimate
-
-            fc += (
-                f";[{logo_idx}:v]format=rgba,colorchannelmixer=aa=0.45,"
-                f"scale={logo_w}:-2[wm_logo];"
-                f"[reframed_base][wm_logo]overlay={logo_x}:{logo_y}"
-                f":enable='{wm_enable}'[wm_base];"
-                # drawtext — white@0.45 opacity, vertically centered with th
-                f"[wm_base]drawtext="
-                f"text='ShortClipr.com':"
-                f"fontsize={font_size}:"
-                f"fontcolor=white@0.45:"
-                f"x={text_x}:"
-                f"y={text_y}:"
-                f"enable='{wm_enable}'"
-                f"[reframed]"
-            )
+                fc += f";[reframed_base]copy[reframed]"
         else:
             fc += f";[reframed_base]copy[reframed]"
 
@@ -1336,6 +1314,8 @@ async def _encode_reframed_and_captioned(
             Path(ass_path).unlink(missing_ok=True)
         if box_path:
             box_path.unlink(missing_ok=True)
+        if wm_png_path:
+            wm_png_path.unlink(missing_ok=True)
 
 
 async def reframe_and_caption(
