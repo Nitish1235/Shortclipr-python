@@ -16,6 +16,7 @@ export default function CtaBuilder() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [activePageIdx, setActivePageIdx] = useState(0) // Track which page is being previewed
 
   useEffect(() => {
     fetchSettings()
@@ -23,7 +24,7 @@ export default function CtaBuilder() {
 
   const fetchSettings = async () => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('sc_token')
       const res = await fetch(`${API_URL}/auth/cta-settings`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
@@ -44,7 +45,7 @@ export default function CtaBuilder() {
     setSaving(true)
     setError('')
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('sc_token')
       const res = await fetch(`${API_URL}/auth/cta-settings`, {
         method: 'PUT',
         headers: {
@@ -68,14 +69,19 @@ export default function CtaBuilder() {
     const newPages = [...pages]
     newPages[index] = { ...newPages[index], [field]: value }
     setPages(newPages)
+    setActivePageIdx(index) // Switch preview to the edited page
   }
 
   const addPage = () => {
     setPages([...pages, { words: ['NEW', 'PAGE'], animation: 'staggered_stack', x: 50, y: 50, font_size: 120 }])
+    setActivePageIdx(pages.length) // Auto-focus the newly added page
   }
 
   const removePage = (index) => {
     setPages(pages.filter((_, i) => i !== index))
+    if (activePageIdx >= index && activePageIdx > 0) {
+      setActivePageIdx(activePageIdx - 1)
+    }
   }
 
   // Calculate approximate timings
@@ -118,7 +124,9 @@ export default function CtaBuilder() {
           
           {/* Left: Preview Canvas */}
           <div style={{ flex: '1', minWidth: '300px' }}>
-            <h3 style={{ fontSize: '1.1rem', marginBottom: '12px', color: '#ccc' }}>Preview (Approximate Layout)</h3>
+            <h3 style={{ fontSize: '1.1rem', marginBottom: '12px', color: '#ccc' }}>
+              Preview <span style={{ color: '#ff2d55', fontSize: '0.9em' }}>(Page {activePageIdx + 1})</span>
+            </h3>
             <div style={{
               width: '100%',
               maxWidth: '360px',
@@ -139,7 +147,8 @@ export default function CtaBuilder() {
                   textAlign: 'center',
                   width: '100%',
                   pointerEvents: 'none',
-                  opacity: 0.3 // show all faintly to get a sense of placement
+                  opacity: i === activePageIdx ? 1 : 0, // Only show the active page
+                  transition: 'opacity 0.2s ease-in-out'
                 }}>
                   {page.words.map((word, wIdx) => (
                     <div key={wIdx} style={{
@@ -155,14 +164,15 @@ export default function CtaBuilder() {
                   ))}
                   <div style={{
                     position: 'absolute',
-                    top: '-20px',
+                    top: '-25px',
                     left: '50%',
                     transform: 'translateX(-50%)',
                     fontSize: '12px',
                     color: '#ff2d55',
                     background: 'rgba(0,0,0,0.8)',
                     padding: '2px 6px',
-                    borderRadius: '4px'
+                    borderRadius: '4px',
+                    whiteSpace: 'nowrap'
                   }}>
                     Pg {i + 1}
                   </div>
@@ -204,21 +214,34 @@ export default function CtaBuilder() {
               {pages.map((page, i) => {
                 const wordsLen = Math.max(1, page.words.length)
                 const approxTime = totalWords > 0 ? ((wordsLen / totalWords) * 10).toFixed(1) : 0
+                const isActive = i === activePageIdx
                 
                 return (
-                  <div key={i} style={{ background: 'rgba(0,0,0,0.4)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div 
+                    key={i} 
+                    onClick={() => setActivePageIdx(i)}
+                    style={{ 
+                      background: 'rgba(0,0,0,0.4)', 
+                      padding: '16px', 
+                      borderRadius: '8px', 
+                      border: isActive ? '1px solid #ff2d55' : '1px solid rgba(255,255,255,0.05)',
+                      boxShadow: isActive ? '0 0 10px rgba(255, 45, 85, 0.2)' : 'none',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease-in-out'
+                    }}
+                  >
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
                       <strong>Page {i + 1} <span style={{ color: '#888', fontSize: '0.9em', fontWeight: 'normal' }}> (~{approxTime}s)</span></strong>
                       <button 
-                        onClick={() => removePage(i)}
-                        style={{ background: 'transparent', border: 'none', color: '#ff4444', cursor: 'pointer' }}
+                        onClick={(e) => { e.stopPropagation(); removePage(i); }}
+                        style={{ background: 'transparent', border: 'none', color: '#ff4444', cursor: 'pointer', padding: '4px' }}
                         disabled={pages.length <= 1}
                       >
                         ✕
                       </button>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
                       <div style={{ flex: '1', minWidth: '150px' }}>
                         <label style={{ display: 'block', fontSize: '0.85em', color: '#aaa', marginBottom: '4px' }}>Words (One per line)</label>
                         <textarea 
