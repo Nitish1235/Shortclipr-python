@@ -1214,14 +1214,26 @@ async def _encode_reframed_and_captioned(
             and clip_duration > 0
         )
 
-        if captions or hook_title:
+        effective_captions = list(captions or [])
+        if cta_enabled and effective_captions:
+            cta_start = max(0.0, clip_duration - 10.0)
+            filtered_caps = []
+            for c in effective_captions:
+                if c.start < cta_start:
+                    if c.end > cta_start:
+                        filtered_caps.append(Caption(start=c.start, end=cta_start, text=c.text))
+                    else:
+                        filtered_caps.append(c)
+            effective_captions = filtered_caps
+
+        if effective_captions or hook_title or cta_enabled:
             ass_content = build_ass_content(
-                captions or [], style, color, h_align, v_align, words_per_line, hook_title,
+                effective_captions, style, color, h_align, v_align, words_per_line, hook_title,
                 template=template, title_permanent=title_permanent, clip_duration=clip_duration, font=font,
                 title_color=title_color_hex,
             )
 
-            # Inject CTA animation events into the ASS if marketer CTA is enabled
+            # Inject CTA animation style & events into the ASS if marketer CTA is enabled
             if cta_enabled:
                 cta_ass = build_cta_ass(
                     pages=cta_settings["pages"],
@@ -1229,7 +1241,14 @@ async def _encode_reframed_and_captioned(
                     color_hex=cta_settings.get("color", "#FFFFFF"),
                 )
                 if cta_ass:
+                    cta_styles = [line for line in cta_ass.splitlines() if line.startswith("Style: CTA")]
                     cta_events = [line for line in cta_ass.splitlines() if line.startswith("Dialogue:")]
+
+                    if cta_styles and "[Events]" in ass_content:
+                        parts = ass_content.split("[Events]", 1)
+                        style_str = "\n".join(cta_styles) + "\n\n"
+                        ass_content = parts[0] + style_str + "[Events]" + parts[1]
+
                     ass_content = ass_content + "\n".join(cta_events) + "\n"
 
             with tempfile.NamedTemporaryFile(suffix=".ass", mode="w", encoding="utf-8", delete=False) as f:
