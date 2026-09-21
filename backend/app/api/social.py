@@ -948,8 +948,10 @@ async def zernio_tiktok_connect(current_user: CurrentUser):
     profile_id = await _get_or_create_zernio_profile(current_user.user_id, tokens)
     tokens = await _get_social_tokens(current_user.user_id)  # Re-fetch after profile creation
 
+    # Derive the backend API base url from one of the other configured redirect URIs
+    api_base = settings.TIKTOK_REDIRECT_URI.replace("/social/auth/tiktok/callback", "")
     # Build the callback URL Zernio will redirect to after the user authorizes
-    redirect_url = f"{settings.FRONTEND_URL}/social/zernio/connect/tiktok/callback?user_id={current_user.user_id}"
+    redirect_url = f"{api_base}/social/zernio/connect/tiktok/callback?user_id={current_user.user_id}"
 
     async with httpx.AsyncClient(timeout=20) as client:
         resp = await client.get(
