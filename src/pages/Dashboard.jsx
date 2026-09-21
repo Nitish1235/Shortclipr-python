@@ -101,6 +101,11 @@ export default function Dashboard() {
   const updateClipMeta = (clipId, field, value) =>
     setClipMeta(prev => ({ ...prev, [clipId]: { ...(prev[clipId] || {}), [field]: value } }))
 
+  // Zernio TikTok (marketer plan only)
+  const [zernioTtConnected, setZernioTtConnected] = useState(false)
+  const [publishedZernioTT, setPublishedZernioTT] = useState(new Set())
+  const [publishingZernioTT, setPublishingZernioTT] = useState(new Set())
+
   // Modals / toasts
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [upgradeReason, setUpgradeReason]       = useState('')
@@ -163,6 +168,14 @@ export default function Dashboard() {
       setTtConnected(true)
       showToast('TikTok connected successfully!')
       window.history.replaceState({}, '', '/youtube-shorts/dashboard')
+    } else if (statusParam === 'zernio_tiktok_connected') {
+      setZernioTtConnected(true)
+      showToast('🚀 TikTok connected via Zernio!')
+      window.history.replaceState({}, '', '/youtube-shorts/dashboard')
+    } else if (statusParam === 'zernio_tiktok_error') {
+      const reason = params.get('reason') || 'unknown error'
+      showToast(`Zernio TikTok connect failed: ${reason}`, 'error')
+      window.history.replaceState({}, '', '/youtube-shorts/dashboard')
     } else if (statusParam === 'tiktok_error') {
       const reason = params.get('reason') || 'unknown error'
       showToast(`TikTok connect failed: ${reason}`, 'error')
@@ -189,6 +202,14 @@ export default function Dashboard() {
           }
         })
         .catch(() => {})
+
+      // Zernio TikTok status (marketer plan only — 403 for non-marketer, ignore silently)
+      if (isMarketer) {
+        fetch(`${API_BASE}/social/zernio/status`, { headers: { Authorization: `Bearer ${token}` } })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d) setZernioTtConnected(!!d.zernio_tiktok) })
+          .catch(() => {})
+      }
     }
   }, []) // eslint-disable-line
 
@@ -352,23 +373,37 @@ export default function Dashboard() {
 
   // ── YouTube + TikTok publishing ───────────────────────────────────
   const handleConnectYouTube = async () => {
+    if (!isMarketer) {
+      setUpgradeReason('YouTube OAuth Posting (Marketer Plan)')
+      setShowUpgradeModal(true)
+      return
+    }
     try {
       const token = localStorage.getItem('sc_token')
       const res = await fetch(`${API_BASE}/social/auth/youtube`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (res.ok) { const data = await res.json(); window.location.href = data.url }
-      else showToast('Could not start YouTube connect', 'error')
+      else {
+        const data = await res.json()
+        showToast(data.detail || 'Could not start YouTube connect', 'error')
+      }
     } catch { showToast('Network error — try again', 'error') }
   }
 
   const handlePublishYT = async (e, clip) => {
     e.stopPropagation()
-    if (!requirePlan('Publish to YouTube')) return
+    if (!isMarketer) {
+      setUpgradeReason('Publish to YouTube (Marketer Plan)')
+      setShowUpgradeModal(true)
+      return
+    }
     if (!ytConnected) { handleConnectYouTube(); return }
     const clipId = clip.clip_id || clip.id
     const meta = clipMeta[clipId] || {}
     const hashtags = (meta.hashtags || '').split(/[\s,#]+/).filter(Boolean)
+    // Auto-fill description from clip's GPT-generated topic; fall back to manual input
+    const description = clip.topic || meta.topic || ''
     setPublishingYT(prev => new Set([...prev, clipId]))
     try {
       const token = localStorage.getItem('sc_token')
@@ -378,7 +413,7 @@ export default function Dashboard() {
         body: JSON.stringify({
           clips: [{ clip_id: clipId, video_url: clip.video_url,
             title: clip.top_title || currentJob?.video_title || 'Short Clip',
-            description: meta.topic || '', tags: hashtags }]
+            description, tags: hashtags }]
         })
       })
       const data = await res.json()
@@ -388,14 +423,18 @@ export default function Dashboard() {
       } else if (res.status === 400 && data.detail?.includes('not connected')) {
         localStorage.removeItem('yt_connected'); setYtConnected(false); handleConnectYouTube()
       } else {
-        showToast(data.results?.[0]?.error || 'YouTube publish failed', 'error')
+        showToast(data.results?.[0]?.error || data.detail || 'YouTube publish failed', 'error')
       }
     } catch { showToast('YouTube publish failed', 'error') }
     setPublishingYT(prev => { const n = new Set(prev); n.delete(clipId); return n })
   }
 
   const handleBulkPublishYT = async () => {
-    if (!requirePlan('Publish to YouTube')) return
+    if (!isMarketer) {
+      setUpgradeReason('Publish to YouTube (Marketer Plan)')
+      setShowUpgradeModal(true)
+      return
+    }
     if (!ytConnected) { handleConnectYouTube(); return }
     const sel = filteredClips.filter(c =>
       selectedClipIds.has(c.clip_id || c.id) && !publishedYT.has(c.clip_id || c.id)
@@ -414,7 +453,7 @@ export default function Dashboard() {
             const hashtags = (meta.hashtags || '').split(/[\s,#]+/).filter(Boolean)
             return { clip_id: cId, video_url: c.video_url,
               title: c.top_title || currentJob?.video_title || 'Short Clip',
-              description: meta.topic || '', tags: hashtags }
+              description: c.topic || meta.topic || '', tags: hashtags }
           })
         })
       })
@@ -440,6 +479,64 @@ export default function Dashboard() {
         showToast(data.detail || 'Could not start TikTok connect', 'error')
       }
     } catch { showToast('Network error — try again', 'error') }
+  }
+
+  // ── Zernio TikTok connect + publish (marketer plan only) ──────────────
+  const handleConnectZernioTT = async () => {
+    try {
+      const token = localStorage.getItem('sc_token')
+      const res = await fetch(`${API_BASE}/social/zernio/connect/tiktok`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (res.ok) { const data = await res.json(); window.location.href = data.url }
+      else {
+        const data = await res.json()
+        showToast(data.detail || 'Could not start Zernio TikTok connect', 'error')
+      }
+    } catch { showToast('Network error — try again', 'error') }
+  }
+
+  const handlePublishZernioTT = async (e, clip) => {
+    e.stopPropagation()
+    if (!isMarketer) return
+    if (!zernioTtConnected) { handleConnectZernioTT(); return }
+    const clipId = clip.clip_id || clip.id
+    const meta = clipMeta[clipId] || {}
+    // Auto-fill content from GPT top_title + topic — no manual input needed
+    const topTitle = clip.top_title || currentJob?.video_title || 'Short Clip'
+    const topic = clip.topic || meta.topic || ''
+    const hashtags = meta.hashtags || '#shorts #tiktok #viral'
+    setPublishingZernioTT(prev => new Set([...prev, clipId]))
+    try {
+      const token = localStorage.getItem('sc_token')
+      const res = await fetch(`${API_BASE}/social/publish/zernio/tiktok`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          clips: [{
+            clip_id: clipId,
+            video_url: clip.video_url,
+            top_title: topic ? `${topTitle}\n\n${topic}` : topTitle,
+            hashtags,
+            privacy_level: 'PUBLIC_TO_EVERYONE',
+            allow_comment: true,
+            allow_duet: true,
+            allow_stitch: true,
+          }]
+        })
+      })
+      const data = await res.json()
+      const result = data.results?.[0]
+      if (res.ok && result?.status === 'success') {
+        setPublishedZernioTT(prev => new Set([...prev, clipId]))
+        showToast('🚀 Posted to TikTok via Zernio!')
+      } else if (res.status === 400 && data.detail?.includes('not connected')) {
+        setZernioTtConnected(false); handleConnectZernioTT()
+      } else {
+        showToast(result?.error || data.detail || 'Zernio TikTok post failed', 'error')
+      }
+    } catch { showToast('Zernio TikTok post failed', 'error') }
+    setPublishingZernioTT(prev => { const n = new Set(prev); n.delete(clipId); return n })
   }
 
   const handlePublishTT = async (e, clip) => {
@@ -633,8 +730,9 @@ export default function Dashboard() {
             <div style={{ display:'flex', alignItems:'center', gap:'16px', minHeight:'44px', flexWrap:'wrap' }}>
               {/* Platform pills */}
               <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
-                {socialEnabled ? (<>
-                  {ytConnected ? (
+                {(socialEnabled || isMarketer) ? (<>
+                  {/* YouTube OAuth pill — marketer plan only */}
+                  {isMarketer && (ytConnected ? (
                     <div style={{
                       display:'flex', alignItems:'center', gap:'6px',
                       padding:'5px 12px', borderRadius:'8px',
@@ -655,8 +753,8 @@ export default function Dashboard() {
                     }}>
                       <YTLogo size={14} /> Connect YouTube
                     </button>
-                  )}
-                  {ttConnected ? (
+                  ))}
+                  {socialEnabled && (ttConnected ? (
                     <div style={{
                       display:'flex', alignItems:'center', gap:'6px',
                       padding:'5px 12px', borderRadius:'8px',
@@ -677,6 +775,30 @@ export default function Dashboard() {
                     }}>
                       <TTLogo size={14} /> Connect TikTok
                     </button>
+                  ))}
+                  {/* Zernio TikTok pill — marketer plan only */}
+                  {isMarketer && (
+                    zernioTtConnected ? (
+                      <div style={{
+                        display:'flex', alignItems:'center', gap:'6px',
+                        padding:'5px 12px', borderRadius:'8px',
+                        border:'1px solid #bbf7d0', background:'#f0fdf4',
+                        fontSize:'.72rem', fontWeight:700, color:'#16a34a',
+                      }}>
+                        🚀 Zernio TikTok
+                        <span style={{ width:6, height:6, borderRadius:'50%', background:'#4ade80', display:'inline-block' }}/>
+                      </div>
+                    ) : (
+                      <button onClick={handleConnectZernioTT} style={{
+                        display:'flex', alignItems:'center', gap:'6px',
+                        padding:'5px 12px', borderRadius:'8px',
+                        border:'1px solid #86efac', background:'#f0fdf4',
+                        fontSize:'.72rem', fontWeight:700, color:'#16a34a',
+                        cursor:'pointer',
+                      }}>
+                        🚀 Connect Zernio TikTok
+                      </button>
+                    )
                   )}
                 </>) : (
                   <div style={{
@@ -1035,10 +1157,12 @@ export default function Dashboard() {
                       const ytDone    = publishedYT.has(clipId)
                       const ttDone    = publishedTT.has(clipId)
                       const ttDraft   = draftedTT.has(clipId)
+                      const zttDone   = publishedZernioTT.has(clipId)
+                      const zttPubbing = publishingZernioTT.has(clipId)
                       const ytPubbing = publishingYT.has(clipId)
                       const ttPubbing = publishingTT.has(clipId)
                       const ttDrafting = draftingTT.has(clipId)
-                      const allDone   = ytDone && (ttDone || ttDraft)
+                      const allDone   = ytDone && (ttDone || ttDraft || zttDone)
                       const urgent    = currentJob && isUrgent(currentJob.created_at)
                       const dur = clip.duration
                         ? `${Math.floor(clip.duration/60)}:${String(Math.round(clip.duration%60)).padStart(2,'0')}`
@@ -1175,40 +1299,98 @@ export default function Dashboard() {
                               <YTLogo size={10} /><span style={{fontSize:'.5rem'}}>{ytPubbing ? '…' : ytDone ? '✓' : 'Post'}</span>
                             </button>
                             {/* TikTok: publish + draft split */}
-                            <div style={{ flex:1, display:'flex', gap:2 }}>
-                              <button
-                                onClick={e => handlePublishTT(e, clip)}
-                                disabled={ttPubbing || ttDone}
-                                title={ttDone ? 'Published to TikTok' : 'Publish to TikTok'}
-                                style={{
-                                  flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:2,
-                                  padding:'5px 2px', borderRadius:7, fontSize:'.55rem', fontWeight:700,
-                                  border: ttDone ? '1px solid #d8b4fe' : '1px solid #e9d5ff',
-                                  background: ttDone ? '#faf5ff' : '#fdf4ff',
-                                  color: ttDone ? '#7c3aed' : '#9333ea',
-                                  cursor: (ttPubbing || ttDone) ? 'default' : 'pointer',
-                                  opacity: ttPubbing ? 0.7 : 1,
-                                }}
-                              >
-                                <TTLogo size={9} /><span style={{fontSize:'.5rem'}}>{ttPubbing ? '…' : ttDone ? '✓' : 'Post'}</span>
-                              </button>
-                              <button
-                                onClick={e => handleDraftTT(e, clip)}
-                                disabled={ttDrafting || ttDraft}
-                                title={ttDraft ? 'Saved to TikTok drafts' : 'Save to TikTok drafts'}
-                                style={{
-                                  flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:2,
-                                  padding:'5px 2px', borderRadius:7, fontSize:'.55rem', fontWeight:700,
-                                  border: ttDraft ? '1px solid #d8b4fe' : '1px solid #e9d5ff',
-                                  background: ttDraft ? '#faf5ff' : '#fdf4ff',
-                                  color: ttDraft ? '#7c3aed' : '#9333ea',
-                                  cursor: (ttDrafting || ttDraft) ? 'default' : 'pointer',
-                                  opacity: ttDrafting ? 0.7 : 1,
-                                }}
-                              >
-                                <TTLogo size={9} /><span style={{fontSize:'.5rem'}}>{ttDrafting ? '…' : ttDraft ? '✓' : 'Draft'}</span>
-                              </button>
+                            <div style={{ flex:1, display:'flex', gap:2, flexDirection:'column' }}>
+                              <div style={{ display:'flex', gap:2 }}>
+                                <button
+                                  onClick={e => handlePublishTT(e, clip)}
+                                  disabled={ttPubbing || ttDone}
+                                  title={ttDone ? 'Published to TikTok' : 'Publish to TikTok'}
+                                  style={{
+                                    flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:2,
+                                    padding:'5px 2px', borderRadius:7, fontSize:'.55rem', fontWeight:700,
+                                    border: ttDone ? '1px solid #d8b4fe' : '1px solid #e9d5ff',
+                                    background: ttDone ? '#faf5ff' : '#fdf4ff',
+                                    color: ttDone ? '#7c3aed' : '#9333ea',
+                                    cursor: (ttPubbing || ttDone) ? 'default' : 'pointer',
+                                    opacity: ttPubbing ? 0.7 : 1,
+                                  }}
+                                >
+                                  <TTLogo size={9} /><span style={{fontSize:'.5rem'}}>{ttPubbing ? '…' : ttDone ? '✓' : 'Post'}</span>
+                                </button>
+                                <button
+                                  onClick={e => handleDraftTT(e, clip)}
+                                  disabled={ttDrafting || ttDraft}
+                                  title={ttDraft ? 'Saved to TikTok drafts' : 'Save to TikTok drafts'}
+                                  style={{
+                                    flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:2,
+                                    padding:'5px 2px', borderRadius:7, fontSize:'.55rem', fontWeight:700,
+                                    border: ttDraft ? '1px solid #d8b4fe' : '1px solid #e9d5ff',
+                                    background: ttDraft ? '#faf5ff' : '#fdf4ff',
+                                    color: ttDraft ? '#7c3aed' : '#9333ea',
+                                    cursor: (ttDrafting || ttDraft) ? 'default' : 'pointer',
+                                    opacity: ttDrafting ? 0.7 : 1,
+                                  }}
+                                >
+                                  <TTLogo size={9} /><span style={{fontSize:'.5rem'}}>{ttDrafting ? '…' : ttDraft ? '✓' : 'Draft'}</span>
+                                </button>
+                              </div>
+                              {/* Zernio TikTok button — marketer plan only */}
+                              {isMarketer && (
+                                <button
+                                  onClick={e => handlePublishZernioTT(e, clip)}
+                                  disabled={zttPubbing || zttDone}
+                                  title={zttDone ? 'Posted to TikTok via Zernio' : 'Post to TikTok via Zernio (GPT title + topic)'}
+                                  style={{
+                                    flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:3,
+                                    padding:'5px 2px', borderRadius:7, fontSize:'.55rem', fontWeight:700,
+                                    border: zttDone ? '1px solid #86efac' : '1px solid #6ee7b7',
+                                    background: zttDone ? '#f0fdf4' : '#ecfdf5',
+                                    color: zttDone ? '#16a34a' : '#059669',
+                                    cursor: (zttPubbing || zttDone) ? 'default' : 'pointer',
+                                    opacity: zttPubbing ? 0.7 : 1,
+                                  }}
+                                >
+                                  <span style={{fontSize:'.7rem'}}>{zttPubbing ? '⏳' : zttDone ? '✓' : '🚀'}</span>
+                                  <span>{zttPubbing ? 'Posting…' : zttDone ? 'Posted' : 'Zernio TT'}</span>
+                                </button>
+                              )}
                             </div>
+                            </>) : isMarketer ? (<>
+                            {/* YouTube OAuth button — marketer (no socialEnabled needed) */}
+                            <button
+                              onClick={e => handlePublishYT(e, clip)}
+                              disabled={ytPubbing || ytDone}
+                              title={ytDone ? 'Published to YouTube' : ytConnected ? 'Publish to YouTube Shorts' : 'Connect YouTube to publish'}
+                              style={{
+                                flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:3,
+                                padding:'5px 4px', borderRadius:7, fontSize:'.6rem', fontWeight:700,
+                                border: ytDone ? '1px solid #bbf7d0' : '1px solid #fca5a5',
+                                background: ytDone ? '#f0fdf4' : '#fff5f5',
+                                color: ytDone ? '#16a34a' : '#dc2626',
+                                cursor: (ytPubbing || ytDone) ? 'default' : 'pointer',
+                                opacity: ytPubbing ? 0.7 : 1,
+                              }}
+                            >
+                              <YTLogo size={10} /><span style={{fontSize:'.5rem'}}>{ytPubbing ? '…' : ytDone ? '✓' : 'Post'}</span>
+                            </button>
+                            {/* Zernio TikTok button — marketer */}
+                            <button
+                              onClick={e => handlePublishZernioTT(e, clip)}
+                              disabled={zttPubbing || zttDone}
+                              title={zttDone ? 'Posted to TikTok via Zernio' : 'Post to TikTok via Zernio (GPT title + topic)'}
+                              style={{
+                                flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:3,
+                                padding:'5px 2px', borderRadius:7, fontSize:'.55rem', fontWeight:700,
+                                border: zttDone ? '1px solid #86efac' : '1px solid #6ee7b7',
+                                background: zttDone ? '#f0fdf4' : '#ecfdf5',
+                                color: zttDone ? '#16a34a' : '#059669',
+                                cursor: (zttPubbing || zttDone) ? 'default' : 'pointer',
+                                opacity: zttPubbing ? 0.7 : 1,
+                              }}
+                            >
+                              <span style={{fontSize:'.7rem'}}>{zttPubbing ? '⏳' : zttDone ? '✓' : '🚀'}</span>
+                              <span>{zttPubbing ? 'Posting…' : zttDone ? 'Posted' : 'Zernio TT'}</span>
+                            </button>
                             </>) : (
                               <div title="Social publishing coming soon" style={{
                                 flex:1, display:'flex', alignItems:'center', justifyContent:'center',
@@ -1255,7 +1437,7 @@ export default function Dashboard() {
             background: isPaid ? '#111' : '#cf1322', color:'#fff', border:'none',
             borderRadius:7, padding:'7px 16px', fontWeight:700, fontSize:'.76rem', cursor:'pointer',
           }}>{isPaid ? '⬇ Download' : '💳 Upgrade to Download'}</button>
-          {socialEnabled && (<>
+          {(socialEnabled || isMarketer) && (<>
           <button onClick={handleBulkPublishYT} style={{
             display:'flex', alignItems:'center', gap:7,
             background:'#fff5f5', color:'#dc2626', border:'1px solid #fca5a5',
@@ -1431,8 +1613,8 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* YouTube publish section */}
-                {socialEnabled ? (
+                {/* YouTube publish section — marketer plan only */}
+                {isMarketer ? (
                 <div style={{ border:'1px solid #e5e7eb', borderRadius:10, overflow:'hidden' }}>
                   <div style={{ padding:'9px 13px', background:'#fafafa', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', gap:8 }}>
                     <YTLogo size={16} />
@@ -1473,6 +1655,27 @@ export default function Dashboard() {
                         Connect YouTube
                       </button>
                     )}
+                  </div>
+                </div>
+                ) : socialEnabled ? (
+                <div style={{ border:'1px solid #e5e7eb', borderRadius:10, overflow:'hidden' }}>
+                  <div style={{ padding:'9px 13px', background:'#fafafa', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', gap:8 }}>
+                    <YTLogo size={16} />
+                    <span style={{ fontSize:'.8rem', fontWeight:700, flex:1 }}>YouTube Shorts</span>
+                    <span style={{ fontSize:'.65rem', fontWeight:700, padding:'2px 8px', borderRadius:8, background:'#f3f4f6', color:'#6b7280' }}>
+                      Not connected
+                    </span>
+                  </div>
+                  <div style={{ padding:'11px 13px' }}>
+                    <button
+                      onClick={handleConnectYouTube}
+                      style={{
+                        width:'100%', padding:'7px 16px', borderRadius:7, fontSize:'.75rem', fontWeight:700,
+                        background:'#fff5f5', color:'#dc2626', border:'1px solid #fca5a5', cursor:'pointer',
+                      }}
+                    >
+                      Connect YouTube
+                    </button>
                   </div>
                 </div>
                 ) : (
@@ -1551,6 +1754,59 @@ export default function Dashboard() {
                 <div style={{ border:'1px solid #e5e7eb', borderRadius:10, padding:'11px 13px', background:'#f9fafb', display:'flex', alignItems:'center', gap:8 }}>
                   <TTLogo size={14} />
                   <span style={{ fontSize:'.74rem', color:'#9ca3af', fontWeight:600 }}>TikTok — coming soon</span>
+                </div>
+                )}
+
+                {/* Zernio TikTok section — marketer plan only */}
+                {isMarketer && (
+                <div style={{ border:'1px solid #d1fae5', borderRadius:10, overflow:'hidden' }}>
+                  <div style={{ padding:'9px 13px', background:'#f0fdf4', borderBottom:'1px solid #d1fae5', display:'flex', alignItems:'center', gap:8 }}>
+                    <span style={{ fontSize:'1rem' }}>🚀</span>
+                    <span style={{ fontSize:'.8rem', fontWeight:700, flex:1 }}>Zernio TikTok <span style={{ fontSize:'.65rem', color:'#6b7280', fontWeight:500 }}>(Direct posting · GPT title auto-filled)</span></span>
+                    <span style={{
+                      fontSize:'.65rem', fontWeight:700, padding:'2px 8px', borderRadius:8,
+                      background: zernioTtConnected ? '#dcfce7' : '#f3f4f6',
+                      color: zernioTtConnected ? '#16a34a' : '#6b7280',
+                    }}>
+                      {zernioTtConnected ? '● Connected' : 'Not connected'}
+                    </span>
+                  </div>
+                  <div style={{ padding:'11px 13px', display:'flex', flexDirection:'column', gap:6 }}>
+                    {zernioTtConnected ? (
+                      publishedZernioTT.has(modalClipId) ? (
+                        <div style={{ fontSize:'.74rem', color:'#16a34a', fontWeight:600 }}>✓ Posted to TikTok via Zernio</div>
+                      ) : (
+                        <>
+                          <div style={{ fontSize:'.72rem', color:'#6b7280', marginBottom:4 }}>
+                            Caption: <em style={{ color:'#374151', fontStyle:'normal', fontWeight:600 }}>"{(modalClip.top_title || currentJob?.video_title || 'Short Clip').slice(0,80)}{((modalClip.top_title || currentJob?.video_title || 'Short Clip').length > 80 ? '…' : '')}"</em>
+                          </div>
+                          <button
+                            onClick={e => handlePublishZernioTT(e, modalClip)}
+                            disabled={publishingZernioTT.has(modalClipId)}
+                            style={{
+                              width:'100%', padding:'7px 16px', borderRadius:7, fontSize:'.75rem', fontWeight:700,
+                              background: publishingZernioTT.has(modalClipId) ? '#f3f4f6' : '#ecfdf5',
+                              color: publishingZernioTT.has(modalClipId) ? '#9ca3af' : '#059669',
+                              border: `1px solid ${publishingZernioTT.has(modalClipId) ? '#d1d5db' : '#6ee7b7'}`,
+                              cursor: publishingZernioTT.has(modalClipId) ? 'default' : 'pointer',
+                            }}
+                          >
+                            {publishingZernioTT.has(modalClipId) ? '⏳ Posting to TikTok…' : '🚀 Post to TikTok via Zernio'}
+                          </button>
+                        </>
+                      )
+                    ) : (
+                      <button
+                        onClick={handleConnectZernioTT}
+                        style={{
+                          width:'100%', padding:'7px 16px', borderRadius:7, fontSize:'.75rem', fontWeight:700,
+                          background:'#ecfdf5', color:'#059669', border:'1px solid #6ee7b7', cursor:'pointer',
+                        }}
+                      >
+                        Connect TikTok via Zernio
+                      </button>
+                    )}
+                  </div>
                 </div>
                 )}
 

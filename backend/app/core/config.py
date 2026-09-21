@@ -98,6 +98,13 @@ class Settings(BaseSettings):
     # app has actually passed TikTok's review for public posting.
     TIKTOK_APP_AUDITED: bool = False
 
+    # ── Zernio (social media API — marketer plan TikTok direct posting) ──
+    # Used for /social/publish/zernio/tiktok — marketer-only endpoint that
+    # posts clips directly to TikTok via Zernio's unified social API without
+    # needing ShortClipr's own TikTok app to pass TikTok's audit.
+    # Get a key at https://zernio.com/dashboard/api-keys
+    ZERNIO_API_KEY: str = ""
+
     # ── Resend (email broadcast) ─────────────────────────────
     RESEND_API_KEY: str = ""
     RESEND_FROM_EMAIL: str = "ShortClipr <updates@shortclipr.com>"
