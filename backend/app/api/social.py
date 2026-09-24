@@ -72,6 +72,7 @@ class PublishItem(BaseModel):
     video_url:        str
     title:            str = "Generated Short"
     description:      str = ""
+    top_title:        str = ""
     tags:             List[str] = []
     # YouTube-specific
     privacy_status:   str = "public"          # "public" | "unlisted" | "private"
@@ -136,6 +137,7 @@ async def social_status(current_user: CurrentUser):
     return {
         "youtube": bool(tokens.get("youtube", {}).get("refresh_token")),
         "tiktok":  bool(tokens.get("tiktok",  {}).get("access_token")),
+        "instagram": bool(tokens.get("instagram", {}).get("access_token")),
     }
 
 
@@ -845,289 +847,179 @@ async def youtube_disconnect(current_user: CurrentUser):
 
 
 # ══════════════════════════════════════════════════════════════════
-#  ZERNIO — TikTok direct posting via Zernio API (MARKETER PLAN ONLY)
+#  META / INSTAGRAM — Direct posting (MARKETER PLAN ONLY)
 # ══════════════════════════════════════════════════════════════════
-#
-# Zernio wraps TikTok's Content Posting API so we don't need our own
-# TikTok app to pass TikTok's audit. Marketer users connect their TikTok
-# account through Zernio's hosted OAuth flow, which stores a Zernio
-# profileId + accountId in the user's social_tokens. Publishing then
-# goes through POST https://zernio.com/api/v1/posts with publishNow:true.
-#
-# The post content is taken directly from the clip's GPT-generated
-# top_title (the AI hook title) — zero manual input for marketer users.
-#
-# Flow:
-#   1. Backend calls Zernio to create a profile for this user (idempotent —
-#      stored in social_tokens.zernio.profile_id).
-#   2. GET /social/zernio/connect/tiktok → returns Zernio OAuth URL.
-#   3. Zernio redirects back → we store accountId.
-#   4. POST /social/publish/zernio/tiktok → posts via Zernio with clip
-#      video_url + top_title as content.
-# ──────────────────────────────────────────────────────────────────
 
-ZERNIO_BASE = "https://zernio.com/api/v1"
+META_OAUTH_URL = "https://www.facebook.com/v18.0/dialog/oauth"
+META_TOKEN_URL = "https://graph.facebook.com/v18.0/oauth/access_token"
+META_GRAPH_URL = "https://graph.facebook.com/v18.0"
+META_SCOPES = "instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement"
 
 
-# Duplicate helper removed - defined above as _require_marketer
+@router.get("/auth/instagram")
+async def instagram_auth_init(current_user: CurrentUser, product: str = "youtube-shorts"):
+    """Return Meta OAuth URL for Instagram (Marketer only)."""
+    _require_marketer(current_user, "Instagram Direct Posting")
+    state = f"{current_user.user_id}|{product}"
+    params = (
+        f"?client_id={settings.META_CLIENT_ID}"
+        f"&redirect_uri={settings.META_REDIRECT_URI}"
+        f"&scope={META_SCOPES}"
+        f"&state={state}"
+        f"&response_type=code"
+    )
+    return {"url": f"{META_OAUTH_URL}{params}"}
 
 
-def _zernio_headers() -> dict:
-    """Authorization header for all Zernio API calls."""
-    if not settings.ZERNIO_API_KEY:
-        raise HTTPException(
-            status_code=501,
-            detail="Zernio integration is not configured. Add ZERNIO_API_KEY to .env",
-        )
-    return {
-        "Authorization": f"Bearer {settings.ZERNIO_API_KEY}",
-        "Content-Type": "application/json",
-    }
+@router.get("/auth/instagram/callback")
+async def instagram_auth_callback(code: str, state: str = "", error: str = ""):
+    user_id, product = _parse_state(state)
+    if error:
+        return RedirectResponse(url=_studio_url(product, "instagram_error", error))
 
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            # 1. Short lived token
+            resp = await client.get(
+                META_TOKEN_URL,
+                params={
+                    "client_id": settings.META_CLIENT_ID,
+                    "redirect_uri": settings.META_REDIRECT_URI,
+                    "client_secret": settings.META_CLIENT_SECRET,
+                    "code": code,
+                }
+            )
+            data = resp.json()
+            short_token = data.get("access_token")
+            if not short_token:
+                logger.error(f"Meta token exchange failed: {data}")
+                return RedirectResponse(url=_studio_url(product, "instagram_error", "token_exchange_failed"))
 
-async def _get_or_create_zernio_profile(user_id: str, tokens: dict) -> str:
-    """
-    Ensure a Zernio profile exists for this user. Returns the profileId.
-    The profileId is stored in social_tokens.zernio.profile_id so we
-    only call Zernio once per user (subsequent connects reuse it).
-    """
-    zernio = tokens.get("zernio", {})
-    profile_id = zernio.get("profile_id", "")
-    if profile_id:
-        return profile_id
+            # 2. Long lived token
+            resp2 = await client.get(
+                META_TOKEN_URL,
+                params={
+                    "grant_type": "fb_exchange_token",
+                    "client_id": settings.META_CLIENT_ID,
+                    "client_secret": settings.META_CLIENT_SECRET,
+                    "fb_exchange_token": short_token,
+                }
+            )
+            data2 = resp2.json()
+            long_token = data2.get("access_token") or short_token
 
-    # Create a new Zernio profile named after the user_id (opaque, unique)
-    async with httpx.AsyncClient(timeout=20) as client:
-        resp = await client.post(
-            f"{ZERNIO_BASE}/profiles",
-            json={"name": f"shortclipr-{user_id[:12]}"},
-            headers=_zernio_headers(),
-        )
-    data = resp.json()
-    if resp.status_code not in (200, 201) or not data.get("profile", {}).get("_id"):
-        raise HTTPException(
-            status_code=502,
-            detail=f"Failed to create Zernio profile: {data.get('error', data)}",
-        )
-    profile_id = data["profile"]["_id"]
+            # 3. Get Pages and IG Business Account
+            resp3 = await client.get(
+                f"{META_GRAPH_URL}/me/accounts",
+                params={"access_token": long_token, "fields": "id,instagram_business_account"}
+            )
+            pages_data = resp3.json().get("data", [])
+            ig_user_id = None
+            for page in pages_data:
+                if page.get("instagram_business_account"):
+                    ig_user_id = page["instagram_business_account"]["id"]
+                    break
+            
+            if not ig_user_id:
+                logger.error(f"No Instagram Business Account found for user {user_id}")
+                return RedirectResponse(url=_studio_url(product, "instagram_error", "no_ig_business_account"))
 
-    # Persist
-    tokens["zernio"] = {**zernio, "profile_id": profile_id}
-    await _save_social_tokens(user_id, tokens)
-    return profile_id
-
-
-@router.get("/zernio/status")
-async def zernio_status(current_user: CurrentUser):
-    """
-    Returns Zernio TikTok connection status for marketer users.
-    { zernio_tiktok: bool, account_id: str | null }
-    """
-    _require_marketer(current_user)
-    tokens = await _get_social_tokens(current_user.user_id)
-    zernio = tokens.get("zernio", {})
-    account_id = zernio.get("tiktok_account_id", "")
-    return {
-        "zernio_tiktok": bool(account_id),
-        "account_id": account_id or None,
-    }
-
-
-@router.get("/zernio/connect/tiktok")
-async def zernio_tiktok_connect(current_user: CurrentUser):
-    """
-    Returns the Zernio-hosted TikTok OAuth URL for marketer users.
-    The user visits this URL, grants access, and Zernio calls back to
-    /social/zernio/connect/tiktok/callback with accountId in the query.
-    """
-    _require_marketer(current_user)
-    if not settings.ZERNIO_API_KEY:
-        raise HTTPException(status_code=501, detail="ZERNIO_API_KEY not configured.")
-
-    tokens = await _get_social_tokens(current_user.user_id)
-    profile_id = await _get_or_create_zernio_profile(current_user.user_id, tokens)
-    tokens = await _get_social_tokens(current_user.user_id)  # Re-fetch after profile creation
-
-    # Derive the backend API base url from one of the other configured redirect URIs
-    api_base = settings.TIKTOK_REDIRECT_URI.replace("/social/auth/tiktok/callback", "")
-    # Build the callback URL Zernio will redirect to after the user authorizes
-    redirect_url = f"{api_base}/social/zernio/connect/tiktok/callback?user_id={current_user.user_id}"
-
-    async with httpx.AsyncClient(timeout=20) as client:
-        resp = await client.get(
-            f"{ZERNIO_BASE}/connect/tiktok",
-            params={"profileId": profile_id, "redirect_url": redirect_url},
-            headers=_zernio_headers(),
-        )
-    data = resp.json()
-    auth_url = data.get("authUrl") or data.get("auth_url") or ""
-    if not auth_url:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Zernio did not return an OAuth URL: {data}",
-        )
-    return {"url": auth_url}
-
-
-@router.get("/zernio/connect/tiktok/callback")
-async def zernio_tiktok_callback(
-    user_id: str,
-    account_id: str = Query(default="", alias="accountId"),
-    connected: str = Query(default=""),
-    error: str = Query(default=""),
-):
-    """
-    Zernio redirects here after the user connects TikTok.
-    Stores the accountId in the user's social_tokens and redirects
-    to the dashboard with a status param.
-    """
-    if error or not account_id:
-        logger.warning(f"Zernio TikTok connect failed for user {user_id}: error={error}")
-        return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/youtube-shorts/dashboard?status=zernio_tiktok_error&reason={error or 'no_account_id'}"
-        )
+    except Exception as exc:
+        logger.error(f"Insta token exchange network error: {exc}")
+        return RedirectResponse(url=_studio_url(product, "instagram_error", "network_error"))
 
     tokens = await _get_social_tokens(user_id)
-    zernio = tokens.get("zernio", {})
-    zernio["tiktok_account_id"] = account_id
-    tokens["zernio"] = zernio
+    tokens["instagram"] = {
+        "access_token": long_token,
+        "ig_user_id": ig_user_id,
+    }
     await _save_social_tokens(user_id, tokens)
-
-    logger.info(f"Zernio TikTok connected for user {user_id} (account_id={account_id})")
-    return RedirectResponse(
-        url=f"{settings.FRONTEND_URL}/youtube-shorts/dashboard?status=zernio_tiktok_connected"
-    )
+    return RedirectResponse(url=_studio_url(product, "instagram_connected"))
 
 
-class ZernioPublishItem(BaseModel):
-    clip_id:       str
-    video_url:     str
-    top_title:     str = ""          # GPT-generated AI title — used as TikTok caption
-    hashtags:      str = ""          # optional user-supplied hashtags
-    privacy_level: str = "PUBLIC_TO_EVERYONE"   # PUBLIC_TO_EVERYONE | SELF_ONLY | etc.
-    allow_comment: bool = True
-    allow_duet:    bool = True
-    allow_stitch:  bool = True
-
-
-class ZernioPublishRequest(BaseModel):
-    clips: List[ZernioPublishItem]
-
-
-@router.post("/publish/zernio/tiktok")
-async def publish_to_tiktok_via_zernio(body: ZernioPublishRequest, current_user: CurrentUser):
-    """
-    Publish clips to TikTok via Zernio API — MARKETER PLAN ONLY.
-
-    The post content (caption) is taken directly from `top_title` — the
-    GPT-generated AI hook title for each clip.  Optional hashtags from the
-    marketer's input are appended.  Zernio handles TikTok's upload,
-    chunking, audit workarounds, and rate-limit retries for us.
-
-    Returns a results list with { clip_id, status, post_id, zernio_post_id }.
-    """
-    _require_marketer(current_user)
+@router.post("/publish/instagram")
+async def publish_to_instagram(body: PublishRequest, current_user: CurrentUser):
+    _require_marketer(current_user, "Instagram Direct Posting")
     if not body.clips:
         return {"results": []}
 
     tokens = await _get_social_tokens(current_user.user_id)
-    zernio = tokens.get("zernio", {})
-    account_id = zernio.get("tiktok_account_id", "")
-    if not account_id:
+    ig = tokens.get("instagram")
+    if not ig or not ig.get("access_token") or not ig.get("ig_user_id"):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="TikTok not connected via Zernio. Connect TikTok through the Marketer dashboard.",
+            status_code=400,
+            detail="Instagram not connected. Connect Instagram through settings."
         )
 
     results = []
     for item in body.clips:
-        result = await _zernio_publish_one(item, account_id)
-        results.append(result)
-
+        results.append(await _publish_one_instagram(item, ig["access_token"], ig["ig_user_id"]))
     return {"results": results}
 
 
-async def _zernio_publish_one(item: ZernioPublishItem, account_id: str) -> dict:
-    """
-    POST a single clip to TikTok via Zernio /v1/posts.
-
-    Uses the clip's GPT top_title as the post content (TikTok caption).
-    Appends hashtags if supplied.  publishNow=True for immediate posting.
-    """
-    # Build content string: GPT title + optional hashtags
-    caption = (item.top_title or "").strip()
-    hashtags = (item.hashtags or "").strip()
+async def _publish_one_instagram(item: PublishItem, access_token: str, ig_user_id: str) -> dict:
+    caption = (item.top_title or item.description or item.title or "").strip()
+    hashtags = " ".join([h if h.startswith("#") else f"#{h}" for h in item.tags])
     if hashtags and not caption.endswith(hashtags):
         caption = f"{caption} {hashtags}".strip()
-    # TikTok caption cap: 2200 chars for Business app accounts
-    caption = caption[:2000]
+    caption = caption[:2200]
 
-    payload = {
-        "content": caption,
-        "mediaItems": [
-            {"type": "video", "url": item.video_url}
-        ],
-        "platforms": [
-            {"platform": "tiktok", "accountId": account_id}
-        ],
-        "tiktokSettings": {
-            "privacy_level":             item.privacy_level,
-            "allow_comment":             item.allow_comment,
-            "allow_duet":                item.allow_duet,
-            "allow_stitch":              item.allow_stitch,
-            "content_preview_confirmed": True,
-            "express_consent_given":     True,
-        },
-        "publishNow": True,
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post(
-                f"{ZERNIO_BASE}/posts",
-                json=payload,
-                headers=_zernio_headers(),
-            )
-        data = resp.json()
-    except Exception as exc:
-        logger.error(f"Zernio publish network error for clip {item.clip_id}: {exc}")
-        return {"clip_id": item.clip_id, "status": "failed", "error": str(exc)}
-
-    logger.debug(f"Zernio publish response for {item.clip_id}: {resp.status_code} {data}")
-
-    if resp.status_code not in (200, 201):
-        error_msg = (
-            data.get("error")
-            or data.get("message")
-            or f"Zernio returned HTTP {resp.status_code}"
+    async with httpx.AsyncClient(timeout=30) as client:
+        # Step 1: Create media container
+        init_resp = await client.post(
+            f"{META_GRAPH_URL}/{ig_user_id}/media",
+            params={
+                "access_token": access_token,
+                "video_url": item.video_url,
+                "media_type": "REELS",
+                "caption": caption,
+                "share_to_feed": "true",
+            }
         )
-        logger.error(f"Zernio publish failed for clip {item.clip_id}: {error_msg}")
-        return {
-            "clip_id": item.clip_id,
-            "status": "failed",
-            "error": error_msg,
-        }
+        init_data = init_resp.json()
+        if "id" not in init_data:
+            logger.error(f"IG container init failed: {init_data}")
+            return {"clip_id": item.clip_id, "status": "failed", "error": str(init_data)}
+        
+        creation_id = init_data["id"]
 
-    post = data.get("post", {})
-    post_id = post.get("_id", "")
-    platform_status = (post.get("platforms") or [{}])[0].get("status", "unknown")
+        # Step 2: Poll status
+        for _ in range(12):
+            await asyncio.sleep(5)
+            status_resp = await client.get(
+                f"{META_GRAPH_URL}/{creation_id}",
+                params={"access_token": access_token, "fields": "status_code"}
+            )
+            status_data = status_resp.json()
+            code = status_data.get("status_code", "")
+            if code == "FINISHED":
+                break
+            elif code == "ERROR":
+                logger.error(f"IG processing failed: {status_data}")
+                return {"clip_id": item.clip_id, "status": "failed", "error": "Instagram processing failed"}
+        else:
+            return {"clip_id": item.clip_id, "status": "failed", "error": "Instagram processing timed out"}
 
-    logger.info(f"Zernio published clip {item.clip_id} → post_id={post_id} status={platform_status}")
-    return {
-        "clip_id":       item.clip_id,
-        "status":        "success",
-        "zernio_post_id": post_id,
-        "tiktok_status": platform_status,
-    }
+        # Step 3: Publish
+        pub_resp = await client.post(
+            f"{META_GRAPH_URL}/{ig_user_id}/media_publish",
+            params={
+                "access_token": access_token,
+                "creation_id": creation_id,
+            }
+        )
+        pub_data = pub_resp.json()
+        if "id" not in pub_data:
+            logger.error(f"IG publish failed: {pub_data}")
+            return {"clip_id": item.clip_id, "status": "failed", "error": str(pub_data)}
+
+        return {"clip_id": item.clip_id, "status": "success", "post_id": pub_data["id"]}
 
 
-@router.delete("/zernio/disconnect/tiktok")
-async def zernio_tiktok_disconnect(current_user: CurrentUser):
-    """Remove stored Zernio TikTok account (user-initiated disconnect)."""
-    _require_marketer(current_user)
+@router.delete("/disconnect/instagram")
+async def instagram_disconnect(current_user: CurrentUser):
+    _require_marketer(current_user, "Instagram Direct Posting")
     tokens = await _get_social_tokens(current_user.user_id)
-    zernio = tokens.get("zernio", {})
-    zernio.pop("tiktok_account_id", None)
-    tokens["zernio"] = zernio
+    tokens.pop("instagram", None)
     await _save_social_tokens(current_user.user_id, tokens)
     return {"status": "disconnected"}
