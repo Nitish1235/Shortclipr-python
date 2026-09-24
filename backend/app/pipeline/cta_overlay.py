@@ -28,7 +28,7 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: CTA,Arial,{fontsize},{primary_color},&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,0,5,30,30,30,1
+Style: CTA,{font_name},{fontsize},{primary_color},&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,0,5,30,30,30,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -194,6 +194,7 @@ def build_cta_ass(
     clip_duration: float,
     color_hex: str = "#FFFFFF",
     cta_window: float = 10.0,
+    font_name: str = "Liberation Sans",
 ) -> str:
     """
     Generate a complete ASS file string with the CTA animation.
@@ -208,6 +209,7 @@ def build_cta_ass(
         clip_duration: Total clip length in seconds.
         color_hex:     Text colour as #RRGGBB.
         cta_window:    Duration of the CTA section (default 10s).
+        font_name:     The font to use for subtitles (e.g. "Liberation Sans").
 
     Returns:
         ASS file content as a string.
@@ -234,5 +236,5 @@ def build_cta_ass(
         lines.extend(builder(words, t, t + dur, x_pct, y_pct, font_size, color_ass))
         t += dur
 
-    header = _ASS_HEADER.format(W=_W, H=_H, fontsize=header_fs, primary_color=color_ass)
+    header = _ASS_HEADER.format(W=_W, H=_H, font_name=font_name, fontsize=header_fs, primary_color=color_ass)
     return header + "\n".join(lines) + "\n"

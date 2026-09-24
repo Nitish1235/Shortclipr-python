@@ -65,6 +65,7 @@ from app.core.config import get_settings
 from app.core.proxy import get_proxyseller_proxy
 from app.pipeline.captions import (
     Caption, build_ass_content, compute_hook_duration, _hook_position, _safe_upper,
+    FONT_OPTIONS, DEFAULT_FONT,
 )
 from app.pipeline.downloader import download_clip_segments, download_source_parallel
 from app.pipeline.title_box import (
@@ -1235,10 +1236,12 @@ async def _encode_reframed_and_captioned(
 
             # Inject CTA animation style & events into the ASS if marketer CTA is enabled
             if cta_enabled:
+                mapped_font = FONT_OPTIONS.get(font, FONT_OPTIONS[DEFAULT_FONT])
                 cta_ass = build_cta_ass(
                     pages=cta_settings["pages"],
                     clip_duration=clip_duration,
                     color_hex=cta_settings.get("color", "#FFFFFF"),
+                    font_name=mapped_font,
                 )
                 if cta_ass:
                     cta_styles = [line for line in cta_ass.splitlines() if line.startswith("Style: CTA")]
@@ -1307,10 +1310,12 @@ async def _encode_reframed_and_captioned(
             ]
         elif cta_enabled:
             # No captions/hook_title but CTA is enabled — create an ASS file with just the CTA events
+            mapped_font = FONT_OPTIONS.get(font, FONT_OPTIONS[DEFAULT_FONT])
             cta_ass = build_cta_ass(
                 pages=cta_settings["pages"],
                 clip_duration=clip_duration,
                 color_hex=cta_settings.get("color", "#FFFFFF"),
+                font_name=mapped_font,
             )
             if cta_ass:
                 with tempfile.NamedTemporaryFile(suffix=".ass", mode="w", encoding="utf-8", delete=False) as f:
