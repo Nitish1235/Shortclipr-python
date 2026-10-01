@@ -11,7 +11,7 @@ import Footer        from './components/Footer'
 import Hero              from './components/Hero'
 import Ticker            from './components/Ticker'
 import HowItWorks        from './components/HowItWorks'
-import Features          from './components/Features'
+
 import UseCases          from './components/UseCases'
 import VideoShowcase     from './components/VideoShowcase'
 import Comparison        from './components/Comparison'
@@ -114,8 +114,6 @@ function LandingPage() {
         {/* 3. How it works */}
         <HowItWorks />
 
-        {/* 4. Feature cards */}
-        <Features />
 
         {/* 5. Use cases by creator type */}
         <UseCases />
