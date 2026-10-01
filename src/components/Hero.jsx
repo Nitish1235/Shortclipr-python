@@ -222,18 +222,13 @@ export default function Hero() {
         </div>
 
         {/* Trust stats */}
-        <div style={{
-          display: 'flex', justifyContent: 'center', flexWrap: 'wrap',
-          gap: '0', marginTop: '52px',
+        <div className="trust-stats-wrapper" style={{
+          marginTop: '52px',
           borderTop: '1px solid #e5e5e5',
           paddingTop: '32px',
         }}>
-          {trust.map(({ num, label }, i) => (
-            <div key={label} style={{
-              padding: '0 clamp(20px, 4vw, 48px)',
-              borderRight: i < trust.length - 1 ? '1px solid #e5e5e5' : 'none',
-              textAlign: 'center',
-            }}>
+          {trust.map(({ num, label }) => (
+            <div key={label} className="trust-stat">
               <div style={{
                 fontSize: 'clamp(1.4rem, 2.5vw, 1.9rem)',
                 fontWeight: 800, color: '#cf1322',
@@ -252,6 +247,33 @@ export default function Hero() {
         @keyframes pulse {
           0%,100% { opacity:1; transform:scale(1); }
           50% { opacity:0.5; transform:scale(0.8); }
+        }
+        .trust-stats-wrapper {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 16px;
+        }
+        .trust-stat {
+          text-align: center;
+          border-right: 1px solid #e5e5e5;
+          padding: 0 10px;
+        }
+        .trust-stat:last-child {
+          border-right: none;
+        }
+        @media(max-width: 800px) {
+          .trust-stats-wrapper {
+            grid-template-columns: repeat(2, 1fr);
+            row-gap: 32px;
+          }
+          .trust-stat { border-right: none !important; }
+          .trust-stat:nth-of-type(odd) { border-right: 1px solid #e5e5e5 !important; }
+        }
+        @media(max-width: 500px) {
+          .trust-stats-wrapper {
+            grid-template-columns: 1fr;
+          }
+          .trust-stat:nth-of-type(odd) { border-right: none !important; }
         }
         @media(max-width:600px){
           #hero form > div { flex-direction:column; border-radius:12px !important; }
