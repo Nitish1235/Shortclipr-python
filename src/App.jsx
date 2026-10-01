@@ -108,6 +108,9 @@ function LandingPage() {
         {/* 2. Dark feature ticker */}
         <Ticker />
 
+        {/* 6. INFINITE VIDEO SHOWCASE — admin-curated clips from GCS */}
+        <VideoShowcase />
+
         {/* 3. How it works */}
         <HowItWorks />
 
@@ -116,9 +119,6 @@ function LandingPage() {
 
         {/* 5. Use cases by creator type */}
         <UseCases />
-
-        {/* 6. INFINITE VIDEO SHOWCASE — admin-curated clips from GCS */}
-        <VideoShowcase />
 
         {/* 7. AI pipeline flow */}
         <VisualHighlights />
