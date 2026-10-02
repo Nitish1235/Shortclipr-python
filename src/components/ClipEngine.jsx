@@ -281,6 +281,55 @@ function MinutesGatewaySlider({ durationSeconds, value, onChange }) {
   )
 }
 
+// ── Manual Fixed-Width Clip Slider ──────────────────────────────────
+function ManualClipSlider({ durationSeconds, windowSize, value, onChange }) {
+  const maxStart = Math.max(0, durationSeconds - windowSize);
+  const start = Math.min(Math.max(0, value), maxStart);
+  
+  const pctStart = (start / durationSeconds) * 100;
+  const pctWidth = Math.min(100, (windowSize / durationSeconds) * 100);
+
+  return (
+    <div style={{
+      background:'#fef2f2', border:'1.5px solid #fecaca', borderRadius:'12px',
+      padding:'14px 16px 12px',
+    }}>
+      <div style={{ position:'relative', height:'34px' }}>
+        <div style={{
+          position:'absolute', top:'50%', left:0, right:0, height:'8px',
+          background:'#e5e5e5', borderRadius:'100px', transform:'translateY(-50%)',
+          boxShadow:'inset 0 1px 2px rgba(0,0,0,0.1)',
+        }}/>
+        <div style={{
+          position:'absolute', top:'50%', height:'8px',
+          background:'linear-gradient(90deg,#cf1322,#ff6b6b)', borderRadius:'100px',
+          transform:'translateY(-50%)', transition:'left .15s ease',
+          boxShadow:'0 1px 3px rgba(207,19,34,0.4)',
+          left:`${pctStart}%`, width:`${pctWidth}%`,
+          pointerEvents:'none'
+        }}/>
+        <input
+          type="range" className="gw-thumb"
+          min={0} max={maxStart} step={1} value={start}
+          onChange={e => onChange(Number(e.target.value))}
+          style={{ position:'absolute', top:0, left:0, width:'100%', height:'34px', margin:0, background:'transparent', zIndex: 2, cursor: 'grab' }}
+          onMouseDown={e => e.target.style.cursor = 'grabbing'}
+          onMouseUp={e => e.target.style.cursor = 'grab'}
+        />
+      </div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'6px' }}>
+        <span style={{ fontSize:'0.76rem', color:'#888', fontWeight:600 }}>{formatDuration(start)}</span>
+        <span style={{
+          fontWeight:800, color:'#b91c1c', fontSize:'0.75rem',
+          background:'#fee2e2', padding:'4px 12px', borderRadius:'100px',
+          border:'1.5px solid #fca5a5'
+        }}>Exactly {windowSize}s window</span>
+        <span style={{ fontSize:'0.76rem', color:'#888', fontWeight:600 }}>{formatDuration(start + windowSize)}</span>
+      </div>
+    </div>
+  )
+}
+
 export default function ClipEngine({ onJobCreated }) {
   const [url, setUrl]               = useState('')
   const [mode, setMode]             = useState('input') // input | login | config | processing | paywall_library
@@ -339,16 +388,18 @@ export default function ClipEngine({ onJobCreated }) {
       const count = parseInt(clipCount, 10) || 3
       const baseStart = gatewayRange ? gatewayRange[0] : 0
       const baseEnd = gatewayRange ? gatewayRange[1] : videoData.duration
-      const span = baseEnd - baseStart
       
       const newRanges = []
-      const spacing = span / count
       const clipLenOpt = CLIP_LENGTH_OPTIONS.find(o => o.val === clipLen) || CLIP_LENGTH_OPTIONS[0]
       const maxLen = clipLenOpt.max
 
+      const maxPossibleStart = Math.max(baseStart, baseEnd - maxLen)
+      const availableStartSpan = maxPossibleStart - baseStart
+      const spacing = count > 1 ? availableStartSpan / (count - 1) : 0
+
       for (let i = 0; i < count; i++) {
         const start = baseStart + (i * spacing)
-        const end = Math.min(start + maxLen, baseEnd)
+        const end = start + maxLen
         newRanges.push([Math.round(start), Math.round(end)])
       }
       setManualRanges(newRanges)
@@ -723,22 +774,26 @@ export default function ClipEngine({ onJobCreated }) {
 
               {clipGenerationMethod === 'manual' && videoData && manualRanges.length > 0 && (
                 <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {manualRanges.map((range, idx) => (
+                  {manualRanges.map((range, idx) => {
+                    const clipLenOpt = CLIP_LENGTH_OPTIONS.find(o => o.val === clipLen) || CLIP_LENGTH_OPTIONS[0];
+                    const wSize = clipLenOpt.max;
+                    return (
                     <div key={idx}>
                       <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#444', marginBottom: '6px' }}>
                         Short {idx + 1}
                       </div>
-                      <MinutesGatewaySlider
+                      <ManualClipSlider
                         durationSeconds={videoData.duration}
-                        value={range}
-                        onChange={(newVal) => {
+                        windowSize={wSize}
+                        value={range[0]}
+                        onChange={(newStart) => {
                           const updated = [...manualRanges]
-                          updated[idx] = newVal
+                          updated[idx] = [newStart, newStart + wSize]
                           setManualRanges(updated)
                         }}
                       />
                     </div>
-                  ))}
+                  )})}
                 </div>
               )}
             </div>
