@@ -169,6 +169,7 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
     title_bg_opacity = options.get("title_bg_opacity", 0.55)
     bar_color        = options.get("bar_color",       "#0d0d0d")
     aspect           = options.get("aspect",          "9:16")
+    gameplay_clip_id = options.get("gameplay_clip_id", None)
 
     reserved_credits       = options.get("reserved_credits",       0)
     video_minutes_reserved = options.get("video_minutes_reserved", 0.0)
@@ -191,6 +192,21 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
         clip_ranges     = [(ts.start, ts.end) for ts in timestamps]
         source_path     = None
         raw_clip_results = None
+
+        gameplay_bg_path = None
+        if gameplay_clip_id and settings.GAMEPLAY_GCS_BUCKET_NAME:
+            async with _step(job_id, "downloading gameplay bg"):
+                gameplay_bg_path = job_dir / "gameplay_bg.mp4"
+                def _dl_gameplay():
+                    from google.cloud import storage
+                    bucket = storage.Client().bucket(settings.GAMEPLAY_GCS_BUCKET_NAME)
+                    blob = bucket.blob(f"gameplay_clips/{gameplay_clip_id}.mp4")
+                    if blob.exists():
+                        blob.download_to_filename(str(gameplay_bg_path))
+                    else:
+                        raise ValueError(f"Gameplay clip not found: {gameplay_clip_id}")
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, _dl_gameplay)
 
         try:
             async with _step(job_id, f"DASH parallel download ({len(timestamps)} clips)"):
@@ -334,6 +350,7 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
                         job_semaphore=job_encode_semaphore,
                         is_marketer=is_marketer,
                         cta_settings=cta_settings,
+                        gameplay_bg_path=gameplay_bg_path,
                     )
 
                 thumb_path = job_dir / f"clip_{i:02d}_thumb.jpg"

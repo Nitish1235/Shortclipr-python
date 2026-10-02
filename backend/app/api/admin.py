@@ -863,3 +863,126 @@ async def admin_delete_tutorial(admin: AdminUser):
     await db.clear_tutorial_video()
     logger.info(f"Admin {admin.email} removed the onboarding tutorial video")
     return {"success": True}
+
+# ── Gameplay clips library ─────────────────────────────────────────
+
+def _gameplay_bucket():
+    from google.cloud import storage
+    return storage.Client().bucket(settings.GAMEPLAY_GCS_BUCKET_NAME)
+
+
+def _upload_gameplay_sync(video_bytes: bytes, thumb_bytes: bytes, title: str) -> dict:
+    clip_id = str(uuid.uuid4())
+    bucket = _gameplay_bucket()
+    gcs_base = f"https://storage.googleapis.com/{settings.GAMEPLAY_GCS_BUCKET_NAME}"
+
+    video_blob = bucket.blob(f"gameplay_clips/{clip_id}.mp4")
+    video_blob.upload_from_string(video_bytes, content_type="video/mp4")
+    video_blob.metadata = {"title": title[:200], "clip_id": clip_id,
+                           "added_at": datetime.now(timezone.utc).isoformat()}
+    video_blob.patch()
+
+    thumb_blob = bucket.blob(f"gameplay_thumbs/{clip_id}.jpg")
+    thumb_blob.upload_from_string(thumb_bytes, content_type="image/jpeg")
+
+    return {
+        "id": clip_id,
+        "title": title,
+        "video_url": f"{gcs_base}/gameplay_clips/{clip_id}.mp4",
+        "thumbnail_url": f"{gcs_base}/gameplay_thumbs/{clip_id}.jpg",
+        "added_at": video_blob.metadata["added_at"],
+    }
+
+
+def _list_gameplay_sync() -> list[dict]:
+    try:
+        bucket = _gameplay_bucket()
+        blobs = list(bucket.list_blobs(prefix="gameplay_clips/"))
+        gcs_base = f"https://storage.googleapis.com/{settings.GAMEPLAY_GCS_BUCKET_NAME}"
+        items = []
+        for blob in blobs:
+            if not blob.name.endswith(".mp4"):
+                continue
+            blob.reload()
+            meta = blob.metadata or {}
+            clip_id = meta.get("clip_id", blob.name.split("/")[-1][:-4])
+            items.append({
+                "id": clip_id,
+                "title": meta.get("title", "Gameplay Clip"),
+                "video_url": f"{gcs_base}/gameplay_clips/{clip_id}.mp4",
+                "thumbnail_url": f"{gcs_base}/gameplay_thumbs/{clip_id}.jpg",
+                "added_at": meta.get("added_at", ""),
+                "blob_name": blob.name,
+            })
+        items.sort(key=lambda x: x["added_at"], reverse=True)
+        return items
+    except Exception as e:
+        logger.error(f"Failed to list gameplay clips: {e}")
+        return []
+
+
+def _delete_gameplay_sync(clip_id: str) -> None:
+    bucket = _gameplay_bucket()
+    for prefix, ext in [("gameplay_clips", ".mp4"), ("gameplay_thumbs", ".jpg")]:
+        try:
+            bucket.blob(f"{prefix}/{clip_id}{ext}").delete()
+        except Exception:
+            pass
+
+
+@router.get("/gameplay/list", tags=["public"])
+async def list_gameplay_clips():
+    if not settings.GAMEPLAY_GCS_BUCKET_NAME:
+        return {"clips": [], "count": 0}
+    loop = asyncio.get_running_loop()
+    items = await loop.run_in_executor(None, _list_gameplay_sync)
+    return {"clips": items, "count": len(items)}
+
+
+@router.get("/admin/gameplay")
+async def admin_list_gameplay(admin: AdminUser):
+    if not settings.GAMEPLAY_GCS_BUCKET_NAME:
+        raise HTTPException(status_code=503, detail="GAMEPLAY_GCS_BUCKET_NAME not configured")
+    loop = asyncio.get_running_loop()
+    items = await loop.run_in_executor(None, _list_gameplay_sync)
+    return {"clips": items, "count": len(items)}
+
+
+@router.post("/admin/gameplay/upload")
+async def admin_upload_gameplay(
+    admin: AdminUser,
+    title: str = "Gameplay Clip",
+    video: UploadFile = File(...),
+    thumbnail: UploadFile = File(...),
+):
+    if not settings.GAMEPLAY_GCS_BUCKET_NAME:
+        raise HTTPException(status_code=503, detail="GAMEPLAY_GCS_BUCKET_NAME not configured")
+    if not (video.filename or "").lower().endswith(".mp4"):
+        raise HTTPException(status_code=400, detail="Video must be .mp4")
+    if not (thumbnail.filename or "").lower().endswith((".jpg", ".jpeg")):
+        raise HTTPException(status_code=400, detail="Thumbnail must be .jpg")
+
+    video_bytes = await video.read()
+    thumb_bytes = await thumbnail.read()
+    loop = asyncio.get_running_loop()
+    try:
+        entry = await loop.run_in_executor(None, _upload_gameplay_sync, video_bytes, thumb_bytes, title)
+    except Exception as e:
+        logger.error(f"Gameplay upload failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    logger.info(f"Admin {admin.email} uploaded gameplay clip {entry['id']}")
+    return {"success": True, "clip": entry}
+
+
+@router.delete("/admin/gameplay/{clip_id}")
+async def admin_delete_gameplay(clip_id: str, admin: AdminUser):
+    if not settings.GAMEPLAY_GCS_BUCKET_NAME:
+        raise HTTPException(status_code=503, detail="GAMEPLAY_GCS_BUCKET_NAME not configured")
+    loop = asyncio.get_running_loop()
+    try:
+        await loop.run_in_executor(None, _delete_gameplay_sync, clip_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    logger.info(f"Admin {admin.email} deleted gameplay clip {clip_id}")
+    return {"success": True}

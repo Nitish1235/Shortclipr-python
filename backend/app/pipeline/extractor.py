@@ -83,11 +83,11 @@ VALID_TEMPLATES = [
     "blur_bg",       # Blur background
     "zoom_blur",     # Heavy zoom + blur
     "glass",         # Glassmorphism
-    "color_bars",    # Solid coloured bars — merged: subsumes the old
-                     # "gradient"/"cinema"/"neon_frame" (near-identical bar
-                     # looks, pick the look via bar_color, e.g. black = cinema)
+    "color_bars",    # Solid coloured bars
     "full_screen",   # True full-screen — face-tracked crop, no bars, 100% fill (default)
-    # "gameplay",    # Portrait top 30 % / full bottom 70 % — temporarily disabled, will rework
+    "gameplay_50_50",
+    "gameplay_40_60",
+    "gameplay_face",
 ]
 
 # Output canvas size per aspect ratio (width, height)
@@ -1004,6 +1004,52 @@ def _fc_gameplay(
     return fc + ";" + _fast_crop_pan("pre", out_label, width, height)
 
 
+
+def _fc_gameplay_split(
+    template: str,
+    gameplay_idx: int | None,
+    width: int,
+    height: int,
+    face_track: list[tuple[float, float, float]] | None,
+    out_label: str = "out",
+) -> str:
+    if template == "gameplay_40_60":
+        top_h = _even_round(height * 0.4)
+    elif template == "gameplay_50_50":
+        top_h = _even_round(height * 0.5)
+    else:  # gameplay_face
+        top_h = _even_round(height * 0.4)
+
+    bot_h = height - top_h
+    
+    if template == "gameplay_face":
+        cx = _fc_crop_offset(face_track, "x", "iw", "ow", "(iw-ow)/2")
+        cy = _fc_crop_offset(face_track, "y", "ih", "oh", "(ih-oh)/2")
+        top_f = (
+            f"[0:v]scale={width}:{top_h}:force_original_aspect_ratio=increase:flags=bicubic,"
+            f"crop={width}:{top_h}:'{cx}':'{cy}'[top];"
+        )
+    else:
+        top_f = (
+            f"[0:v]scale={width}:{top_h}:force_original_aspect_ratio=increase:flags=fast_bilinear,"
+            f"crop={width}:{top_h},"
+            f"{_fast_boxblur_bg(width, top_h, 25, 1)}[top_bg];"
+            f"[0:v]scale={width}:-2:force_original_aspect_ratio=decrease[top_fg];"
+            f"[top_bg][top_fg]overlay=(W-w)/2:(H-h)/2[top];"
+        )
+        
+    if gameplay_idx is not None:
+        bot_f = (
+            f"[{gameplay_idx}:v]scale={width}:{bot_h}:force_original_aspect_ratio=increase:flags=bicubic,"
+            f"crop={width}:{bot_h}:(in_w-{width})/2:(in_h-{bot_h})/2[bot];"
+        )
+    else:
+        bot_f = f"color=c=black:s={width}x{bot_h}[bot];"
+        
+    fc = top_f + bot_f + "[top][bot]vstack[pre]"
+    return fc + ";" + _fast_crop_pan("pre", out_label, width, height)
+
+
 def _build_template_filter(
     template: str,
     bar_color: str,
@@ -1014,11 +1060,9 @@ def _build_template_filter(
     src_w: int = 0,
     src_h: int = 0,
     out_label: str = "out",
+    gameplay_idx: int | None = None,
 ) -> str:
     """Dispatch to the filter-string builder for `template`, ending in [{out_label}].
-
-    `face_track`/`src_w`/`src_h` come from `face_tracker.compute_face_track()`
-    — empty/None reproduces the previous centre-default behaviour exactly.
     """
     if template == "crop_fill":
         return _fc_crop_fill(width, height, face_track, src_w, src_h, out_label=out_label)
@@ -1032,8 +1076,8 @@ def _build_template_filter(
         return _fc_colour_bars(bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
     elif template == "full_screen":
         return _fc_full_screen(width, height, face_track, src_w, src_h, out_label=out_label)
-    # elif template == "gameplay":  # temporarily disabled, will rework — function kept above
-    #     return _fc_gameplay(zoom_beats, width, height, face_track, src_w, src_h, out_label=out_label)
+    elif template.startswith("gameplay_"):
+        return _fc_gameplay_split(template, gameplay_idx, width, height, face_track, out_label=out_label)
     return _fc_crop_fill(width, height, face_track, src_w, src_h, out_label=out_label)
 
 
@@ -1170,6 +1214,7 @@ async def _encode_reframed_and_captioned(
     job_semaphore: asyncio.Semaphore | None = None,
     is_marketer: bool = False,
     cta_settings: dict | None = None,
+    gameplay_bg_path: Path | None = None,
 ) -> None:
     """One ffmpeg invocation: reframe + (optionally) burn captions, producing
     both the raw reframed output and the captioned output."""
@@ -1177,8 +1222,14 @@ async def _encode_reframed_and_captioned(
     title_color_hex = TITLE_TEXT_COLORS.get(title_color, TITLE_TEXT_COLORS[DEFAULT_TITLE_TEXT_COLOR])
     box_path: Path | None = None
     try:
-        fc = _build_template_filter(template, bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label="reframed_base")
         extra_inputs: list[str] = []
+        if gameplay_bg_path:
+            extra_inputs.extend(["-stream_loop", "-1", "-i", str(gameplay_bg_path)])
+            gameplay_idx = 1
+        else:
+            gameplay_idx = None
+            
+        fc = _build_template_filter(template, bar_color, zoom_beats, width, height, face_track, src_w, src_h, out_label="reframed_base", gameplay_idx=gameplay_idx)
         
         logo_path = Path(__file__).parent.parent / "assets" / "logo.png"
         wm_png_path: Path | None = None
@@ -1188,7 +1239,7 @@ async def _encode_reframed_and_captioned(
             
             if wm_png_path:
                 extra_inputs.extend(["-i", str(wm_png_path)])
-                logo_idx = len(extra_inputs) // 2
+                logo_idx = extra_inputs.count("-i")
                 
                 # Watermark visible for the entire clip, start to end.
                 wm_enable = "1"
@@ -1270,7 +1321,7 @@ async def _encode_reframed_and_captioned(
                     box_path, box_w, box_h = box
                     ox, oy = overlay_xy(hook_x, hook_y, alignment, box_w, box_h)
                     extra_inputs.extend(["-i", str(box_path)])
-                    box_idx = len(extra_inputs) // 2
+                    box_idx = extra_inputs.count("-i")
                     fc += (
                         f";[reframed]split=2[rawv][capv0];"
                         f"[capv0][{box_idx}:v]overlay={ox}:{oy}:enable='between(t,0,{hook_duration:.3f})'[capv];"
@@ -1436,6 +1487,7 @@ async def reframe_and_caption(
     job_semaphore: asyncio.Semaphore | None = None,
     is_marketer: bool = False,
     cta_settings: dict | None = None,
+    gameplay_bg_path: Path | None = None,
 ) -> tuple[Path, Path]:
     """
     Reframe a 16:9 clip into the chosen aspect ratio and (if `captions` or
@@ -1495,6 +1547,7 @@ async def reframe_and_caption(
             hook_title, face_track, src_w, src_h, title_permanent, clip_duration, font,
             title_color, title_bg, title_bg_opacity, job_semaphore, is_marketer,
             cta_settings=cta_settings,
+            gameplay_bg_path=gameplay_bg_path,
         )
     except Exception as exc:
         logger.error(
@@ -1508,6 +1561,7 @@ async def reframe_and_caption(
                 hook_title, None, 0, 0, title_permanent, clip_duration, font,
                 title_color, title_bg, title_bg_opacity, job_semaphore, False,
                 cta_settings=None,
+                gameplay_bg_path=None,
             )
         except Exception as exc2:
             raise RuntimeError(

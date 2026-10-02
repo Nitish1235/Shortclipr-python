@@ -106,6 +106,10 @@ class JobOptions(BaseModel):
     gateway_end:   float | None = None
     manual_clip_ranges: list[ClipRange] | None = None
 
+    # Gameplay Overlay
+    gameplay_clip_id: str | None = None      # which gameplay clip was selected
+    gameplay_layout: str = "gameplay_50_50"   # gameplay_50_50 | gameplay_40_60 | gameplay_face
+
     @field_validator("clip_count")
     @classmethod
     def validate_clip_count(cls, v: int) -> int:

@@ -66,7 +66,7 @@ const STYLE_OPTIONS = [
 // frame extraction, so it updates instantly as the user clicks a template.
 // Approximates each template's actual ffmpeg filter-complex layout
 // (see backend/app/pipeline/extractor.py) closely enough to preview it.
-function TemplatePreviewBg({ template, thumbnail, barColor }) {
+function TemplatePreviewBg({ template, thumbnail, barColor, gameplayUrl }) {
   const img = thumbnail || '/placeholder.png'
   const fgImg = (style) => (
     <img src={img} alt="" style={{
@@ -82,6 +82,32 @@ function TemplatePreviewBg({ template, thumbnail, barColor }) {
       transform:`scale(${scale})`,
     }}/>
   )
+
+  if (template.startsWith('gameplay_')) {
+    const is50 = template === 'gameplay_50_50';
+    const topH = is50 ? '50%' : '40%';
+    const botH = is50 ? '50%' : '60%';
+    
+    // For face-tracked, simulate center-crop
+    const isFace = template === 'gameplay_face';
+    const topStyle = isFace ? { objectFit: 'cover' } : { objectFit: 'contain' };
+    
+    return (
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ height: topH, width: '100%', position: 'relative', overflow: 'hidden', background: '#000' }}>
+          {!isFace && <img src={img} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(25px)' }} />}
+          <img src={img} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', ...topStyle }} />
+        </div>
+        <div style={{ height: botH, width: '100%', background: '#111', position: 'relative' }}>
+          {gameplayUrl ? (
+            <video src={gameplayUrl} autoPlay muted loop playsInline style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555', fontSize: '0.8rem' }}>No Gameplay Selected</div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   switch (template) {
     case 'blur_bg':
@@ -360,6 +386,9 @@ export default function ClipEngine({ onJobCreated }) {
   const [titleColor,    setTitleColor]    = useState('white')
   const [titleBg,       setTitleBg]       = useState('none')
   const [titleBgOpacity, setTitleBgOpacity] = useState(0.55)
+  
+  const [gameplayClips, setGameplayClips] = useState([])
+  const [selectedGameplayId, setSelectedGameplayId] = useState('')
   // "Minutes gateway" — [startSeconds, endSeconds] sub-window of the video
   // to actually process. null until video metadata loads (full video by
   // default — the gateway is opt-in, not required).
@@ -368,6 +397,18 @@ export default function ClipEngine({ onJobCreated }) {
   const { user, loginWithGoogleToken } = useAuth()
   const navigate = useNavigate()
   const isPaid = !!(user?.plan && user.plan !== 'free')
+
+  useEffect(() => {
+    fetch(API_BASE + '/gameplay/list')
+      .then(res => res.json())
+      .then(data => {
+        if (data.clips && data.clips.length > 0) {
+          setGameplayClips(data.clips)
+          setSelectedGameplayId(data.clips[0].id)
+        }
+      })
+      .catch(err => console.error(err))
+  }, [])
 
   // Restore pending URL after login
   useEffect(() => {
@@ -503,6 +544,7 @@ export default function ClipEngine({ onJobCreated }) {
             gateway_start: gatewayRange ? gatewayRange[0] : 0,
             gateway_end:   gatewayRange ? gatewayRange[1] : null,
             manual_clip_ranges: clipGenerationMethod === 'manual' ? manualRanges.map(r => ({ start: r[0], end: r[1] })) : null,
+            gameplay_clip_id: shortTemplate.startsWith('gameplay_') ? selectedGameplayId : null,
           },
         }),
       })
@@ -616,7 +658,9 @@ export default function ClipEngine({ onJobCreated }) {
       { val:'zoom_blur',    label:'🔍 Zoom Blur',     sub:'Dramatic' },
       { val:'glass',        label:'🪟 Glass',          sub:'Premium' },
       { val:'full_screen',  label:'📺 Full Screen',   sub:'No Bars · Full Fill' },
-      // { val:'gameplay',  label:'🎮 Gameplay',       sub:'Gaming' }, // temporarily disabled, will rework
+      { val:'gameplay_50_50', label:'🎮 Gameplay 50/50', sub:'50% Split' },
+      { val:'gameplay_40_60', label:'🎮 Gameplay 60%',   sub:'60% Gaming' },
+      { val:'gameplay_face',  label:'🎯 Face Tracked',    sub:'Full Width' },
     ]
 
     return (
@@ -1042,6 +1086,24 @@ export default function ClipEngine({ onJobCreated }) {
                 </div>
               </div>
 
+              {/* Gameplay picker */}
+              {shortTemplate.startsWith('gameplay_') && gameplayClips.length > 0 && (
+                <div style={{ ...rowStyle, borderBottom:'none', flexDirection:'column', alignItems:'flex-start' }}>
+                  <span style={{ ...labelStyle, display:'block' }}>Gameplay Clip</span>
+                  <div style={{ display:'flex', gap:'8px', overflowX:'auto', width:'100%', paddingBottom:'4px' }}>
+                    {gameplayClips.map(clip => (
+                      <div key={clip.id} onClick={() => setSelectedGameplayId(clip.id)} style={{
+                        width: '80px', flexShrink: 0, cursor: 'pointer',
+                        border: selectedGameplayId === clip.id ? '2px solid #cf1322' : '2px solid transparent',
+                        borderRadius: '6px', overflow: 'hidden', position: 'relative'
+                      }}>
+                        <img src={clip.thumbnail_url} alt={clip.title || 'Gameplay'} style={{ width: '100%', height: '50px', objectFit: 'cover', display: 'block' }} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Bar/frame color picker */}
               {shortTemplate === 'color_bars' && (
                 <div style={{ ...rowStyle, borderBottom:'none' }}>
@@ -1077,7 +1139,7 @@ export default function ClipEngine({ onJobCreated }) {
               border:'2px solid #111', boxShadow:'3px 3px 0 #cf1322',
             }}>
               {videoData.thumbnail && (
-                <TemplatePreviewBg template={shortTemplate} thumbnail={videoData.thumbnail} barColor={barColor} />
+                <TemplatePreviewBg template={shortTemplate} thumbnail={videoData.thumbnail} barColor={barColor} gameplayUrl={gameplayClips.find(c => c.id === selectedGameplayId)?.video_url} />
               )}
               {/* Bottom gradient — keeps bottom-aligned captions legible
                   regardless of which template/background sits behind them. */}

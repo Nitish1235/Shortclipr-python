@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     # material, not per-user output.  Must be set explicitly (see above).
     BRAINROT_GCS_BUCKET_NAME: str = ""
 
+    # ── Gameplay clips library — GCS bucket ───────────────────────
+    # Pre-edited 2-min gameplay clips + thumbnails uploaded by admin.
+    # Separate from GCS_BUCKET_NAME so lifecycle/IAM stays independent.
+    GAMEPLAY_GCS_BUCKET_NAME: str = ""   # e.g. "shortclipr-gameplay-bg"
+
     # ── Runware (AI image generation) ──────────────────────────
     # Was only ever read directly out of .env by backend/scripts/
     # generate_characters.py's own regex-based load_api_key() — wiring it
