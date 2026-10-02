@@ -243,7 +243,7 @@ export default function AppLayout({ children }) {
   }, [location.pathname])
 
   return (
-    <div className="app-layout" style={{ display: 'flex', minHeight: '100vh', width: '100vw', overflowX: 'hidden' }}>
+    <div className="app-layout" style={{ display: 'flex', minHeight: '100vh', width: '100%' }}>
 
       {/* ══ Mobile Header (Hamburger) ════════════════════════════ */}
       <div className="mobile-header" style={{

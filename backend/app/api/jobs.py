@@ -71,6 +71,10 @@ def _min_video_seconds_for_clips(clip_count: int) -> int:
 
 # ── Request / response schemas ─────────────────────────────────
 
+class ClipRange(BaseModel):
+    start: float
+    end: float
+
 class JobOptions(BaseModel):
     clip_count:   int = 10
     min_duration: int = 30
@@ -100,6 +104,7 @@ class JobOptions(BaseModel):
     # this model has no access to it yet.
     gateway_start: float = 0.0
     gateway_end:   float | None = None
+    manual_clip_ranges: list[ClipRange] | None = None
 
     @field_validator("clip_count")
     @classmethod

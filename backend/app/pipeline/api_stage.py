@@ -27,7 +27,7 @@ import logging
 
 from app.core.plan_limits import get_max_video_minutes
 from app.db import supabase as db
-from app.pipeline.ai_clipper import find_random_clips, find_viral_clips
+from app.pipeline.ai_clipper import find_random_clips, find_viral_clips, ClipTimestamp
 from app.pipeline.stream import extract_video_id, get_stream_urls, get_video_metadata
 from app.pipeline.transcript import get_transcript_with_retries
 from app.pipeline.transcript_cleanup import clean_transcript
@@ -266,12 +266,25 @@ async def _execute_api_stage(
     transcript = await clean_transcript(transcript, video_id=job_id)
 
     # ── STEP 5: Clip selection — AI (transcript available) or random fallback ──
-    # transcript is [] here only after get_transcript_with_retries exhausted
-    # every method + retry — a video with no captions at all, or every fetch
-    # path blocked. GPT can't score or boundary-snap without transcript text,
-    # so fall back to randomly-placed clips across the job's allowed window
-    # instead of failing the job outright.
-    if transcript:
+    # or manual override if user provided exact ranges
+    manual = options.get("manual_clip_ranges")
+    if manual:
+        await db.update_job_progress(job_id, 18, "Processing manual timeframes...")
+        timestamps = []
+        for i, rng in enumerate(manual):
+            rng_start = max(0.0, float(rng.get("start", 0)))
+            rng_end = min(metadata["duration"], float(rng.get("end", 0)))
+            if rng_start >= rng_end:
+                continue
+            timestamps.append(ClipTimestamp(
+                start=rng_start,
+                end=rng_end,
+                title=f"Manual Short {i + 1}",
+                viral_score=100 - i,
+                reason="User manually selected this timeframe.",
+                caption_preview="Manual selection",
+            ))
+    elif transcript:
         await db.update_job_progress(job_id, 18, "AI analyzing best moments...")
         timestamps = await find_viral_clips(transcript, options)
     else:

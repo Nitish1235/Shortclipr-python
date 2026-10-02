@@ -175,8 +175,6 @@ const MIN_GATEWAY_GAP = 60
 const CLIP_LENGTH_OPTIONS = [
   { val:'hooks', label:'<30s',   sub:'Hooks',     min:15, max:30 },
   { val:'mid',   label:'30-60s', sub:'Standard',  min:30, max:60 },
-  { val:'auto',  label:'Auto',   sub:'<90s',      min:30, max:90 },
-  { val:'long',  label:'60-90s', sub:'Long-form', min:60, max:90 },
 ]
 
 const CLIP_COUNT_OPTIONS = [
@@ -298,8 +296,10 @@ export default function ClipEngine({ onJobCreated }) {
 
   // Config options
   const [lang,          setLang]          = useState('Auto / No translation')
-  const [clipLen,       setClipLen]       = useState('auto')
+  const [clipLen,       setClipLen]       = useState('hooks')
   const [clipCount,     setClipCount]     = useState('10')
+  const [clipGenerationMethod, setClipGenerationMethod] = useState('auto')
+  const [manualRanges,  setManualRanges]  = useState([])
   const [captionStyle,  setCaptionStyle]  = useState('word_pop')
   const [colorCombo,    setColorCombo]    = useState('white_black')
   const [wordsPerLine,  setWordsPerLine]  = useState(2)
@@ -333,6 +333,27 @@ export default function ClipEngine({ onJobCreated }) {
   useEffect(() => {
     if (videoData?.duration > 0) setGatewayRange([0, videoData.duration])
   }, [videoData])
+
+  useEffect(() => {
+    if (videoData?.duration && clipCount) {
+      const count = parseInt(clipCount, 10) || 3
+      const baseStart = gatewayRange ? gatewayRange[0] : 0
+      const baseEnd = gatewayRange ? gatewayRange[1] : videoData.duration
+      const span = baseEnd - baseStart
+      
+      const newRanges = []
+      const spacing = span / count
+      const clipLenOpt = CLIP_LENGTH_OPTIONS.find(o => o.val === clipLen) || CLIP_LENGTH_OPTIONS[0]
+      const maxLen = clipLenOpt.max
+
+      for (let i = 0; i < count; i++) {
+        const start = baseStart + (i * spacing)
+        const end = Math.min(start + maxLen, baseEnd)
+        newRanges.push([Math.round(start), Math.round(end)])
+      }
+      setManualRanges(newRanges)
+    }
+  }, [videoData, clipCount, clipLen, gatewayRange])
 
   // Free-tier: if a previously-selected option becomes locked once we know
   // the user's plan, snap it back to the nearest unlocked option instead of
@@ -397,7 +418,7 @@ export default function ClipEngine({ onJobCreated }) {
     setProgress(5)
     setStatusMsg('Connecting to processing queue…')
     const clipLenOpt = CLIP_LENGTH_OPTIONS.find(o => o.val === clipLen)
-      || CLIP_LENGTH_OPTIONS.find(o => o.val === 'auto')
+      || CLIP_LENGTH_OPTIONS[0]
     try {
       const token = localStorage.getItem('sc_token')
       const res = await fetch(`${API_BASE}/jobs`, {
@@ -430,6 +451,7 @@ export default function ClipEngine({ onJobCreated }) {
             // duration regardless (jobs.py) — see MIN_GATEWAY_SECONDS there.
             gateway_start: gatewayRange ? gatewayRange[0] : 0,
             gateway_end:   gatewayRange ? gatewayRange[1] : null,
+            manual_clip_ranges: clipGenerationMethod === 'manual' ? manualRanges.map(r => ({ start: r[0], end: r[1] })) : null,
           },
         }),
       })
@@ -666,6 +688,58 @@ export default function ClipEngine({ onJobCreated }) {
                     <strong style={{ color:'#cf1322' }}>{formatDuration(gatewayRange[1] - gatewayRange[0])}</strong>{' '}
                     is deducted from your video-minutes credit, not the full video.
                   </p>
+                </div>
+              )}
+            </div>
+
+            {/* ✂️ Clip Generation Method */}
+            <div style={sectionCard}>
+              <div style={sectionTitle}>⚙️ Generation Method</div>
+              <div style={{ display:'flex', gap:'8px', marginTop:'10px' }}>
+                <button
+                  onClick={() => setClipGenerationMethod('auto')}
+                  style={{
+                    flex:1, padding:'10px', borderRadius:'8px',
+                    background: clipGenerationMethod === 'auto' ? '#cf1322' : '#f9f9f9',
+                    color: clipGenerationMethod === 'auto' ? '#fff' : '#666',
+                    border: clipGenerationMethod === 'auto' ? '1.5px solid #cf1322' : '1.5px solid #e5e5e5',
+                    fontWeight:700, cursor:'pointer'
+                  }}
+                >
+                  AI Generated (Auto)
+                </button>
+                <button
+                  onClick={() => setClipGenerationMethod('manual')}
+                  style={{
+                    flex:1, padding:'10px', borderRadius:'8px',
+                    background: clipGenerationMethod === 'manual' ? '#cf1322' : '#f9f9f9',
+                    color: clipGenerationMethod === 'manual' ? '#fff' : '#666',
+                    border: clipGenerationMethod === 'manual' ? '1.5px solid #cf1322' : '1.5px solid #e5e5e5',
+                    fontWeight:700, cursor:'pointer'
+                  }}
+                >
+                  Manual (Timeframes)
+                </button>
+              </div>
+
+              {clipGenerationMethod === 'manual' && videoData && manualRanges.length > 0 && (
+                <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {manualRanges.map((range, idx) => (
+                    <div key={idx}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#444', marginBottom: '6px' }}>
+                        Short {idx + 1}
+                      </div>
+                      <MinutesGatewaySlider
+                        durationSeconds={videoData.duration}
+                        value={range}
+                        onChange={(newVal) => {
+                          const updated = [...manualRanges]
+                          updated[idx] = newVal
+                          setManualRanges(updated)
+                        }}
+                      />
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
