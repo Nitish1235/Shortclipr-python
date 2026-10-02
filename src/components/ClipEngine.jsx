@@ -304,7 +304,7 @@ export default function ClipEngine({ onJobCreated }) {
   const [colorCombo,    setColorCombo]    = useState('white_black')
   const [wordsPerLine,  setWordsPerLine]  = useState(2)
   const [captionFont,   setCaptionFont]   = useState('default')
-  const [shortTemplate, setShortTemplate] = useState('full_screen')
+  const [shortTemplate, setShortTemplate] = useState('zoom_blur')
   const [barColor,      setBarColor]      = useState('#0d0d0d')
   const [aspect,        setAspect]        = useState('9:16')
   const [titleEnabled,  setTitleEnabled]  = useState(false)
@@ -564,8 +564,7 @@ export default function ClipEngine({ onJobCreated }) {
       { val:'blur_bg',      label:'🌫 Blur BG',       sub:'Most Popular' },
       { val:'zoom_blur',    label:'🔍 Zoom Blur',     sub:'Dramatic' },
       { val:'glass',        label:'🪟 Glass',          sub:'Premium' },
-      { val:'color_bars',   label:'🎨 Color Bars',    sub:'Branded' }, // merged: covers old Gradient/Cinema/Neon Frame — pick via frame colour below
-      { val:'full_screen',  label:'📺 Full Screen',   sub:'Default · No Bars · Full Fill' },
+      { val:'full_screen',  label:'📺 Full Screen',   sub:'No Bars · Full Fill' },
       // { val:'gameplay',  label:'🎮 Gameplay',       sub:'Gaming' }, // temporarily disabled, will rework
     ]
 
