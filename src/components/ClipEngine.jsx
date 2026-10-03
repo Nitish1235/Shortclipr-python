@@ -658,9 +658,12 @@ export default function ClipEngine({ onJobCreated }) {
       { val:'zoom_blur',    label:'🔍 Zoom Blur',     sub:'Dramatic' },
       { val:'glass',        label:'🪟 Glass',          sub:'Premium' },
       { val:'full_screen',  label:'📺 Full Screen',   sub:'No Bars · Full Fill' },
-      { val:'gameplay_50_50', label:'🎮 Gameplay 50/50', sub:'50% Split' },
-      { val:'gameplay_40_60', label:'🎮 Gameplay 60%',   sub:'60% Gaming' },
-      { val:'gameplay_face',  label:'🎯 Face Tracked',    sub:'Full Width' },
+      // Gameplay options only shown when admin has uploaded at least one clip
+      ...(gameplayClips.length > 0 ? [
+        { val:'gameplay_50_50', label:'🎮 Gameplay 50/50', sub:'50% Split' },
+        { val:'gameplay_40_60', label:'🎮 Gameplay 60%',   sub:'60% Gaming' },
+        { val:'gameplay_face',  label:'🎯 Face Tracked',    sub:'Full Width' },
+      ] : []),
     ]
 
     return (

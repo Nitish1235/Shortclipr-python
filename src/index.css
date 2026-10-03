@@ -198,7 +198,6 @@ h1,h2,h3,h4,h5 { line-height: 1.2; letter-spacing: -0.04em; font-weight: 700; co
   .dashboard-stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
-}
 
   .hide-mobile { display: none !important; }
   .section { padding: 60px 0; }

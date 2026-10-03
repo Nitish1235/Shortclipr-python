@@ -698,6 +698,151 @@ function TutorialManager({ showToast }) {
   )
 }
 
+// ── Gameplay Library Manager ───────────────────────────────────
+function GameplayManager({ showToast }) {
+  const [clips, setClips] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const [title, setTitle] = useState('')
+  const [deleting, setDeleting] = useState(null)
+
+  const fetchClips = async () => {
+    setLoading(true)
+    try {
+      const r = await authFetch('/admin/gameplay')
+      const d = await r.json()
+      setClips(d.clips || [])
+    } catch { setClips([]) }
+    setLoading(false)
+  }
+
+  useEffect(() => { fetchClips() }, [])
+
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.mp4')) {
+      showToast('Only .mp4 files are supported', 'error'); return
+    }
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('video', file)
+      form.append('title', title.trim() || file.name.replace('.mp4', ''))
+      const r = await fetch(`${API}/admin/gameplay/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token()}` },
+        body: form,
+      })
+      if (!r.ok) {
+        const e2 = await r.json().catch(() => ({}))
+        throw new Error(e2.detail || 'Upload failed')
+      }
+      showToast('Gameplay clip uploaded — thumbnail auto-generated!')
+      setTitle('')
+      fetchClips()
+    } catch (err) {
+      showToast(err.message, 'error')
+    }
+    setUploading(false)
+  }
+
+  const handleDelete = async (clipId) => {
+    if (!window.confirm('Delete this gameplay clip?')) return
+    setDeleting(clipId)
+    try {
+      const r = await authFetch(`/admin/gameplay/${clipId}`, { method: 'DELETE' })
+      if (!r.ok) throw new Error('Delete failed')
+      showToast('Clip deleted')
+      fetchClips()
+    } catch (err) {
+      showToast(err.message, 'error')
+    }
+    setDeleting(null)
+  }
+
+  return (
+    <div>
+      <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111', marginBottom: '4px' }}>Gameplay Clips Library</h2>
+      <p style={{ fontSize: '0.78rem', color: '#999', marginBottom: '20px' }}>
+        Upload .mp4 gameplay clips. A thumbnail JPG is auto-generated from the video — no manual image needed.<br/>
+        These clips appear in the user dashboard when they select a Gameplay short style.
+      </p>
+
+      {/* Upload section */}
+      <div style={{ ...card, marginBottom: '24px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div style={{ flex: 1, minWidth: '180px' }}>
+          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#555', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>Clip Name (optional)</label>
+          <input
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder="e.g. Subway Surfers Run 1"
+            style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e5e5e5', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }}
+            onFocus={e => e.target.style.borderColor = '#cf1322'}
+            onBlur={e => e.target.style.borderColor = '#e5e5e5'}
+          />
+        </div>
+        <label style={{ ...btnRed, cursor: uploading ? 'default' : 'pointer', opacity: uploading ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+          {uploading ? '⏳ Uploading & generating thumbnail…' : '⬆ Upload Gameplay .mp4'}
+          <input type="file" accept="video/mp4" onChange={handleUpload} disabled={uploading} style={{ display: 'none' }} />
+        </label>
+      </div>
+
+      {/* Clips grid */}
+      {loading ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#aaa', padding: '20px' }}>
+          <div style={{ width: '18px', height: '18px', border: '2px solid #fecaca', borderTopColor: '#cf1322', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          Loading clips…
+        </div>
+      ) : clips.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#aaa' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>🎮</div>
+          <p style={{ fontSize: '0.85rem' }}>No gameplay clips uploaded yet. Upload your first clip above.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '14px' }}>
+          {clips.map(clip => (
+            <div key={clip.id} style={{ ...card, padding: 0, overflow: 'hidden' }}>
+              {/* Thumbnail */}
+              <div style={{ position: 'relative', background: '#111', aspectRatio: '16/9' }}>
+                <img
+                  src={clip.thumbnail_url}
+                  alt={clip.title}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  onError={e => { e.target.style.display = 'none' }}
+                />
+                <div style={{ position: 'absolute', top: '6px', left: '6px', background: 'rgba(0,0,0,0.7)', color: '#fff', borderRadius: '4px', padding: '2px 7px', fontSize: '0.62rem', fontWeight: 700 }}>
+                  🎮 Gameplay
+                </div>
+              </div>
+              {/* Info & actions */}
+              <div style={{ padding: '10px 12px' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#111', marginBottom: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {clip.title || 'Gameplay Clip'}
+                </div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <a href={clip.video_url} target="_blank" rel="noreferrer"
+                    style={{ ...btnOutline, padding: '5px 10px', fontSize: '0.72rem', flex: 1, textAlign: 'center' }}>
+                    ▶ Preview
+                  </a>
+                  <button
+                    onClick={() => handleDelete(clip.id)}
+                    disabled={deleting === clip.id}
+                    style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '5px 10px', fontSize: '0.72rem', fontWeight: 600, color: '#cf1322', cursor: 'pointer' }}
+                  >
+                    {deleting === clip.id ? '…' : '🗑'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main Admin Page ────────────────────────────────────────────
 
 export default function Admin() {
@@ -916,6 +1061,7 @@ export default function Admin() {
             { key: 'jobs', label: '📋 All Jobs' },
             { key: 'generate', label: '⚡ Generate & Assign' },
             { key: 'tutorial', label: '📹 Tutorial' },
+            { key: 'gameplay', label: '🎮 Gameplay' },
             { key: 'tiktok', label: '🎵 TikTok' },
             { key: 'email', label: '📧 Email' },
           ].map(t => (
@@ -1196,6 +1342,11 @@ export default function Admin() {
         {/* ── Tutorial tab ── */}
         {tab === 'tutorial' && (
           <TutorialManager showToast={showToast} />
+        )}
+
+        {/* ── Gameplay Library tab ── */}
+        {tab === 'gameplay' && (
+          <GameplayManager showToast={showToast} />
         )}
 
         {/* ── TikTok mock accounts tab ── */}
