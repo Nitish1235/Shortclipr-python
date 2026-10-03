@@ -698,7 +698,7 @@ export default function ClipEngine({ onJobCreated }) {
         </div>
 
         {/* Config + Live Preview */}
-        <div style={{ display:'flex', gap:'20px', flexWrap:'wrap', alignItems:'flex-start', marginBottom:'20px' }}>
+        <div className="clip-engine-layout" style={{ display:'flex', gap:'20px', flexWrap:'wrap', alignItems:'flex-start', marginBottom:'20px' }}>
 
           {/* Left: sectioned config */}
           <div style={{ flex:'1 1 360px', minWidth:0 }}>
@@ -1130,8 +1130,8 @@ export default function ClipEngine({ onJobCreated }) {
               scrolling through the Source/Captions/Layout sections on the
               left; renders the selected template + caption style together,
               instantly, from the video's thumbnail (no server round-trip). */}
-          <div style={{ flex:'0 0 200px', minWidth:'160px', position:'sticky', top:'20px', alignSelf:'flex-start' }}>
-            <div style={{ ...sectionTitle, marginBottom:'10px' }}>👀 Live Preview</div>
+          <div className="clip-engine-preview" style={{ flex:'0 0 200px', minWidth:'160px', position:'sticky', top:'20px', alignSelf:'flex-start' }}>
+            <div className="pip-title" style={{ ...sectionTitle, marginBottom:'10px' }}>👀 Live Preview</div>
             <div style={{
               position:'relative', width:'100%',
               aspectRatio: aspect.replace(':','/'),

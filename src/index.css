@@ -195,6 +195,11 @@ h1,h2,h3,h4,h5 { line-height: 1.2; letter-spacing: -0.04em; font-weight: 700; co
 }
 
 @media (max-width: 768px) {
+  .dashboard-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
   .hide-mobile { display: none !important; }
   .section { padding: 60px 0; }
   .card { padding: 20px; }
@@ -258,5 +263,48 @@ h1,h2,h3,h4,h5 { line-height: 1.2; letter-spacing: -0.04em; font-weight: 700; co
   #hero-form-container button {
     width: 100%;
     border-radius: 8px !important;
+  }
+}
+
+
+/* ========================================================
+   MOBILE REDESIGN TWEAKS (Responsive overrides)
+   ======================================================== */
+@media (max-width: 768px) {
+  /* 1. Dashboard Nav Bar Stats */
+  .dashboard-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  /* Remove right border on every second item in mobile stat grid */
+  .dashboard-stats-grid > div:nth-child(2n) {
+    border-right: none !important;
+  }
+  
+  /* 2. Generated Video Cards Grid */
+  .dashboard-clips-grid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  /* 3. Clip Engine Layout Picture-in-Picture */
+  .clip-engine-layout {
+    display: flex !important;
+    flex-direction: column-reverse !important; /* Put preview first in flow */
+    gap: 0 !important; /* we use margins to overlay */
+  }
+  .clip-engine-preview {
+    position: sticky !important;
+    top: 90px !important; 
+    align-self: flex-end !important;
+    width: 140px !important;
+    z-index: 99 !important;
+    /* Pull the left config panel up so it sits under the floated preview */
+    margin-bottom: -220px !important; 
+    padding-bottom: 10px;
+    margin-right: 10px; /* spacing against edge */
+  }
+  /* Hide the label on mobile pip */
+  .clip-engine-preview .pip-title {
+    display: none !important;
   }
 }

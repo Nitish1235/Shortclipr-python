@@ -816,7 +816,7 @@ export default function Dashboard() {
 
             {/* Row 2 — stats. Full-width, evenly divided columns so no single
                 cell (e.g. "1665h") blows out the others' widths. */}
-            <div style={{
+            <div className="dashboard-stats-grid" style={{
               display:'grid',
               gridTemplateColumns:'repeat(7, minmax(0, 1fr))',
               borderTop:'1px solid #e5e7eb',
@@ -1150,7 +1150,7 @@ export default function Dashboard() {
                     No clips match this filter.
                   </div>
                 ) : (
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:'12px' }}>
+                  <div className="dashboard-clips-grid" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:'12px' }}>
                     {filteredClips.map((clip, idx) => {
                       const clipId    = clip.clip_id || clip.id
                       const isSel     = selectedClipIds.has(clipId)
