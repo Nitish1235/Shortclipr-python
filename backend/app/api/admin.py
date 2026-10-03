@@ -583,6 +583,13 @@ def _list_all_clips_sync() -> dict:
     return {"jobs": result, "total_jobs": len(result), "total_clips": sum(j["clip_count"] for j in result)}
 
 
+@router.get("/admin/clips/all")
+async def get_all_edited_clips(admin: AdminUser, limit: int = 150):
+    """Fetch raw successfully-encoded clips for the admin infinite wall."""
+    clips = await db.get_all_ready_clips(limit=limit)
+    return {"clips": clips}
+
+
 @router.get("/admin/gcs/clips")
 async def admin_list_gcs_clips(admin: AdminUser):
     """Admin: one-click check of every clip stored in GCS, grouped by job."""

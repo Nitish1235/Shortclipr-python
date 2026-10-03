@@ -41,6 +41,7 @@ import Editor         from './pages/Editor'
 import Lab            from './pages/Lab'
 import Tutorial       from './pages/Tutorial'
 import Admin          from './pages/Admin'
+import AdminClips     from './pages/AdminClips'
 import BrainrotStudio    from './pages/brainrot/BrainrotStudio'
 import BrainrotLogin     from './pages/brainrot/BrainrotLogin'
 import BrainrotSettings  from './pages/brainrot/BrainrotSettings'
@@ -255,6 +256,7 @@ export default function App() {
 
             {/* Admin — no separate auth guard on frontend, backend enforces admin check */}
             <Route path="/admin"                 element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+            <Route path="/admin/clips"           element={<ProtectedRoute><AdminClips /></ProtectedRoute>} />
 
             {/* ── YouTube Shorts product ────────────────────────── */}
             <Route path="/youtube-shorts"                      element={<LandingPage />} />

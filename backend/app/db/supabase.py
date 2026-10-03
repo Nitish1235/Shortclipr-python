@@ -693,6 +693,20 @@ async def get_clips_for_job(job_id: str) -> list[dict]:
     )
 
 
+async def get_all_ready_clips(limit: int = 150) -> list[dict]:
+    """Fetch raw successfully-encoded clips for the admin infinite wall."""
+    return await _fetch(
+        """
+        SELECT clip_id, video_url, thumbnail_url
+        FROM clips
+        WHERE clip_ready = TRUE AND video_url IS NOT NULL
+        ORDER BY created_at DESC
+        LIMIT $1
+        """,
+        limit,
+    )
+
+
 # ── Showcase protection ────────────────────────────────────────
 # Clips added to the public admin showcase (see admin.py) get is_showcased=TRUE
 # so the delete-job path in jobs.py can skip them + their GCS files. See
