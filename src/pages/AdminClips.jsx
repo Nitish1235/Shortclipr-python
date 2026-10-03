@@ -134,7 +134,7 @@ function Clip({ clip, demo }) {
   const videoRef = useRef(null)
 
   useEffect(() => {
-    if (!demo || !videoRef.current) return
+    if (!videoRef.current) return
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
@@ -147,7 +147,7 @@ function Clip({ clip, demo }) {
     
     observer.observe(videoRef.current)
     return () => observer.disconnect()
-  }, [demo])
+  }, [])
 
   return (
     <div className="edited-clip-wrapper">
@@ -159,8 +159,8 @@ function Clip({ clip, demo }) {
         playsInline
         loop
         preload="metadata"
-        autoPlay={demo}
-        controls={!demo}
+        autoPlay
+        controls={false}
         style={{ pointerEvents: demo ? 'none' : 'auto' }}
       />
     </div>
