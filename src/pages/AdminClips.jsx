@@ -131,38 +131,43 @@ export default function AdminClips() {
 }
 
 function Clip({ clip, demo }) {
-  const videoRef = useRef(null)
+  const [inView, setInView] = useState(false)
+  const containerRef = useRef(null)
 
   useEffect(() => {
-    if (!videoRef.current) return
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          videoRef.current.play().catch(() => {})
-        } else {
-          videoRef.current.pause()
-        }
-      })
-    }, { rootMargin: '200px', threshold: 0 })
+    if (!containerRef.current) return
+    // Large 400px top/bottom margin so videos start loading/buffering just before scrolling into view,
+    // and offload completely when sufficiently out of view.
+    const observer = new IntersectionObserver(([entry]) => {
+      setInView(entry.isIntersecting)
+    }, { rootMargin: '400px 0px', threshold: 0 })
     
-    observer.observe(videoRef.current)
+    observer.observe(containerRef.current)
     return () => observer.disconnect()
   }, [])
 
   return (
-    <div className="edited-clip-wrapper">
-      <video
-        ref={videoRef}
-        src={clip.video_url}
-        poster={clip.thumbnail_url}
-        muted
-        playsInline
-        loop
-        preload="metadata"
-        autoPlay
-        controls={false}
-        style={{ pointerEvents: demo ? 'none' : 'auto' }}
-      />
+    <div ref={containerRef} className="edited-clip-wrapper">
+      {inView ? (
+        <video
+          // #t=0,5 forces the browser to only fetch and loop the first 5 seconds, hugely saving bandwidth/memory
+          src={`${clip.video_url}#t=0,5`}
+          poster={clip.thumbnail_url}
+          muted
+          playsInline
+          loop
+          preload="metadata"
+          autoPlay
+          controls={false}
+          style={{ pointerEvents: demo ? 'none' : 'auto' }}
+        />
+      ) : (
+        <img 
+          src={clip.thumbnail_url} 
+          alt="thumbnail"
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} 
+        />
+      )}
     </div>
   )
 }
