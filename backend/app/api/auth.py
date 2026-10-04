@@ -83,6 +83,14 @@ async def google_auth(body: GoogleAuthRequest):
         user_id = str(user["id"])
         user_email = str(user["email"])
 
+        if user.get("is_new_user"):
+            from app.core.tiktok_events import send_tiktok_event_background
+            send_tiktok_event_background(
+                event_name="CompleteRegistration",
+                event_id=f"reg_{user_id}",
+                email=user_email
+            )
+
         # Issue our JWT
         token = create_access_token({
             "sub": user_id,

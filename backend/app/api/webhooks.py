@@ -97,6 +97,17 @@ async def dodo_webhook(request: Request):
         "subscription.renewed",
         "subscription.plan_changed",
     ):
+        # Fire TikTok Events
+        from app.core.tiktok_events import send_tiktok_event_background
+        tt_event_name = "Purchase" if event_type == "payment.succeeded" else "Subscribe"
+        tt_email = (payload.get("customer") or {}).get("email")
+        if tt_email:
+            send_tiktok_event_background(
+                event_name=tt_event_name,
+                event_id=f"dodo_{event_type}_{payload.get('payment_id') or payload.get('subscription_id')}",
+                email=tt_email
+            )
+
         if is_brainrot:
             await _handle_brainrot_payment_succeeded(payload)
         else:

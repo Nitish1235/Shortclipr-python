@@ -81,6 +81,14 @@ async def create_checkout_session(body: CheckoutRequest, current_user: CurrentUs
         },
     )
 
+    from app.core.tiktok_events import send_tiktok_event_background
+    import uuid
+    send_tiktok_event_background(
+        event_name="AddPaymentInfo",
+        event_id=f"chk_{uuid.uuid4().hex[:8]}_{current_user.user_id}",
+        email=current_user.email
+    )
+
     return {"checkout_url": checkout_url, "plan": plan}
 
 
@@ -121,6 +129,14 @@ async def create_brainrot_checkout_session(body: CheckoutRequest, current_user: 
             "plan": plan,
             "product": "brainrot",
         },
+    )
+
+    from app.core.tiktok_events import send_tiktok_event_background
+    import uuid
+    send_tiktok_event_background(
+        event_name="AddPaymentInfo",
+        event_id=f"chk_{uuid.uuid4().hex[:8]}_{current_user.user_id}",
+        email=current_user.email
     )
 
     return {"checkout_url": checkout_url, "plan": plan}

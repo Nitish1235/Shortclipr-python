@@ -799,6 +799,28 @@ async def consume_feedback_reward(feedback_id: str, clip_id: str) -> None:
     )
 
 
+# ── TikTok Events ──────────────────────────────────────────────
+
+async def insert_tiktok_event(event_name: str, event_id: str, email: str | None, ip: str | None, user_agent: str | None) -> None:
+    await _execute(
+        """
+        INSERT INTO tiktok_events_log (event_name, event_id, email, ip, user_agent)
+        VALUES ($1, $2, $3, $4, $5)
+        """,
+        event_name, event_id, email, ip, user_agent,
+    )
+
+async def list_tiktok_events(limit: int = 100) -> list[dict]:
+    return await _fetch(
+        """
+        SELECT * FROM tiktok_events_log
+        ORDER BY created_at DESC
+        LIMIT $1
+        """,
+        limit,
+    )
+
+
 # ── Fake TikTok account mockups (migration 015) ────────────────
 # Admin-only tool for staging generated clips (from either product) into
 # mock TikTok profiles rendered in the admin panel. See admin_tiktok.py.

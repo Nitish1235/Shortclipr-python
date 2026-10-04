@@ -103,6 +103,10 @@ class Settings(BaseSettings):
     # app has actually passed TikTok's review for public posting.
     TIKTOK_APP_AUDITED: bool = False
 
+    # ── TikTok Events API / Pixel ─────────────────────────────────────
+    TIKTOK_PIXEL_ID: str = ""
+    TIKTOK_ACCESS_TOKEN: str = ""
+
     # ── Meta / Instagram (direct posting for Marketer plan) ──────────────
     # Client ID and secret from Facebook Developer portal
     META_CLIENT_ID: str = ""

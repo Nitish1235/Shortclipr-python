@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from
 import { useEffect } from 'react'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import TikTokPixel from './components/TikTokPixel'
 
 // Layout
 import Navigation    from './components/Navigation'
@@ -238,6 +239,7 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter>
           <ScrollToTop />
+          <TikTokPixel />
           <Routes>
             {/* Root — client-side safety net; nginx 301s the actual HTTP request */}
             <Route path="/"                      element={<Navigate to="/youtube-shorts" replace />} />

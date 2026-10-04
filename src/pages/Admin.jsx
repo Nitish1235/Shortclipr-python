@@ -843,6 +843,75 @@ function GameplayManager({ showToast }) {
   )
 }
 
+// ── TikTok Events Tracker ──────────────────────────────────────
+function TikTokEventsManager({ showToast }) {
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchEvents = async () => {
+    setLoading(true)
+    try {
+      const r = await authFetch('/admin/tiktok-events')
+      const d = await r.json()
+      setEvents(d.events || [])
+    } catch { setEvents([]) }
+    setLoading(false)
+  }
+
+  useEffect(() => { fetchEvents() }, [])
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+        <div>
+          <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111' }}>TikTok Tracking Log</h2>
+          <p style={{ fontSize: '0.78rem', color: '#999', marginTop: '2px' }}>
+            Live view of Server-Side Events dispatched to the TikTok API (Signups, Checkouts, Payments, etc).
+          </p>
+        </div>
+        <button onClick={fetchEvents} style={{ ...btnOutline, fontSize: '0.75rem', padding: '6px 12px' }}>
+          🔄 Refresh
+        </button>
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#aaa', padding: '20px' }}>
+          <div style={{ width: '18px', height: '18px', border: '2px solid #fecaca', borderTopColor: '#cf1322', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          Loading events...
+        </div>
+      ) : events.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#aaa', ...card }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>📈</div>
+          <p style={{ fontSize: '0.85rem' }}>No TikTok events logged yet.</p>
+        </div>
+      ) : (
+        <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
+            <thead>
+              <tr style={{ background: '#f8f8f8', borderBottom: '1px solid #e5e5e5', color: '#555' }}>
+                <th style={{ padding: '10px 14px', fontWeight: 600 }}>Event Name</th>
+                <th style={{ padding: '10px 14px', fontWeight: 600 }}>Event ID</th>
+                <th style={{ padding: '10px 14px', fontWeight: 600 }}>Email</th>
+                <th style={{ padding: '10px 14px', fontWeight: 600 }}>Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map(ev => (
+                <tr key={ev.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                  <td style={{ padding: '10px 14px', fontWeight: 700, color: '#cf1322' }}>{ev.event_name}</td>
+                  <td style={{ padding: '10px 14px', color: '#666', fontFamily: 'monospace', fontSize: '0.75rem' }}>{ev.event_id}</td>
+                  <td style={{ padding: '10px 14px', color: '#333' }}>{ev.email || '—'}</td>
+                  <td style={{ padding: '10px 14px', color: '#999' }}>{new Date(ev.created_at).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main Admin Page ────────────────────────────────────────────
 
 export default function Admin() {
@@ -1063,6 +1132,7 @@ export default function Admin() {
             { key: 'tutorial', label: '📹 Tutorial' },
             { key: 'gameplay', label: '🎮 Gameplay' },
             { key: 'tiktok', label: '🎵 TikTok' },
+            { key: 'tiktok-tracking', label: '📈 Tracker' },
             { key: 'email', label: '📧 Email' },
           ].map(t => (
             <button key={t.key} onClick={() => setTab(t.key)} style={tabStyle(tab === t.key)}>
@@ -1352,6 +1422,11 @@ export default function Admin() {
         {/* ── TikTok mock accounts tab ── */}
         {tab === 'tiktok' && (
           <AdminTikTokAccounts />
+        )}
+
+        {/* ── TikTok Events Tracking tab ── */}
+        {tab === 'tiktok-tracking' && (
+          <TikTokEventsManager showToast={showToast} />
         )}
       </div>
 
