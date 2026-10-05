@@ -704,14 +704,14 @@ export default function ClipEngine({ onJobCreated }) {
         <div className="clip-engine-layout" style={{ display:'flex', gap:'20px', flexWrap:'wrap', alignItems:'flex-start', marginBottom:'20px' }}>
 
           {/* Left: sectioned config */}
-          <div style={{ flex:'1 1 360px', minWidth:0 }}>
+          <div className="clip-engine-config" style={{ flex:'1 1 360px', minWidth:0 }}>
 
             {/* 🎬 Source */}
-            <div style={sectionCard}>
+            <div className="ce-section-card" style={sectionCard}>
               <div style={sectionTitle}>🎬 Source</div>
 
               <div style={rowStyle}>
-                <span style={labelStyle}>Language</span>
+                <span className="ce-row-label" style={labelStyle}>Language</span>
                 <select style={selectStyle} value={lang} onChange={e => setLang(e.target.value)}
                   onFocus={e => e.target.style.borderColor='#cf1322'} onBlur={e => e.target.style.borderColor='#e5e5e5'}>
                   <option>Auto / No translation</option>
@@ -721,7 +721,7 @@ export default function ClipEngine({ onJobCreated }) {
               </div>
 
               <div style={{ ...rowStyle, flexWrap:'wrap' }}>
-                <span style={labelStyle}>Clip Length</span>
+                <span className="ce-row-label" style={labelStyle}>Clip Length</span>
                 <div style={{ display:'flex', gap:'8px', flex:'1 1 auto', flexWrap:'wrap' }}>
                   {CLIP_LENGTH_OPTIONS.map(opt => {
                     const locked = !isPaid && opt.max > FREE_MAX_CLIP_SECONDS
@@ -742,7 +742,7 @@ export default function ClipEngine({ onJobCreated }) {
               )}
 
               <div style={{ ...rowStyle, flexWrap:'wrap' }}>
-                <span style={labelStyle}>Clip Count</span>
+                <span className="ce-row-label" style={labelStyle}>Clip Count</span>
                 <div style={{ display:'flex', gap:'8px', flex:'1 1 auto', flexWrap:'wrap' }}>
                   {CLIP_COUNT_OPTIONS.map(opt => {
                     const locked = !isPaid && Number(opt.val) > FREE_MAX_CLIPS
@@ -790,7 +790,7 @@ export default function ClipEngine({ onJobCreated }) {
             </div>
 
             {/* ✂️ Clip Generation Method */}
-            <div style={sectionCard}>
+            <div className="ce-section-card" style={sectionCard}>
               <div style={sectionTitle}>⚙️ Generation Method</div>
               <div style={{ display:'flex', gap:'8px', marginTop:'10px' }}>
                 <button
@@ -846,13 +846,13 @@ export default function ClipEngine({ onJobCreated }) {
             </div>
 
             {/* 💬 Captions */}
-            <div style={sectionCard}>
+            <div className="ce-section-card" style={sectionCard}>
               <div style={sectionTitle}>💬 Captions</div>
 
               {/* Caption style swatches */}
               <div style={{ padding:'10px 0 4px' }}>
-                <span style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>Caption Style</span>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px' }}>
+                <span className="ce-row-label" style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>Caption Style</span>
+                <div className="ce-caption-style-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px' }}>
                   {STYLE_OPTIONS.map(opt => {
                     const combo = COLOR_COMBOS[colorCombo] || COLOR_COMBOS.white_black
                     const active = captionStyle === opt.val
@@ -887,8 +887,8 @@ export default function ClipEngine({ onJobCreated }) {
               {/* Caption colour swatches — irrelevant when style is "None" */}
               {captionStyle !== 'none' && (
               <div style={{ padding:'12px 0 4px' }}>
-                <span style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>Caption Colour</span>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px' }}>
+                <span className="ce-row-label" style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>Caption Colour</span>
+                <div className="ce-color-grid" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px' }}>
                   {COLOR_OPTIONS.map(opt => {
                     const combo = COLOR_COMBOS[opt.val]
                     const active = colorCombo === opt.val
@@ -918,14 +918,14 @@ export default function ClipEngine({ onJobCreated }) {
               {/* Words per line */}
               {captionStyle !== 'none' && (
               <div style={{ ...rowStyle, borderBottom:'none' }}>
-                <span style={labelStyle}>Words / Screen</span>
+                <span className="ce-row-label" style={labelStyle}>Words / Screen</span>
                 <div style={{ display:'flex', gap:'8px', flex:1 }}>
                   {[
                     { val:1, label:'1 Word', sub:'Max Impact' },
                     { val:2, label:'2 Words', sub:'Balanced'  },
                     { val:3, label:'3 Words', sub:'Natural'   },
                   ].map(({ val, label, sub }) => (
-                    <button key={val} onClick={() => setWordsPerLine(val)} style={{
+                    <button key={val} className="ce-words-btn" onClick={() => setWordsPerLine(val)} style={{
                       flex:1, padding:'8px 6px', borderRadius:'8px',
                       background: wordsPerLine === val ? '#cf1322' : '#f9f9f9',
                       color: wordsPerLine === val ? '#fff' : '#666',
@@ -943,8 +943,8 @@ export default function ClipEngine({ onJobCreated }) {
               {/* Caption font */}
               {captionStyle !== 'none' && (
               <div style={{ padding:'12px 0 4px', borderTop:'1px solid #f0f0f0' }}>
-                <span style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>Font</span>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'8px' }}>
+                <span className="ce-row-label" style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>Font</span>
+                <div className="ce-font-grid" style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'8px' }}>
                   {FONT_OPTIONS.map(opt => {
                     const active = captionFont === opt.val
                     return (
@@ -968,7 +968,7 @@ export default function ClipEngine({ onJobCreated }) {
             </div>
 
             {/* 🏷️ Title Card */}
-            <div style={sectionCard}>
+            <div className="ce-section-card" style={sectionCard}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                 <div style={sectionTitle}>🏷️ Title Card</div>
                 <button onClick={() => setTitleEnabled(p => !p)} style={{
@@ -1044,19 +1044,19 @@ export default function ClipEngine({ onJobCreated }) {
             </div>
 
             {/* 📐 Layout */}
-            <div style={sectionCard}>
+            <div className="ce-section-card" style={sectionCard}>
               <div style={sectionTitle}>📐 Layout</div>
 
               {/* Aspect ratio */}
               <div style={rowStyle}>
-                <span style={labelStyle}>Aspect Ratio</span>
+                <span className="ce-row-label" style={labelStyle}>Aspect Ratio</span>
                 <div style={{ display:'flex', gap:'8px', flex:1 }}>
                   {[
                     { val:'9:16', label:'9:16', sub:'Shorts / Reels' },
                     { val:'16:9', label:'16:9', sub:'YouTube / X' },
                     { val:'1:1',  label:'1:1',  sub:'Square' },
                   ].map(({ val, label, sub }) => (
-                    <button key={val} onClick={() => setAspect(val)} style={{
+                    <button key={val} className="ce-aspect-btn" onClick={() => setAspect(val)} style={{
                       flex:1, padding:'8px 6px', borderRadius:'8px',
                       background: aspect === val ? '#cf1322' : '#f9f9f9',
                       color: aspect === val ? '#fff' : '#666',
@@ -1072,8 +1072,8 @@ export default function ClipEngine({ onJobCreated }) {
 
               {/* Short template */}
               <div style={{ padding:'12px 0' }}>
-                <span style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>Short Style</span>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'6px' }}>
+                <span className="ce-row-label" style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>Short Style</span>
+                <div className="ce-template-grid" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'6px' }}>
                   {templates.map(({ val, label, sub }) => (
                     <button key={val} onClick={() => setShortTemplate(val)} style={{
                       padding:'8px 6px', borderRadius:'8px', textAlign:'center',
@@ -1129,11 +1129,15 @@ export default function ClipEngine({ onJobCreated }) {
             </div>
           </div>
 
-          {/* Right: live preview — sticky so it stays on screen while
-              scrolling through the Source/Captions/Layout sections on the
-              left; renders the selected template + caption style together,
-              instantly, from the video's thumbnail (no server round-trip). */}
-          <div className="clip-engine-preview" style={{ flex:'0 0 200px', minWidth:'160px', position:'sticky', top:'20px', alignSelf:'flex-start' }}>
+          {/* ─── Mobile Live Preview: fixed pill badge ─────────────────────
+              On desktop this stays sticky to the right of config.
+              On mobile (CSS class swap) it becomes a small fixed card
+              in the top-right corner, appears with a slide-in after 0.3s
+              via CSS animation, and has a subtle float/bob loop. */}
+          <div className="clip-engine-preview" style={{
+            flex:'0 0 200px', minWidth:'160px',
+            position:'sticky', top:'20px', alignSelf:'flex-start',
+          }}>
             <div className="pip-title" style={{ ...sectionTitle, marginBottom:'10px' }}>👀 Live Preview</div>
             <div style={{
               position:'relative', width:'100%',
@@ -1144,8 +1148,6 @@ export default function ClipEngine({ onJobCreated }) {
               {videoData.thumbnail && (
                 <TemplatePreviewBg template={shortTemplate} thumbnail={videoData.thumbnail} barColor={barColor} gameplayUrl={gameplayClips.find(c => c.id === selectedGameplayId)?.video_url} />
               )}
-              {/* Bottom gradient — keeps bottom-aligned captions legible
-                  regardless of which template/background sits behind them. */}
               <div style={{
                 position:'absolute', left:0, right:0, bottom:0, height:'40%',
                 background:'linear-gradient(to top, rgba(0,0,0,0.55), transparent)',

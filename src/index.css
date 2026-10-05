@@ -215,95 +215,223 @@ h1,h2,h3,h4,h5 { line-height: 1.2; letter-spacing: -0.04em; font-weight: 700; co
     padding: 12px !important;
   }
 
-  /* Fix ClipEngine layout on mobile */
+  /* Fix ClipEngine container direction on mobile */
   .clip-engine-container { flex-direction: column !important; }
-}
 
-@media (max-width: 480px) {
-  .section { padding: 50px 0; }
-  .section-inner { padding: 0 4%; }
-  
-  .btn-red, .btn-outline, .btn-white { 
-    padding: 12px 20px; 
-    font-size: 0.85rem; 
-    width: 100%; 
-    justify-content: center;
-    margin-bottom: 8px; /* Extra spacing on mobile wrap */
-  }
-  
-  .eyebrow { flex-direction: column; align-items: flex-start; gap: 8px; }
-  .card-red-shadow { box-shadow: 4px 4px 0 var(--red); }
-  
-  /* Inline grid responsive (scoped to the legacy YT-shorts Dashboard only —
-     an unscoped inline-style substring selector here also matched
-     BrainrotStudio's Cast size / Motion mode / Caption style / Callsheet
-     grids, none of which use "minmax(", forcing them into a single broken
-     column on small phones even though Studio never asked for that) */
-  .dashboard-page div[style*="grid-template-columns"]:not([style*="repeat(7"]):not([style*="minmax("]) {
-    grid-template-columns: 1fr !important;
-    gap: 16px !important;
-  }
-
-  .dashboard-page div[style*="grid-template-columns: repeat(auto-fill"] {
-    grid-template-columns: 1fr !important;
-    gap: 16px !important;
-  }
-
-  /* Adjust hero layouts */
-  #hero-form-container {
+  /* Clip Engine layout — side-by-side collapses, preview becomes animated floating badge */
+  .clip-engine-layout {
+    display: flex !important;
     flex-direction: column !important;
+    gap: 0 !important;
   }
-  
-  #hero-form-container input {
-    margin-bottom: 8px;
-    border-radius: 8px !important;
-  }
-  
-  #hero-form-container button {
-    width: 100%;
-    border-radius: 8px !important;
-  }
-}
 
+  /* Live preview: small fixed badge top-right, floating, animated */
+  .clip-engine-preview {
+    position: fixed !important;
+    top: 64px !important;   /* just below the sticky nav */
+    right: 12px !important;
+    left: auto !important;
+    bottom: auto !important;
+    width: 96px !important;
+    z-index: 200 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    pointer-events: none !important;  /* pass all taps through to the panel below */
+    
+    /* Styling */
+    border-radius: 12px !important;
+    overflow: visible !important;
+    
+    /* Animations: Slide in on mount, then gently float bob */
+    animation: pip-slide-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+               pip-bob 4s ease-in-out 1s infinite !important;
+  }
 
-/* ========================================================
-   MOBILE REDESIGN TWEAKS (Responsive overrides)
-   ======================================================== */
-@media (max-width: 768px) {
-  /* 1. Dashboard Nav Bar Stats */
-  .dashboard-stats-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
+  .clip-engine-preview > div:not(.pip-title) {
+    border-radius: 14px !important;
+    border: 1px solid rgba(255,255,255,0.15) !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05) !important;
+    overflow: hidden !important;
   }
-  /* Remove right border on every second item in mobile stat grid */
-  .dashboard-stats-grid > div:nth-child(2n) {
-    border-right: none !important;
-  }
+
+  /* Hide the big live preview title on mobile */
+  .clip-engine-preview .pip-title { display: none !important; }
   
+  /* The "live preview — updates…" caption under the badge -> hide it */
+  .clip-engine-preview p { display: none !important; }
+
+  /* Add a cool "LIVE" glowing dot underneath */
+  .clip-engine-preview::after {
+    content: '● LIVE';
+    display: block !important;
+    text-align: center;
+    font-size: 0.55rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    color: #cf1322;
+    padding: 8px 0 0;
+    text-shadow: 0 0 8px rgba(207,19,34,0.6);
+    animation: pulse-dot 2s infinite ease-in-out;
+  }
+
+  @keyframes pip-slide-in {
+    0% { transform: translateX(120px) scale(0.8) rotate(4deg); opacity: 0; }
+    100% { transform: translateX(0) scale(1) rotate(0deg); opacity: 1; }
+  }
+
+  @keyframes pip-bob {
+    0% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+    100% { transform: translateY(0); }
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Give the config panel right-side breathing room so content isn't hidden behind badge */
+  .clip-engine-config {
+    padding-right: 120px !important;
+  }
+
+  /* Section cards tighter */
+  .ce-section-card {
+    padding: 10px 12px 2px !important;
+    margin-bottom: 10px !important;
+    border-radius: 10px !important;
+  }
+
+  /* Row label: don't reserve fixed width, allow wrapping */
+  .ce-row-label {
+    min-width: 0 !important;
+    font-size: 0.72rem !important;
+    margin-bottom: 4px;
+  }
+
+  /* Caption style grid: 4 per row instead of 3 */
+  .ce-caption-style-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 5px !important;
+  }
+  .ce-caption-style-grid > button {
+    padding: 6px 2px !important;
+    border-radius: 7px !important;
+    gap: 3px !important;
+  }
+  .ce-caption-style-grid > button > span:first-child {
+    font-size: 0.65rem !important;
+  }
+  .ce-caption-style-grid > button > span:nth-child(2) {
+    font-size: 0.58rem !important;
+  }
+  .ce-caption-style-grid > button > span:nth-child(3) {
+    display: none !important; /* hide the "sub" (e.g. "🔥 Trending") on mobile */
+  }
+
+  /* Caption colour grid: 4 per row, compact */
+  .ce-color-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 5px !important;
+  }
+  .ce-color-grid > button {
+    padding: 5px 2px !important;
+    border-radius: 7px !important;
+    gap: 2px !important;
+  }
+  .ce-color-grid > button > span:first-child {
+    font-size: 0.65rem !important;
+    padding: 1px 5px !important;
+  }
+  .ce-color-grid > button > span:last-child {
+    font-size: 0.55rem !important;
+    line-height: 1.1 !important;
+  }
+
+  /* Font grid: 3 per row instead of 2 */
+  .ce-font-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 5px !important;
+  }
+  .ce-font-grid > button {
+    padding: 7px 4px !important;
+    border-radius: 7px !important;
+  }
+  .ce-font-grid > button > div:first-child {
+    font-size: 0.8rem !important;
+    margin-bottom: 1px !important;
+  }
+  .ce-font-grid > button > div:last-child {
+    font-size: 0.58rem !important;
+  }
+
+  /* Short-style (template) grid: 3 per row */
+  .ce-template-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 5px !important;
+  }
+  .ce-template-grid > button {
+    padding: 6px 4px !important;
+    font-size: 0.66rem !important;
+    border-radius: 6px !important;
+  }
+
+  /* Clip count / length button rows: smaller pill buttons */
+  .ce-option-btn {
+    padding: 6px 8px !important;
+    font-size: 0.72rem !important;
+    border-radius: 6px !important;
+  }
+
+  /* Words per screen row */
+  .ce-words-btn {
+    padding: 6px 4px !important;
+    font-size: 0.68rem !important;
+  }
+
+  /* Aspect ratio row */
+  .ce-aspect-btn {
+    padding: 6px 4px !important;
+    font-size: 0.68rem !important;
+  }
+
   /* 2. Generated Video Cards Grid */
   .dashboard-clips-grid {
     grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important;
     gap: 8px !important;
   }
 
-  /* 3. Clip Engine Layout Picture-in-Picture */
-  .clip-engine-layout {
-    display: flex !important;
-    flex-direction: column-reverse !important; /* Put preview first in flow */
-    gap: 0 !important; /* we use margins to overlay */
+  /* Dashboard stats 2-col */
+  .dashboard-stats-grid > div:nth-child(2n) {
+    border-right: none !important;
   }
-  .clip-engine-preview {
-    position: sticky !important;
-    top: 90px !important; 
-    align-self: flex-end !important;
-    width: 140px !important;
-    z-index: 99 !important;
-    /* Pull the left config panel up so it sits under the floated preview */
-    margin-bottom: -220px !important; 
-    padding-bottom: 10px;
-    margin-right: 10px; /* spacing against edge */
+}
+
+@media (max-width: 480px) {
+  .section { padding: 50px 0; }
+  .section-inner { padding: 0 4%; }
+
+  .btn-red, .btn-outline, .btn-white {
+    padding: 12px 20px;
+    font-size: 0.85rem;
+    width: 100%;
+    justify-content: center;
+    margin-bottom: 8px;
   }
-  /* Hide the label on mobile pip */
-  .clip-engine-preview .pip-title {
-    display: none !important;
+
+  .eyebrow { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .card-red-shadow { box-shadow: 4px 4px 0 var(--red); }
+
+  .dashboard-page div[style*="grid-template-columns"]:not([style*="repeat(7"]):not([style*="minmax("]) {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
   }
+  .dashboard-page div[style*="grid-template-columns: repeat(auto-fill"] {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  #hero-form-container { flex-direction: column !important; }
+  #hero-form-container input { margin-bottom: 8px; border-radius: 8px !important; }
+  #hero-form-container button { width: 100%; border-radius: 8px !important; }
 }
