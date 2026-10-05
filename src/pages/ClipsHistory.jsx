@@ -181,10 +181,6 @@ export default function ClipsHistory() {
     a.href = `${API_BASE}/clips/${clipId}/download?token=${token}`
     a.download = `ShortClipr_${clipId.split('-')[0]}.mp4`
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
-    if (!isPaid && freeOk && !feedbackReward.clipId) {
-      localStorage.setItem('sc_feedback_reward_clip_id', clipId)
-      setFeedbackReward(r => ({ ...r, clipId }))
-    }
   }
 
   const totalClips = groups.reduce((acc, g) => acc + g.clips.length, 0)
@@ -207,16 +203,16 @@ export default function ClipsHistory() {
         </div>
       )}
 
-      <main style={{ flex: 1, background: '#f7f8fa', paddingBottom: 60 }}>
+      <main className="clips-library-page" style={{ flex: 1, background: '#f7f8fa', paddingBottom: 60 }}>
         {/* Header bar */}
-        <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb' }}>
-          <div style={{ maxWidth: 1140, margin: '0 auto', padding: '0 24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', height: 56, gap: 20 }}>
+        <div className="clips-library-topbar" style={{ background: '#fff', borderBottom: '1px solid #e5e7eb' }}>
+          <div className="clips-library-topbar-inner" style={{ maxWidth: 1140, margin: '0 auto', padding: '0 24px' }}>
+            <div className="clips-library-heading-row" style={{ display: 'flex', alignItems: 'center', height: 56, gap: 20 }}>
               <div>
                 <h1 style={{ fontSize: '1rem', fontWeight: 700, color: '#111', margin: 0, lineHeight: 1 }}>Clips Library</h1>
                 <p style={{ fontSize: '.72rem', color: '#9ca3af', margin: 0, marginTop: 2 }}>All your generated shorts</p>
               </div>
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: 0, borderLeft: '1px solid #e5e7eb' }}>
+              <div className="clips-library-stats" style={{ marginLeft: 'auto', display: 'flex', gap: 0, borderLeft: '1px solid #e5e7eb' }}>
                 {[
                   { n: totalClips,                        l: 'Total clips',  c: '#111' },
                   { n: publishedYT.size + publishedTT.size, l: 'Published', c: '#16a34a' },
@@ -234,7 +230,7 @@ export default function ClipsHistory() {
           </div>
         </div>
 
-        <div style={{ maxWidth: 1140, margin: '0 auto', padding: '20px 24px' }}>
+        <div className="clips-library-content" style={{ maxWidth: 1140, margin: '0 auto', padding: '20px 24px' }}>
           {/* Content */}
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
@@ -256,20 +252,20 @@ export default function ClipsHistory() {
               }}>Go to Dashboard →</a>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+            <div className="clips-library-groups" style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
               {groups.map(({ job, clips }) => (
-                <div key={job.job_id}>
+                <section className="clips-library-group" key={job.job_id}>
                   {/* Job header */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <div className="clips-library-group-header" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#cf1322', flexShrink: 0 }}/>
-                    <h2 style={{
+                    <h2 className="clips-library-group-title" style={{
                       fontSize: '.88rem', fontWeight: 700, color: '#111', margin: 0,
                       flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
                       {job.video_title || job.youtube_url || 'Untitled Video'}
                     </h2>
-                    <span style={{ fontSize: '.7rem', color: '#9ca3af', flexShrink: 0 }}>{fmtDate(job.created_at)}</span>
-                    <span style={{
+                    <span className="clips-library-group-date" style={{ fontSize: '.7rem', color: '#9ca3af', flexShrink: 0 }}>{fmtDate(job.created_at)}</span>
+                    <span className="clips-library-group-count" style={{
                       fontSize: '.68rem', color: '#6b7280',
                       background: '#f3f4f6', borderRadius: 5, padding: '2px 8px', flexShrink: 0,
                     }}>
@@ -278,7 +274,7 @@ export default function ClipsHistory() {
                   </div>
 
                   {/* Clips grid */}
-                  <div style={{
+                  <div className="clips-library-grid" style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
                     gap: 10,
@@ -292,9 +288,10 @@ export default function ClipsHistory() {
                       const dur     = fmtDur(clip.duration_sec)
 
                       return (
-                        <div key={clipId} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        <div className="clips-library-item" key={clipId} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                           {/* Square card */}
                           <div
+                            className="clips-library-media"
                             onClick={() => { setModalClip(clip); setModalJob(job); setModalOpen(true) }}
                             style={{
                               aspectRatio: '1/1', position: 'relative', overflow: 'hidden',
@@ -367,13 +364,13 @@ export default function ClipsHistory() {
                           </div>
 
                           {/* Title */}
-                          <p style={{
+                          <p className="clips-library-item-title" style={{
                             margin: 0, fontSize: '.67rem', fontWeight: 700, color: '#374151',
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           }}>{clip.top_title || 'Clip'}</p>
 
                           {/* Action buttons */}
-                          <div style={{ display: 'flex', gap: 3 }}>
+                          <div className="clips-library-actions" style={{ display: 'flex', gap: 3 }}>
                             {/* Post-to-YouTube/TikTok disabled — pending platform
                                 approval. Original buttons called handlePublishYT/TT
                                 (now stubbed above). */}
@@ -414,7 +411,7 @@ export default function ClipsHistory() {
                       )
                     })}
                   </div>
-                </div>
+                </section>
               ))}
             </div>
           )}
@@ -424,6 +421,7 @@ export default function ClipsHistory() {
       {/* ── Video modal ── */}
       {modalOpen && modalClip && (
         <div
+          className="clips-library-modal-backdrop"
           onClick={() => setModalOpen(false)}
           style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)',
@@ -432,6 +430,7 @@ export default function ClipsHistory() {
           }}
         >
           <div
+            className="clips-library-modal"
             onClick={e => e.stopPropagation()}
             style={{
               background: '#fff', borderRadius: 16,
@@ -482,7 +481,7 @@ export default function ClipsHistory() {
               </div>
             </div>
             {/* Actions */}
-            <div style={{ padding: '14px 18px', display: 'flex', gap: 8 }}>
+            <div className="clips-library-modal-actions" style={{ padding: '14px 18px', display: 'flex', gap: 8 }}>
               {/* Post-to-YouTube/TikTok disabled — pending platform approval.
                   Original buttons called handlePublishYT/TT (now stubbed above). */}
               <div
@@ -492,7 +491,7 @@ export default function ClipsHistory() {
                   padding: '9px 12px', borderRadius: 9, fontSize: '.78rem', fontWeight: 700,
                   border: '1px dashed #d1d5db', background: '#f9fafb', color: '#9ca3af', cursor: 'default',
                 }}
-              ><YTLogo size={13} /> YouTube — Coming Soon</div>
+              ><YTLogo size={13} /> YouTube Soon</div>
               <div
                 title="TikTok publishing — coming soon"
                 style={{
@@ -500,7 +499,7 @@ export default function ClipsHistory() {
                   padding: '9px 12px', borderRadius: 9, fontSize: '.78rem', fontWeight: 700,
                   border: '1px dashed #d1d5db', background: '#f9fafb', color: '#9ca3af', cursor: 'default',
                 }}
-              ><TTLogo size={13} /> TikTok — Coming Soon</div>
+              ><TTLogo size={13} /> TikTok Soon</div>
               <button
                 onClick={e => handleDownload(e, modalClip, modalJob?.job_id)}
                 style={{

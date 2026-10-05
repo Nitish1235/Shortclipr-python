@@ -115,6 +115,7 @@ export default function Dashboard() {
   // mirrors what the backend enforces (server is authoritative; this is
   // just for showing the right button/lock state without an extra fetch).
   const [showSocialProofModal, setShowSocialProofModal] = useState(false)
+  const [feedbackReward, setFeedbackReward] = useState(null)
 
   const activeSseJobs = useRef(new Set())
   const clipPollRef   = useRef(null)
@@ -723,11 +724,11 @@ export default function Dashboard() {
       <main className="dashboard-page" style={{ background:'#f7f8fa', flex:1, paddingBottom:'90px' }}>
 
         {/* ── Platform status + stats bar ── */}
-        <div style={{ background:'#fff', borderBottom:'1px solid #e5e7eb' }}>
-          <div style={{ maxWidth:'1140px', margin:'0 auto', padding:'0 24px' }}>
+        <div className="dashboard-status-bar" style={{ background:'#fff', borderBottom:'1px solid #e5e7eb' }}>
+          <div className="dashboard-status-inner" style={{ maxWidth:'1140px', margin:'0 auto', padding:'0 24px' }}>
             {/* Row 1 — pills only. Stats live on their own row (below) so they
                 never wrap awkwardly next to the pills at narrower widths. */}
-            <div style={{ display:'flex', alignItems:'center', gap:'16px', minHeight:'44px', flexWrap:'wrap' }}>
+            <div className="dashboard-connections-row" style={{ display:'flex', alignItems:'center', gap:'16px', minHeight:'44px', flexWrap:'wrap' }}>
               {/* Platform pills */}
               <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
                 {(socialEnabled || isMarketer) ? (<>
@@ -852,17 +853,18 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div style={{ maxWidth:'1140px', margin:'0 auto', padding:'20px 24px 0' }}>
+        <div className="dashboard-content" style={{ maxWidth:'1140px', margin:'0 auto', padding:'20px 24px 0' }}>
 
           {/* ── Generate panel ──
               NOTE: no `overflow:hidden` here — ClipEngine's live preview
               uses `position:sticky` while scrolling its config sections,
               and an overflow:hidden ancestor would clip/disable that. */}
-          <div style={{
+          <div className="dashboard-generator-panel" style={{
             background:'#fff', border:'1.5px solid #e5e7eb',
             borderRadius:'12px', marginBottom:'20px',
           }}>
             <button
+              className="dashboard-generator-toggle"
               onClick={() => setShowGeneratePanel(v => !v)}
               style={{
                 width:'100%', padding:'13px 18px',
@@ -877,7 +879,7 @@ export default function Dashboard() {
               <span style={{ marginLeft:'auto', color:'#9ca3af', fontSize:'12px' }}>{showGeneratePanel ? '▲' : '▼'}</span>
             </button>
             {showGeneratePanel && (
-              <div style={{ padding:'16px 18px' }}>
+              <div className="dashboard-generator-body" style={{ padding:'16px 18px' }}>
                 <ClipEngine onJobCreated={(jobId) => {
                   fetchJobs()
                   setShowGeneratePanel(false)
@@ -1081,28 +1083,28 @@ export default function Dashboard() {
 
           {/* ── Phase 2: HD clips ready ── */}
           {(hdClips.length > 0 || (!loading && currentJob && !isActive && hdClips.length === 0)) && (
-            <div style={{ background:'#fff', border:'1.5px solid #e5e7eb', borderRadius:'14px', overflow:'hidden', marginBottom:'20px' }}>
+            <div className="dashboard-clips-section" style={{ background:'#fff', border:'1.5px solid #e5e7eb', borderRadius:'14px', overflow:'hidden', marginBottom:'20px' }}>
               {/* Section header */}
-              <div style={{
+              <div className="dashboard-clips-header" style={{
                 padding:'12px 18px', borderBottom:'1px solid #e5e7eb',
                 display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap',
               }}>
-                <span style={{ fontWeight:700, fontSize:'.86rem', color:'#111' }}>
+                <span className="dashboard-clips-title" style={{ fontWeight:700, fontSize:'.86rem', color:'#111' }}>
                   {hdClips.length > 0 ? 'Your Clips' : jobExpired ? 'Clips Expired' : 'No clips yet'}
                 </span>
                 {hdClips.length > 0 && (
                   <>
                     {/* 15-day soft expiry reminder — clips leave the dashboard after this. */}
-                    <span style={{
+                    <span className="dashboard-clips-expiry" style={{
                       fontSize:'.68rem', fontWeight:600, padding:'2px 9px', borderRadius:'100px',
                       background:'#fffbeb', color:'#b45309', border:'1px solid #fde68a',
                     }}>⏳ Clips last 15 days — download or publish before they expire</span>
-                    <span style={{
+                    <span className="dashboard-clips-ready" style={{
                       fontSize:'.68rem', fontWeight:700, padding:'2px 9px', borderRadius:'100px',
                       background:'#f0fdf4', color:'#16a34a', border:'1px solid #bbf7d0',
                     }}>{hdClips.length} HD ready</span>
                     {currentJob && (
-                      <span style={{ fontSize:'.72rem', color:'#9ca3af' }}>
+                      <span className="dashboard-clips-source" style={{ fontSize:'.72rem', color:'#9ca3af' }}>
                         {currentJob.video_title
                           ? `"${currentJob.video_title.slice(0,50)}${currentJob.video_title.length > 50 ? '…' : ''}"`
                           : currentJob.youtube_url}
@@ -1110,7 +1112,7 @@ export default function Dashboard() {
                     )}
                     {/* Expiry timer */}
                     {currentJob && (
-                      <span style={{
+                      <span className="dashboard-clips-timer" style={{
                         fontSize:'.7rem', fontWeight:700,
                         color: isUrgent(currentJob.created_at) ? '#ef4444' : '#f59e0b',
                       }}>
@@ -1118,7 +1120,7 @@ export default function Dashboard() {
                       </span>
                     )}
                     {/* Filters */}
-                    <div style={{ marginLeft:'auto', display:'flex', gap:'6px' }}>
+                    <div className="dashboard-clips-filters" style={{ marginLeft:'auto', display:'flex', gap:'6px' }}>
                       {['all','unpublished','expiring'].map(f => (
                         <button key={f} onClick={() => setFilter(f)} style={{
                           padding:'4px 12px', borderRadius:'7px', border:'1px solid',
@@ -1136,7 +1138,7 @@ export default function Dashboard() {
               </div>
 
               {/* Grid body */}
-              <div style={{ padding:'16px' }}>
+              <div className="dashboard-clips-body" style={{ padding:'16px' }}>
                 {hdClips.length === 0 ? (
                   <div style={{ textAlign:'center', padding:'32px 20px', color:'#9ca3af', fontSize:'.84rem' }}>
                     {isActive
@@ -1169,9 +1171,10 @@ export default function Dashboard() {
                         : null
 
                       return (
-                        <div key={clipId} style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                        <div className="dashboard-clip-item" key={clipId} style={{ display:'flex', flexDirection:'column', gap:6 }}>
                           {/* Square card */}
                           <div
+                            className="dashboard-clip-media"
                             onClick={() => openModal(idx)}
                             style={{
                               width:'100%', aspectRatio:'1/1', borderRadius:12,
@@ -1196,6 +1199,7 @@ export default function Dashboard() {
 
                             {/* Checkbox top-left */}
                             <div
+                              className="dashboard-clip-select"
                               onClick={e => toggleSelect(e, clipId)}
                               style={{
                                 position:'absolute', top:8, left:8,
@@ -1209,7 +1213,7 @@ export default function Dashboard() {
                             >{isSel && '✓'}</div>
 
                             {/* Viral score top-right */}
-                            <div style={{
+                            <div className="dashboard-clip-score" style={{
                               position:'absolute', top:8, right:8,
                               background:'rgba(207,19,34,.88)', color:'#fff',
                               borderRadius:6, padding:'3px 8px',
@@ -1218,7 +1222,7 @@ export default function Dashboard() {
                             }}>🔥 {clip.viral_score}</div>
 
                             {/* HD badge */}
-                            <div style={{
+                            <div className="dashboard-clip-hd" style={{
                               position:'absolute', top:36, right:8,
                               background:'rgba(22,163,74,.9)', color:'#fff',
                               borderRadius:4, padding:'2px 6px',
@@ -1227,7 +1231,7 @@ export default function Dashboard() {
 
                             {/* Duration bottom-right */}
                             {dur && (
-                              <div style={{
+                              <div className="dashboard-clip-duration" style={{
                                 position:'absolute', bottom:8, right:8,
                                 background:'rgba(0,0,0,.65)', color:'#fff',
                                 borderRadius:4, padding:'2px 7px',
@@ -1274,13 +1278,13 @@ export default function Dashboard() {
                           </div>
 
                           {/* Clip title */}
-                          <p style={{
+                          <p className="dashboard-clip-title" style={{
                             margin:0, fontSize:'.68rem', fontWeight:700, color:'#374151',
                             overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
                           }}>{clip.top_title || 'Clip'}</p>
 
                           {/* Action buttons row */}
-                          <div style={{ display:'flex', gap:4 }}>
+                          <div className="dashboard-clip-actions" style={{ display:'flex', gap:4 }}>
                             {socialEnabled ? (<>
                             <button
                               onClick={e => handlePublishYT(e, clip)}
@@ -1422,7 +1426,7 @@ export default function Dashboard() {
 
       {/* ── Bulk action bar ── */}
       {selectedClipIds.size > 0 && (
-        <div style={{
+        <div className="dashboard-bulk-actions" style={{
           position:'fixed', bottom:0, left:SIDEBAR_W, right:0,
           background:'rgba(255,255,255,.97)', borderTop:'1.5px solid #e5e7eb',
           padding:'11px 24px', zIndex:500,

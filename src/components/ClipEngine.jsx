@@ -215,6 +215,7 @@ const CLIP_COUNT_OPTIONS = [
 function LockableButton({ active, locked, label, sub, onClick }) {
   return (
     <button
+      className="ce-option-btn"
       onClick={locked ? () => alert('🔒 This option needs a paid plan. Free accounts get 2 clips per job, up to 60s each — upgrade to unlock more.') : onClick}
       title={locked ? '🔒 Upgrade to a paid plan to unlock' : undefined}
       style={{
@@ -667,9 +668,9 @@ export default function ClipEngine({ onJobCreated }) {
     ]
 
     return (
-      <div>
+      <div className="ce-config-view">
         {/* Video preview card */}
-        <div style={{
+        <div className="ce-video-summary" style={{
           display:'flex', gap:'16px', alignItems:'center',
           background:'#f9f9f9', border:'1px solid #e5e5e5',
           borderRadius:'10px', padding:'14px', marginBottom:'20px',
@@ -707,10 +708,10 @@ export default function ClipEngine({ onJobCreated }) {
           <div className="clip-engine-config" style={{ flex:'1 1 360px', minWidth:0 }}>
 
             {/* 🎬 Source */}
-            <div className="ce-section-card" style={sectionCard}>
+            <div className="ce-section-card ce-source-section" style={sectionCard}>
               <div style={sectionTitle}>🎬 Source</div>
 
-              <div style={rowStyle}>
+              <div className="ce-control-row" style={rowStyle}>
                 <span className="ce-row-label" style={labelStyle}>Language</span>
                 <select style={selectStyle} value={lang} onChange={e => setLang(e.target.value)}
                   onFocus={e => e.target.style.borderColor='#cf1322'} onBlur={e => e.target.style.borderColor='#e5e5e5'}>
@@ -720,9 +721,9 @@ export default function ClipEngine({ onJobCreated }) {
                 </select>
               </div>
 
-              <div style={{ ...rowStyle, flexWrap:'wrap' }}>
+              <div className="ce-control-row" style={{ ...rowStyle, flexWrap:'wrap' }}>
                 <span className="ce-row-label" style={labelStyle}>Clip Length</span>
-                <div style={{ display:'flex', gap:'8px', flex:'1 1 auto', flexWrap:'wrap' }}>
+                <div className="ce-option-row" style={{ display:'flex', gap:'8px', flex:'1 1 auto', flexWrap:'wrap' }}>
                   {CLIP_LENGTH_OPTIONS.map(opt => {
                     const locked = !isPaid && opt.max > FREE_MAX_CLIP_SECONDS
                     return (
@@ -741,9 +742,9 @@ export default function ClipEngine({ onJobCreated }) {
                 </p>
               )}
 
-              <div style={{ ...rowStyle, flexWrap:'wrap' }}>
+              <div className="ce-control-row" style={{ ...rowStyle, flexWrap:'wrap' }}>
                 <span className="ce-row-label" style={labelStyle}>Clip Count</span>
-                <div style={{ display:'flex', gap:'8px', flex:'1 1 auto', flexWrap:'wrap' }}>
+                <div className="ce-option-row" style={{ display:'flex', gap:'8px', flex:'1 1 auto', flexWrap:'wrap' }}>
                   {CLIP_COUNT_OPTIONS.map(opt => {
                     const locked = !isPaid && Number(opt.val) > FREE_MAX_CLIPS
                     return (
@@ -790,10 +791,11 @@ export default function ClipEngine({ onJobCreated }) {
             </div>
 
             {/* ✂️ Clip Generation Method */}
-            <div className="ce-section-card" style={sectionCard}>
+            <div className="ce-section-card ce-generation-section" style={sectionCard}>
               <div style={sectionTitle}>⚙️ Generation Method</div>
-              <div style={{ display:'flex', gap:'8px', marginTop:'10px' }}>
+              <div className="ce-generation-row" style={{ display:'flex', gap:'8px', marginTop:'10px' }}>
                 <button
+                  className="ce-generation-btn"
                   onClick={() => setClipGenerationMethod('auto')}
                   style={{
                     flex:1, padding:'10px', borderRadius:'8px',
@@ -806,6 +808,7 @@ export default function ClipEngine({ onJobCreated }) {
                   AI Generated (Auto)
                 </button>
                 <button
+                  className="ce-generation-btn"
                   onClick={() => setClipGenerationMethod('manual')}
                   style={{
                     flex:1, padding:'10px', borderRadius:'8px',
@@ -846,7 +849,7 @@ export default function ClipEngine({ onJobCreated }) {
             </div>
 
             {/* 💬 Captions */}
-            <div className="ce-section-card" style={sectionCard}>
+            <div className="ce-section-card ce-captions-section" style={sectionCard}>
               <div style={sectionTitle}>💬 Captions</div>
 
               {/* Caption style swatches */}
@@ -857,7 +860,7 @@ export default function ClipEngine({ onJobCreated }) {
                     const combo = COLOR_COMBOS[colorCombo] || COLOR_COMBOS.white_black
                     const active = captionStyle === opt.val
                     return (
-                      <button key={opt.val} onClick={() => setCaptionStyle(opt.val)} style={{
+                      <button className="ce-choice-btn" key={opt.val} onClick={() => setCaptionStyle(opt.val)} style={{
                         display:'flex', flexDirection:'column', alignItems:'center', gap:'6px',
                         padding:'10px 4px', borderRadius:'10px',
                         background: active ? '#fef2f2' : '#f9f9f9',
@@ -893,7 +896,7 @@ export default function ClipEngine({ onJobCreated }) {
                     const combo = COLOR_COMBOS[opt.val]
                     const active = colorCombo === opt.val
                     return (
-                      <button key={opt.val} onClick={() => setColorCombo(opt.val)} style={{
+                      <button className="ce-choice-btn" key={opt.val} onClick={() => setColorCombo(opt.val)} style={{
                         display:'flex', flexDirection:'column', alignItems:'center', gap:'4px',
                         padding:'8px 4px', borderRadius:'10px',
                         background: active ? '#fef2f2' : '#f9f9f9',
@@ -917,15 +920,15 @@ export default function ClipEngine({ onJobCreated }) {
 
               {/* Words per line */}
               {captionStyle !== 'none' && (
-              <div style={{ ...rowStyle, borderBottom:'none' }}>
+              <div className="ce-control-row" style={{ ...rowStyle, borderBottom:'none' }}>
                 <span className="ce-row-label" style={labelStyle}>Words / Screen</span>
-                <div style={{ display:'flex', gap:'8px', flex:1 }}>
+                <div className="ce-segment-row" style={{ display:'flex', gap:'8px', flex:1 }}>
                   {[
                     { val:1, label:'1 Word', sub:'Max Impact' },
                     { val:2, label:'2 Words', sub:'Balanced'  },
                     { val:3, label:'3 Words', sub:'Natural'   },
                   ].map(({ val, label, sub }) => (
-                    <button key={val} className="ce-words-btn" onClick={() => setWordsPerLine(val)} style={{
+                    <button key={val} className="ce-choice-btn ce-words-btn" onClick={() => setWordsPerLine(val)} style={{
                       flex:1, padding:'8px 6px', borderRadius:'8px',
                       background: wordsPerLine === val ? '#cf1322' : '#f9f9f9',
                       color: wordsPerLine === val ? '#fff' : '#666',
@@ -948,7 +951,7 @@ export default function ClipEngine({ onJobCreated }) {
                   {FONT_OPTIONS.map(opt => {
                     const active = captionFont === opt.val
                     return (
-                      <button key={opt.val} onClick={() => setCaptionFont(opt.val)} style={{
+                      <button className="ce-choice-btn" key={opt.val} onClick={() => setCaptionFont(opt.val)} style={{
                         padding:'10px 8px', borderRadius:'10px', textAlign:'center',
                         background: active ? '#fef2f2' : '#f9f9f9',
                         border: active ? '1.5px solid #cf1322' : '1.5px solid #e5e5e5',
@@ -968,10 +971,10 @@ export default function ClipEngine({ onJobCreated }) {
             </div>
 
             {/* 🏷️ Title Card */}
-            <div className="ce-section-card" style={sectionCard}>
+            <div className="ce-section-card ce-title-section" style={sectionCard}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                 <div style={sectionTitle}>🏷️ Title Card</div>
-                <button onClick={() => setTitleEnabled(p => !p)} style={{
+                <button className="ce-toggle" aria-label="Toggle title card" aria-pressed={titleEnabled} onClick={() => setTitleEnabled(p => !p)} style={{
                   background: titleEnabled ? '#cf1322' : '#e5e5e5',
                   border:'none', borderRadius:'100px', width:'44px', height:'24px',
                   cursor:'pointer', position:'relative', transition:'background 0.2s', flexShrink:0,
@@ -1044,19 +1047,19 @@ export default function ClipEngine({ onJobCreated }) {
             </div>
 
             {/* 📐 Layout */}
-            <div className="ce-section-card" style={sectionCard}>
+            <div className="ce-section-card ce-layout-section" style={sectionCard}>
               <div style={sectionTitle}>📐 Layout</div>
 
               {/* Aspect ratio */}
-              <div style={rowStyle}>
+              <div className="ce-control-row" style={rowStyle}>
                 <span className="ce-row-label" style={labelStyle}>Aspect Ratio</span>
-                <div style={{ display:'flex', gap:'8px', flex:1 }}>
+                <div className="ce-segment-row" style={{ display:'flex', gap:'8px', flex:1 }}>
                   {[
                     { val:'9:16', label:'9:16', sub:'Shorts / Reels' },
                     { val:'16:9', label:'16:9', sub:'YouTube / X' },
                     { val:'1:1',  label:'1:1',  sub:'Square' },
                   ].map(({ val, label, sub }) => (
-                    <button key={val} className="ce-aspect-btn" onClick={() => setAspect(val)} style={{
+                    <button key={val} className="ce-choice-btn ce-aspect-btn" onClick={() => setAspect(val)} style={{
                       flex:1, padding:'8px 6px', borderRadius:'8px',
                       background: aspect === val ? '#cf1322' : '#f9f9f9',
                       color: aspect === val ? '#fff' : '#666',
@@ -1075,7 +1078,7 @@ export default function ClipEngine({ onJobCreated }) {
                 <span className="ce-row-label" style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>Short Style</span>
                 <div className="ce-template-grid" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'6px' }}>
                   {templates.map(({ val, label, sub }) => (
-                    <button key={val} onClick={() => setShortTemplate(val)} style={{
+                    <button className="ce-choice-btn" key={val} onClick={() => setShortTemplate(val)} style={{
                       padding:'8px 6px', borderRadius:'8px', textAlign:'center',
                       background: shortTemplate === val ? '#fef2f2' : '#f9f9f9',
                       color: shortTemplate === val ? '#cf1322' : '#555',
@@ -1091,7 +1094,7 @@ export default function ClipEngine({ onJobCreated }) {
 
               {/* Gameplay picker */}
               {shortTemplate.startsWith('gameplay_') && gameplayClips.length > 0 && (
-                <div style={{ ...rowStyle, borderBottom:'none', flexDirection:'column', alignItems:'flex-start' }}>
+                <div className="ce-control-row" style={{ ...rowStyle, borderBottom:'none', flexDirection:'column', alignItems:'flex-start' }}>
                   <span style={{ ...labelStyle, display:'block' }}>Gameplay Clip</span>
                   <div style={{ display:'flex', gap:'8px', overflowX:'auto', width:'100%', paddingBottom:'4px' }}>
                     {gameplayClips.map(clip => (
@@ -1109,7 +1112,7 @@ export default function ClipEngine({ onJobCreated }) {
 
               {/* Bar/frame color picker */}
               {shortTemplate === 'color_bars' && (
-                <div style={{ ...rowStyle, borderBottom:'none' }}>
+                <div className="ce-control-row" style={{ ...rowStyle, borderBottom:'none' }}>
                   <span style={labelStyle}>Frame Color</span>
                   <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap' }}>
                     {['#0d0d0d','#1a1a2e','#ffffff','#39ff14','#cf1322','#00cfff','#ff9900','#a855f7'].map(c => (
@@ -1175,7 +1178,7 @@ export default function ClipEngine({ onJobCreated }) {
         </div>
 
         {/* Submit */}
-        <button onClick={handleExecute} disabled={processing} style={{
+        <button className="ce-submit-btn" onClick={handleExecute} disabled={processing} style={{
           width:'100%', background:'#cf1322', color:'#fff',
           border:'2px solid #111', borderRadius:'8px',
           padding:'15px', fontWeight:700, fontSize:'0.95rem', cursor:'pointer',
