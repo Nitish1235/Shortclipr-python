@@ -92,7 +92,7 @@ export default function Comparison() {
   })
 
   return (
-    <section id="comparison" style={{ padding: '96px 0', background: '#f9f9f9' }}>
+    <section id="comparison" className="cloud-comparison" style={{ padding: '96px 0', background: '#f9f9f9' }}>
       <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '0 5%' }}>
 
         {/* Header */}

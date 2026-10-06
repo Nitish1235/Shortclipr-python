@@ -1,126 +1,148 @@
-const cases = [
+import { useState } from 'react'
+
+const audiences = [
   {
-    icon: '🎙️',
-    type: 'Podcasters',
-    headline: 'Every episode → 10+ viral clips',
-    bullets: ['Find every quotable moment', 'Auto-captioned & reframed', '3–5× more reach from clips'],
-    stat: '10 clips / episode',
-    color: '#7c3aed',
-    bg: '#f5f3ff',
-    border: '#ddd6fe',
+    id: 'podcasters',
+    label: 'Podcasters',
+    source: 'Long interviews and weekly episodes',
+    title: 'Turn one conversation into a complete clip queue.',
+    copy: 'Surface quotable answers, strong opinions, and story-driven moments without replaying the whole episode.',
+    outputs: [
+      ['Opening hook', 'A sharp answer that earns attention quickly'],
+      ['Guest insight', 'A useful idea with enough context to stand alone'],
+      ['Story moment', 'A personal section built for retention'],
+    ],
   },
   {
-    icon: '📹',
-    type: 'YouTubers',
-    headline: 'One video → content for every platform',
-    bullets: ['Vertical format in minutes', 'Zero extra filming needed', 'TikTok + Reels + Shorts'],
-    stat: '5× more content',
-    color: '#cf1322',
-    bg: '#fef2f2',
-    border: '#fecaca',
+    id: 'youtube',
+    label: 'YouTubers',
+    source: 'Tutorials, commentary, and long-form uploads',
+    title: 'Give every upload a second life on short-form platforms.',
+    copy: 'Pull clear lessons, surprising moments, and practical takeaways from the videos you already produced.',
+    outputs: [
+      ['Fast takeaway', 'The most useful result in under a minute'],
+      ['Common mistake', 'A focused problem-and-solution clip'],
+      ['Key reveal', 'The moment viewers are most likely to share'],
+    ],
   },
   {
-    icon: '🎓',
-    type: 'Educators & Coaches',
-    headline: 'Course content → bite-sized lessons',
-    bullets: ['Key concepts as short clips', '"Aha moments" go viral', 'Topic search built-in'],
-    stat: '+200% course discovery',
-    color: '#0369a1',
-    bg: '#f0f9ff',
-    border: '#bae6fd',
+    id: 'educators',
+    label: 'Educators',
+    source: 'Courses, lectures, and coaching sessions',
+    title: 'Make valuable ideas easier to discover and revisit.',
+    copy: 'Break complex teaching into focused clips while preserving the explanation that makes each idea useful.',
+    outputs: [
+      ['Core concept', 'One clear idea explained without filler'],
+      ['Worked example', 'A practical demonstration from the lesson'],
+      ['Quick definition', 'A searchable answer to a common question'],
+    ],
   },
   {
-    icon: '💼',
-    type: 'Marketing Teams',
-    headline: 'One webinar → 10 social clips',
-    bullets: ['Scale output without scaling team', 'Consistent daily posting', 'Multiple channels at once'],
-    stat: '10 clips / webinar',
-    color: '#059669',
-    bg: '#f0fdf4',
-    border: '#bbf7d0',
+    id: 'teams',
+    label: 'Marketing teams',
+    source: 'Webinars, launches, and customer conversations',
+    title: 'Extend every recording without extending the edit queue.',
+    copy: 'Create a dependable stream of social content from the recordings already produced by your team.',
+    outputs: [
+      ['Problem statement', 'A clip that identifies the audience pain'],
+      ['Product insight', 'A focused explanation of the solution'],
+      ['Customer moment', 'A credible quote ready for social use'],
+    ],
   },
 ]
 
 export default function UseCases() {
-  return (
-    <section id="use-cases" style={{ padding: '96px 0', background: '#fff' }}>
-      <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 5%' }}>
+  const [activeId, setActiveId] = useState(audiences[0].id)
+  const active = audiences.find((audience) => audience.id === activeId) ?? audiences[0]
 
-        {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: '56px' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-            <div style={{ width: '28px', height: '2px', background: '#cf1322' }}/>
-            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#cf1322', textTransform: 'uppercase', letterSpacing: '0.22em' }}>
-              Who it's for
-            </span>
-            <div style={{ width: '28px', height: '2px', background: '#cf1322' }}/>
+  return (
+    <section id="use-cases" className="use-cases-v2">
+      <div className="use-cases-v2-inner">
+        <div className="use-cases-v2-heading">
+          <div>
+            <span>Who it's for</span>
+            <h2>Built around the content you already create.</h2>
           </div>
-          <h2 style={{ fontSize: 'clamp(1.8rem, 3.5vw, 2.8rem)', fontWeight: 800, color: '#0f0f0f', letterSpacing: '-0.04em' }}>
-            Used by every kind of creator.
-          </h2>
+          <p>Choose your workflow to see the moments ShortClipr helps you turn into publishable clips.</p>
         </div>
 
-        {/* Cards */}
-        <div id="use-cases-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px' }}>
-          {cases.map(c => (
-            <div key={c.type} style={{
-              background: c.bg,
-              border: `1.5px solid ${c.border}`,
-              borderRadius: '18px', padding: '28px',
-              display: 'flex', flexDirection: 'column', gap: '16px',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              position: 'relative', overflow: 'hidden',
-            }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 8px 32px ${c.color}20` }}
-              onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '' }}
+        <div className="use-cases-v2-tabs" role="tablist" aria-label="Creator workflows">
+          {audiences.map((audience, index) => (
+            <button
+              key={audience.id}
+              type="button"
+              role="tab"
+              aria-selected={active.id === audience.id}
+              className={active.id === audience.id ? 'active' : ''}
+              onClick={() => setActiveId(audience.id)}
             >
-              {/* Stat badge — top right */}
-              <div style={{
-                position: 'absolute', top: '20px', right: '20px',
-                background: '#fff', border: `1px solid ${c.border}`,
-                borderRadius: '100px', padding: '4px 12px',
-                fontSize: '0.72rem', fontWeight: 800, color: c.color,
-              }}>{c.stat}</div>
-
-              {/* Icon + type */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '1.6rem' }}>{c.icon}</span>
-                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: c.color, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                  {c.type}
-                </span>
-              </div>
-
-              {/* Headline */}
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f0f0f', lineHeight: 1.3, paddingRight: '80px' }}>
-                {c.headline}
-              </h3>
-
-              {/* Bullet points */}
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                {c.bullets.map(b => (
-                  <li key={b} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.83rem', color: '#555' }}>
-                    <span style={{
-                      width: '16px', height: '16px', borderRadius: '50%',
-                      background: c.color + '18', border: `1px solid ${c.color}40`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      flexShrink: 0,
-                    }}>
-                      <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
-                        <polyline points="2,6 5,9 10,3" stroke={c.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </span>
-                    {b}
-                  </li>
-                ))}
-              </ul>
-            </div>
+              <small>{String(index + 1).padStart(2, '0')}</small>
+              <strong>{audience.label}</strong>
+            </button>
           ))}
+        </div>
+
+        <div className="use-cases-v2-panel" role="tabpanel">
+          <div className="use-cases-v2-copy">
+            <span>{active.source}</span>
+            <h3>{active.title}</h3>
+            <p>{active.copy}</p>
+          </div>
+
+          <div className="use-cases-v2-output">
+            <div className="use-cases-v2-output-head">
+              <span>Suggested clip set</span>
+              <b>Ready to review</b>
+            </div>
+            {active.outputs.map(([title, description], index) => (
+              <div className="use-cases-v2-output-row" key={title}>
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                <div><strong>{title}</strong><small>{description}</small></div>
+                <i>{38 + index * 9}s</i>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       <style>{`
-        @media(max-width:680px){
-          #use-cases-grid { grid-template-columns: 1fr !important; }
+        .use-cases-v2 { padding:96px 0; background:#f8f8f6; }
+        .use-cases-v2-inner { max-width:1100px; margin:0 auto; padding:0 5%; }
+        .use-cases-v2-heading { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(260px,.65fr); gap:56px; align-items:end; margin-bottom:42px; }
+        .use-cases-v2-heading > div > span { color:#cf1322; font-size:.72rem; font-weight:800; letter-spacing:.18em; text-transform:uppercase; }
+        .use-cases-v2-heading h2 { max-width:700px; margin:12px 0 0; color:#111; font-size:clamp(2rem,4vw,3.2rem); line-height:1.05; letter-spacing:-.03em; }
+        .use-cases-v2-heading > p { margin:0; color:#666; line-height:1.7; }
+        .use-cases-v2-tabs { display:grid; grid-template-columns:repeat(4,1fr); border-bottom:1px solid #d7d7d4; }
+        .use-cases-v2-tabs button { display:flex; align-items:center; justify-content:center; gap:9px; min-width:0; padding:15px 10px; color:#777; background:transparent; border:0; border-bottom:3px solid transparent; font:inherit; cursor:pointer; }
+        .use-cases-v2-tabs button small { color:#aaa; font-size:.62rem; font-weight:800; }
+        .use-cases-v2-tabs button strong { font-size:.82rem; white-space:nowrap; }
+        .use-cases-v2-tabs button.active { color:#111; border-bottom-color:#cf1322; }
+        .use-cases-v2-tabs button.active small { color:#cf1322; }
+        .use-cases-v2-panel { display:grid; grid-template-columns:minmax(0,.9fr) minmax(420px,1.1fr); margin-top:26px; overflow:hidden; background:#fff; border:1px solid #dededb; border-radius:8px; }
+        .use-cases-v2-copy { display:flex; min-height:350px; flex-direction:column; justify-content:center; padding:48px; border-right:1px solid #e5e5e5; }
+        .use-cases-v2-copy > span { color:#cf1322; font-size:.7rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+        .use-cases-v2-copy h3 { margin:14px 0; color:#111; font-size:clamp(1.65rem,3vw,2.5rem); line-height:1.08; letter-spacing:-.025em; }
+        .use-cases-v2-copy p { margin:0; color:#666; line-height:1.7; }
+        .use-cases-v2-output { align-self:center; margin:34px; border:1px solid #dedede; border-radius:7px; overflow:hidden; }
+        .use-cases-v2-output-head { display:flex; justify-content:space-between; padding:13px 16px; color:#666; background:#f6f6f4; border-bottom:1px solid #dedede; font-size:.7rem; }
+        .use-cases-v2-output-head b { color:#08754f; }
+        .use-cases-v2-output-row { display:grid; grid-template-columns:30px minmax(0,1fr) auto; align-items:center; padding:15px 16px; border-bottom:1px solid #ededed; gap:10px; }
+        .use-cases-v2-output-row:last-child { border-bottom:0; }
+        .use-cases-v2-output-row > span { color:#aaa; font-size:.66rem; }
+        .use-cases-v2-output-row div { min-width:0; }
+        .use-cases-v2-output-row strong, .use-cases-v2-output-row small { display:block; }
+        .use-cases-v2-output-row strong { margin-bottom:3px; color:#222; font-size:.8rem; }
+        .use-cases-v2-output-row small { overflow:hidden; color:#888; font-size:.68rem; text-overflow:ellipsis; white-space:nowrap; }
+        .use-cases-v2-output-row i { color:#777; font-size:.68rem; font-style:normal; }
+        @media(max-width:720px){
+          .use-cases-v2 { padding:72px 0; }
+          .use-cases-v2-heading { grid-template-columns:1fr; gap:18px; margin-bottom:30px; }
+          .use-cases-v2-tabs { overflow-x:auto; grid-template-columns:none; grid-auto-flow:column; grid-auto-columns:max-content; justify-content:start; scrollbar-width:none; }
+          .use-cases-v2-tabs::-webkit-scrollbar { display:none; }
+          .use-cases-v2-tabs button { padding:13px 16px; }
+          .use-cases-v2-panel { grid-template-columns:1fr; }
+          .use-cases-v2-copy { min-height:0; padding:30px 24px; border-right:0; border-bottom:1px solid #e5e5e5; }
+          .use-cases-v2-output { margin:16px; }
         }
       `}</style>
     </section>

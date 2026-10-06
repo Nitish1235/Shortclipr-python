@@ -19,7 +19,7 @@ export default function CTA() {
   }
 
   return (
-    <section id="cta" style={{
+    <section id="cta" className="cloud-cta" style={{
       background: '#cf1322',
       padding: 'clamp(80px, 10vw, 120px) 5%',
       textAlign: 'center',
@@ -63,8 +63,7 @@ export default function CTA() {
           color: 'rgba(255,255,255,0.78)', fontSize: 'clamp(0.95rem, 1.5vw, 1.1rem)',
           maxWidth: '520px', margin: '0 auto 40px', lineHeight: 1.7,
         }}>
-          12,000+ creators are turning their old YouTube videos into daily content.
-          Start free — paste any YouTube URL and get your first clips in minutes.
+          Paste any YouTube URL and turn the strongest moments into ready-to-post clips in minutes.
         </p>
 
         {/* Inline URL input */}
@@ -102,24 +101,6 @@ export default function CTA() {
           No credit card · No software install · Cancel anytime
         </p>
 
-        {/* Social proof row */}
-        <div style={{
-          display: 'flex', justifyContent: 'center', gap: 'clamp(20px, 4vw, 48px)',
-          flexWrap: 'wrap', paddingTop: '28px',
-          borderTop: '1px solid rgba(255,255,255,0.15)',
-        }}>
-          {[
-            { num: '47K+',  label: 'Creators'           },
-            { num: '9.2M+', label: 'Clips generated'    },
-            { num: '4.8★',  label: 'Average rating'     },
-            { num: '99.1%', label: 'Uptime SLA'         },
-          ].map(s => (
-            <div key={s.label} style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.04em' }}>{s.num}</div>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: '3px' }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
       </div>
     </section>
   )

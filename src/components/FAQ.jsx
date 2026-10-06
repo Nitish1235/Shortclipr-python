@@ -52,7 +52,7 @@ export default function FAQ() {
   }
 
   return (
-    <section id="faq" style={{ padding: '96px 0', background: '#f9f9f9' }}>
+    <section id="faq" className="cloud-faq" style={{ padding: '96px 0', background: '#f9f9f9' }}>
       <div style={{ maxWidth: '780px', margin: '0 auto', padding: '0 5%' }}>
 
         {/* Header */}

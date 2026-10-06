@@ -3,24 +3,19 @@ import { useEffect } from 'react'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import TikTokPixel from './components/TikTokPixel'
+import './landing-theme.css'
+import './cloud-studio.css'
 
 // Layout
-import Navigation    from './components/Navigation'
 import Footer        from './components/Footer'
 
 // Landing sections
-import Hero              from './components/Hero'
-import Ticker            from './components/Ticker'
-import HowItWorks        from './components/HowItWorks'
-
-import UseCases          from './components/UseCases'
 import VideoShowcase     from './components/VideoShowcase'
-import Comparison        from './components/Comparison'
-import Testimonials      from './components/Testimonials'
+import MultipleShorts    from './components/MultipleShorts'
 import Pricing           from './components/Pricing'
-import VisualHighlights  from './components/VisualHighlights'
 import FAQ               from './components/FAQ'
 import CTA               from './components/CTA'
+import CloudStudioLanding, { CloudNavigation } from './components/CloudStudioLanding'
 
 // Pages
 import Privacy        from './pages/Privacy'
@@ -101,33 +96,15 @@ function LandingPage() {
   }, [location, navigate])
 
   return (
-    <>
-      <Navigation />
+    <div className="youtube-shorts-landing">
+      <CloudNavigation />
       <main>
-        {/* 1. Hero — centered headline + URL input above fold */}
-        <Hero />
+        <CloudStudioLanding />
 
-        {/* 2. Dark feature ticker */}
-        <Ticker />
-
-        {/* 6. INFINITE VIDEO SHOWCASE — admin-curated clips from GCS */}
+        {/* Live admin-curated showcase, newest clips first */}
         <VideoShowcase />
 
-        {/* 3. How it works */}
-        <HowItWorks />
-
-
-        {/* 5. Use cases by creator type */}
-        <UseCases />
-
-        {/* 7. AI pipeline flow */}
-        <VisualHighlights />
-
-        {/* 8. Competitor comparison table */}
-        <Comparison />
-
-        {/* 9. Testimonials */}
-        <Testimonials />
+        <MultipleShorts />
 
         {/* 10. Pricing */}
         <Pricing />
@@ -139,7 +116,7 @@ function LandingPage() {
         <CTA />
       </main>
       <Footer />
-    </>
+    </div>
   )
 }
 

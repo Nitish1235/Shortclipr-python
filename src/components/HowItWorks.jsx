@@ -1,507 +1,237 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
-const RED    = '#cf1322'
-const RED_BG = '#fef2f2'
-const RED_B  = '#fecaca'
-
-/* ─── step data ────────────────────────────────────────────── */
 const STEPS = [
-  { num: '01', icon: '🔗', label: 'Paste URL',         short: 'Drop any YouTube link'         },
-  { num: '02', icon: '🎙️', label: 'AI reads audio',    short: 'Transcription & semantic map'  },
-  { num: '03', icon: '🧠', label: 'Best moments found', short: 'Hook-strength scoring'         },
-  { num: '04', icon: '✨', label: 'Reframe & Export',   short: 'Clips ready in minutes'        },
+  { key: 'connect', label: 'Connect', title: 'Start with one YouTube URL.', copy: 'ShortClipr connects to the source without asking you to learn an editing timeline.', console: ['Source link received', 'Video stream connected'] },
+  { key: 'map', label: 'Understand', title: 'Turn the conversation into context.', copy: 'Speech, speakers, pauses, and topic changes become a searchable map of the full video.', console: ['Audio mapped', 'Transcript indexed', 'Topic changes detected'] },
+  { key: 'scan', label: 'Scan', title: 'Inspect the complete timeline.', copy: 'A scanning playhead compares every section and marks moments that can stand on their own.', console: ['Timeline scan running', 'Candidate moments ranked'] },
+  { key: 'reframe', label: 'Reframe', title: 'See the wide video become vertical.', copy: 'The selected moment becomes 9:16 while the active speaker stays inside the viewing area.', console: ['Speaker position tracked', 'Vertical frame prepared'] },
+  { key: 'finish', label: 'Finish', title: 'Review the finished short.', copy: 'Word-timed captions and export settings are applied, leaving a clip ready for approval.', console: ['Captions synchronized', 'Preview ready for review'] },
 ]
-const DESCS = [
-  'Paste any YouTube link — podcast, interview, lecture. ShortClipr streams only the segments it needs, so no 2-hour wait for a full download.',
-  'Our AI transcribes every word in seconds and builds a full semantic map of the video — emotions, pacing, topic shifts, and momentum signals.',
-  'An LLM scores every segment by hook strength, emotional intensity, and retention signal. Only the highest-value moments get selected.',
-  'Face-tracking reframes to 9:16, animated captions burn in word-by-word, and your clips are packaged — ready for TikTok, Reels, and Shorts.',
-]
-const STEP_MS = 3400
 
-/* ─── Step 1 — URL typewriter ───────────────────────────────── */
-const URL_STR = 'youtube.com/watch?v=dQw4w9WgXcQ'
-function VisualURL({ tick }) {
-  const [typed,    setTyped]    = useState('')
-  const [success,  setSuccess]  = useState(false)
-  const [card,     setCard]     = useState(false)
-  const ref = useRef(null)
-  useEffect(() => {
-    setTyped(''); setSuccess(false); setCard(false)
-    let i = 0
-    ref.current = setInterval(() => {
-      i++; setTyped(URL_STR.slice(0, i))
-      if (i >= URL_STR.length) {
-        clearInterval(ref.current)
-        setTimeout(() => setSuccess(true), 350)
-        setTimeout(() => setCard(true), 720)
-      }
-    }, 40)
-    return () => clearInterval(ref.current)
-  }, [tick])
+const SEGMENTS = [18, 31, 24, 44, 29, 52, 36, 63, 41, 27, 48, 33]
 
+function SourceFrame({ compact = false }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Browser frame */}
-      <div style={{ background: '#111', borderRadius: 12, border: '1px solid #222', overflow: 'hidden' }}>
-        {/* Title bar */}
-        <div style={{ background: '#0c0c0c', padding: '9px 14px', borderBottom: '1px solid #1e1e1e', display: 'flex', alignItems: 'center', gap: 6 }}>
-          {['#ef4444','#f59e0b','#22c55e'].map(c => (
-            <div key={c} style={{ width: 9, height: 9, borderRadius: '50%', background: c, opacity: .8 }}/>
-          ))}
-          <div style={{ flex: 1, background: '#1a1a1a', borderRadius: 6, padding: '4px 10px', marginLeft: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#44b" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-            <span style={{ fontSize: '0.65rem', color: '#555', fontFamily: 'monospace' }}>
-              {typed}
-              <span style={{ animation: 'blink-c 1s step-end infinite', color: RED }}>|</span>
-            </span>
-          </div>
-        </div>
-        {/* Content */}
-        <div style={{ padding: '20px 18px', minHeight: 96, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {!success ? (
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 6 }}>
-                <div style={{ width: 16, height: 16, border: '2px solid #333', borderTopColor: RED, borderRadius: '50%', animation: 'spin-c .8s linear infinite' }}/>
-                <span style={{ fontSize: '0.72rem', color: '#444' }}>Connecting to stream…</span>
-              </div>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, animation: 'flyUp .3s ease' }}>
-              <div style={{ width: 44, height: 32, background: RED, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <span style={{ color: '#fff', fontSize: '1rem' }}>▶</span>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#e5e5e5' }}>Video stream detected</div>
-                <div style={{ fontSize: '0.64rem', color: '#555', marginTop: 2 }}>Only segments needed will be fetched · Fast</div>
-              </div>
-              <span style={{ marginLeft: 'auto', background: '#0d2a18', color: '#4ade80', fontSize: '0.58rem', fontWeight: 700, padding: '3px 8px', borderRadius: 100, whiteSpace: 'nowrap', border: '1px solid #166534' }}>✓ READY</span>
-            </div>
-          )}
-        </div>
+    <div className={`hiw-source-frame${compact ? ' compact' : ''}`}>
+      <img src="/assets/showcase_interview.png" alt="Long-form interview source" />
+      <div className="hiw-source-shade" />
+      <span>Long-form source</span>
+      <div className="hiw-speaker-box" aria-hidden="true" />
+    </div>
+  )
+}
+
+function ConnectVisual() {
+  return (
+    <div className="hiw-connect-visual">
+      <div className="hiw-url-field">
+        <span className="hiw-url-prefix">URL</span>
+        <span className="hiw-typed-url">youtube.com/watch?v=your-video</span>
+        <b>Connected</b>
       </div>
-      {/* Stat row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, opacity: card ? 1 : 0, transform: card ? 'none' : 'translateY(6px)', transition: 'all .4s ease' }}>
-        {[['~2 min','Processing time'],['0 GB','Full download avoided'],['Any length','Podcast to lecture']].map(([v,l]) => (
-          <div key={l} style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
-            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: RED, letterSpacing: '-0.02em' }}>{v}</div>
-            <div style={{ fontSize: '0.6rem', color: '#555', marginTop: 2, lineHeight: 1.4 }}>{l}</div>
-          </div>
-        ))}
+      <SourceFrame />
+      <div className="hiw-transform-line"><span /></div>
+    </div>
+  )
+}
+
+function MapVisual() {
+  return (
+    <div className="hiw-map-visual">
+      <div className="hiw-waveform" aria-label="Audio waveform">
+        {SEGMENTS.map((height, index) => <i key={index} style={{ '--bar-height': `${height}%`, '--bar-delay': `${index * 45}ms` }} />)}
+        <span className="hiw-wave-scan" />
+      </div>
+      <div className="hiw-transcript-map">
+        <p><span>00:18</span> The thing most creators miss is finding the sentence that makes somebody stop.</p>
+        <p><span>00:27</span> Once that moment is clear, the rest of the clip becomes easier to shape.</p>
+        <div className="hiw-topic-row"><b>Hook</b><b>Creator workflow</b><b>Editing</b></div>
       </div>
     </div>
   )
 }
 
-/* ─── Step 2 — Waveform + transcript ───────────────────────── */
-const TRANSCRIPT_WORDS = ['So','the','real','question','is','what','makes','someone','stop','scrolling?','And','the','answer,','every','time,','is','emotion.']
-const BARS_N = 30
-function VisualTranscript({ tick }) {
-  const [wi, setWi]   = useState(-1)
-  const [done, setDone] = useState(false)
-  const ref = useRef(null)
-  useEffect(() => {
-    setWi(-1); setDone(false)
-    let i = -1
-    ref.current = setInterval(() => {
-      i++; setWi(i)
-      if (i >= TRANSCRIPT_WORDS.length - 1) {
-        clearInterval(ref.current)
-        setTimeout(() => setDone(true), 400)
-      }
-    }, 140)
-    return () => clearInterval(ref.current)
-  }, [tick])
-
+function ScanVisual() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Waveform */}
-      <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, padding: '14px 16px' }}>
-        <div style={{ fontSize: '0.6rem', color: '#444', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 10 }}>Live audio stream</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2.5, height: 44 }}>
-          {Array.from({ length: BARS_N }, (_, i) => (
-            <div key={i} style={{
-              flex: 1, borderRadius: 3, background: RED,
-              opacity: .65,
-              animation: `wave-c ${.5 + (i % 6) * .12}s ease-in-out infinite alternate`,
-              animationDelay: `${i * .035}s`,
-              height: `${20 + Math.sin(i * .9) * 16 + Math.cos(i * 1.3) * 8}px`,
-            }}/>
-          ))}
+    <div className="hiw-scan-visual">
+      <SourceFrame compact />
+      <div className="hiw-timeline-shell">
+        <div className="hiw-time-labels"><span>00:00</span><span>06:00</span><span>12:00</span></div>
+        <div className="hiw-timeline-track">
+          <i className="candidate one" /><i className="candidate two" /><i className="candidate three" />
+          <span className="hiw-playhead" />
         </div>
-      </div>
-      {/* Transcript */}
-      <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, padding: '14px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <span style={{ fontSize: '0.6rem', color: '#444', textTransform: 'uppercase', letterSpacing: '.1em' }}>Transcript</span>
-          {done && <span style={{ background: '#0d2a18', color: '#4ade80', fontSize: '0.58rem', fontWeight: 700, padding: '2px 7px', borderRadius: 100, border: '1px solid #166534', animation: 'flyUp .3s ease' }}>✓ COMPLETE</span>}
-        </div>
-        <p style={{ fontSize: '0.82rem', lineHeight: 2, fontWeight: 500 }}>
-          {TRANSCRIPT_WORDS.map((w, i) => (
-            <span key={i} style={{
-              marginRight: 4,
-              color: i < wi ? '#999' : i === wi ? '#fff' : '#2a2a2a',
-              fontWeight: i === wi ? 800 : 400,
-              background: i === wi ? 'rgba(207,19,34,.15)' : 'transparent',
-              borderRadius: 3, padding: '0 2px',
-              transition: 'all .12s',
-            }}>{w}</span>
-          ))}
-        </p>
-        <div style={{ marginTop: 8, fontSize: '0.62rem', color: '#555' }}>
-          {wi >= 0 ? `${Math.round((wi / TRANSCRIPT_WORDS.length) * 817)} / 817 words` : '0 / 817 words'}
-        </div>
+        <div className="hiw-candidate-key"><span>Candidate moment</span><span>Scanning full video</span></div>
       </div>
     </div>
   )
 }
 
-/* ─── Step 3 — Timeline scoring ────────────────────────────── */
-const SEGS = [
-  { l: '4%',  w: '13%', score: 9.2, label: 'Hook',     color: '#ef4444' },
-  { l: '24%', w: '10%', score: 7.4, label: 'Context',  color: '#f97316' },
-  { l: '42%', w: '15%', score: 9.5, label: 'Peak',     color: '#ef4444' },
-  { l: '66%', w: '9%',  score: 8.1, label: 'Story',    color: '#f59e0b' },
-  { l: '82%', w: '11%', score: 8.7, label: 'CTA',      color: '#f97316' },
-]
-function VisualTimeline({ tick }) {
-  const [rev, setRev] = useState(-1)
-  const ref = useRef(null)
-  useEffect(() => {
-    setRev(-1)
-    let i = -1
-    const tick2 = () => {
-      i++; setRev(i)
-      if (i < SEGS.length - 1) ref.current = setTimeout(tick2, 480)
-    }
-    ref.current = setTimeout(tick2, 300)
-    return () => clearTimeout(ref.current)
-  }, [tick])
-
+function ReframeVisual() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, padding: '20px 16px' }}>
-        <div style={{ fontSize: '0.6rem', color: '#444', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 36 }}>Video timeline · AI scoring</div>
-        <div style={{ position: 'relative', height: 52 }}>
-          {/* Track */}
-          <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 5, background: '#1e1e1e', borderRadius: 3, transform: 'translateY(-50%)' }}/>
-          {/* Tick marks */}
-          {[0,25,50,75,100].map(p => (
-            <div key={p} style={{ position: 'absolute', top: '50%', left: `${p}%`, width: 1, height: 12, background: '#2a2a2a', transform: 'translateY(-50%)' }}/>
-          ))}
-          {SEGS.map((s, i) => (
-            <div key={i}>
-              <div style={{
-                position: 'absolute', top: '50%', left: s.l, width: s.w,
-                height: 9, borderRadius: 4,
-                background: i <= rev ? `linear-gradient(90deg, ${s.color}, ${s.color}cc)` : '#2a2a2a',
-                transform: 'translateY(-50%)',
-                boxShadow: i <= rev ? `0 0 12px ${s.color}80` : 'none',
-                transition: 'all .35s ease',
-              }}/>
-              <div style={{
-                position: 'absolute',
-                left: `calc(${s.l} + ${s.w} / 2)`,
-                top: -26, transform: 'translateX(-50%)',
-                background: i <= rev ? s.color : '#1e1e1e',
-                color: '#fff', fontSize: '0.58rem', fontWeight: 800,
-                padding: '2px 5px', borderRadius: 5,
-                opacity: i <= rev ? 1 : 0,
-                transition: 'all .3s .1s',
-                whiteSpace: 'nowrap',
-              }}>{s.score}★</div>
-              <div style={{
-                position: 'absolute',
-                left: `calc(${s.l} + ${s.w} / 2)`,
-                bottom: -18, transform: 'translateX(-50%)',
-                fontSize: '0.56rem', color: '#555',
-                opacity: i <= rev ? 1 : 0,
-                transition: 'opacity .3s .15s',
-                whiteSpace: 'nowrap',
-              }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-      {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
-        {[
-          [`${Math.max(0, rev + 1)}/${SEGS.length}`, 'Moments scored'],
-          ['9.5★',                                    'Highest hook score'],
-          ['~4 min',                                  'Avg clip length'],
-        ].map(([v, l]) => (
-          <div key={l} style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
-            <div style={{ fontSize: '0.9rem', fontWeight: 800, color: RED, letterSpacing: '-0.02em' }}>{v}</div>
-            <div style={{ fontSize: '0.6rem', color: '#555', marginTop: 2, lineHeight: 1.4 }}>{l}</div>
-          </div>
-        ))}
+    <div className="hiw-reframe-visual">
+      <div className="hiw-before-pane"><span>Before · 16:9</span><SourceFrame compact /></div>
+      <div className="hiw-frame-arrow"><i /></div>
+      <div className="hiw-after-pane">
+        <span>After · 9:16</span>
+        <div className="hiw-portrait-crop"><img src="/assets/showcase_interview.png" alt="Vertically reframed interview" /><i /></div>
       </div>
     </div>
   )
 }
 
-/* ─── Step 4 — Phone + badges ───────────────────────────────── */
-const CAP_WORDS = ['The', 'answer', 'is', 'emotion.']
-function VisualExport({ tick }) {
-  const [ci,     setCi]     = useState(-1)
-  const [badges, setBadges] = useState(false)
-  const ref = useRef(null)
-  useEffect(() => {
-    setCi(-1); setBadges(false)
-    setTimeout(() => setBadges(true), 400)
-    let i = 0
-    ref.current = setInterval(() => { i = (i + 1) % CAP_WORDS.length; setCi(i) }, 480)
-    return () => clearInterval(ref.current)
-  }, [tick])
-
-  const BADGE_LIST = [
-    { icon: '📐', t: 'Face-tracked 9:16',     s: 'Speaker always centered' },
-    { icon: '🗒️', t: 'Word-sync captions',    s: '11 animated styles' },
-    { icon: '🎨', t: 'Premium layout applied', s: 'Glass · Blur · Neon · Cinema' },
-    { icon: '📦', t: 'ZIP ready to post',      s: 'TikTok · Reels · Shorts' },
-  ]
-
+function FinishVisual() {
   return (
-    <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-      {/* Phone */}
-      <div style={{ flexShrink: 0, width: 110, background: '#0a0a0a', borderRadius: 20, border: '2px solid #2a2a2a', overflow: 'hidden', boxShadow: `0 0 36px rgba(207,19,34,.18), 0 0 0 1px #111` }}>
-        <div style={{ background: '#0a0a0a', height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 30, height: 4, background: '#222', borderRadius: 4 }}/>
-        </div>
-        {/* Video area */}
-        <div style={{ height: 180, background: 'linear-gradient(170deg,#1c1c3a,#0d1b2a,#0a1628)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-          {/* Background glow */}
-          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 50% 40%, rgba(56,189,248,.06) 0%, transparent 70%)' }}/>
-          {/* Silhouette body */}
-          <div style={{ width: 38, height: 56, background: 'rgba(255,255,255,.06)', borderRadius: '18px 18px 8px 8px', position: 'relative', zIndex: 1 }}>
-            <div style={{ position: 'absolute', top: -20, left: '50%', transform: 'translateX(-50%)', width: 26, height: 26, borderRadius: '50%', background: 'rgba(255,255,255,.08)' }}/>
-          </div>
-          {/* Face track box */}
-          {badges && (
-            <div style={{
-              position: 'absolute', top: 22, left: '50%', transform: 'translateX(-50%)',
-              width: 36, height: 36, border: '1.5px solid #38bdf8', borderRadius: 5,
-              boxShadow: '0 0 10px rgba(56,189,248,.5)', animation: 'flyUp .4s ease',
-            }}>
-              {[{t:0,l:0},{t:0,r:0},{b:0,l:0},{b:0,r:0}].map((pos, i) => (
-                <div key={i} style={{ position: 'absolute', width: 6, height: 6, background: '#38bdf8', borderRadius: 1, ...pos }}/>
-              ))}
-            </div>
-          )}
-        </div>
-        {/* Caption bar */}
-        <div style={{ background: '#080808', padding: '8px 6px', minHeight: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, flexWrap: 'wrap' }}>
-          {CAP_WORDS.map((w, i) => (
-            <span key={i} style={{
-              fontSize: '0.58rem', fontWeight: 900, textTransform: 'uppercase',
-              color: '#fff', background: i === ci ? RED : 'transparent',
-              borderRadius: 3, padding: '1px 2px', transition: 'background .1s',
-              letterSpacing: '.02em',
-            }}>{w}</span>
-          ))}
-        </div>
+    <div className="hiw-finish-visual">
+      <div className="hiw-finished-phone">
+        <img src="/assets/showcase_interview.png" alt="Finished short with captions" />
+        <p><span>FIND</span> THE MOMENT<br />PEOPLE REMEMBER</p>
+        <i>00:38</i>
       </div>
-
-      {/* Feature badges */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {BADGE_LIST.map((b, i) => (
-          <div key={i} style={{
-            background: '#111', border: '1px solid #1e1e1e', borderRadius: 10,
-            padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10,
-            opacity: badges ? 1 : 0,
-            transform: badges ? 'none' : 'translateX(10px)',
-            transition: `opacity .35s ${i * .09}s, transform .35s ${i * .09}s`,
-          }}>
-            <span style={{ fontSize: '.95rem', flexShrink: 0 }}>{b.icon}</span>
-            <div>
-              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#e5e5e5' }}>{b.t}</div>
-              <div style={{ fontSize: '0.6rem', color: '#555', marginTop: 1 }}>{b.s}</div>
-            </div>
-            <div style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: '#22c55e', flexShrink: 0, boxShadow: '0 0 5px #22c55e' }}/>
-          </div>
-        ))}
+      <div className="hiw-export-queue">
+        <span>Review summary</span>
+        <div><p><b>Vertical framing</b><small>Speaker centered</small></p><em>Ready</em></div>
+        <div><p><b>Captions</b><small>Word-timed and editable</small></p><em>Ready</em></div>
+        <div><p><b>Export</b><small>1080 x 1920 MP4</small></p><em>Review</em></div>
       </div>
     </div>
   )
 }
 
-/* ─── Main ─────────────────────────────────────────────────── */
-const VISUALS = [VisualURL, VisualTranscript, VisualTimeline, VisualExport]
+const VISUALS = [ConnectVisual, MapVisual, ScanVisual, ReframeVisual, FinishVisual]
 
 export default function HowItWorks() {
   const [active, setActive] = useState(0)
-  const [tick,   setTick]   = useState(0)   // remount signal for visuals
-  const [pct,    setPct]    = useState(0)   // progress bar 0-100
-  const timerRef = useRef(null)
-  const pctRef   = useRef(null)
-
-  const goto = (i) => {
-    clearTimeout(timerRef.current)
-    clearInterval(pctRef.current)
-    setActive(i)
-    setTick(t => t + 1)
-    setPct(0)
-    startProgress(i)
-  }
-
-  const startProgress = (from) => {
-    let p = 0
-    const step = 100 / (STEP_MS / 50)
-    pctRef.current = setInterval(() => {
-      p += step
-      if (p >= 100) {
-        clearInterval(pctRef.current)
-        const next = (from + 1) % STEPS.length
-        timerRef.current = setTimeout(() => goto(next), 0)
-        return
-      }
-      setPct(p)
-    }, 50)
-  }
+  const storyRef = useRef(null)
+  const interactionLockRef = useRef(false)
+  const unlockTimerRef = useRef(null)
 
   useEffect(() => {
-    startProgress(0)
-    return () => { clearTimeout(timerRef.current); clearInterval(pctRef.current) }
+    const story = storyRef.current
+    if (!story) return undefined
+    const nodes = Array.from(story.querySelectorAll('[data-step]'))
+    let frame = null
+
+    const updateFromScroll = () => {
+      if (interactionLockRef.current || frame) return
+      frame = window.requestAnimationFrame(() => {
+        frame = null
+        const mobile = window.matchMedia('(max-width: 820px)').matches
+        const readingLine = window.innerHeight * (mobile ? 0.72 : 0.5)
+        const closest = nodes.reduce((best, node, index) => {
+          const rect = node.getBoundingClientRect()
+          const distance = Math.abs(rect.top + rect.height / 2 - readingLine)
+          return distance < best.distance ? { index, distance } : best
+        }, { index: 0, distance: Number.POSITIVE_INFINITY })
+        setActive((current) => current === closest.index ? current : closest.index)
+      })
+    }
+
+    updateFromScroll()
+    window.addEventListener('scroll', updateFromScroll, { passive: true })
+    window.addEventListener('resize', updateFromScroll)
+    return () => {
+      window.removeEventListener('scroll', updateFromScroll)
+      window.removeEventListener('resize', updateFromScroll)
+      if (frame) window.cancelAnimationFrame(frame)
+      clearTimeout(unlockTimerRef.current)
+    }
   }, [])
 
   const ActiveVisual = VISUALS[active]
+  const goToStep = (index) => {
+    clearTimeout(unlockTimerRef.current)
+    interactionLockRef.current = true
+    setActive(index)
+    const target = storyRef.current?.querySelector(`[data-step="${index}"]`)
+    if (window.matchMedia('(min-width: 821px)').matches) {
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    } else {
+      target?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+    }
+    unlockTimerRef.current = setTimeout(() => { interactionLockRef.current = false }, 900)
+  }
 
   return (
-    <section id="how-it-works" style={{ padding: '100px 0', background: '#fff' }}>
-      <div style={{ maxWidth: '1080px', margin: '0 auto', padding: '0 5%' }}>
+    <section id="how-it-works" className="hiw-v3">
+      <div className="hiw-v3-inner">
+        <header className="hiw-v3-heading">
+          <span>How it works</span>
+          <h2>Watch a long video become a finished short.</h2>
+          <p>Move through the workflow yourself, or scroll to watch every stage unfold.</p>
+        </header>
 
-        {/* ── Header ─────────────────────────────── */}
-        <div style={{ textAlign: 'center', marginBottom: 52 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <div style={{ width: 22, height: 2, background: RED, borderRadius: 2 }}/>
-            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: RED, textTransform: 'uppercase', letterSpacing: '.2em' }}>How it works</span>
-            <div style={{ width: 22, height: 2, background: RED, borderRadius: 2 }}/>
-          </div>
-          <h2 style={{ fontSize: 'clamp(1.9rem,3.5vw,2.7rem)', fontWeight: 800, color: '#0f0f0f', letterSpacing: '-0.04em', margin: '0 0 12px' }}>
-            URL to viral clip in 3 steps.
-          </h2>
-          <p style={{ fontSize: '0.95rem', color: '#888', maxWidth: '380px', margin: '0 auto', lineHeight: 1.7 }}>
-            Paste, wait a few minutes, download. That's the entire workflow.
-          </p>
+        <div className="hiw-scrubber" role="tablist" aria-label="ShortClipr workflow">
+          <div className="hiw-scrubber-line"><i style={{ width: `${(active / (STEPS.length - 1)) * 100}%` }} /></div>
+          {STEPS.map((step, index) => (
+            <button key={step.key} type="button" role="tab" aria-selected={active === index} className={active === index ? 'active' : active > index ? 'complete' : ''} onClick={() => goToStep(index)}>
+              <span>{String(index + 1).padStart(2, '0')}</span><b>{step.label}</b>
+            </button>
+          ))}
         </div>
 
-        {/* ── Step tabs ──────────────────────────── */}
-        <div id="hiw-tabs" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 16 }}>
-          {STEPS.map((s, i) => {
-            const isActive = i === active
-            const isDone   = i < active
-            return (
-              <button
-                key={i}
-                onClick={() => goto(i)}
-                style={{
-                  background: isActive ? '#0f0f0f' : '#fafafa',
-                  border: `1.5px solid ${isActive ? '#0f0f0f' : '#e5e5e5'}`,
-                  borderRadius: 14,
-                  padding: '14px 14px 12px',
-                  cursor: 'pointer', textAlign: 'left',
-                  transition: 'all .22s ease',
-                  outline: 'none',
-                  position: 'relative',
-                  overflow: 'hidden',
-                }}
-                onMouseEnter={e => { if (!isActive) { e.currentTarget.style.borderColor = '#d0d0d0'; e.currentTarget.style.background = '#f5f5f5' } }}
-                onMouseLeave={e => { if (!isActive) { e.currentTarget.style.borderColor = '#e5e5e5'; e.currentTarget.style.background = '#fafafa' } }}
-              >
-                {/* Timer bar on active */}
-                {isActive && (
-                  <div style={{ position: 'absolute', bottom: 0, left: 0, height: 2, background: RED, width: `${pct}%`, transition: 'width .05s linear', borderRadius: '0 2px 2px 0' }}/>
-                )}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                  <span style={{ fontSize: '0.6rem', fontWeight: 700, color: isActive ? '#fff' : isDone ? '#0f0f0f' : '#bbb', background: isActive ? RED : isDone ? '#0f0f0f' : '#ebebeb', borderRadius: 100, padding: '2px 7px', letterSpacing: '.06em' }}>
-                    {isDone ? '✓' : s.num}
-                  </span>
-                  <span style={{ fontSize: '0.62rem', color: isActive ? 'rgba(255,255,255,.5)' : '#bbb', letterSpacing: '.06em' }}>
-                    {s.icon}
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: isActive ? '#fff' : '#555', lineHeight: 1.3, marginBottom: 2 }}>{s.label}</div>
-                <div style={{ fontSize: '0.68rem', color: isActive ? 'rgba(255,255,255,.4)' : '#bbb', lineHeight: 1.4 }}>{s.short}</div>
+        <div className="hiw-story-layout">
+          <div className="hiw-story" ref={storyRef}>
+            {STEPS.map((step, index) => (
+              <button key={step.key} type="button" data-step={index} className={active === index ? 'active' : ''} onClick={() => goToStep(index)}>
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                <div><h3>{step.title}</h3><p>{step.copy}</p></div>
               </button>
-            )
-          })}
-        </div>
+            ))}
+          </div>
 
-        {/* ── Demo panel ─────────────────────────── */}
-        <div style={{
-          background: '#0a0a0a',
-          border: '1px solid #1a1a1a',
-          borderRadius: 20,
-          padding: '28px 28px 24px',
-          boxShadow: '0 24px 64px rgba(0,0,0,.14), 0 0 0 1px rgba(255,255,255,.02)',
-        }}>
-          {/* Panel top bar */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {['#ef4444','#f59e0b','#22c55e'].map(c => (
-                <div key={c} style={{ width: 8, height: 8, borderRadius: '50%', background: c, opacity: .6 }}/>
-              ))}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ background: '#1a1a1a', border: '1px solid #252525', color: '#555', fontSize: '0.6rem', fontWeight: 600, padding: '3px 10px', borderRadius: 100 }}>
-                shortclipr.com · live demo
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: 5 }}>
-              {STEPS.map((_, i) => (
-                <div key={i} onClick={() => goto(i)} style={{
-                  width: i === active ? 18 : 5, height: 5, borderRadius: 3,
-                  background: i === active ? RED : '#222',
-                  cursor: 'pointer', transition: 'all .25s',
-                }}/>
+          <div className="hiw-sticky-workspace">
+            <div className="hiw-workspace-bar"><span>ShortClipr workflow</span><b>Stage {String(active + 1).padStart(2, '0')} of {String(STEPS.length).padStart(2, '0')}</b></div>
+            <div className="hiw-mobile-stage-copy"><b>{STEPS[active].title}</b><span>{STEPS[active].copy}</span></div>
+            <div className="hiw-workspace-canvas" key={STEPS[active].key}><ActiveVisual /></div>
+            <div className="hiw-console">
+              <div className="hiw-console-head"><span>Processing console</span><b>Live workflow</b></div>
+              {STEPS[active].console.map((line, index) => (
+                <p key={line} style={{ '--log-delay': `${index * 130}ms` }}><i />{line}<span>{index === STEPS[active].console.length - 1 ? 'Active' : 'Complete'}</span></p>
               ))}
             </div>
           </div>
-
-          {/* Animated visual — key on tick so it remounts cleanly */}
-          <div key={tick} style={{ animation: 'flyUp .3s ease' }}>
-            <ActiveVisual tick={tick} />
-          </div>
-
-          {/* Step description */}
-          <div style={{
-            marginTop: 20, paddingTop: 18,
-            borderTop: '1px solid #181818',
-            display: 'flex', alignItems: 'flex-start', gap: 12,
-          }}>
-            <span style={{ background: RED, color: '#fff', fontSize: '0.58rem', fontWeight: 800, padding: '3px 9px', borderRadius: 100, letterSpacing: '.08em', textTransform: 'uppercase', whiteSpace: 'nowrap', marginTop: 1, flexShrink: 0 }}>
-              Step {STEPS[active].num}
-            </span>
-            <p style={{ fontSize: '0.78rem', color: '#555', lineHeight: 1.75, margin: 0 }}>
-              {DESCS[active]}
-            </p>
-          </div>
         </div>
-
       </div>
 
       <style>{`
-        @keyframes wave-c {
-          from { transform: scaleY(.35); }
-          to   { transform: scaleY(1); }
+        .hiw-v3 { padding:96px 0 112px; overflow:clip; background:#fff; color:#111; }
+        .hiw-v3-inner { width:min(1120px,90%); margin:0 auto; }
+        .hiw-v3-heading { max-width:720px; margin:0 auto 46px; text-align:center; }
+        .hiw-v3-heading > span { color:#cf1322; font-size:.7rem; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
+        .hiw-v3-heading h2 { margin:12px 0; color:#111; font-size:clamp(2rem,4.5vw,3.35rem); line-height:1.04; letter-spacing:0; }
+        .hiw-v3-heading p { margin:0; color:#707070; font-size:.95rem; line-height:1.7; }
+        .hiw-scrubber { position:relative; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); margin-bottom:34px; }
+        .hiw-scrubber-line { position:absolute; top:15px; right:8.3%; left:8.3%; height:2px; overflow:hidden; background:#e5e5e5; }
+        .hiw-scrubber-line i { display:block; height:100%; background:#cf1322; transition:width .45s ease; }
+        .hiw-scrubber button { position:relative; z-index:1; display:grid; justify-items:center; padding:0 6px; color:#999; background:transparent; border:0; font:inherit; cursor:pointer; gap:7px; }
+        .hiw-scrubber button span { display:grid; width:31px; height:31px; place-items:center; color:#888; background:#fff; border:1px solid #d8d8d8; border-radius:50%; font-size:.62rem; font-weight:800; transition:.25s ease; }
+        .hiw-scrubber button b { font-size:.7rem; }.hiw-scrubber button.active span,.hiw-scrubber button.complete span { color:#fff; background:#cf1322; border-color:#cf1322; }.hiw-scrubber button.active b { color:#111; }
+        .hiw-story-layout { display:grid; grid-template-columns:320px minmax(0,1fr); align-items:start; gap:28px; }.hiw-story { display:grid; gap:10px; }
+        .hiw-story > button { display:grid; grid-template-columns:34px minmax(0,1fr); min-height:clamp(560px,82vh,760px); align-items:center; padding:28px 20px; color:#777; background:transparent; border:1px solid transparent; border-radius:7px; font:inherit; text-align:left; cursor:pointer; gap:12px; transition:.25s ease; }
+        .hiw-story > button > span { padding-top:4px; color:#aaa; font-size:.64rem; font-weight:800; }.hiw-story h3 { margin:0 0 7px; color:#4d4d4d; font-size:1rem; line-height:1.3; letter-spacing:0; }.hiw-story p { margin:0; color:#8a8a8a; font-size:.76rem; line-height:1.6; }
+        .hiw-story > button.active { background:#f7f7f5; border-color:#dededb; box-shadow:inset 3px 0 0 #cf1322; }.hiw-story > button.active > span { color:#cf1322; }.hiw-story > button.active h3 { color:#111; }
+        .hiw-sticky-workspace { position:sticky; top:105px; overflow:hidden; background:#101010; border:1px solid #262626; border-radius:8px; box-shadow:0 22px 55px rgba(0,0,0,.14); }
+        .hiw-workspace-bar { display:flex; align-items:center; justify-content:space-between; height:44px; padding:0 18px; color:#777; border-bottom:1px solid #262626; font-size:.65rem; }.hiw-workspace-bar b { color:#d6d6d6; font-weight:700; }
+        .hiw-mobile-stage-copy { display:none; }
+        .hiw-workspace-canvas { min-height:386px; padding:26px; animation:hiw-enter .42s ease both; }.hiw-console { min-height:126px; padding:14px 18px 16px; background:#0b0b0b; border-top:1px solid #262626; }
+        .hiw-console-head { display:flex; justify-content:space-between; margin-bottom:9px; color:#777; font-size:.62rem; text-transform:uppercase; letter-spacing:.08em; }.hiw-console-head b { color:#cf1322; }
+        .hiw-console p { display:grid; grid-template-columns:8px minmax(0,1fr) auto; align-items:center; margin:0; padding:5px 0; color:#aaa; font:500 .68rem/1.3 ui-monospace,SFMono-Regular,Consolas,monospace; gap:8px; opacity:0; animation:hiw-log .3s var(--log-delay) ease forwards; }.hiw-console p i { width:6px; height:6px; background:#2c9b68; border-radius:50%; }.hiw-console p span { color:#666; font-size:.58rem; }
+        .hiw-source-frame { position:relative; overflow:hidden; aspect-ratio:16/9; background:#222; border:1px solid #353535; border-radius:6px; }.hiw-source-frame.compact { min-height:150px; }.hiw-source-frame img { width:100%; height:100%; object-fit:cover; }.hiw-source-shade { position:absolute; inset:0; background:linear-gradient(180deg,transparent 48%,rgba(0,0,0,.68)); }.hiw-source-frame > span { position:absolute; bottom:10px; left:12px; color:#fff; font-size:.65rem; font-weight:700; }.hiw-speaker-box { position:absolute; top:20%; left:42%; width:19%; height:45%; border:1px solid rgba(255,255,255,.6); border-radius:4px; }
+        .hiw-connect-visual { position:relative; display:grid; gap:16px; }.hiw-url-field { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; min-height:48px; padding:0 13px; overflow:hidden; color:#bbb; background:#181818; border:1px solid #303030; border-radius:6px; gap:10px; }.hiw-url-prefix { color:#cf1322; font-size:.6rem; font-weight:800; }.hiw-typed-url { overflow:hidden; width:0; font:500 .72rem ui-monospace,SFMono-Regular,Consolas,monospace; white-space:nowrap; animation:hiw-type 1.15s .15s steps(31,end) forwards; }.hiw-url-field b { color:#73c69f; font-size:.62rem; opacity:0; animation:hiw-reveal .25s 1.3s ease forwards; }.hiw-transform-line { position:absolute; top:49px; left:36px; width:1px; height:17px; background:#cf1322; }.hiw-transform-line span { position:absolute; bottom:-1px; left:-3px; width:7px; height:7px; border-right:1px solid #cf1322; border-bottom:1px solid #cf1322; transform:rotate(45deg); }
+        .hiw-map-visual { display:grid; grid-template-columns:.68fr 1.32fr; min-height:330px; gap:16px; }.hiw-waveform,.hiw-transcript-map { position:relative; overflow:hidden; background:#181818; border:1px solid #303030; border-radius:6px; }.hiw-waveform { display:flex; align-items:center; padding:25px; gap:5px; }.hiw-waveform i { flex:1; height:var(--bar-height); background:#cf1322; border-radius:2px; opacity:.3; animation:hiw-bar .45s var(--bar-delay) ease forwards; }.hiw-wave-scan { position:absolute; top:0; bottom:0; width:2px; background:#fff; box-shadow:0 0 14px #fff; opacity:.65; animation:hiw-scan 2s ease-in-out infinite; }.hiw-transcript-map { display:flex; flex-direction:column; justify-content:center; padding:26px; }.hiw-transcript-map p { margin:0; padding:15px 0; color:#aaa; border-bottom:1px solid #292929; font-size:.76rem; line-height:1.65; }.hiw-transcript-map p span { margin-right:8px; color:#cf1322; font-size:.62rem; font-weight:800; }.hiw-topic-row { display:flex; flex-wrap:wrap; padding-top:18px; gap:7px; }.hiw-topic-row b { padding:5px 8px; color:#aaa; background:#242424; border-radius:3px; font-size:.58rem; }
+        .hiw-scan-visual { display:grid; grid-template-columns:.8fr 1.2fr; min-height:330px; align-items:center; gap:18px; }.hiw-timeline-shell { padding:24px 20px; background:#181818; border:1px solid #303030; border-radius:6px; }.hiw-time-labels,.hiw-candidate-key { display:flex; justify-content:space-between; color:#696969; font-size:.58rem; }.hiw-timeline-track { position:relative; height:76px; margin:8px 0 10px; background:repeating-linear-gradient(90deg,#242424 0,#242424 1px,transparent 1px,transparent 10%); border-top:1px solid #313131; border-bottom:1px solid #313131; }.hiw-timeline-track .candidate { position:absolute; top:20px; height:35px; background:rgba(207,19,34,.22); border:1px solid #cf1322; border-radius:3px; opacity:0; animation:hiw-candidate .35s ease forwards; }.hiw-timeline-track .one { left:8%; width:18%; animation-delay:.55s; }.hiw-timeline-track .two { left:43%; width:24%; animation-delay:1.05s; }.hiw-timeline-track .three { left:78%; width:14%; animation-delay:1.55s; }.hiw-playhead { position:absolute; top:-6px; bottom:-6px; left:0; width:2px; background:#fff; box-shadow:0 0 9px rgba(255,255,255,.65); animation:hiw-playhead 2.2s ease-in-out infinite; }.hiw-candidate-key span:first-child { color:#c8c8c8; }
+        .hiw-reframe-visual { display:grid; grid-template-columns:minmax(0,1fr) 45px 145px; min-height:330px; align-items:center; gap:12px; }.hiw-before-pane > span,.hiw-after-pane > span { display:block; margin-bottom:8px; color:#777; font-size:.6rem; }.hiw-frame-arrow { height:1px; background:#555; }.hiw-frame-arrow i { display:block; width:8px; height:8px; margin:-4px 0 0 auto; border-top:1px solid #888; border-right:1px solid #888; transform:rotate(45deg); }.hiw-portrait-crop { position:relative; overflow:hidden; aspect-ratio:9/16; border:2px solid #cf1322; border-radius:6px; box-shadow:0 0 24px rgba(207,19,34,.2); }.hiw-portrait-crop img { width:100%; height:100%; object-fit:cover; animation:hiw-crop 1s ease both; }.hiw-portrait-crop i { position:absolute; inset:17% 16% 35%; border:1px solid rgba(255,255,255,.75); border-radius:4px; }
+        .hiw-finish-visual { display:grid; grid-template-columns:155px minmax(0,1fr); min-height:330px; align-items:center; justify-content:center; max-width:520px; margin:0 auto; gap:30px; }.hiw-finished-phone { position:relative; overflow:hidden; aspect-ratio:9/16; background:#222; border:5px solid #292929; border-radius:18px; box-shadow:0 0 28px rgba(207,19,34,.2); }.hiw-finished-phone img { width:100%; height:100%; object-fit:cover; }.hiw-finished-phone p { position:absolute; right:9px; bottom:35px; left:9px; margin:0; color:#fff; font-size:.67rem; font-weight:900; line-height:1.25; text-align:center; text-shadow:0 2px 5px #000; }.hiw-finished-phone p span { color:#fff; background:#cf1322; padding:1px 3px; }.hiw-finished-phone > i { position:absolute; top:10px; right:9px; padding:3px 5px; color:#fff; background:rgba(0,0,0,.65); border-radius:3px; font-size:.54rem; font-style:normal; }.hiw-export-queue > span { display:block; margin-bottom:12px; color:#777; font-size:.62rem; text-transform:uppercase; }.hiw-export-queue > div { display:flex; align-items:center; justify-content:space-between; padding:14px 0; border-bottom:1px solid #292929; gap:12px; opacity:0; animation:hiw-row .35s ease forwards; }.hiw-export-queue > div:nth-child(3) { animation-delay:.12s; }.hiw-export-queue > div:nth-child(4) { animation-delay:.24s; }.hiw-export-queue p { margin:0; }.hiw-export-queue b,.hiw-export-queue small { display:block; }.hiw-export-queue b { color:#ddd; font-size:.7rem; }.hiw-export-queue small { margin-top:3px; color:#666; font-size:.58rem; }.hiw-export-queue em { color:#73c69f; font-size:.58rem; font-style:normal; }
+        @keyframes hiw-enter { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } } @keyframes hiw-log { from { opacity:0; transform:translateX(-5px); } to { opacity:1; transform:none; } } @keyframes hiw-type { to { width:100%; } } @keyframes hiw-reveal { to { opacity:1; } } @keyframes hiw-bar { from { transform:scaleY(.15); opacity:.2; } to { transform:scaleY(1); opacity:.9; } } @keyframes hiw-scan { 0% { left:5%; } 50% { left:94%; } 100% { left:5%; } } @keyframes hiw-playhead { 0% { left:1%; } 50% { left:98%; } 100% { left:1%; } } @keyframes hiw-candidate { from { opacity:0; transform:scaleX(.4); transform-origin:left; } to { opacity:1; transform:scaleX(1); } } @keyframes hiw-row { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } } @keyframes hiw-crop { from { transform:scale(1.35) translateX(-8%); } to { transform:scale(1.12) translateX(4%); } }
+        @media(max-width:820px) {
+          .hiw-v3 { padding:72px 0 82px; }.hiw-v3-heading { margin-bottom:32px; }.hiw-scrubber { display:flex; margin-right:-5.5%; margin-bottom:20px; padding-right:5.5%; overflow-x:auto; scrollbar-width:none; }.hiw-scrubber::-webkit-scrollbar { display:none; }.hiw-scrubber-line { display:none; }.hiw-scrubber button { min-width:94px; grid-template-columns:27px auto; justify-content:start; align-items:center; padding:8px; gap:7px; }.hiw-scrubber button span { width:27px; height:27px; }.hiw-scrubber button b { white-space:nowrap; }
+          .hiw-story-layout { grid-template-columns:1fr; }.hiw-story,.hiw-sticky-workspace { grid-area:1/1; }.hiw-story { display:grid; grid-template-columns:1fr; padding-bottom:18vh; overflow:visible; }.hiw-story > button { min-height:76vh; padding:0; opacity:0; pointer-events:none; }.hiw-sticky-workspace { position:sticky; top:82px; z-index:2; align-self:start; }.hiw-mobile-stage-copy { display:grid; min-height:78px; align-content:center; padding:12px 16px; color:#aaa; background:#141414; border-bottom:1px solid #262626; gap:4px; }.hiw-mobile-stage-copy b { color:#fff; font-size:.78rem; }.hiw-mobile-stage-copy span { font-size:.64rem; line-height:1.45; }.hiw-workspace-canvas { min-height:330px; }
         }
-        @keyframes flyUp {
-          from { opacity: 0; transform: translateY(8px); }
-          to   { opacity: 1; transform: translateY(0); }
+        @media(max-width:560px) {
+          .hiw-v3-inner { width:90%; }.hiw-v3-heading h2 { font-size:2.15rem; }.hiw-story-layout { gap:18px; }.hiw-workspace-canvas { min-height:330px; padding:16px; }.hiw-workspace-bar { padding:0 14px; }.hiw-map-visual,.hiw-scan-visual { grid-template-columns:1fr; min-height:0; }.hiw-map-visual { gap:10px; }.hiw-waveform { min-height:105px; }.hiw-transcript-map { padding:17px; }.hiw-scan-visual .hiw-source-frame { display:none; }.hiw-timeline-shell { margin-top:50px; }.hiw-reframe-visual { grid-template-columns:minmax(0,1fr) 26px 105px; }.hiw-finish-visual { grid-template-columns:112px minmax(0,1fr); gap:16px; }.hiw-export-queue > div { padding:10px 0; }.hiw-url-field { grid-template-columns:auto minmax(0,1fr); }.hiw-url-field b { display:none; }.hiw-console { min-height:118px; }
         }
-        @keyframes blink-c {
-          0%,100% { opacity: 1; }
-          50%      { opacity: 0; }
-        }
-        @keyframes spin-c {
-          to { transform: rotate(360deg); }
-        }
-        @media(max-width: 700px) {
-          #hiw-tabs { grid-template-columns: repeat(2, 1fr) !important; }
-        }
-        @media(max-width: 420px) {
-          #hiw-tabs { grid-template-columns: 1fr !important; }
-        }
+        @media(prefers-reduced-motion:reduce) { .hiw-v3 * { scroll-behavior:auto !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; } }
       `}</style>
     </section>
   )

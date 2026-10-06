@@ -2,284 +2,93 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { GoogleLogin } from '@react-oauth/google'
+import './hero.css'
+
+// Real, publicly assigned showcase clips; media stays on the existing CDN.
+const EXAMPLES = [
+  { id: 'f714e13f-437f-4733-a0cd-00dc81534fb7', poster: 'https://storage.googleapis.com/shortclipr-clip/thumbnails/79126d9e-b984-441d-8755-e0caf155d5ed/8923e089-d891-433c-a52f-49993f48a338.jpg' },
+  { id: 'f350fd1d-eb50-42d5-9250-35b291833574', poster: 'https://storage.googleapis.com/shortclipr-clip/thumbnails/2cfb7925-86a8-490b-8eaf-d45e9e328584/387a0c20-cc48-4a8f-a3da-cca07be93bbc.jpg' },
+]
 
 export default function Hero() {
-  const [url, setUrl]           = useState('')
+  const [url, setUrl] = useState('')
   const [showAuth, setShowAuth] = useState(false)
-  const [focused, setFocused]   = useState(false)
+  const [error, setError] = useState('')
+  const [failedClips, setFailedClips] = useState([])
   const { user, loginWithGoogleToken } = useAuth()
   const navigate = useNavigate()
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
+  const handleSubmit = (event) => {
+    event.preventDefault()
     const trimmed = url.trim()
     if (!trimmed) return
-    if (user) {
-      navigate('/youtube-shorts/dashboard', { state: { pendingUrl: trimmed } })
-    } else {
+    setError('')
+    if (user) navigate('/youtube-shorts/dashboard', { state: { pendingUrl: trimmed } })
+    else {
       sessionStorage.setItem('sc_pending_url', trimmed)
       setShowAuth(true)
     }
   }
 
-  const platforms = [
-    { name: 'YouTube Shorts', icon: '▶', color: '#ff0000' },
-    { name: 'TikTok',         icon: '♪', color: '#000000' },
-    { name: 'Instagram Reels',icon: '◈', color: '#e1306c' },
-    { name: 'LinkedIn',       icon: '🔷', color: '#0077b5' },
-  ]
-
-  const trust = [
-    { num:'12,000+', label:'Creators' },
-    { num:'9.2M+',   label:'Clips generated' },
-    { num:'Minutes', label:'Not hours of editing' },
-    { num:'4.8 ★',   label:'Average rating' },
-  ]
-
   return (
-    <section id="hero" style={{
-      background: 'linear-gradient(180deg, #fff 0%, #fafafa 100%)',
-      padding: 'clamp(56px, 8vw, 100px) 5% clamp(64px, 8vw, 96px)',
-      textAlign: 'center',
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
-
-      {/* Subtle grid background */}
-      <div style={{
-        position: 'absolute', inset: 0, zIndex: 0,
-        backgroundImage: 'linear-gradient(#f0f0f0 1px, transparent 1px), linear-gradient(90deg, #f0f0f0 1px, transparent 1px)',
-        backgroundSize: '48px 48px',
-        opacity: 0.5,
-        maskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%)',
-        WebkitMaskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%)',
-      }}/>
-
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: '860px', margin: '0 auto' }}>
-
-        {/* Top badge */}
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: '8px',
-          background: '#fef2f2', border: '1px solid #fecaca',
-          borderRadius: '100px', padding: '6px 16px', marginBottom: '28px',
-          fontSize: '0.78rem', fontWeight: 700, color: '#cf1322',
-          letterSpacing: '0.04em',
-        }}>
-          <span style={{ width: '7px', height: '7px', background: '#cf1322', borderRadius: '50%', display: 'inline-block', animation: 'pulse 2s ease-in-out infinite' }}/>
-          Trusted by 12,000+ creators worldwide
-        </div>
-
-        {/* 2-line centered headline */}
-        <h1 style={{
-          fontSize: 'clamp(2.6rem, 6.5vw, 4.6rem)',
-          fontWeight: 800,
-          letterSpacing: '-0.04em',
-          lineHeight: 1.08,
-          color: '#0f0f0f',
-          marginBottom: '16px',
-          whiteSpace: 'nowrap',
-        }}>
-          Turn Long Videos Into{' '}
-          <span style={{
-            color: '#cf1322',
-            position: 'relative',
-            display: 'inline-block',
-          }}>
-            Viral Shorts.
-            <svg style={{ position:'absolute', bottom:'-5px', left:0, width:'100%', height:'8px' }} viewBox="0 0 300 8" preserveAspectRatio="none">
-              <path d="M0,6 Q75,0 150,4 Q225,8 300,2" stroke="#cf1322" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-            </svg>
-          </span>
-        </h1>
-
-        {/* Subtitle tagline — one clear line */}
-        <p style={{
-          fontSize: 'clamp(1rem, 1.8vw, 1.2rem)',
-          fontWeight: 600, color: '#888',
-          letterSpacing: '-0.01em', marginBottom: '18px',
-        }}>
-          Automatically. In minutes. Zero editing required.
-        </p>
-
-        {/* Subheadline */}
-        <p style={{
-          fontSize: 'clamp(1rem, 1.6vw, 1.15rem)',
-          color: '#555',
-          lineHeight: 1.7,
-          maxWidth: '620px',
-          margin: '0 auto 36px',
-          fontWeight: 400,
-        }}>
-          The AI short clip maker that turns any YouTube video into viral shorts. Paste a URL — our YouTube clips maker
-          extracts the best moments, auto-reframes to 9:16, burns in captions, and delivers ready-to-post clips.
-        </p>
-
-        {/* ── BIG URL INPUT — center, above fold ── */}
-        <div style={{ maxWidth: '680px', margin: '0 auto 12px' }}>
-          <form onSubmit={handleSubmit}>
-            <div id="hero-form-container" style={{
-              display: 'flex',
-              borderRadius: '14px',
-              border: focused ? '2.5px solid #cf1322' : '2px solid #111',
-              boxShadow: focused ? '0 0 0 4px rgba(207,19,34,0.12), 4px 4px 0 #111' : '4px 4px 0 #111',
-              overflow: 'hidden',
-              background: '#fff',
-              transition: 'box-shadow 0.2s, border-color 0.2s',
-            }}>
-              <div style={{
-                display: 'flex', alignItems: 'center',
-                padding: '0 14px', color: '#bbb', flexShrink: 0,
-              }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#cf1322" strokeWidth="2.5">
-                  <path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.6C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.95A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/>
-                  <polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="#cf1322" stroke="none"/>
-                </svg>
-              </div>
-              <input
-                type="url"
-                value={url}
-                onChange={e => setUrl(e.target.value)}
-                onFocus={() => setFocused(true)}
-                onBlur={() => setFocused(false)}
-                placeholder="Paste a YouTube URL (youtube.com/watch?v=...)"
-                style={{
-                  flex: 1, padding: '16px 8px',
-                  border: 'none', outline: 'none',
-                  fontSize: 'clamp(0.9rem, 1.4vw, 1rem)',
-                  background: 'transparent', color: '#111',
-                  minWidth: 0,
-                }}
-              />
-              <button type="submit" style={{
-                background: '#cf1322', color: '#fff',
-                border: 'none', borderRadius: '0 12px 12px 0',
-                padding: '16px 28px',
-                fontWeight: 800, fontSize: 'clamp(0.85rem, 1.2vw, 0.95rem)',
-                cursor: 'pointer', whiteSpace: 'nowrap',
-                transition: 'background 0.15s',
-                letterSpacing: '0.02em',
+    <section id="hero" className="studio-hero" aria-labelledby="studio-hero-title">
+      <div className="studio-hero-intro">
+        <p className="studio-eyebrow"><span aria-hidden="true" /> YOUR CONTENT. A SECOND ACT.</p>
+        <h1 id="studio-hero-title">One video.<br /><span>More worth sharing.</span></h1>
+        <p className="studio-hero-description">Turn your YouTube videos into captioned shorts.<br className="studio-desktop-break" /> Find the moments, make them yours, and keep creating.</p>
+        <form className="studio-url-form" onSubmit={handleSubmit}>
+          <label className="studio-sr-only" htmlFor="studio-video-url">YouTube video URL</label>
+          <span className="studio-link-icon" aria-hidden="true">↗</span>
+          <input id="studio-video-url" type="url" required value={url} onChange={event => setUrl(event.target.value)} placeholder="Paste your YouTube link" autoComplete="url" />
+          <button type="submit">Create my clips <span aria-hidden="true">→</span></button>
+        </form>
+        <p className="studio-reassurance">2 free clips <span aria-hidden="true">·</span> No credit card required</p>
+        {showAuth && !user && (
+          <div className="studio-auth">
+            <div><strong>Your link is saved.</strong><p>Sign in to create your first clips.</p></div>
+            <GoogleLogin
+              onSuccess={async response => {
+                const ok = await loginWithGoogleToken(response.credential)
+                if (ok) navigate('/youtube-shorts/dashboard', { state: { pendingUrl: sessionStorage.getItem('sc_pending_url') || url } })
+                else setError('Sign-in did not finish. Please try again.')
               }}
-                onMouseEnter={e => e.currentTarget.style.background = '#a10e1b'}
-                onMouseLeave={e => e.currentTarget.style.background = '#cf1322'}
-              >
-                Generate Clips →
-              </button>
-            </div>
-          </form>
-
-          {/* Auth inline trigger */}
-          {showAuth && !user && (
-            <div style={{
-              marginTop: '12px',
-              background: '#fff', border: '1px solid #fecaca',
-              borderRadius: '12px', padding: '16px 20px',
-              display: 'flex', alignItems: 'center',
-              justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap',
-              boxShadow: '0 4px 16px rgba(207,19,34,0.08)',
-            }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#111', marginBottom: '2px' }}>
-                  Sign in to start — your URL is saved 🔒
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#999' }}>Free • No credit card • 2 free clips</div>
-              </div>
-              <GoogleLogin
-                onSuccess={async cr => {
-                  const ok = await loginWithGoogleToken(cr.credential)
-                  if (ok) {
-                    const saved = sessionStorage.getItem('sc_pending_url')
-                    navigate('/youtube-shorts/dashboard', { state: { pendingUrl: saved || url } })
-                  }
-                }}
-                onError={() => {}}
-                theme="filled_red" shape="rectangular" text="signin_with" size="medium"
-              />
-            </div>
-          )}
-
-          <div style={{ fontSize: '0.75rem', color: '#bbb', marginTop: '10px' }}>
-            ✓ Free forever plan &nbsp;·&nbsp; ✓ No credit card &nbsp;·&nbsp; ✓ 2 free clips included
+              onError={() => setError('Sign-in did not finish. Please try again.')}
+              theme="outline" shape="rectangular" text="signin_with" size="medium"
+            />
           </div>
+        )}
+        {error && <p className="studio-error" role="alert">{error}</p>}
+      </div>
+      <div className="studio-preview">
+        <div className="studio-preview-copy">
+          <p className="studio-eyebrow">MADE WITH SHORTCLIPR</p>
+          <h2>Let the clips<br />do the talking.</h2>
+          <p>Real videos from our showcase.<br />Press play. See the result for yourself.</p>
+          <a href="#video-showcase">Explore more clips <span aria-hidden="true">↗</span></a>
+          <div className="studio-workflow" aria-label="Workflow"><span>Find the moment</span><span>Frame it vertically</span><span>Add captions</span></div>
         </div>
-
-        {/* Platform badges */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          gap: '8px', flexWrap: 'wrap', marginTop: '24px',
-        }}>
-          <span style={{ fontSize: '0.75rem', color: '#aaa', marginRight: '4px' }}>Export to:</span>
-          {platforms.map(p => (
-            <div key={p.name} style={{
-              display: 'flex', alignItems: 'center', gap: '5px',
-              background: '#f9f9f9', border: '1px solid #e5e5e5',
-              borderRadius: '100px', padding: '4px 12px',
-              fontSize: '0.72rem', fontWeight: 600, color: '#444',
-            }}>
-              <span style={{ color: p.color, fontSize: '0.8rem' }}>{p.icon}</span>
-              {p.name}
-            </div>
-          ))}
-        </div>
-
-        {/* Trust stats */}
-        <div className="trust-stats-wrapper" style={{
-          marginTop: '52px',
-          borderTop: '1px solid #e5e5e5',
-          paddingTop: '32px',
-        }}>
-          {trust.map(({ num, label }) => (
-            <div key={label} className="trust-stat">
-              <div style={{
-                fontSize: 'clamp(1.4rem, 2.5vw, 1.9rem)',
-                fontWeight: 800, color: '#cf1322',
-                letterSpacing: '-0.04em', lineHeight: 1,
-              }}>{num}</div>
-              <div style={{
-                fontSize: '0.72rem', color: '#999',
-                textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: '5px',
-              }}>{label}</div>
-            </div>
+        <div className="studio-films">
+          {EXAMPLES.map((clip, index) => (
+            <figure className="studio-film" key={clip.id}>
+              <div className="studio-film-screen">
+                {failedClips.includes(clip.id) ? (
+                  <div className="studio-media-error"><p>This preview is unavailable.</p><a href="#video-showcase">Browse the showcase →</a></div>
+                ) : (
+                  <video controls playsInline preload="metadata" poster={clip.poster} aria-label={`ShortClipr generated clip ${index + 1}`}
+                    src={`https://storage.googleapis.com/shortclipr-clip/showcase/${clip.id}.mp4`}
+                    onPlay={event => {
+                      event.currentTarget.closest('.studio-films')?.querySelectorAll('video').forEach(video => { if (video !== event.currentTarget) video.pause() })
+                    }}
+                    onError={() => setFailedClips(previous => [...previous, clip.id])}
+                  />
+                )}
+              </div>
+              <figcaption><span>0{index + 1} / GENERATED CLIP</span><span>9:16</span></figcaption>
+            </figure>
           ))}
         </div>
       </div>
-
-      <style>{`
-        @keyframes pulse {
-          0%,100% { opacity:1; transform:scale(1); }
-          50% { opacity:0.5; transform:scale(0.8); }
-        }
-        .trust-stats-wrapper {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 16px;
-        }
-        .trust-stat {
-          text-align: center;
-          border-right: 1px solid #e5e5e5;
-          padding: 0 10px;
-        }
-        .trust-stat:last-child {
-          border-right: none;
-        }
-        @media(max-width: 800px) {
-          .trust-stats-wrapper {
-            grid-template-columns: repeat(2, 1fr);
-            row-gap: 32px;
-          }
-          .trust-stat { border-right: none !important; }
-          .trust-stat:nth-of-type(odd) { border-right: 1px solid #e5e5e5 !important; }
-        }
-        @media(max-width: 500px) {
-          .trust-stats-wrapper {
-            grid-template-columns: 1fr;
-          }
-          .trust-stat:nth-of-type(odd) { border-right: none !important; }
-        }
-        @media(max-width:600px){
-          #hero form > div { flex-direction:column; border-radius:12px !important; }
-          #hero form > div button { border-radius:12px !important; padding:14px !important; }
-        }
-      `}</style>
+      <div className="studio-platforms"><span>Made for your next post</span><p>YouTube Shorts <i> / </i> Instagram Reels <i> / </i> TikTok</p></div>
     </section>
   )
 }

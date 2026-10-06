@@ -1,151 +1,138 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import Logo from './Logo'
 
-const COLS = [
+const GROUPS = [
   {
     title: 'Product',
     links: [
-      { label: 'Features',  href: '/youtube-shorts#features'      },
-      { label: 'Pricing',   href: '/youtube-shorts#pricing'        },
-      { label: 'Showcase',  href: '/youtube-shorts#showcase'       },
-      { label: 'Changelog', href: '/changelog'       },
+      ['Features', '/youtube-shorts#how-it-works'],
+      ['Showcase', '/youtube-shorts#video-showcase'],
+      ['Pricing', '/youtube-shorts#pricing'],
+      ['Changelog', '/changelog'],
     ],
   },
   {
-    title: 'Tools',
+    title: 'Create',
     links: [
-      { label: 'YouTube to Shorts',    href: '/youtube-shorts/tools/youtube-to-shorts-converter'    },
-      { label: 'Long Video to Shorts', href: '/youtube-shorts/tools/long-video-to-shorts-ai'        },
-      { label: 'AI Clip Maker',        href: '/youtube-shorts/tools/ai-clip-maker'                  },
-      { label: 'TikTok Clip Maker',    href: '/youtube-shorts/tools/tiktok-clip-maker'              },
-      { label: 'Video to Reels',       href: '/youtube-shorts/tools/video-to-reels'                 },
-      { label: 'Podcast to Shorts',    href: '/youtube-shorts/tools/podcast-to-shorts'              },
-      { label: 'Webinar to Clips',     href: '/youtube-shorts/tools/webinar-to-clips'               },
-      { label: 'Interview to Clips',   href: '/youtube-shorts/tools/interview-to-clips'             },
-      { label: 'All tools →',          href: '/youtube-shorts/tools'                                },
+      ['YouTube to Shorts', '/youtube-shorts/tools/youtube-to-shorts-converter'],
+      ['Long Video to Shorts', '/youtube-shorts/tools/long-video-to-shorts-ai'],
+      ['AI Clip Maker', '/youtube-shorts/tools/ai-clip-maker'],
+      ['TikTok Clip Maker', '/youtube-shorts/tools/tiktok-clip-maker'],
+      ['Video to Reels', '/youtube-shorts/tools/video-to-reels'],
+      ['Podcast to Shorts', '/youtube-shorts/tools/podcast-to-shorts'],
+      ['Webinar to Clips', '/youtube-shorts/tools/webinar-to-clips'],
+      ['Interview to Clips', '/youtube-shorts/tools/interview-to-clips'],
+      ['All tools', '/youtube-shorts/tools'],
     ],
   },
   {
-    title: 'Guides',
+    title: 'Learn and compare',
     links: [
-      { label: 'Long Videos → Shorts',   href: '/youtube-shorts/guides/how-to-turn-long-videos-into-shorts' },
-      { label: 'Make Shorts Go Viral',   href: '/youtube-shorts/guides/how-to-make-youtube-shorts-go-viral' },
-      { label: 'Best Caption Styles',    href: '/youtube-shorts/guides/best-caption-styles-for-short-form-video' },
-      { label: 'Repurpose a Podcast',    href: '/youtube-shorts/guides/how-to-repurpose-a-podcast-into-clips' },
-      { label: 'Shorts vs TikTok vs Reels', href: '/youtube-shorts/guides/youtube-shorts-vs-tiktok-vs-reels' },
-      { label: 'AI Clipping Explained',  href: '/youtube-shorts/guides/ai-video-clipping-explained' },
-      { label: 'All guides →',           href: '/youtube-shorts/guides' },
-    ],
-  },
-  {
-    title: 'Compare',
-    links: [
-      { label: 'vs Opus Clip',      href: '/youtube-shorts/alternatives/opus-clip'    },
-      { label: 'vs Klap',           href: '/youtube-shorts/alternatives/klap'         },
-      { label: 'vs 2short.ai',      href: '/youtube-shorts/alternatives/2short'       },
-      { label: 'vs Vidyo / Quso',   href: '/youtube-shorts/alternatives/vidyo'        },
-      { label: 'vs Munch',          href: '/youtube-shorts/alternatives/munch'        },
-      { label: 'vs Riverside Clips',href: '/youtube-shorts/alternatives/riverside'    },
-      { label: 'vs Spikes Studio',  href: '/youtube-shorts/alternatives/spikes-studio'},
-      { label: 'vs Vizard AI',      href: '/youtube-shorts/alternatives/vizard'       },
-      { label: 'All comparisons →', href: '/youtube-shorts/alternatives'              },
+      ['Long Videos to Shorts', '/youtube-shorts/guides/how-to-turn-long-videos-into-shorts'],
+      ['Make Shorts Go Viral', '/youtube-shorts/guides/how-to-make-youtube-shorts-go-viral'],
+      ['Best Caption Styles', '/youtube-shorts/guides/best-caption-styles-for-short-form-video'],
+      ['Repurpose a Podcast', '/youtube-shorts/guides/how-to-repurpose-a-podcast-into-clips'],
+      ['Shorts vs TikTok vs Reels', '/youtube-shorts/guides/youtube-shorts-vs-tiktok-vs-reels'],
+      ['AI Clipping Explained', '/youtube-shorts/guides/ai-video-clipping-explained'],
+      ['All guides', '/youtube-shorts/guides'],
+      ['vs Opus Clip', '/youtube-shorts/alternatives/opus-clip'],
+      ['vs Klap', '/youtube-shorts/alternatives/klap'],
+      ['vs 2short.ai', '/youtube-shorts/alternatives/2short'],
+      ['vs Vidyo / Quso', '/youtube-shorts/alternatives/vidyo'],
+      ['vs Munch', '/youtube-shorts/alternatives/munch'],
+      ['vs Riverside Clips', '/youtube-shorts/alternatives/riverside'],
+      ['vs Spikes Studio', '/youtube-shorts/alternatives/spikes-studio'],
+      ['vs Vizard AI', '/youtube-shorts/alternatives/vizard'],
+      ['All comparisons', '/youtube-shorts/alternatives'],
     ],
   },
   {
     title: 'Company',
     links: [
-      { label: 'About',    href: '/about'   },
-      { label: 'Contact',  href: '/contact' },
-      { label: 'Press Kit',href: '/press'   },
-      { label: 'Careers',  href: '/careers' },
-    ],
-  },
-  {
-    title: 'Legal',
-    links: [
-      { label: 'Privacy Policy',   href: '/privacy' },
-      { label: 'Terms of Service', href: '/terms'   },
-      { label: 'DMCA',             href: '/dmca'    },
+      ['About', '/about'],
+      ['Contact', '/contact'],
+      ['Press kit', '/press'],
+      ['Careers', '/careers'],
     ],
   },
 ]
 
 export default function Footer() {
+  const [openGroup, setOpenGroup] = useState('Product')
   const year = new Date().getFullYear()
 
-  const linkBase = {
-    fontSize:'0.85rem', color:'#666', display:'block',
-    marginBottom:'10px', transition:'color 0.15s',
-    textDecoration:'none',
-  }
-
   return (
-    <footer style={{
-      background:'#fff',
-      borderTop:'1px solid #e5e5e5',
-      padding:'60px 5% 32px',
-    }}>
-      <div style={{ maxWidth:'1100px', margin:'0 auto' }}>
-
-        {/* Top row */}
-        <div id="footer-grid" style={{
-          display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))',
-          gap:'40px', marginBottom:'56px',
-        }}>
-
-          {/* Brand */}
-          <div>
-            <Link to="/youtube-shorts" style={{ display:'inline-flex', alignItems:'center', gap:'10px', marginBottom:'14px' }}>
-              <Logo size={32}/>
-              <span style={{ fontWeight:700, fontSize:'1rem', color:'#cf1322', letterSpacing:'-0.02em' }}>ShortClipr</span>
-            </Link>
-            <p style={{ fontSize:'0.85rem', color:'#999', lineHeight:1.7, maxWidth:'220px' }}>
-              Long to Shorts.<br/>No Editing Required.<br/>No Credit Card.
-            </p>
-            {/* Red accent bar */}
-            <div style={{ width:'40px', height:'3px', background:'#cf1322', marginTop:'20px', borderRadius:'2px' }}/>
+    <footer className="footer-v2">
+      <div className="footer-v2-inner">
+        <div className="footer-v2-main">
+          <div className="footer-v2-brand">
+            <Link to="/youtube-shorts"><Logo size={32} /><span>ShortClipr</span></Link>
+            <p>Turn long videos into focused, ready-to-publish short clips.</p>
           </div>
 
-          {/* Link columns */}
-          {COLS.map(col => (
-            <div key={col.title}>
-              <div style={{
-                fontWeight:700, fontSize:'0.75rem', color:'#111',
-                letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:'18px',
-              }}>{col.title}</div>
-              {col.links.map(link => (
-                <Link
-                  key={link.label}
-                  to={link.href}
-                  style={linkBase}
-                  onMouseEnter={e => e.currentTarget.style.color='#cf1322'}
-                  onMouseLeave={e => e.currentTarget.style.color='#666'}
-                >{link.label}</Link>
-              ))}
-            </div>
-          ))}
+          <div className="footer-v2-groups">
+            {GROUPS.map((group) => {
+              const isOpen = openGroup === group.title
+              return (
+                <section className={isOpen ? 'footer-v2-group open' : 'footer-v2-group'} key={group.title}>
+                  <button type="button" aria-expanded={isOpen} onClick={() => setOpenGroup(isOpen ? '' : group.title)}>
+                    <span>{group.title}</span><i aria-hidden="true">+</i>
+                  </button>
+                  <div className="footer-v2-links">
+                    {group.links.map(([label, href]) => <Link key={href} to={href}>{label}</Link>)}
+                  </div>
+                </section>
+              )
+            })}
+          </div>
         </div>
 
-        {/* Divider */}
-        <div style={{ borderTop:'1px solid #e5e5e5', paddingTop:'24px', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'12px' }}>
-          <span style={{ fontSize:'0.8rem', color:'#bbb' }}>
-            © {year} ShortClipr — All rights reserved
-          </span>
-          <div style={{ display:'flex', gap:'20px' }}>
-            {[['Privacy','/privacy'],['Terms','/terms'],['Contact','/contact']].map(([label,href]) => (
-              <Link key={href} to={href} style={{ fontSize:'0.8rem', color:'#bbb', textDecoration:'none' }}
-                onMouseEnter={e => e.currentTarget.style.color='#cf1322'}
-                onMouseLeave={e => e.currentTarget.style.color='#bbb'}
-              >{label}</Link>
-            ))}
+        <div className="footer-v2-bottom">
+          <span>© {year} ShortClipr</span>
+          <div>
+            <Link to="/privacy">Privacy</Link>
+            <Link to="/terms">Terms</Link>
+            <Link to="/dmca">DMCA</Link>
           </div>
-          <span style={{ fontSize:'0.78rem', color:'#ddd' }}>v2.0.4</span>
+          <span>v2.0.4</span>
         </div>
       </div>
 
       <style>{`
-        @media(max-width:768px){
-          #footer-grid { grid-template-columns: 1fr 1fr !important; }
+        .footer-v2 { padding:48px 5% 24px; background:#fff; border-top:1px solid #e5e5e5; }
+        .footer-v2-inner { max-width:1100px; margin:0 auto; }
+        .footer-v2-main { display:grid; grid-template-columns:minmax(220px,1.1fr) minmax(0,2.4fr); gap:56px; }
+        .footer-v2-brand > a { display:inline-flex; align-items:center; gap:10px; color:#cf1322; font-weight:800; text-decoration:none; }
+        .footer-v2-brand p { max-width:235px; margin:14px 0 0; color:#888; font-size:.82rem; line-height:1.65; }
+        .footer-v2-groups { display:grid; grid-template-columns:.75fr 1.2fr 1.8fr .75fr; gap:30px; }
+        .footer-v2-group button { width:100%; padding:0; color:#111; background:none; border:0; font:inherit; text-align:left; cursor:default; }
+        .footer-v2-group button span { font-size:.72rem; font-weight:800; letter-spacing:.09em; text-transform:uppercase; }
+        .footer-v2-group button i { display:none; font-style:normal; }
+        .footer-v2-links { display:grid; margin-top:15px; gap:8px; }
+        .footer-v2-links a { color:#666; font-size:.78rem; line-height:1.35; text-decoration:none; }
+        .footer-v2-links a:hover { color:#cf1322; }
+        .footer-v2-bottom { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; margin-top:38px; padding-top:20px; color:#aaa; border-top:1px solid #e5e5e5; font-size:.74rem; }
+        .footer-v2-bottom > div { display:flex; gap:18px; }
+        .footer-v2-bottom a { color:#888; text-decoration:none; }
+        .footer-v2-bottom > span:last-child { text-align:right; color:#ccc; }
+        @media(max-width:800px){
+          .footer-v2 { padding:36px 5% 22px; }
+          .footer-v2-main { grid-template-columns:1fr; gap:28px; }
+          .footer-v2-brand p { max-width:300px; }
+          .footer-v2-groups { display:block; border-top:1px solid #e5e5e5; }
+          .footer-v2-group { border-bottom:1px solid #e5e5e5; }
+          .footer-v2-group button { display:flex; align-items:center; justify-content:space-between; padding:13px 2px; cursor:pointer; }
+          .footer-v2-group button i { display:block; color:#cf1322; font-size:1.1rem; transition:transform .2s; }
+          .footer-v2-group.open button i { transform:rotate(45deg); }
+          .footer-v2-links { display:none; margin:0; padding:0 2px 14px; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 16px; }
+          .footer-v2-group.open .footer-v2-links { display:grid; }
+          .footer-v2-bottom { grid-template-columns:1fr auto; margin-top:24px; }
+          .footer-v2-bottom > span:last-child { display:none; }
+        }
+        @media(max-width:430px){
+          .footer-v2-links { grid-template-columns:1fr; }
+          .footer-v2-bottom { grid-template-columns:1fr; gap:12px; }
         }
       `}</style>
     </footer>

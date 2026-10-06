@@ -33,6 +33,7 @@
 /* Base resets & typography */
 html  { scroll-behavior: smooth; }
 body  { background: var(--bg); color: var(--text); font-family: 'Plus Jakarta Sans', sans-serif; -webkit-font-smoothing: antialiased; }
+.youtube-shorts-landing { width: 100%; overflow-x: clip; }
 a     { text-decoration: none; color: inherit; }
 *     { font-family: 'Plus Jakarta Sans', sans-serif; }
 

@@ -21,7 +21,7 @@ export default function Navigation() {
 
   const navLinks = isApp ? [] : [
     { label: 'How it works', href: '/youtube-shorts#how-it-works' },
-    { label: 'Features',     href: '/youtube-shorts#features'     },
+    { label: 'Features',     href: '/youtube-shorts#how-it-works' },
     { label: 'Tools',        href: '/youtube-shorts/tools'          },
     { label: 'Guides',       href: '/youtube-shorts/guides'         },
     { label: 'Compare',      href: '/youtube-shorts/alternatives'   },
@@ -175,17 +175,17 @@ export default function Navigation() {
 
         {/* Mobile dropdown — Full navigation + sign in/out */}
         {menuOpen && (
-          <div style={{
-            position: 'absolute', top: 'calc(100% + 8px)', right: 0, left: 0,
-            background: '#fff', border: '2px solid #111', borderRadius: 12,
-            boxShadow: '4px 4px 0 #cf1322', padding: '12px 8px',
-            display: 'flex', flexDirection: 'column', gap: 6, zIndex: 250,
+          <div className="sc-nav-mobile-menu" style={{
+            position: 'absolute', top: 'calc(100% - 2px)', right: 4, left: 4,
+            background: '#fff', border: '2px solid #111', borderRadius: '0 0 12px 12px',
+            boxShadow: '3px 3px 0 #cf1322', padding: '7px 7px 9px',
+            display: 'flex', flexDirection: 'column', gap: 2, zIndex: 250,
           }}>
             <a href="/youtube-shorts"
               onClick={(e) => { setMenuOpen(false); handleNavClick(e, '/youtube-shorts') }}
               style={{
                 color: '#111', fontSize: '.9rem', fontWeight: 700,
-                padding: '10px 14px', borderRadius: 8, textDecoration: 'none', display: 'block',
+                padding: '8px 11px', borderRadius: 6, textDecoration: 'none', display: 'block',
               }}>Home</a>
             
             {navLinks.map(({ label, href }) => (
@@ -193,35 +193,37 @@ export default function Navigation() {
                 onClick={(e) => { setMenuOpen(false); handleNavClick(e, href) }}
                 style={{
                   color: '#444', fontSize: '.9rem', fontWeight: 600,
-                  padding: '10px 14px', borderRadius: 8, textDecoration: 'none', display: 'block',
+                  padding: '8px 11px', borderRadius: 6, textDecoration: 'none', display: 'block',
                 }}
               >{label}</a>
             ))}
 
-            <div style={{ margin: '8px 4px', height: '1px', background: '#eee' }} />
+            <div className="sc-nav-mobile-divider" style={{ margin: '4px', height: '1px', background: '#eee' }} />
 
             {user ? (
               <>
                 <Link to="/youtube-shorts/dashboard"
+                  className="sc-nav-mobile-auth"
                   onClick={() => setMenuOpen(false)}
                   style={{
                     display: 'block', color: '#cf1322', fontSize: '.9rem', fontWeight: 700,
-                    padding: '10px 14px', borderRadius: 8, textDecoration: 'none',
+                    padding: '8px 11px', borderRadius: 6, textDecoration: 'none',
                   }}
                 >Dashboard</Link>
-                <button onClick={() => { setMenuOpen(false); logout() }} style={{
+                <button className="sc-nav-mobile-auth" onClick={() => { setMenuOpen(false); logout() }} style={{
                   background: 'transparent', border: 'none', cursor: 'pointer',
                   textAlign: 'left', color: '#999', fontSize: '.9rem', fontWeight: 700,
-                  padding: '10px 14px', borderRadius: 8,
+                  padding: '8px 11px', borderRadius: 6,
                 }}>Sign out</button>
               </>
             ) : (
               <Link
+                className="sc-nav-mobile-auth"
                 to="/youtube-shorts/login"
                 onClick={() => setMenuOpen(false)}
                 style={{
                   display: 'block', color: '#cf1322', fontSize: '.9rem', fontWeight: 700,
-                  padding: '10px 14px', borderRadius: 8, textDecoration: 'none',
+                  padding: '8px 11px', borderRadius: 6, textDecoration: 'none',
                   background: '#fef2f2',
                 }}
               >Sign in →</Link>
@@ -234,6 +236,13 @@ export default function Navigation() {
         @media (max-width: 768px) {
           .sc-nav-desktop { display: none !important; }
           .sc-nav-toggle { display: inline-flex !important; }
+          .sc-nav-mobile-menu {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 2px 8px !important;
+          }
+          .sc-nav-mobile-divider,
+          .sc-nav-mobile-auth { grid-column: 1 / -1; }
         }
       `}</style>
     </div>

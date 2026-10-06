@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shortclipr · Story panels</title>
+  <style>
+    :root { --ink:#252426; --muted:#77747a; --paper:#fffdfa; --line:#ece7e2; --coral:#ff786c; --lav:#eeeaf8; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:linear-gradient(180deg,#fffdfa 0%,#fff8f4 52%,#f7f4fb 100%); font:15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; }
+    main { width:min(1180px, calc(100% - 40px)); margin:0 auto; padding:28px 0 84px; }
+    nav { display:flex; align-items:center; justify-content:space-between; margin-bottom:82px; }
+    .brand { font-weight:800; letter-spacing:-.04em; font-size:20px; }
+    .brand span { color:var(--coral); }
+    .nav-note { color:var(--muted); font-size:13px; }
+    .intro { max-width:730px; margin-bottom:70px; }
+    .eyebrow { color:var(--coral); font-weight:700; letter-spacing:.12em; text-transform:uppercase; font-size:11px; }
+    h1 { font-size:clamp(44px,7vw,82px); line-height:.96; letter-spacing:-.07em; margin:15px 0 22px; max-width:760px; }
+    .intro p { margin:0; color:var(--muted); max-width:510px; font-size:17px; }
+    .story { display:grid; grid-template-columns:1.22fr .78fr; gap:28px; align-items:start; }
+    .panel { background:rgba(255,255,255,.72); border:1px solid rgba(230,224,220,.9); border-radius:32px; padding:15px; box-shadow:0 22px 60px rgba(81,55,49,.08); }
+    .panel--tall { margin-top:92px; background:rgba(245,244,255,.78); }
+    .panel--square { grid-column:1 / -1; max-width:760px; margin:26px auto 0; background:rgba(255,250,246,.84); }
+    .media { overflow:hidden; border-radius:23px; background:#f1ede9; position:relative; }
+    .media img { display:block; width:100%; height:auto; object-fit:contain; }
+    .stamp { position:absolute; z-index:2; left:18px; top:18px; padding:7px 12px; border-radius:4px; background:#ff3e42; color:#fff; font-size:13px; font-weight:900; letter-spacing:.04em; transform:rotate(-3deg); box-shadow:0 5px 12px #0003; }
+    .caption { position:absolute; z-index:2; left:8%; bottom:13%; max-width:68%; color:#fff; font-weight:900; line-height:.95; letter-spacing:-.045em; font-size:clamp(22px,3vw,44px); text-shadow:0 2px 14px #000a; }
+    .caption em { color:#ffe22e; font-style:normal; }
+    .caption--tall { left:10%; bottom:31%; max-width:74%; font-family:Georgia,serif; font-weight:700; letter-spacing:-.025em; }
+    .caption--tall em { color:#ff6d5e; background:#fff; padding:0 .12em; }
+    .caption--square { left:7%; bottom:32%; color:#161519; text-shadow:none; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:clamp(17px,2.4vw,31px); line-height:1.06; }
+    .caption--square em { color:#fff; background:#ff624f; padding:.05em .17em; }
+    .detect { position:absolute; z-index:2; right:17px; top:17px; border:1px solid #fff9; border-radius:999px; background:#0c1427d9; color:#fff; padding:7px 11px; font-size:11px; font-weight:700; letter-spacing:.02em; backdrop-filter:blur(8px); }
+    .convert { position:absolute; z-index:2; right:6%; bottom:8%; color:#fff; background:#2977ff; border-radius:999px; padding:8px 12px; font-size:11px; font-weight:800; box-shadow:0 8px 20px #2977ff66; }
+    .marker { position:absolute; z-index:2; left:7%; bottom:20%; width:31%; height:12px; background:#ffde32; transform:rotate(-3deg); border-radius:4px; opacity:.9; }
+    .reference-pass { margin-top:92px; padding-top:36px; border-top:1px solid var(--line); }
+    .reference-pass h3 { margin:10px 0 8px; font-size:34px; letter-spacing:-.055em; }
+    .reference-pass > p { color:var(--muted); max-width:560px; margin:0 0 26px; }
+    .reference-grid { display:grid; grid-template-columns:1.15fr .85fr .85fr; gap:18px; }
+    .reference-card { position:relative; overflow:hidden; border-radius:24px; background:#171717; min-height:190px; }
+    .reference-card img { width:100%; height:100%; display:block; object-fit:cover; }
+    .reference-card--tall { min-height:300px; }
+    .reference-card--tall img { object-position:center; }
+    .reference-card .ref-type { position:absolute; left:14px; top:14px; padding:5px 8px; border-radius:3px; background:#fff; color:#171717; font-size:10px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
+    .reference-card .ref-copy { position:absolute; left:16px; right:12px; bottom:14px; color:#fff; font-weight:900; font-size:clamp(17px,2vw,27px); line-height:1; text-shadow:0 2px 12px #000; }
+    .reference-card .ref-copy em { color:#ffda1e; font-style:normal; }
+    @media (max-width:760px) { .reference-grid { grid-template-columns:1fr; } .reference-card, .reference-card--tall { min-height:210px; } }
+    .meta { display:flex; justify-content:space-between; gap:20px; padding:21px 8px 7px; align-items:end; }
+    .number { color:var(--coral); font-weight:800; font-size:12px; letter-spacing:.1em; }
+    h2 { margin:3px 0 0; font-size:25px; letter-spacing:-.04em; }
+    .meta p { color:var(--muted); margin:0; font-size:13px; max-width:230px; text-align:right; }
+    .foot { margin-top:70px; padding-top:20px; border-top:1px solid var(--line); color:var(--muted); font-size:13px; display:flex; justify-content:space-between; gap:20px; }
+    @media (max-width:760px) { main { width:min(100% - 24px, 560px); padding-top:18px; } nav { margin-bottom:55px; } .nav-note { display:none; } .story { display:block; } .panel, .panel--tall, .panel--square { margin:0 0 18px; } .meta { align-items:start; flex-direction:column; gap:8px; } .meta p { text-align:left; } .foot { display:block; } }
+  </style>
+</head>
+<body>
+  <main>
+    <nav><div class="brand">short<span>clipr</span></div><div class="nav-note">Product story panels · concept preview</div></nav>
+    <section class="intro"><div class="eyebrow">From long-form to scroll-stop</div><h1>Find the moment.<br>Frame it. Share it.</h1><p>Shortclipr detects the story, converts the frame, and gives every clip its own editorial treatment.</p></section>
+    <section class="story" aria-label="Shortclipr story panels">
+      <article class="panel"><div class="media"><img src="/assets/story-find-gpt-original.png" alt="A real interview thumbnail with an AI-selected moment and timeline" /></div><div class="meta"><div><div class="number">01 / FIND THE MOMENT</div><h2>One recording, already understood.</h2></div><p>Real source footage, selected and packaged with a clear editorial hook.</p></div></article>
+      <article class="panel panel--tall"><div class="media"><img src="/assets/story-frame-gpt-original.png" alt="A real creator photo converted into a vertical short" /></div><div class="meta"><div><div class="number">02 / FRAME IT FOR SHORTS</div><h2>Every crop feels intentional.</h2></div><p>Face tracking, crop suggestions, captions, and the source strip in one frame.</p></div></article>
+      <article class="panel panel--square"><div class="media"><img src="/assets/story-review-gpt-original.png" alt="A real interview thumbnail with three reviewed cuts" /></div><div class="meta"><div><div class="number">03 / REVIEW THE CLIP</div><h2>Keep what sounds like you.</h2></div><p>Three cuts, one selected moment, and a ready state that feels publishable.</p></div></article>
+    </section>
+    <section class="reference-pass" aria-label="Reference-led treatment pass">
+      <div class="eyebrow">Reference-led treatment pass</div>
+      <h3>Real clips. More point of view.</h3>
+      <p>These are your supplied thumbnails carried into the same system: headline-safe crops, captions, color emphasis, and conversion cues added in the interface layer.</p>
+      <div class="reference-grid">
+        <article class="reference-card reference-card--tall"><img src="/assets/ref-thumbnail-01.png" alt="Supplied interview thumbnail" /><span class="ref-type">caption remix</span><span class="ref-copy">Make the <em>moment</em> impossible to miss.</span></article>
+        <article class="reference-card"><img src="/assets/ref-thumbnail-04.png" alt="Supplied creator video still" /><span class="ref-type">auto crop</span><span class="ref-copy">Face tracked → <em>vertical cut</em></span></article>
+        <article class="reference-card"><img src="/assets/ref-thumbnail-05.png" alt="Supplied business interview thumbnail" /><span class="ref-type">new treatment</span><span class="ref-copy">One take. <em>Three hooks.</em></span></article>
+      </div>
+    </section>
+    <div class="foot"><span>Shortclipr · direction preview</span><span>Images are concept assets for review</span></div>
+  </main>
+</body>
+</html>

@@ -110,11 +110,11 @@ export default function Pricing() {
   const checkStyle = { color:'#cf1322', fontWeight:700, marginRight:'8px' }
 
   return (
-    <section id="pricing" style={{ padding:'96px 0', background:'#fff' }}>
+    <section id="pricing" className="cloud-pricing" style={{ padding:'96px 0', background:'#fff' }}>
       <div style={{ maxWidth:'1100px', margin:'0 auto', padding:'0 5%' }}>
 
         {/* Header */}
-        <div style={{ textAlign:'center', marginBottom:'56px' }}>
+        <div className="cloud-pricing-heading" style={{ textAlign:'center', marginBottom:'56px' }}>
           <div style={{ display:'inline-flex', alignItems:'center', gap:'12px', marginBottom:'16px' }}>
             <div style={{ width:'32px', height:'2px', background:'#cf1322' }}/>
             <span style={{ fontSize:'0.72rem', fontWeight:700, color:'#cf1322', textTransform:'uppercase', letterSpacing:'0.22em' }}>Pricing</span>
@@ -127,10 +127,10 @@ export default function Pricing() {
         </div>
 
         {/* Two cards */}
-        <div id="pricing-grid" style={{ display:'grid', gridTemplateColumns:'1fr 1.1fr', gap:'28px', alignItems:'start' }}>
+        <div id="pricing-grid" className="cloud-pricing-grid" style={{ display:'grid', gridTemplateColumns:'1fr 1.1fr', gap:'28px', alignItems:'start' }}>
 
           {/* Free card */}
-          <div style={{
+          <div className="cloud-price-card cloud-price-free" style={{
             border:'1px solid #e5e5e5', borderRadius:'16px',
             padding:'32px', background:'#fff',
           }}>
@@ -162,7 +162,7 @@ export default function Pricing() {
           </div>
 
           {/* Pro card */}
-          <div style={{
+          <div className="cloud-price-card cloud-price-pro" style={{
             border:'2px solid #cf1322', borderRadius:'16px',
             padding:'32px', background:'#fff',
             boxShadow:'4px 4px 0 #cf1322',
