@@ -26,7 +26,6 @@ const FEATURES = [
   { f: 'HD vertical shorts (9:16)',            free: false, paid: true  },
   { f: 'YouTube Shorts publish',               free: false, paid: true, soon: true },
   { f: 'TikTok publish',                       free: false, paid: true, soon: true },
-  { f: 'Clip editor (captions, style, color)', free: false, paid: true  },
   { f: 'Download MP4',                         free: false, paid: true  },
   { f: 'Batch download',                       free: false, paid: true  },
   { f: 'Priority processing queue',            free: false, paid: true  },
@@ -83,15 +82,15 @@ export default function Billing() {
 
   return (
     <AppLayout>
-      <main style={{ flex: 1, background: '#f7f8fa', paddingBottom: 60 }}>
+      <main className="studio-billing" style={{ flex: 1, background: '#f7f8fa', paddingBottom: 60 }}>
 
         {/* Header */}
         <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb' }}>
           <div style={{ maxWidth: 1000, margin: '0 auto', padding: '0 24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', height: 56 }}>
               <div>
-                <h1 style={{ fontSize: '1rem', fontWeight: 700, color: '#111', margin: 0, lineHeight: 1 }}>Plans & Billing</h1>
-                <p style={{ fontSize: '.72rem', color: '#9ca3af', margin: 0, marginTop: 2 }}>Manage your subscription and credits</p>
+                <h1 style={{ fontSize: '1rem', fontWeight: 700, color: '#111', margin: 0, lineHeight: 1 }}>Room for your next idea.</h1>
+                <p style={{ fontSize: '.72rem', color: '#9ca3af', margin: 0, marginTop: 2 }}>Your plan, usage, and billing — all in one place.</p>
               </div>
             </div>
           </div>

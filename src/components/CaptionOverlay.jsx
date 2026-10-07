@@ -15,6 +15,10 @@ import { useEffect, useRef, useState } from 'react'
 
 // Mirrors COLOR_COMBOS in captions.py (ASS &HAABBGGRR → CSS hex/rgba)
 export const COLOR_COMBOS = {
+  rose_ink: { primary:'#FFFFFF', secondary:'#f2aeb7', outline:'#243644', back:'rgba(0,0,0,.6)', highlight:'#f2aeb7', highlightInk:'#243644' },
+  mint_ink: { primary:'#FFFFFF', secondary:'#a5dcce', outline:'#243644', back:'rgba(0,0,0,.6)', highlight:'#a5dcce', highlightInk:'#243644' },
+  lavender_ink: { primary:'#FFFFFF', secondary:'#bac4f0', outline:'#243644', back:'rgba(0,0,0,.6)', highlight:'#bac4f0', highlightInk:'#243644' },
+  butter_ink: { primary:'#FFFFFF', secondary:'#eac897', outline:'#243644', back:'rgba(0,0,0,.6)', highlight:'#eac897', highlightInk:'#243644' },
   white_black:  { primary:'#FFFFFF', secondary:'#FFFF00', outline:'#000000', back:'rgba(0,0,0,0.6)',   highlight:'#FFFF00' },
   yellow_black: { primary:'#FFFF00', secondary:'#FFFFFF', outline:'#000000', back:'rgba(0,0,0,0.6)',   highlight:'#FFFFFF' },
   black_white:  { primary:'#000000', secondary:'#FF0000', outline:'#FFFFFF', back:'rgba(255,255,255,0.6)', highlight:'#FF0000' },
@@ -150,6 +154,21 @@ function renderChunk({ style, combo, highlightColor, phrase, chunk, chunks, idx,
   }
 
   switch (style) {
+    case 'last_word_box':
+    case 'last_word_editorial':
+    case 'last_word_ink': {
+      const words = chunk.text.split(/\s+/).filter(Boolean)
+      const last = words.pop()
+      const box = style !== 'last_word_ink'
+      return {
+        node: <>{words.join(' ')}{words.length > 0 && ' '}<span style={{
+          color: box ? (combo.highlightInk || '#243644') : combo.highlight,
+          background: box ? combo.highlight : 'transparent',
+          padding: box ? '0 .08em' : 0,
+        }}>{last}</span></>,
+        wrapStyle: { ...base, textShadow:'none', fontStyle:style === 'last_word_editorial' ? 'italic' : 'normal' },
+      }
+    }
     case 'word_pop':
       return { text: chunk.text.toUpperCase(), wrapStyle: { ...base, animation: 'capPop 0.28s ease both' } }
 

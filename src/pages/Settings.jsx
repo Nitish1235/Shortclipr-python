@@ -49,13 +49,13 @@ export default function Settings() {
 
   return (
     <AppLayout>
-      <div style={{ padding: '32px 40px', maxWidth: 680, margin: '0 auto', width: '100%' }}>
+      <div className="studio-settings" style={{ padding: '32px 40px', maxWidth: 980, margin: '0 auto', width: '100%' }}>
 
         {/* Page header */}
         <div style={{ marginBottom: 32 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111', margin: 0 }}>Settings</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111', margin: 0 }}>Settle into your space.</h1>
           <p style={{ color: '#888', fontSize: '.9rem', marginTop: 6, marginBottom: 0 }}>
-            Manage your account preferences
+            Your profile and account security, in one quiet corner.
           </p>
         </div>
 

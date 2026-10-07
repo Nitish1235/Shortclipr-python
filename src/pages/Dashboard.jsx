@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppLayout, { SIDEBAR_W } from '../components/AppLayout'
-import ClipEngine from '../components/ClipEngine'
 import SocialProofModal from '../components/SocialProofModal'
 import { YTLogo, TTLogo } from '../components/PlatformLogos'
 import CtaBuilder from '../components/CtaBuilder'
@@ -81,7 +80,10 @@ export default function Dashboard() {
   // UI state
   const [filter, setFilter]           = useState('all') // all | unpublished | expiring
   const [selectedClipIds, setSelectedClipIds] = useState(new Set())
-  const [showGeneratePanel, setShowGeneratePanel] = useState(true)
+  const [sourceUrl, setSourceUrl] = useState('')
+  useEffect(() => {
+    if (sessionStorage.getItem('sc_pending_url') || new URLSearchParams(location.search).has('create')) navigate('/youtube-shorts/create', { replace:true })
+  }, [location.search, navigate])
 
   // Modal
   const [modalOpen, setModalOpen]     = useState(false)
@@ -723,6 +725,7 @@ export default function Dashboard() {
 
       <main className="dashboard-page" style={{ background:'#f7f8fa', flex:1, paddingBottom:'90px' }}>
 
+        <header className="studio-page-heading studio-dashboard-heading"><div><span className="studio-eyebrow">YOUR CREATIVE SPACE</span><h1>Less editing. More creating.</h1><p>Your next great clip starts here.</p></div><button className="studio-primary" onClick={() => navigate('/youtube-shorts/create')}>＋ Create clips</button></header>
         {/* ── Platform status + stats bar ── */}
         <div className="dashboard-status-bar" style={{ background:'#fff', borderBottom:'1px solid #e5e7eb' }}>
           <div className="dashboard-status-inner" style={{ maxWidth:'1140px', margin:'0 auto', padding:'0 24px' }}>
@@ -823,13 +826,9 @@ export default function Dashboard() {
               borderTop:'1px solid #e5e7eb',
             }}>
               {[
-                { n: user?.credits_used || 0,      l:'Shorts made',      c:'#cf1322' },
-                { n: user?.videos_remaining || 0,  l:'Credits left',     c:'#16a34a' },
-                { n: formatMinutes(user?.video_minutes_used),      l:'Minutes used', c:'#cf1322' },
-                { n: formatMinutes(user?.video_minutes_remaining), l:'Minutes left', c:'#16a34a' },
-                { n: rawClips.length,              l:'Encoding',         c:'#f59e0b' },
-                { n: hdClips.length,               l:'HD ready',         c:'#1d4ed8' },
-                { n: publishedYT.size + publishedTT.size, l:'Published', c:'#16a34a' },
+                { n: hdClips.length, l:'Clips ready', c:'#247d80' },
+                { n: user?.videos_remaining ?? Math.max(0, (user?.credits_limit || 0) - (user?.credits_used || 0)), l:'Clips remaining', c:'#247d80' },
+                { n: formatMinutes(user?.video_minutes_remaining), l:'Video time left', c:'#247d80' },
               ].map((s, i, arr) => (
                 <div key={i} style={{
                   padding:'8px 12px',
@@ -855,38 +854,11 @@ export default function Dashboard() {
 
         <div className="dashboard-content" style={{ maxWidth:'1140px', margin:'0 auto', padding:'20px 24px 0' }}>
 
-          {/* ── Generate panel ──
-              NOTE: no `overflow:hidden` here — ClipEngine's live preview
-              uses `position:sticky` while scrolling its config sections,
-              and an overflow:hidden ancestor would clip/disable that. */}
-          <div className="dashboard-generator-panel" style={{
-            background:'#fff', border:'1.5px solid #e5e7eb',
-            borderRadius:'12px', marginBottom:'20px',
-          }}>
-            <button
-              className="dashboard-generator-toggle"
-              onClick={() => setShowGeneratePanel(v => !v)}
-              style={{
-                width:'100%', padding:'13px 18px',
-                background:'none', border:'none', cursor:'pointer',
-                display:'flex', alignItems:'center', gap:'10px',
-                borderBottom: showGeneratePanel ? '1px solid #e5e7eb' : 'none',
-              }}
-            >
-              <span style={{ width:8, height:8, borderRadius:'50%', background:'#cf1322', flexShrink:0 }}/>
-              <span style={{ fontWeight:700, fontSize:'.88rem', color:'#111' }}>Generate Clips</span>
-              <span style={{ fontSize:'.76rem', color:'#9ca3af' }}>Paste a YouTube URL to extract viral shorts</span>
-              <span style={{ marginLeft:'auto', color:'#9ca3af', fontSize:'12px' }}>{showGeneratePanel ? '▲' : '▼'}</span>
-            </button>
-            {showGeneratePanel && (
-              <div className="dashboard-generator-body" style={{ padding:'16px 18px' }}>
-                <ClipEngine onJobCreated={(jobId) => {
-                  fetchJobs()
-                  setShowGeneratePanel(false)
-                }} />
-              </div>
-            )}
-          </div>
+          <section className="studio-welcome">
+            <div><span className="studio-eyebrow">FROM LONG VIDEO TO SHORTS</span><h2>Make more of what<br/>you’ve already made.</h2><p>Find the moments worth sharing. Reframe them for every screen. Add captions that feel like you.</p>
+              <form className="studio-source-form" onSubmit={e => { e.preventDefault(); if(sourceUrl.trim()) sessionStorage.setItem('sc_pending_url',sourceUrl.trim()); navigate('/youtube-shorts/create') }}><input aria-label="YouTube video URL" type="url" placeholder="Paste your YouTube link…" value={sourceUrl} onChange={e => setSourceUrl(e.target.value)}/><button className="studio-primary">Start a project →</button></form>
+            </div><div className="studio-welcome-art" aria-hidden="true"><span>01 <b>Find moments</b></span><span>02 <b>Frame beautifully</b></span><span>03 <b>Make it yours</b></span></div>
+          </section>
 
           {/* ── Active job progress banner ── */}
           {isActive && (
@@ -1872,11 +1844,11 @@ export default function Dashboard() {
             <h2 style={{ fontSize:'1.2rem', fontWeight:700, color:'#111', marginBottom:8 }}>{upgradeReason}</h2>
             <p style={{ fontSize:'.875rem', color:'#666', lineHeight:1.6, marginBottom:24 }}>
               This feature requires a paid plan. Free accounts get <strong style={{ color:'#cf1322' }}>3 free generations</strong> to try ShortClipr.
-              Upgrade to unlock downloads, the editor, and unlimited shorts.
+              Upgrade to unlock downloads and a larger monthly clip allowance.
             </p>
             <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:24 }}>
               {[
-                { name:'Starter', price:'$10/mo', perks:'50 shorts · Editor · Downloads' },
+                { name:'Starter', price:'$10/mo', perks:'50 shorts · Captions · Downloads' },
                 { name:'Pro',     price:'$45/mo', perks:'350 shorts · Priority · Everything' },
               ].map(plan => (
                 <div key={plan.name} style={{

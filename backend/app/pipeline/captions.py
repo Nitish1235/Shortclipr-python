@@ -78,6 +78,20 @@ class Caption:
 # ══════════════════════════════════════════════════════════════
 
 COLOR_COMBOS: dict[str, dict[str, str]] = {
+    # Pastel highlight backgrounds with contrasting dark ink. These travel
+    # through the existing color field, so stored jobs need no migration.
+    **{
+        key: {
+            "primary": "&H00FFFFFF", "secondary": bg,
+            "outline": "&H00443624", "back": "&H99000000",
+            "highlight": bg, "solid_back": "&H00443624",
+            "highlight_ink": "&H00443624",
+        }
+        for key, bg in {
+            "rose_ink": "&H00B7AEF2", "mint_ink": "&H00CEDCA5",
+            "lavender_ink": "&H00F0C4BA", "butter_ink": "&H0097C8EA",
+        }.items()
+    },
     "white_black": {
         "primary":   "&H00FFFFFF",   # white
         "secondary": "&H0000FFFF",   # yellow  (karaoke active)
@@ -379,6 +393,14 @@ _BASE_STYLES: dict[str, dict] = {
 }
 
 
+for _last_word_style in ("last_word_box", "last_word_editorial", "last_word_ink"):
+    _BASE_STYLES[_last_word_style] = dict(
+        font="Liberation Sans", size=76, bold=1,
+        border_style=1 if _last_word_style == "last_word_ink" else 3,
+        outline=0, shadow=0, scale_x=100, scale_y=100, spacing=0,
+    )
+
+
 def _style_line(style: str, color: str, alignment: int, font: str = DEFAULT_FONT) -> str:
     """Build one ASS [V4+ Styles] Style: line for the given style+colour+font."""
     cfg = _BASE_STYLES.get(style, _BASE_STYLES["minimal"])
@@ -589,6 +611,37 @@ def _lines_minimal(captions: list[Caption], x: int, y: int, wpl: int = 3) -> lis
     for c in captions:
         for p in _split_phrases(c, wpl):
             lines.append(_dlg(p.start, p.end, f"{pos}{_esc(p.text)}"))
+    return lines
+
+
+def _lines_last_word(captions: list[Caption], x: int, y: int, wpl: int,
+                     color: str, style: str) -> list[str]:
+    """Emphasize the final word of each timed phrase, keeping its full timing.
+
+    BorderStyle 3 draws a rectangular highlight for the final ASS text run;
+    the preceding run has zero border and transparent backing. Reset tags
+    prevent styling from leaking into subsequent phrases.
+    """
+    palette = COLOR_COMBOS[color]
+    highlight = palette["highlight"]
+    ink = palette.get("highlight_ink", "&H00443624")
+    italic = r"\i1" if style == "last_word_editorial" else r"\i0"
+    lines = []
+    for caption in captions:
+        for phrase in _split_phrases(caption, wpl):
+            words = phrase.text.split()
+            if not words or phrase.end <= phrase.start:
+                continue
+            prefix = _esc(" ".join(words[:-1]))
+            if prefix:
+                prefix += " "
+            base = f"{{\\pos({x},{y}){italic}\\bord0\\shad0\\3a&HFF&\\4a&HFF&}}"
+            if style == "last_word_ink":
+                accent = f"{{\\1c{highlight}}}"
+            else:
+                accent = f"{{\\1c{ink}\\3c{highlight}\\3a&H00&\\bord6}}"
+            lines.append(_dlg(phrase.start, phrase.end,
+                              f"{base}{prefix}{accent}{_esc(words[-1])}{{\\r}}"))
     return lines
 
 
@@ -1029,7 +1082,9 @@ def build_ass_content(
 
     style_lines = [_style_line(style_key, color_key, alignment, font_key)]
     build  = _BUILDERS.get(style_key, _lines_minimal)
-    events = build(captions, x, y, wpl)
+    events = (_lines_last_word(captions, x, y, wpl, color_key, style_key)
+              if style_key.startswith("last_word_")
+              else build(captions, x, y, wpl))
 
     if hook_title and hook_title.strip():
         style_lines.append(_hook_style_line(title_color, template, font_key))

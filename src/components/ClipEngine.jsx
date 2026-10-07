@@ -47,6 +47,9 @@ const sectionTitle = {
 
 // ── Caption style swatch options ────────────────────────────────
 const STYLE_OPTIONS = [
+  { val:'last_word_box', label:'Last Word', sub:'Highlight box', preview:'Moment', weight:800, box:true },
+  { val:'last_word_editorial', label:'Editorial', sub:'Italic highlight', preview:'Story', weight:700, box:true },
+  { val:'last_word_ink', label:'Color Accent', sub:'Final word color', preview:'Accent', weight:800 },
   { val:'word_pop',   label:'Word Pop',   sub:'🔥 Trending', preview:'POP!',  upper:true,  weight:800 },
   { val:'hormozi',    label:'Hormozi',    sub:'Bold Box',     preview:'BOLD', upper:true,  weight:900, box:true },
   { val:'karaoke',    label:'Karaoke',    sub:'Colour Sweep', preview:'Sing', upper:false, weight:600 },
@@ -137,6 +140,10 @@ function TemplatePreviewBg({ template, thumbnail, barColor, gameplayUrl }) {
 
 // ── Caption colour swatch options ───────────────────────────────
 const COLOR_OPTIONS = [
+  { val:'rose_ink', label:'Rose + Ink', sub:'Soft highlight' },
+  { val:'mint_ink', label:'Mint + Ink', sub:'Fresh highlight' },
+  { val:'lavender_ink', label:'Lavender + Ink', sub:'Calm highlight' },
+  { val:'butter_ink', label:'Butter + Ink', sub:'Warm highlight' },
   { val:'white_black',  label:'White + Black',  sub:'Classic' },
   { val:'yellow_black', label:'Yellow + Black', sub:'' },
   { val:'butter_yellow',         label:'Butter Yellow',     sub:'🔥 Trending' },
@@ -175,17 +182,12 @@ const TITLE_BG_OPTIONS = [
 
 // ── Caption font options ─────────────────────────────────────────
 const FONT_OPTIONS = [
-  { val:'default',       label:'Default' },
-  { val:'montserrat',    label:'Montserrat' },
-  { val:'archivo_black', label:'Archivo Black' },
-  { val:'anton',         label:'Anton' },
-  { val:'bebas_neue',    label:'Bebas Neue' },
-  { val:'poppins',       label:'Poppins' },
-  { val:'jakarta',       label:'Plus Jakarta' },
-  { val:'bangers',            label:'Bangers' },
-  { val:'luckiest_guy',       label:'Luckiest Guy' },
-  { val:'permanent_marker',   label:'Permanent Marker' },
-  { val:'caveat',             label:'Caveat (Cursive)' },
+  { val:'montserrat', label:'Montserrat' },
+  { val:'anton', label:'Anton' },
+  { val:'bangers', label:'Bangers' },
+  { val:'luckiest_guy', label:'Luckiest Guy' },
+  { val:'permanent_marker', label:'Permanent Marker' },
+  { val:'caveat', label:'Caveat (Cursive)' },
 ]
 
 // ── Free-tier caps — mirrors backend/app/core/plan_limits.py "free" plan ──
@@ -379,7 +381,7 @@ export default function ClipEngine({ onJobCreated }) {
   const [captionStyle,  setCaptionStyle]  = useState('word_pop')
   const [colorCombo,    setColorCombo]    = useState('white_black')
   const [wordsPerLine,  setWordsPerLine]  = useState(2)
-  const [captionFont,   setCaptionFont]   = useState('default')
+  const [captionFont,   setCaptionFont]   = useState('montserrat')
   const [shortTemplate, setShortTemplate] = useState('zoom_blur')
   const [barColor,      setBarColor]      = useState('#0d0d0d')
   const [aspect,        setAspect]        = useState('9:16')
@@ -668,7 +670,7 @@ export default function ClipEngine({ onJobCreated }) {
     ]
 
     return (
-      <div className="ce-config-view">
+      <div className="ce-config-view"><div className="studio-config-intro"><span className="studio-eyebrow">NEW PROJECT</span><h2>One video. Many possibilities.</h2><p>Choose your moments, framing, and finishing touches.</p></div>
         {/* Video preview card */}
         <div className="ce-video-summary" style={{
           display:'flex', gap:'16px', alignItems:'center',
@@ -707,9 +709,9 @@ export default function ClipEngine({ onJobCreated }) {
           {/* Left: sectioned config */}
           <div className="clip-engine-config" style={{ flex:'1 1 360px', minWidth:0 }}>
 
-            {/* 🎬 Source */}
+            {/* 01 · Clip settings */}
             <div className="ce-section-card ce-source-section" style={sectionCard}>
-              <div style={sectionTitle}>🎬 Source</div>
+              <div style={sectionTitle}>01 · Clip settings</div>
 
               <div className="ce-control-row" style={rowStyle}>
                 <span className="ce-row-label" style={labelStyle}>Language</span>
@@ -860,7 +862,7 @@ export default function ClipEngine({ onJobCreated }) {
                     const combo = COLOR_COMBOS[colorCombo] || COLOR_COMBOS.white_black
                     const active = captionStyle === opt.val
                     return (
-                      <button className="ce-choice-btn" key={opt.val} onClick={() => setCaptionStyle(opt.val)} style={{
+                      <button className="ce-choice-btn" key={opt.val} onClick={() => { setCaptionStyle(opt.val); if (opt.val.startsWith('last_word') && !colorCombo.endsWith('_ink')) setColorCombo('rose_ink') }} style={{
                         display:'flex', flexDirection:'column', alignItems:'center', gap:'6px',
                         padding:'10px 4px', borderRadius:'10px',
                         background: active ? '#fef2f2' : '#f9f9f9',
@@ -1141,7 +1143,7 @@ export default function ClipEngine({ onJobCreated }) {
             flex:'0 0 200px', minWidth:'160px',
             position:'sticky', top:'20px', alignSelf:'flex-start',
           }}>
-            <div className="pip-title" style={{ ...sectionTitle, marginBottom:'10px' }}>👀 Live Preview</div>
+            <div className="pip-title" style={{ ...sectionTitle, marginBottom:'10px' }}>YOUR STYLE PREVIEW</div>
             <div style={{
               position:'relative', width:'100%',
               aspectRatio: aspect.replace(':','/'),
@@ -1258,7 +1260,7 @@ export default function ClipEngine({ onJobCreated }) {
              <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.75rem', color: '#555', lineHeight: 1.8 }}>
                <li>✓ 180 shorts/mo</li>
                <li>✓ Faster processing</li>
-               <li>✓ Clip editor</li>
+               <li>✓ Caption styling</li>
              </ul>
              <button onClick={() => navigate('/billing')} style={{ width: '100%', padding: '10px', background: '#111', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, marginTop: '16px', cursor: 'pointer', fontSize: '0.8rem' }}>Get Starter+</button>
           </div>
@@ -1290,7 +1292,7 @@ export default function ClipEngine({ onJobCreated }) {
         <button onClick={() => setMode('config')} style={{
           background:'none', border:'none', cursor:'pointer',
           fontSize:'0.85rem', color:'#aaa', textDecoration:'underline', fontWeight: 600
-        }}>← Back to Editor</button>
+        }}>← Back to clip settings</button>
       </div>
 
       <div style={{ marginBottom: '24px' }}>

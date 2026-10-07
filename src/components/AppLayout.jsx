@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { YTLogo, TTLogo } from './PlatformLogos'
 import Logo from './Logo'
+import '../studio-workspace.css'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 export const SIDEBAR_W = 228
@@ -56,63 +57,13 @@ const Icon = {
 
 const NAV_WORKSPACE = [
   { icon: Icon.dashboard, label: 'Dashboard',     path: '/youtube-shorts/dashboard', exact: true },
+  { icon: Icon.clips,     label: 'Create clips',  path: '/youtube-shorts/create', exact: true },
   { icon: Icon.clips,     label: 'Clips History', path: '/youtube-shorts/clips',     exact: true },
 ]
 const NAV_ACCOUNT = [
   { icon: Icon.billing,  label: 'Billing',  path: '/billing',                    exact: true },
   { icon: Icon.settings, label: 'Settings', path: '/youtube-shorts/settings',    exact: true },
 ]
-
-// ── Nav item ─────────────────────────────────────────────────────
-function NavItem({ item, location }) {
-  const active = item.exact
-    ? location.pathname === item.path
-    : location.pathname.startsWith(item.path)
-
-  return (
-    <Link
-      to={item.path}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 9,
-        padding: '8px 11px', borderRadius: 8,
-        background: active ? 'rgba(207,19,34,.16)' : 'transparent',
-        color: active ? '#ff5555' : 'rgba(255,255,255,.5)',
-        fontSize: '.82rem', fontWeight: active ? 600 : 400,
-        textDecoration: 'none',
-        borderLeft: `2px solid ${active ? '#cf1322' : 'transparent'}`,
-        transition: 'all .15s',
-        userSelect: 'none',
-      }}
-      onMouseEnter={e => {
-        if (!active) {
-          e.currentTarget.style.background = 'rgba(255,255,255,.05)'
-          e.currentTarget.style.color = 'rgba(255,255,255,.8)'
-        }
-      }}
-      onMouseLeave={e => {
-        if (!active) {
-          e.currentTarget.style.background = 'transparent'
-          e.currentTarget.style.color = 'rgba(255,255,255,.5)'
-        }
-      }}
-    >
-      <span style={{ flexShrink: 0, opacity: active ? 1 : .7 }}>{item.icon}</span>
-      {item.label}
-    </Link>
-  )
-}
-
-// ── Section label ─────────────────────────────────────────────────
-function SectionLabel({ children }) {
-  return (
-    <div style={{
-      fontSize: '.6rem', fontWeight: 700,
-      color: 'rgba(255,255,255,.2)',
-      textTransform: 'uppercase', letterSpacing: '.1em',
-      padding: '4px 11px 8px',
-    }}>{children}</div>
-  )
-}
 
 // ── Social account row ────────────────────────────────────────────
 function SocialRow({ icon, label, connected, onConnect, onDisconnect, comingSoon }) {
@@ -124,17 +75,17 @@ function SocialRow({ icon, label, connected, onConnect, onDisconnect, comingSoon
       <span style={{ flexShrink: 0, opacity: comingSoon ? 0.5 : 1 }}>{icon}</span>
       <span style={{
         flex: 1, fontSize: '.8rem',
-        color: 'rgba(255,255,255,.55)', userSelect: 'none',
+        color: '#607781', userSelect: 'none',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{label}</span>
       {comingSoon ? (
-        <span style={{ flexShrink: 0, fontSize: '.6rem', fontWeight: 700, color: 'rgba(255,255,255,.3)' }}>
+        <span style={{ flexShrink: 0, fontSize: '.6rem', fontWeight: 700, color: '#74838c' }}>
           Soon
         </span>
       ) : connected ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
           <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4ade80' }}/>
-          <span style={{ fontSize: '.6rem', color: 'rgba(255,255,255,.3)' }}>On</span>
+          <span style={{ fontSize: '.6rem', color: '#74838c' }}>On</span>
           <button
             onClick={onDisconnect}
             title={`Disconnect ${label}`}
@@ -143,7 +94,7 @@ function SocialRow({ icon, label, connected, onConnect, onDisconnect, comingSoon
               background: 'rgba(255,255,255,.06)',
               border: '1px solid rgba(255,255,255,.08)',
               cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'rgba(255,255,255,.3)', fontSize: '.52rem', padding: 0, transition: 'all .12s',
+              color: '#74838c', fontSize: '.52rem', padding: 0, transition: 'all .12s',
             }}
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.2)'; e.currentTarget.style.color = '#f87171' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,.06)'; e.currentTarget.style.color = 'rgba(255,255,255,.3)' }}
@@ -242,199 +193,29 @@ export default function AppLayout({ children }) {
     setSidebarOpen(false)
   }, [location.pathname])
 
+  const currentPage = location.pathname.includes('/create') ? 'Create clips' : location.pathname.includes('/clips') ? 'Clip library' : location.pathname.includes('/settings') ? 'Settings' : location.pathname === '/billing' ? 'Billing' : location.pathname.includes('/tutorial') ? 'Tutorial' : 'Overview'
   return (
-    <div className="app-layout" style={{ display: 'flex', minHeight: '100vh', width: '100%' }}>
-
-      {/* ══ Mobile Header (Hamburger) ════════════════════════════ */}
-      <div className="mobile-header" style={{
-        display: 'none', // Default hidden, shown via CSS on mobile
-        alignItems: 'center', justifyContent: 'space-between',
-        padding: '12px 20px', background: '#0c0c0c', color: '#fff',
-        position: 'sticky', top: 0, zIndex: 400
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Logo size={24} />
-          <div style={{ fontSize: '.9rem', fontWeight: 700, letterSpacing: '-.01em' }}>ShortClipr</div>
-        </div>
-        <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{
-          background: 'transparent', border: 'none', color: '#fff', fontSize: '1.5rem', cursor: 'pointer', padding: 0
-        }}>
-          {sidebarOpen ? '✕' : '☰'}
-        </button>
+    <div className="app-layout studio-workspace">
+      <div className="mobile-header studio-mobile">
+        <Link to="/youtube-shorts"><Logo size={28} /> ShortClipr</Link>
+        <button aria-label="Toggle navigation" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(v => !v)}>{sidebarOpen ? '✕' : '☰'}</button>
       </div>
-
-      {/* ══ Sidebar Overlay ══════════════════════════════════════ */}
-      {sidebarOpen && (
-        <div 
-          className="sidebar-overlay"
-          onClick={() => setSidebarOpen(false)}
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 299
-          }} 
-        />
-      )}
-
-      {/* ══ Sidebar ══════════════════════════════════════════════ */}
-      <aside className={`app-sidebar ${sidebarOpen ? 'open' : ''}`} style={{
-        width: SIDEBAR_W, flexShrink: 0,
-        background: '#0c0c0c',
-        display: 'flex', flexDirection: 'column',
-        position: 'fixed', inset: '0 auto 0 0',
-        zIndex: 300,
-        borderRight: '1px solid rgba(255,255,255,.07)',
-        overflow: 'hidden',
-        height: '100vh',
-        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-      }}>
-
-        {/* Brand */}
-        <div className="sidebar-brand" style={{ padding: '18px 16px 14px', borderBottom: '1px solid rgba(255,255,255,.06)' }}>
-          <Link to="/youtube-shorts" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
-            <span style={{ flexShrink: 0, display: 'flex' }}><Logo size={28} /></span>
-            <div>
-              <div style={{ fontSize: '.9rem', fontWeight: 700, color: '#fff', letterSpacing: '-.01em', lineHeight: 1.1 }}>
-                ShortClipr
-              </div>
-              <div style={{ fontSize: '.6rem', color: 'rgba(255,255,255,.3)', letterSpacing: '.06em', textTransform: 'uppercase', marginTop: 1 }}>
-                Studio
-              </div>
-            </div>
-          </Link>
-        </div>
-
-        {/* Nav links */}
-        <nav style={{ flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 0, overflowY: 'auto' }}>
-
-          <SectionLabel>Workspace</SectionLabel>
-          {[
-            ...NAV_WORKSPACE,
-            ...(tutorialUrl ? [{ icon: Icon.tutorial, label: 'Tutorial', path: '/youtube-shorts/tutorial', exact: true }] : []),
-          ].map(item => <NavItem key={item.path} item={item} location={location} />)}
-
-          <div style={{ marginTop: 16 }}>
-            <SectionLabel>Social Accounts</SectionLabel>
-            <SocialRow
-              icon={<YTLogo size={13} />}
-              label="YouTube"
-              connected={ytConn}
-              onConnect={connectYT}
-              onDisconnect={() => disconnect('youtube')}
-            />
-            <SocialRow
-              icon={<TTLogo size={13} />}
-              label="TikTok"
-              connected={ttConn}
-              onConnect={connectTT}
-              onDisconnect={() => disconnect('tiktok')}
-            />
-          </div>
-
-          <div style={{ marginTop: 16 }}>
-            <SectionLabel>Account</SectionLabel>
-            {NAV_ACCOUNT.map(item => <NavItem key={item.path} item={item} location={location} />)}
-          </div>
-
+      {sidebarOpen && <div className="sidebar-overlay studio-scrim" onClick={() => setSidebarOpen(false)} />}
+      <aside className={`app-sidebar studio-sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <Link className="studio-brand" to="/youtube-shorts"><Logo size={32} /><span>ShortClipr</span></Link>
+        <div className="studio-workspace-label">YOUR WORKSPACE <span>STUDIO</span></div>
+        <Link className="studio-primary studio-new" to="/youtube-shorts/create">＋ New project</Link>
+        <nav aria-label="Workspace navigation">
+          {[...NAV_WORKSPACE, ...NAV_ACCOUNT, ...(tutorialUrl ? [{ icon: Icon.tutorial, label:'Tutorial', path:'/youtube-shorts/tutorial' }] : [])].map(item => <Link className={`studio-nav-link ${location.pathname === item.path ? 'is-active' : ''}`} key={item.path} to={item.path}>{item.icon}<span>{item.label === 'Dashboard' ? 'Overview' : item.label === 'Clips History' ? 'Clip library' : item.label}</span></Link>)}
         </nav>
-
-        {/* Plan card */}
-        <div style={{ padding: '0 8px 8px' }}>
-          {!isPaid ? (
-            <div style={{
-              padding: '13px 14px', borderRadius: 10,
-              background: 'rgba(207,19,34,.08)',
-              border: '1px solid rgba(207,19,34,.18)',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span style={{ fontSize: '.68rem', fontWeight: 700, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Free Plan</span>
-                <span style={{ fontSize: '.68rem', color: 'rgba(255,255,255,.35)' }}>{used}/{limit}</span>
-              </div>
-              <div style={{ background: 'rgba(255,255,255,.08)', borderRadius: 4, height: 3, overflow: 'hidden', marginBottom: 10 }}>
-                <div style={{ height: '100%', width: `${usedPct}%`, background: 'linear-gradient(90deg,#cf1322,#ff6b6b)', borderRadius: 4, transition: 'width .4s' }}/>
-              </div>
-              <Link
-                to="/billing"
-                style={{
-                  display: 'block', padding: '7px 0', borderRadius: 7,
-                  background: '#cf1322', color: '#fff',
-                  fontSize: '.74rem', fontWeight: 700, textAlign: 'center', textDecoration: 'none',
-                  transition: 'background .15s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = '#a10e1b'}
-                onMouseLeave={e => e.currentTarget.style.background = '#cf1322'}
-              >
-                Upgrade Plan →
-              </Link>
-            </div>
-          ) : (
-            <div style={{
-              padding: '10px 14px', borderRadius: 10,
-              background: 'rgba(22,163,74,.08)',
-              border: '1px solid rgba(22,163,74,.18)',
-              display: 'flex', alignItems: 'center', gap: 8,
-            }}>
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ade80', flexShrink: 0 }}/>
-              <div>
-                <div style={{ fontSize: '.72rem', fontWeight: 600, color: 'rgba(255,255,255,.6)', textTransform: 'capitalize' }}>{user.plan} Plan</div>
-                <div style={{ fontSize: '.64rem', color: 'rgba(255,255,255,.3)' }}>{remaining} clips remaining</div>
-              </div>
-            </div>
-          )}
+        <div className="studio-connections"><span className="studio-eyebrow">CONNECTED ACCOUNTS</span>
+          <SocialRow icon={<YTLogo size={14}/>} label="YouTube" connected={ytConn} onConnect={connectYT} onDisconnect={() => disconnect('youtube')}/>
+          <SocialRow icon={<TTLogo size={14}/>} label="TikTok" connected={ttConn} onConnect={connectTT} onDisconnect={() => disconnect('tiktok')}/>
         </div>
-
-        {/* User row */}
-        <div style={{
-          padding: '12px 12px 16px',
-          borderTop: '1px solid rgba(255,255,255,.06)',
-          display: 'flex', alignItems: 'center', gap: 10,
-        }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: '50%',
-            background: '#cf1322', overflow: 'hidden', flexShrink: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            {user?.avatar_url
-              ? <img src={user.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-              : <span style={{ fontSize: '.78rem', fontWeight: 700, color: '#fff' }}>{initials}</span>
-            }
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '.78rem', fontWeight: 600, color: 'rgba(255,255,255,.85)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user?.full_name || user?.email?.split('@')[0] || 'User'}
-            </div>
-            <div style={{ fontSize: '.63rem', color: 'rgba(255,255,255,.3)' }}>
-              {user?.email?.length > 24 ? user.email.slice(0, 22) + '…' : user?.email}
-            </div>
-          </div>
-          <button
-            onClick={logout}
-            title="Sign out"
-            style={{
-              width: 28, height: 28, borderRadius: 7, flexShrink: 0,
-              background: 'rgba(255,255,255,.05)',
-              border: '1px solid rgba(255,255,255,.09)',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'rgba(255,255,255,.35)', transition: 'all .15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,.1)'; e.currentTarget.style.color = 'rgba(255,255,255,.7)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,.05)'; e.currentTarget.style.color = 'rgba(255,255,255,.35)' }}
-          >
-            {Icon.signout}
-          </button>
-        </div>
+        <div className="studio-allowance"><span className="studio-eyebrow">YOUR MONTHLY SPACE</span><h3>{Math.max(0, remaining)} <small>clips remaining</small></h3><div className="studio-meter"><i style={{width:`${usedPct}%`}} /></div><p>{used} of {limit} credits used · {isPaid ? user.plan : 'Free'} plan</p><Link to="/billing">Manage plan ↗</Link></div>
+        <div className="studio-profile"><span className="studio-avatar">{user?.avatar_url ? <img src={user.avatar_url} alt=""/> : initials}</span><div><b>{user?.full_name || user?.email?.split('@')[0] || 'Creator'}</b><small>Your creative workspace</small></div><button onClick={logout} title="Sign out" aria-label="Sign out">{Icon.signout}</button></div>
       </aside>
-
-      {/* ══ Main content ══════════════════════════════════════════ */}
-      <div className="main-content" style={{
-        flex: 1,
-        minHeight: '100vh',
-        background: '#f7f8fa',
-        display: 'flex',
-        flexDirection: 'column',
-        width: '100%',
-        transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-      }}>
-        {children}
-      </div>
+      <div className="main-content studio-main"><header className="studio-topbar"><span>Workspace <i>/</i> <b>{currentPage}</b></span><Link to="/youtube-shorts/settings" className="studio-avatar" aria-label="Account settings">{initials}</Link></header>{children}</div>
     </div>
   )
 }
