@@ -44,7 +44,6 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
 // YouTube/TikTok connect + publish gated to this one account while both
 // platforms are pending app review — same beta gate BrainrotStudio uses.
-const SOCIAL_BETA_EMAIL = 'jainnitish432@gmail.com'
 
 function slugifyKey(label, existing) {
   let base = (label || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
@@ -60,7 +59,7 @@ function isActive(job) { return !!job && ACTIVE_STATUSES.includes(job.status) }
 export default function FactloopStudio() {
   const { user, logout } = useAuth()
   const location = useLocation()
-  const socialEnabled = (user?.email || '').trim().toLowerCase() === SOCIAL_BETA_EMAIL
+  const socialEnabled = user?.plan === 'marketer'
 
   // ── Reference data ──────────────────────────────────────────────
   const [clipsLib, setClipsLib] = useState([])
@@ -1246,26 +1245,12 @@ const YT_ICON = <YTLogo size={15} />
 const TT_ICON = <TTLogo size={15} />
 
 function PublishConnections({ ytConnected, ttConnected, onConnectYT, onConnectTT, onDisconnect, socialEnabled }) {
-  if (!socialEnabled) {
-    return (<><ComingSoonRow icon={YT_ICON} label="YouTube" /><ComingSoonRow icon={TT_ICON} label="TikTok" /></>)
-  }
+  if (!socialEnabled) return null
   return (
     <>
       <SocialConnectRow icon={YT_ICON} label="YouTube" connected={ytConnected} onConnect={onConnectYT} onDisconnect={() => onDisconnect('youtube')} />
       <SocialConnectRow icon={TT_ICON} label="TikTok" connected={ttConnected} onConnect={onConnectTT} onDisconnect={() => onDisconnect('tiktok')} />
     </>
-  )
-}
-
-function ComingSoonRow({ icon, label }) {
-  return (
-    <div style={{ borderRadius: 8, margin: '2px 0', border: `1px solid ${T.line}`, background: T.paper, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px' }}>
-        <span style={{ color: '#bbb', display: 'flex', flexShrink: 0 }}>{icon}</span>
-        <span style={{ flex: 1, fontSize: '.78rem', fontWeight: 600, color: T.mute }}>{label}</span>
-        <span style={{ fontSize: '.63rem', fontWeight: 700, color: T.mute, background: T.lineSoft, borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap' }}>Coming soon</span>
-      </div>
-    </div>
   )
 }
 
@@ -1632,15 +1617,6 @@ function ClipCard({ job, ytConnected, ttConnected, publishedYT, publishingYT, pu
               {job.post_hashtags.join(' ')}
             </div>
           )}
-        </div>
-      )}
-      {isComplete && !socialEnabled && (
-        <div style={{ padding: '4px 4px 2px' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            padding: '7px 4px', borderRadius: 7, border: '1.5px solid #e5e5e5',
-            background: '#fafafa', color: T.mute, fontSize: '.65rem', fontWeight: 600,
-          }}>Publish to YouTube/TikTok — coming soon</div>
         </div>
       )}
       {isComplete && socialEnabled && (

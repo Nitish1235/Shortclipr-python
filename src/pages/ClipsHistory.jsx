@@ -23,6 +23,7 @@ function fmtDate(iso) {
 
 export default function ClipsHistory() {
   const { user, logout } = useAuth()
+  const isMarketer = user?.plan === 'marketer'
   const navigate = useNavigate()
 
   const [loading, setLoading]   = useState(true)
@@ -90,6 +91,7 @@ export default function ClipsHistory() {
 
   // Social status
   useEffect(() => {
+    if (!isMarketer) return
     const token = localStorage.getItem('sc_token')
     if (!token) return
     fetch(`${API_BASE}/social/status`, { headers: { Authorization: `Bearer ${token}` } })
@@ -203,7 +205,7 @@ export default function ClipsHistory() {
         </div>
       )}
 
-      <main className="clips-library-page" style={{ flex: 1, background: '#f7f8fa', paddingBottom: 60 }}>
+      <main className={`clips-library-page ${isMarketer ? 'marketer-access' : 'standard-access'}`} style={{ flex: 1, background: '#f7f8fa', paddingBottom: 60 }}>
         {/* Header bar */}
         <div className="clips-library-topbar" style={{ background: '#fff', borderBottom: '1px solid #e5e7eb' }}>
           <div className="clips-library-topbar-inner" style={{ maxWidth: 1140, margin: '0 auto', padding: '0 24px' }}>
@@ -214,8 +216,8 @@ export default function ClipsHistory() {
               </div>
               <div className="clips-library-stats" style={{ marginLeft: 'auto', display: 'flex', gap: 0, borderLeft: '1px solid #e5e7eb' }}>
                 {[
-                  { n: totalClips,                        l: 'Total clips',  c: '#111' },
-                  { n: publishedYT.size + publishedTT.size, l: 'Published', c: '#16a34a' },
+                  { n: totalClips, l: 'Total clips', c: '#111' },
+                  ...(isMarketer ? [{ n: publishedYT.size + publishedTT.size, l: 'Published', c: '#16a34a' }] : []),
                 ].map((s, i) => (
                   <div key={i} style={{
                     padding: '0 20px', borderRight: '1px solid #e5e7eb',
@@ -371,6 +373,7 @@ export default function ClipsHistory() {
 
                           {/* Action buttons */}
                           <div className="clips-library-actions" style={{ display: 'flex', gap: 3 }}>
+                            {isMarketer && <>
                             {/* Post-to-YouTube/TikTok disabled — pending platform
                                 approval. Original buttons called handlePublishYT/TT
                                 (now stubbed above). */}
@@ -396,6 +399,7 @@ export default function ClipsHistory() {
                             >
                               <TTLogo size={10} /> Soon
                             </div>
+                            </>}
                             <button
                               onClick={e => handleDownload(e, clip, job.job_id)}
                               title={isPaid ? 'Download MP4' : 'Upgrade to download'}
@@ -482,6 +486,7 @@ export default function ClipsHistory() {
             </div>
             {/* Actions */}
             <div className="clips-library-modal-actions" style={{ padding: '14px 18px', display: 'flex', gap: 8 }}>
+              {isMarketer && <>
               {/* Post-to-YouTube/TikTok disabled — pending platform approval.
                   Original buttons called handlePublishYT/TT (now stubbed above). */}
               <div
@@ -500,6 +505,7 @@ export default function ClipsHistory() {
                   border: '1px dashed #d1d5db', background: '#f9fafb', color: '#9ca3af', cursor: 'default',
                 }}
               ><TTLogo size={13} /> TikTok Soon</div>
+              </>}
               <button
                 onClick={e => handleDownload(e, modalClip, modalJob?.job_id)}
                 style={{

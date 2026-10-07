@@ -26,7 +26,7 @@ const FEATURES = [
   { icon: "⚡", text: "Auto-extracts viral moments with AI" },
   { icon: "📐", text: "Smart reframe to 9:16 — no manual cropping" },
   { icon: "💬", text: "Burnt-in captions, perfectly synced" },
-  { icon: "🚀", text: "Publish directly to YouTube & TikTok" },
+  { icon: "🚀", text: "Download clips ready for every short-form platform" },
 ]
 
 export default function Login() {

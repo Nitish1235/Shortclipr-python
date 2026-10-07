@@ -69,7 +69,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
 
   // Social publishing is beta — only available to the allowlisted account
-  const socialEnabled = user?.email === 'jainnitish432@gmail.com'
+  const socialEnabled = user?.plan === 'marketer'
 
   // Jobs & clips
   const [jobs, setJobs]               = useState([])
@@ -124,7 +124,7 @@ export default function Dashboard() {
   const [tick, setTick] = useState(0) // drives timer re-renders
 
   const isPaid = user?.plan && user.plan !== 'free'
-  const isMarketer = user?.role === 'marketer' || user?.plan === 'marketer' || user?.is_marketer
+  const isMarketer = user?.plan === 'marketer'
   const currentJob = jobs[0] || null          // most-recent job only
   const isActive = isJobActive(currentJob)
 
@@ -158,6 +158,7 @@ export default function Dashboard() {
 
   // ── Social connect detection (URL params + localStorage) ─────
   useEffect(() => {
+    if (!socialEnabled) return
     const params = new URLSearchParams(location.search)
     const statusParam = params.get('status')
 

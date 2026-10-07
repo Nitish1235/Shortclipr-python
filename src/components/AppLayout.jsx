@@ -125,6 +125,7 @@ export default function AppLayout({ children }) {
   const [tutorialUrl, setTutorialUrl] = useState(null)
 
   const isPaid    = user?.plan && user.plan !== 'free'
+  const isMarketer = user?.plan === 'marketer'
   const used      = user?.credits_used || 0
   const limit     = user?.credits_limit || 3
   const usedPct   = Math.min(100, Math.round((used / limit) * 100))
@@ -132,6 +133,7 @@ export default function AppLayout({ children }) {
   const initials  = (user?.full_name || user?.email || 'U')[0].toUpperCase()
 
   useEffect(() => {
+    if (!isMarketer) return
     const token = localStorage.getItem('sc_token')
     if (!token) return
     fetch(`${API_BASE}/social/status`, { headers: { Authorization: `Bearer ${token}` } })
@@ -146,7 +148,7 @@ export default function AppLayout({ children }) {
         else localStorage.removeItem('tt_connected')
       })
       .catch(() => {})
-  }, [])
+  }, [isMarketer])
 
   // Nav item only appears once an admin has actually uploaded a tutorial.
   useEffect(() => {
@@ -208,10 +210,10 @@ export default function AppLayout({ children }) {
         <nav aria-label="Workspace navigation">
           {[...NAV_WORKSPACE, ...NAV_ACCOUNT, ...(tutorialUrl ? [{ icon: Icon.tutorial, label:'Tutorial', path:'/youtube-shorts/tutorial' }] : [])].map(item => <Link className={`studio-nav-link ${location.pathname === item.path ? 'is-active' : ''}`} key={item.path} to={item.path}>{item.icon}<span>{item.label === 'Dashboard' ? 'Overview' : item.label === 'Clips History' ? 'Clip library' : item.label}</span></Link>)}
         </nav>
-        <div className="studio-connections"><span className="studio-eyebrow">CONNECTED ACCOUNTS</span>
+        {isMarketer && <div className="studio-connections"><span className="studio-eyebrow">CONNECTED ACCOUNTS</span>
           <SocialRow icon={<YTLogo size={14}/>} label="YouTube" connected={ytConn} onConnect={connectYT} onDisconnect={() => disconnect('youtube')}/>
           <SocialRow icon={<TTLogo size={14}/>} label="TikTok" connected={ttConn} onConnect={connectTT} onDisconnect={() => disconnect('tiktok')}/>
-        </div>
+        </div>}
         <div className="studio-allowance"><span className="studio-eyebrow">YOUR MONTHLY SPACE</span><h3>{Math.max(0, remaining)} <small>clips remaining</small></h3><div className="studio-meter"><i style={{width:`${usedPct}%`}} /></div><p>{used} of {limit} credits used · {isPaid ? user.plan : 'Free'} plan</p><Link to="/billing">Manage plan ↗</Link></div>
         <div className="studio-profile"><span className="studio-avatar">{user?.avatar_url ? <img src={user.avatar_url} alt=""/> : initials}</span><div><b>{user?.full_name || user?.email?.split('@')[0] || 'Creator'}</b><small>Your creative workspace</small></div><button onClick={logout} title="Sign out" aria-label="Sign out">{Icon.signout}</button></div>
       </aside>

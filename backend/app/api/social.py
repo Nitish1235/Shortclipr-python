@@ -129,6 +129,7 @@ def _require_marketer(current_user, feature_name: str = "This feature") -> None:
 
 @router.get("/status")
 async def social_status(current_user: CurrentUser):
+    _require_marketer(current_user, "Social publishing")
     """
     Returns connected status for each platform.
     Frontend calls this on Dashboard mount to avoid relying on localStorage alone.
@@ -325,6 +326,7 @@ async def _upload_one_yt(item: PublishItem, yt_tokens: dict) -> dict:
 
 @router.get("/auth/tiktok")
 async def tiktok_auth_init(current_user: CurrentUser, product: str = "youtube-shorts"):
+    _require_marketer(current_user, "TikTok posting")
     """
     Returns TikTok OAuth v2 authorization URL.
 
@@ -449,6 +451,7 @@ async def _tiktok_refresh_token(user_id: str, tt_tokens: dict) -> dict:
 
 @router.post("/publish/tiktok")
 async def publish_to_tiktok(body: PublishRequest, current_user: CurrentUser):
+    _require_marketer(current_user, "TikTok posting")
     """
     Publish clips to TikTok via Content Posting API v2 (FILE_UPLOAD).
     We fetch each clip's bytes from GCS ourselves and upload them directly
@@ -673,6 +676,7 @@ class TikTokStatusRequest(BaseModel):
 
 @router.post("/publish/tiktok/status")
 async def tiktok_publish_status(body: TikTokStatusRequest, current_user: CurrentUser):
+    _require_marketer(current_user, "TikTok posting")
     """
     Poll TikTok for the publish status of a previously queued video.
     TikTok processes the video asynchronously; call this after receiving publish_id.
@@ -706,6 +710,7 @@ async def tiktok_publish_status(body: TikTokStatusRequest, current_user: Current
 
 @router.post("/upload/tiktok")
 async def upload_to_tiktok_draft(body: PublishRequest, current_user: CurrentUser):
+    _require_marketer(current_user, "TikTok posting")
     """
     Save clips to the creator's TikTok drafts inbox via Content Posting API v2
     (video.upload scope). The video appears in the creator's TikTok app inbox —
@@ -830,6 +835,7 @@ async def _upload_one_tiktok_draft(item: PublishItem, access_token: str) -> dict
 
 @router.delete("/disconnect/tiktok")
 async def tiktok_disconnect(current_user: CurrentUser):
+    _require_marketer(current_user, "TikTok posting")
     """Remove stored TikTok tokens (user-initiated disconnect)."""
     tokens = await _get_social_tokens(current_user.user_id)
     tokens.pop("tiktok", None)
@@ -839,6 +845,7 @@ async def tiktok_disconnect(current_user: CurrentUser):
 
 @router.delete("/disconnect/youtube")
 async def youtube_disconnect(current_user: CurrentUser):
+    _require_marketer(current_user, "YouTube OAuth posting")
     """Remove stored YouTube tokens (user-initiated disconnect)."""
     tokens = await _get_social_tokens(current_user.user_id)
     tokens.pop("youtube", None)

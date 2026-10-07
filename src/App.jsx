@@ -26,6 +26,7 @@ import Contact        from './pages/Contact'
 import About          from './pages/About'
 import PaymentSuccess from './pages/PaymentSuccess'
 import Dashboard      from './pages/Dashboard'
+import CreateClips    from './pages/CreateClips'
 import Login          from './pages/Login'
 import Settings       from './pages/Settings'
 import ClipsHistory   from './pages/ClipsHistory'
@@ -35,7 +36,6 @@ import Changelog      from './pages/Changelog'
 import PressKit       from './pages/PressKit'
 import Careers        from './pages/Careers'
 import DMCA           from './pages/DMCA'
-import Editor         from './pages/Editor'
 import Lab            from './pages/Lab'
 import Tutorial       from './pages/Tutorial'
 import Admin          from './pages/Admin'
@@ -252,6 +252,7 @@ export default function App() {
             <Route path="/dmca"                  element={<DMCA />} />
             <Route path="/payment/success"       element={<PaymentSuccess />} />
             <Route path="/billing"               element={<ProtectedRoute><Billing /></ProtectedRoute>} />
+            <Route path="/create"                element={<Navigate to="/youtube-shorts/create" replace />} />
 
             {/* Admin — no separate auth guard on frontend, backend enforces admin check */}
             <Route path="/admin"                 element={<ProtectedRoute><Admin /></ProtectedRoute>} />
@@ -271,8 +272,9 @@ export default function App() {
 
             {/* Protected — user must be logged in */}
             <Route path="/youtube-shorts/dashboard"             element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/youtube-shorts/create"                element={<ProtectedRoute><CreateClips /></ProtectedRoute>} />
             <Route path="/youtube-shorts/clips"                 element={<ProtectedRoute><ClipsHistory /></ProtectedRoute>} />
-            <Route path="/youtube-shorts/editor/:jobId/:clipId" element={<ProtectedRoute><Editor /></ProtectedRoute>} />
+            <Route path="/youtube-shorts/editor/:jobId/:clipId" element={<ProtectedRoute><Navigate to="/youtube-shorts/clips" replace /></ProtectedRoute>} />
             <Route path="/youtube-shorts/lab"                   element={<ProtectedRoute><Lab /></ProtectedRoute>} />
             <Route path="/youtube-shorts/settings"              element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/youtube-shorts/tutorial"              element={<ProtectedRoute><Tutorial /></ProtectedRoute>} />
