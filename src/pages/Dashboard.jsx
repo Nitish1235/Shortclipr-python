@@ -955,9 +955,9 @@ export default function Dashboard() {
 
           {/* ── Phase 1: Raw clips encoding ── */}
           {rawClips.length > 0 && (
-            <div style={{ background:'#fff', border:'1.5px solid #fde68a', borderRadius:'14px', overflow:'hidden', marginBottom:'20px' }}>
+            <div className="dashboard-processing-section" style={{ background:'#fff', border:'1.5px solid #fde68a', borderRadius:'14px', overflow:'hidden', marginBottom:'20px' }}>
               {/* Section header */}
-              <div style={{
+              <div className="dashboard-processing-header" style={{
                 padding:'12px 18px', borderBottom:'1px solid #fde68a',
                 background:'#fffbeb',
                 display:'flex', alignItems:'center', gap:'10px',
@@ -978,16 +978,16 @@ export default function Dashboard() {
               </div>
 
               {/* Square card grid */}
-              <div style={{ padding:'16px', display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:'12px' }}>
+              <div className="dashboard-processing-grid" style={{ padding:'16px', display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:'12px' }}>
                 {rawClips.map(clip => {
                   const clipId = clip.clip_id || clip.id
                   const dur = clip.duration
                     ? `${Math.floor(clip.duration/60)}:${String(Math.round(clip.duration%60)).padStart(2,'0')}`
                     : null
                   return (
-                    <div key={clipId} style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                    <div className="dashboard-processing-item" key={clipId} style={{ display:'flex', flexDirection:'column', gap:6 }}>
                       {/* Square card */}
-                      <div style={{
+                      <div className="dashboard-processing-media" style={{
                         width:'100%', aspectRatio:'1/1', borderRadius:12,
                         overflow:'hidden', position:'relative',
                         background:'linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)',
@@ -1042,7 +1042,7 @@ export default function Dashboard() {
                         )}
                       </div>
                       {/* Title below card */}
-                      <p style={{
+                      <p className="dashboard-processing-title" style={{
                         margin:0, fontSize:'.68rem', fontWeight:600, color:'#6b7280',
                         overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
                         lineHeight:1.3,
@@ -1095,7 +1095,7 @@ export default function Dashboard() {
                     {/* Filters */}
                     <div className="dashboard-clips-filters" style={{ marginLeft:'auto', display:'flex', gap:'6px' }}>
                       {['all','unpublished','expiring'].map(f => (
-                        <button key={f} onClick={() => setFilter(f)} style={{
+                        <button className={filter === f ? 'is-active' : ''} key={f} onClick={() => setFilter(f)} style={{
                           padding:'4px 12px', borderRadius:'7px', border:'1px solid',
                           borderColor: filter === f ? (f==='expiring'?'#fca5a5':'#cf1322') : '#e5e7eb',
                           background: filter === f ? (f==='expiring'?'#fff5f5':'#fff0f3') : 'none',
@@ -1447,6 +1447,7 @@ export default function Dashboard() {
       {/* ══ VIDEO PREVIEW MODAL ══ */}
       {modalOpen && modalClip && (
         <div
+          className="dashboard-clip-modal-backdrop"
           onClick={closeModal}
           style={{
             position:'fixed', inset:0, background:'rgba(0,0,0,.6)',
@@ -1455,6 +1456,7 @@ export default function Dashboard() {
           }}
         >
           <div
+            className="dashboard-clip-modal"
             onClick={e => e.stopPropagation()}
             style={{
               background:'#fff', borderRadius:16, width:'100%', maxWidth:800,
@@ -1463,7 +1465,7 @@ export default function Dashboard() {
             }}
           >
             {/* Modal header */}
-            <div style={{
+            <div className="dashboard-clip-modal-header" style={{
               padding:'13px 18px', borderBottom:'1px solid #e5e7eb',
               display:'flex', alignItems:'center', gap:10, flexShrink:0,
             }}>
@@ -1489,9 +1491,9 @@ export default function Dashboard() {
             </div>
 
             {/* Modal body */}
-            <div style={{ display:'flex', flex:1, overflow:'hidden', minHeight:0 }}>
+            <div className="dashboard-clip-modal-body" style={{ display:'flex', flex:1, overflow:'hidden', minHeight:0 }}>
               {/* Video panel */}
-              <div style={{ flexShrink:0, background:'#000', padding:'16px 12px 16px 16px', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <div className="dashboard-clip-modal-video" style={{ flexShrink:0, background:'#000', padding:'16px 12px 16px 16px', display:'flex', alignItems:'center', justifyContent:'center' }}>
                 <div style={{ width:190, aspectRatio:'9/16', position:'relative', overflow:'hidden', borderRadius:10 }}>
                   <video
                     key={modalClip.clip_id || modalClip.id}
@@ -1519,7 +1521,7 @@ export default function Dashboard() {
               </div>
 
               {/* Info panel */}
-              <div style={{ flex:1, padding:'18px 20px', overflowY:'auto', display:'flex', flexDirection:'column', gap:14 }}>
+              <div className="dashboard-clip-modal-info" style={{ flex:1, padding:'18px 20px', overflowY:'auto', display:'flex', flexDirection:'column', gap:14 }}>
 
                 {/* Score bar */}
                 <div>
@@ -1799,7 +1801,7 @@ export default function Dashboard() {
             </div>
 
             {/* Modal footer — prev/next nav */}
-            <div style={{
+            <div className="dashboard-clip-modal-footer" style={{
               padding:'10px 18px', borderTop:'1px solid #e5e7eb',
               display:'flex', alignItems:'center', gap:8,
               background:'#fafafa', flexShrink:0,
