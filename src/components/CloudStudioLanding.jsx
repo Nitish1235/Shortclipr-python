@@ -12,8 +12,10 @@ const samples = [
 
 export function CloudNavigation() {
   const location = useLocation(); const navigate = useNavigate()
+  const { user } = useAuth()
   const toHero = event => { event.preventDefault(); if (location.pathname === '/youtube-shorts') document.getElementById('hero')?.scrollIntoView({ behavior: 'smooth' }); else navigate('/youtube-shorts', { state: { scrollToSection: 'hero' } }) }
-  return <nav className="cloud-nav"><Link className="cloud-brand" to="/youtube-shorts"><Logo size={28} /><span>ShortClipr</span></Link><div className="cloud-nav-links"><a href="#examples">Examples</a><a href="#moments">How it works</a><a href="#pricing">Pricing</a></div><a className="cloud-button cloud-button-small" href="#hero" onClick={toHero}>Create clips <span>↗</span></a></nav>
+  const handleCTA = event => { event.preventDefault(); if (user) navigate('/youtube-shorts/dashboard'); else navigate('/youtube-shorts/login') }
+  return <nav className="cloud-nav"><Link className="cloud-brand" to="/youtube-shorts"><Logo size={28} /><span>ShortClipr</span></Link><div className="cloud-nav-links"><a href="#examples">Examples</a><a href="#moments">How it works</a><a href="#pricing">Pricing</a>{user && <Link to="/youtube-shorts/dashboard" className="cloud-nav-dashboard">Dashboard</Link>}</div><a className="cloud-button cloud-button-small" href="#" onClick={handleCTA}>{user ? 'Go to Dashboard ↗' : 'Create clips ↗'}</a></nav>
 }
 
 export default function CloudStudioLanding() {
