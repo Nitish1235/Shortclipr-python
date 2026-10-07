@@ -16,7 +16,7 @@ const faqs = [
   },
   {
     q: 'Can I use ShortClipr for free?',
-    a: 'Yes — free plan includes 3 full video generations with no watermarks, 720p output, and instant download. No credit card required.',
+    a: 'Yes — the free plan includes 2 clips, 720p output, and a preview on the platform. No credit card is required.',
   },
   {
     q: 'Which YouTube videos work best?',

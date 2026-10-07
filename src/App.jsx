@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import TikTokPixel from './components/TikTokPixel'
+import SEO, { SITE } from './components/SEO'
 import './landing-theme.css'
 import './cloud-studio.css'
 
@@ -12,6 +13,7 @@ import Footer        from './components/Footer'
 // Landing sections
 import VideoShowcase     from './components/VideoShowcase'
 import MultipleShorts    from './components/MultipleShorts'
+import SEOContentHub     from './components/SEOContentHub'
 import Pricing           from './components/Pricing'
 import FAQ               from './components/FAQ'
 import CTA               from './components/CTA'
@@ -97,6 +99,22 @@ function LandingPage() {
 
   return (
     <div className="youtube-shorts-landing">
+      <SEO
+        title="AI YouTube Shorts Maker — Turn Long Videos Into Short Clips | ShortClipr"
+        description="Turn long YouTube videos, podcasts, interviews, and tutorials into ready-to-post YouTube Shorts, TikToks, and Instagram Reels. ShortClipr finds strong moments, reframes them for vertical video, and adds captions in minutes."
+        keywords="AI YouTube Shorts maker, YouTube to Shorts, AI clip maker, long video to short clips, podcast to shorts, video to reels, TikTok clip maker"
+        path="/youtube-shorts"
+        schema={{
+          '@context': 'https://schema.org',
+          '@type': 'SoftwareApplication',
+          name: 'ShortClipr',
+          applicationCategory: 'VideoApplication',
+          operatingSystem: 'Web',
+          url: `${SITE}/youtube-shorts`,
+          description: 'ShortClipr turns long-form YouTube videos into ready-to-post short clips with AI-selected moments, vertical reframing, and captions.',
+          offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD', description: 'Free plan — 2 clips, no credit card required' },
+        }}
+      />
       <CloudNavigation />
       <main>
         <CloudStudioLanding />
@@ -105,6 +123,8 @@ function LandingPage() {
         <VideoShowcase />
 
         <MultipleShorts />
+
+        <SEOContentHub />
 
         {/* 10. Pricing */}
         <Pricing />
