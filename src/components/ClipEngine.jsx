@@ -924,13 +924,13 @@ export default function ClipEngine({ onJobCreated }) {
               {captionStyle !== 'none' && (
               <div className="ce-control-row" style={{ ...rowStyle, borderBottom:'none' }}>
                 <span className="ce-row-label" style={labelStyle}>Words / Screen</span>
-                <div className="ce-segment-row" style={{ display:'flex', gap:'8px', flex:1 }}>
+                <div className="ce-segment-row ce-words-grid" style={{ display:'flex', gap:'8px', flex:1 }}>
                   {[
                     { val:1, label:'1 Word', sub:'Max Impact' },
                     { val:2, label:'2 Words', sub:'Balanced'  },
                     { val:3, label:'3 Words', sub:'Natural'   },
                   ].map(({ val, label, sub }) => (
-                    <button key={val} className="ce-choice-btn ce-words-btn" onClick={() => setWordsPerLine(val)} style={{
+                    <button key={val} type="button" aria-pressed={wordsPerLine === val} className={`ce-choice-btn ce-words-btn${wordsPerLine === val ? ' is-active' : ''}`} onClick={() => setWordsPerLine(val)} style={{
                       flex:1, padding:'8px 6px', borderRadius:'8px',
                       background: wordsPerLine === val ? '#cf1322' : '#f9f9f9',
                       color: wordsPerLine === val ? '#fff' : '#666',
@@ -938,7 +938,8 @@ export default function ClipEngine({ onJobCreated }) {
                       cursor:'pointer', fontSize:'0.75rem', fontWeight:700, textAlign:'center',
                       transition:'all 0.15s',
                     }}>
-                      {label}<br/><span style={{ opacity:0.7, fontSize:'0.68rem', fontWeight:400 }}>{sub}</span>
+                      <span className="ce-words-value">{label}</span>
+                      <span className="ce-words-description">{sub}</span>
                     </button>
                   ))}
                 </div>
