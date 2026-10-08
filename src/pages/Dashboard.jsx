@@ -876,8 +876,6 @@ export default function Dashboard() {
             </div><div className="studio-welcome-art" aria-hidden="true"><span>01 <b>Find moments</b></span><span>02 <b>Frame beautifully</b></span><span>03 <b>Make it yours</b></span></div>
           </section>
 
-          <PublicLibrary />
-
           {/* ── Active job progress banner ── */}
           {isActive && (
             <div style={{
@@ -1411,6 +1409,10 @@ export default function Dashboard() {
               </div>
             </div>
           )}
+
+          {/* Keep the creator's completed clips as the primary destination.
+              The public library remains available below their own work. */}
+          <PublicLibrary />
         </div>
       </main>
 

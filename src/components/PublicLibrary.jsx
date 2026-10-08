@@ -50,12 +50,11 @@ function LibraryVideo({ video }) {
           onPlay={() => setPlaying(true)}
         />
         <span className="public-library-play" aria-hidden="true">{playing ? 'Ⅱ' : '▶'}</span>
-        {video.views && <span className="public-library-views">{video.views} views</span>}
         <span className="public-library-shade" aria-hidden="true" />
       </button>
       <div className="public-library-copy">
         <p>{video.title || 'Created with Shortclipr'}</p>
-        <span>{video.earnings ? `${video.earnings} earned` : 'Made with Shortclipr'}</span>
+        <span>Made with Shortclipr</span>
       </div>
     </article>
   )
