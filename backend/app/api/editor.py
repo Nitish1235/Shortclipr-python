@@ -7,15 +7,18 @@ Access rules:
 """
 
 import json
+import shutil
 import tempfile
 import time
+import uuid
+import zipfile
 from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Body, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Query, status
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.api.deps import CurrentUser, decode_access_token
 from app.core.config import get_settings
@@ -330,3 +333,70 @@ async def download_clip(
     # This avoids proxying large video files through our own server workers,
     # which caused 502/503 errors when multiple clips were downloaded at once.
     return RedirectResponse(url=clip["video_url"], status_code=302)
+
+
+@router.get("/clips/download-batch")
+async def download_clip_batch(
+    background_tasks: BackgroundTasks,
+    clip_ids: str = Query(..., description="Comma-separated clip UUIDs, up to 10"),
+    token: Optional[str] = Query(None),
+):
+    """Build one ZIP for a paid user's selected clips.
+
+    Browsers frequently block repeated automatic downloads. A single ZIP gives
+    the dashboard one reliable download while retaining plan and ownership
+    checks for every selected clip.
+    """
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        payload = decode_access_token(token)
+    except HTTPException:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    user = await db.get_user(payload.sub)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    _require_plan(user)
+
+    raw_ids = list(dict.fromkeys(item.strip() for item in clip_ids.split(",") if item.strip()))
+    if not raw_ids or len(raw_ids) > 10:
+        raise HTTPException(status_code=400, detail="Select between 1 and 10 clips")
+    try:
+        ids = [str(uuid.UUID(item)) for item in raw_ids]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid clip selection")
+
+    rows = await db._fetch(
+        """
+        SELECT clip_id, video_url
+        FROM clips
+        WHERE clip_id = ANY($1::uuid[]) AND user_id = $2
+        """,
+        ids, payload.sub,
+    )
+    if len(rows) != len(ids) or any(not row.get("video_url") for row in rows):
+        raise HTTPException(status_code=404, detail="One or more selected clips are unavailable")
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="shortclipr_batch_"))
+    zip_path = temp_dir / "shortclipr-clips.zip"
+    try:
+        clips_by_id = {str(row["clip_id"]): row for row in rows}
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_STORED) as archive:
+            for index, clip_id in enumerate(ids, start=1):
+                row = clips_by_id[clip_id]
+                local_mp4 = temp_dir / f"clip-{index:02d}.mp4"
+                await download_to_file(row["video_url"], local_mp4)
+                archive.write(local_mp4, arcname=f"Shortclipr_clip_{index:02d}.mp4")
+                local_mp4.unlink(missing_ok=True)
+    except Exception as exc:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(status_code=502, detail="Could not prepare the selected clips") from exc
+
+    background_tasks.add_task(shutil.rmtree, temp_dir, ignore_errors=True)
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename="shortclipr-clips.zip",
+        background=background_tasks,
+    )

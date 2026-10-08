@@ -382,6 +382,9 @@ export default function ClipEngine({ onJobCreated }) {
   const [colorCombo,    setColorCombo]    = useState('white_black')
   const [wordsPerLine,  setWordsPerLine]  = useState(2)
   const [captionFont,   setCaptionFont]   = useState('montserrat')
+  // Captions stay horizontally centered. This normalized Y value controls
+  // their vertical centre in both the live preview and exported short.
+  const [captionY,      setCaptionY]      = useState(0.80)
   const [shortTemplate, setShortTemplate] = useState('zoom_blur')
   const [barColor,      setBarColor]      = useState('#0d0d0d')
   const [aspect,        setAspect]        = useState('9:16')
@@ -533,6 +536,7 @@ export default function ClipEngine({ onJobCreated }) {
             color:          colorCombo,
             words_per_line: wordsPerLine,
             font:           captionFont,
+            caption_y:      captionY,
             short_template: shortTemplate,
             bar_color:      barColor,
             aspect:         aspect,
@@ -946,6 +950,32 @@ export default function ClipEngine({ onJobCreated }) {
               </div>
               )}
 
+              {/* Captions always stay horizontally centered; only their vertical placement is adjustable. */}
+              {captionStyle !== 'none' && (
+                <div className="ce-caption-position" style={{ padding:'14px 0 4px', borderTop:'1px solid #f0f0f0' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, marginBottom:8 }}>
+                    <div>
+                      <span className="ce-row-label" style={labelStyle}>Caption Position</span>
+                      <span style={{ display:'block', marginTop:3, color:'#8b9aa1', fontSize:'.68rem' }}>Centered horizontally</span>
+                    </div>
+                    <strong style={{ color:'#cf1322', fontSize:'.74rem' }}>{Math.round(captionY * 100)}%</strong>
+                  </div>
+                  <input
+                    className="ce-caption-position-slider"
+                    type="range"
+                    min={15}
+                    max={85}
+                    value={Math.round(captionY * 100)}
+                    onChange={e => setCaptionY(Number(e.target.value) / 100)}
+                    aria-label="Vertical caption position"
+                    style={{ width:'100%', accentColor:'#cf1322', cursor:'pointer' }}
+                  />
+                  <div style={{ display:'flex', justifyContent:'space-between', marginTop:3, color:'#9aa8ae', fontSize:'.65rem', fontWeight:600 }}>
+                    <span>Higher</span><span>Lower</span>
+                  </div>
+                </div>
+              )}
+
               {/* Caption font */}
               {captionStyle !== 'none' && (
               <div style={{ padding:'12px 0 4px', borderTop:'1px solid #f0f0f0' }}>
@@ -1167,6 +1197,7 @@ export default function ClipEngine({ onJobCreated }) {
                 vAlign="bottom"
                 wordsPerLine={wordsPerLine}
                 font={captionFont}
+                captionY={captionY}
               />
               <div style={{
                 position:'absolute', top:'6px', left:'6px',

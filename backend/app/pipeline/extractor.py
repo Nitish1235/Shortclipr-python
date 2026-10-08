@@ -1201,6 +1201,7 @@ async def _encode_reframed_and_captioned(
     h_align: str,
     v_align: str,
     words_per_line: int,
+    caption_y: float | None = None,
     hook_title: str | None = None,
     face_track: list[tuple[float, float, float]] | None = None,
     src_w: int = 0,
@@ -1282,7 +1283,7 @@ async def _encode_reframed_and_captioned(
             ass_content = build_ass_content(
                 effective_captions, style, color, h_align, v_align, words_per_line, hook_title,
                 template=template, title_permanent=title_permanent, clip_duration=clip_duration, font=font,
-                title_color=title_color_hex,
+                title_color=title_color_hex, caption_y=caption_y,
             )
 
             # Inject CTA animation style & events into the ASS if marketer CTA is enabled
@@ -1474,6 +1475,7 @@ async def reframe_and_caption(
     h_align: str = "center",
     v_align: str = "bottom",
     words_per_line: int = 3,
+    caption_y: float | None = None,
     hook_title: str | None = None,
     face_track: list[tuple[float, float, float]] | None = None,
     src_w: int = 0,
@@ -1505,7 +1507,7 @@ async def reframe_and_caption(
         zoom_beats:  caption-start timestamps (seconds) to punch-zoom on —
                      see _compute_zoom_beats(). Empty/None = ambient drift only.
         aspect:      one of VALID_ASPECTS — "9:16" (default), "16:9", "1:1"
-        captions, style, color, h_align, v_align, words_per_line:
+        captions, style, color, h_align, v_align, words_per_line, caption_y:
                      passed to build_ass_content() when captions is non-empty
         hook_title:  AI-generated hook (ClipTimestamp.title), burned as a
                      boxed title card for the first HOOK_TITLE_DURATION
@@ -1543,7 +1545,7 @@ async def reframe_and_caption(
         await _encode_reframed_and_captioned(
             input_path, raw_output_path, captioned_output_path,
             tpl, bar_color, zoom_beats, width, height,
-            captions, style, color, h_align, v_align, words_per_line,
+            captions, style, color, h_align, v_align, words_per_line, caption_y,
             hook_title, face_track, src_w, src_h, title_permanent, clip_duration, font,
             title_color, title_bg, title_bg_opacity, job_semaphore, is_marketer,
             cta_settings=cta_settings,
@@ -1557,7 +1559,7 @@ async def reframe_and_caption(
             await _encode_reframed_and_captioned(
                 input_path, raw_output_path, captioned_output_path,
                 "blur_bg", bar_color, None, width, height,
-                captions, style, color, h_align, v_align, words_per_line,
+                captions, style, color, h_align, v_align, words_per_line, caption_y,
                 hook_title, None, 0, 0, title_permanent, clip_duration, font,
                 title_color, title_bg, title_bg_opacity, job_semaphore, False,
                 cta_settings=None,

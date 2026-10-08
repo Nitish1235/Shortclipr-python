@@ -81,6 +81,7 @@ export default function Dashboard() {
   // UI state
   const [filter, setFilter]           = useState('all') // all | unpublished | expiring
   const [selectedClipIds, setSelectedClipIds] = useState(new Set())
+  const [bulkDownloading, setBulkDownloading] = useState(false)
   const [sourceUrl, setSourceUrl] = useState('')
   useEffect(() => {
     if (sessionStorage.getItem('sc_pending_url') || new URLSearchParams(location.search).has('create')) navigate('/youtube-shorts/create', { replace:true })
@@ -372,8 +373,21 @@ export default function Dashboard() {
   const handleBulkDownload = async () => {
     if (!isPaid) { navigate('/billing'); return }
     const sel = filteredClips.filter(c => selectedClipIds.has(c.clip_id || c.id))
-    if (sel.length > 1) alert('Allow Multiple Downloads in your browser to save all at once!')
-    for (const clip of sel) { doDownload(clip.clip_id || clip.id); await new Promise(r => setTimeout(r, 600)) }
+    if (!sel.length) return
+    const token = localStorage.getItem('sc_token')
+    if (!token) { logout(); return }
+
+    // One ZIP bypasses browser multiple-download blocking and keeps every
+    // selected clip together in a single download.
+    setBulkDownloading(true)
+    const ids = sel.map(clip => clip.clip_id || clip.id).join(',')
+    const link = document.createElement('a')
+    link.href = `${API_BASE}/clips/download-batch?clip_ids=${encodeURIComponent(ids)}&token=${encodeURIComponent(token)}`
+    link.download = 'shortclipr-clips.zip'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.setTimeout(() => setBulkDownloading(false), 1200)
   }
 
   // ── YouTube + TikTok publishing ───────────────────────────────────
@@ -1413,10 +1427,11 @@ export default function Dashboard() {
             {selectedClipIds.size} clip{selectedClipIds.size !== 1 ? 's' : ''} selected
           </span>
           <div style={{ width:1, height:20, background:'#e5e7eb' }}/>
-          <button onClick={handleBulkDownload} style={{
+          <button onClick={handleBulkDownload} disabled={bulkDownloading} style={{
             background: isPaid ? '#111' : '#cf1322', color:'#fff', border:'none',
-            borderRadius:7, padding:'7px 16px', fontWeight:700, fontSize:'.76rem', cursor:'pointer',
-          }}>{isPaid ? '⬇ Download' : '💳 Upgrade to Download'}</button>
+            borderRadius:7, padding:'7px 16px', fontWeight:700, fontSize:'.76rem', cursor:bulkDownloading ? 'wait' : 'pointer',
+            opacity:bulkDownloading ? .7 : 1,
+          }}>{isPaid ? (bulkDownloading ? 'Preparing ZIP…' : '⬇ Download ZIP') : '💳 Upgrade to Download'}</button>
           {(socialEnabled || isMarketer) && (<>
           <button onClick={handleBulkPublishYT} style={{
             display:'flex', alignItems:'center', gap:7,

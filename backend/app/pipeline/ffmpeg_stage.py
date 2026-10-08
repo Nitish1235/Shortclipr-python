@@ -160,6 +160,7 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
     h_align          = options.get("h_align",         "center")
     v_align          = options.get("v_align",         "bottom")
     words_per_line   = options.get("words_per_line",  3)
+    caption_y        = options.get("caption_y")
     short_template   = options.get("short_template",  "full_screen")
     title_permanent  = options.get("title_permanent",  False)
     hook_title_enabled = options.get("hook_title_enabled", True)
@@ -342,6 +343,7 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
                         zoom_beats=zoom_beats, aspect=aspect,
                         captions=captions, style=clip_style, color=color_combo,
                         h_align=h_align, v_align=v_align, words_per_line=words_per_line,
+                        caption_y=caption_y,
                         hook_title=(ts.title_with_emoji if hook_title_enabled else None),
                         face_track=face_track, src_w=src_w, src_h=src_h,
                         title_permanent=title_permanent, clip_duration=clip_actual_dur,

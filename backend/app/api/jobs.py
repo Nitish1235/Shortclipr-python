@@ -85,6 +85,7 @@ class JobOptions(BaseModel):
     h_align:      str = "center"        # horizontal position
     v_align:      str = "bottom"        # vertical position
     words_per_line:  int = 3             # 1 | 2 | 3  — words per screen
+    caption_y:       float | None = None # 0.0-1.0 continuous vertical position; X stays centered
     title_permanent: bool = False        # keep the AI hook title on screen for the whole clip
     hook_title_enabled: bool = True      # False = "None" — skip the AI title card entirely
     font:            str = "default"    # one of captions.VALID_FONTS
@@ -147,6 +148,11 @@ class JobOptions(BaseModel):
     @classmethod
     def validate_words_per_line(cls, v: int) -> int:
         return v if v in VALID_WORDS_PER_LINE else 3
+
+    @field_validator("caption_y")
+    @classmethod
+    def validate_caption_y(cls, v: float | None) -> float | None:
+        return None if v is None else max(0.0, min(1.0, v))
 
     @field_validator("font")
     @classmethod

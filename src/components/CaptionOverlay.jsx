@@ -255,6 +255,7 @@ export default function CaptionOverlay({
   wordsPerLine = 3,
   highlightColor,
   font = DEFAULT_FONT,
+  captionY = null,
 }) {
   const [time, setTime] = useState(0)
   const [demoIdx, setDemoIdx] = useState(0)
@@ -284,7 +285,9 @@ export default function CaptionOverlay({
   }, [mode, style, wordsPerLine, previewText]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const combo = COLOR_COMBOS[color] || COLOR_COMBOS[DEFAULT_COLOR]
-  const pos   = resolvePos(hAlign, vAlign)
+  const pos   = Number.isFinite(captionY)
+    ? { x:50, y:Math.max(0, Math.min(1, captionY)) * 100, tx:'-50%', ty:'-50%' }
+    : resolvePos(hAlign, vAlign)
 
   let phrase, chunks, idx, activeTime
   if (mode === 'static') {
