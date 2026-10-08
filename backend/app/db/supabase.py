@@ -15,7 +15,8 @@ from typing import Any
 import asyncpg
 
 from app.core.config import get_settings
-from app.core.plan_limits import get_max_video_minutes, get_video_minutes_limit
+from app.core.plan_limits import get_credits_limit, get_max_video_minutes, get_video_minutes_limit
+from app.core.brainrot_plan_limits import get_brainrot_credits_limit
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -904,12 +905,106 @@ async def delete_tiktok_account_clip(clip_row_id: str) -> None:
 
 # ── User operations ───────────────────────────────────────────
 
+async def _enforce_expired_subscriptions(user: dict | None) -> dict | None:
+    """Downgrade locally expired subscriptions before returning a user row.
+
+    Dodo webhooks remain the primary source of subscription state. This check
+    is the fail-safe: a delayed/missed cancellation or expiry webhook can no
+    longer leave a paid plan active forever. The conditional UPDATE makes the
+    operation safe when several requests arrive at the expiry boundary.
+
+    The internal ``marketer`` plan is intentionally exempt because it is
+    assigned by admins and is not a customer Dodo subscription.
+    """
+    if not user:
+        return user
+
+    now = _now()
+    user_id = user["id"]
+
+    plan_expiry = user.get("plan_expires_at")
+    if (
+        user.get("plan", "free") not in ("free", "marketer")
+        and plan_expiry is not None
+        and plan_expiry <= now
+    ):
+        free_credits = get_credits_limit("free")
+        free_video_mins = get_video_minutes_limit("free")
+        result = await _execute(
+            """
+            UPDATE users
+            SET plan                = 'free',
+                credits_limit       = $1,
+                credits_used        = LEAST(credits_used, $1),
+                video_minutes_limit = $2,
+                video_minutes_used  = LEAST(video_minutes_used, $2),
+                subscription_status = 'expired',
+                updated_at          = NOW()
+            WHERE id = $3
+              AND plan NOT IN ('free', 'marketer')
+              AND plan_expires_at IS NOT NULL
+              AND plan_expires_at <= NOW()
+            """,
+            free_credits, free_video_mins, user_id,
+        )
+        if result != "UPDATE 0":
+            user.update({
+                "plan": "free",
+                "credits_limit": free_credits,
+                "credits_used": min(int(user.get("credits_used", 0) or 0), free_credits),
+                "video_minutes_limit": free_video_mins,
+                "video_minutes_used": min(
+                    float(user.get("video_minutes_used", 0) or 0), free_video_mins
+                ),
+                "subscription_status": "expired",
+            })
+            logger.info("Expired Shortclipr subscription for user %s", user_id)
+
+    brainrot_expiry = user.get("brainrot_plan_expires_at")
+    if (
+        user.get("brainrot_plan", "free") != "free"
+        and brainrot_expiry is not None
+        and brainrot_expiry <= now
+    ):
+        free_brainrot_credits = get_brainrot_credits_limit("free")
+        result = await _execute(
+            """
+            UPDATE users
+            SET brainrot_plan                = 'free',
+                brainrot_credits_limit       = $1,
+                brainrot_credits_used        = LEAST(brainrot_credits_used, $1),
+                brainrot_subscription_status = 'expired',
+                updated_at                   = NOW()
+            WHERE id = $2
+              AND brainrot_plan <> 'free'
+              AND brainrot_plan_expires_at IS NOT NULL
+              AND brainrot_plan_expires_at <= NOW()
+            """,
+            free_brainrot_credits, user_id,
+        )
+        if result != "UPDATE 0":
+            user.update({
+                "brainrot_plan": "free",
+                "brainrot_credits_limit": free_brainrot_credits,
+                "brainrot_credits_used": min(
+                    int(user.get("brainrot_credits_used", 0) or 0), free_brainrot_credits
+                ),
+                "brainrot_subscription_status": "expired",
+            })
+            logger.info("Expired Brainrot subscription for user %s", user_id)
+
+    return user
+
 async def get_user(user_id: str) -> dict | None:
-    return await _fetchrow("SELECT * FROM users WHERE id=$1", user_id)
+    return await _enforce_expired_subscriptions(
+        await _fetchrow("SELECT * FROM users WHERE id=$1", user_id)
+    )
 
 
 async def get_user_by_email(email: str) -> dict | None:
-    return await _fetchrow("SELECT * FROM users WHERE email=$1", email)
+    return await _enforce_expired_subscriptions(
+        await _fetchrow("SELECT * FROM users WHERE email=$1", email)
+    )
 
 
 async def get_cta_settings(user_id: str) -> dict | None:
@@ -955,6 +1050,9 @@ async def admin_set_user_plan(
 
     if plan is not None:
         sets.append(f"plan = {_arg(plan)}")
+        sets.append("dodo_subscription_id = NULL")
+        sets.append("plan_expires_at = NULL")
+        sets.append(f"subscription_status = '{'admin_free' if plan == 'free' else 'admin_granted'}'")
     if credits_limit is not None:
         p = _arg(credits_limit)
         sets.append(f"credits_limit = {p}")
@@ -965,6 +1063,9 @@ async def admin_set_user_plan(
         sets.append(f"video_minutes_used  = LEAST(video_minutes_used, {p})")
     if brainrot_plan is not None:
         sets.append(f"brainrot_plan = {_arg(brainrot_plan)}")
+        sets.append("brainrot_dodo_subscription_id = NULL")
+        sets.append("brainrot_plan_expires_at = NULL")
+        sets.append(f"brainrot_subscription_status = '{'admin_free' if brainrot_plan == 'free' else 'admin_granted'}'")
     if brainrot_credits_limit is not None:
         p = _arg(brainrot_credits_limit)
         sets.append(f"brainrot_credits_limit = {p}")
@@ -1015,7 +1116,7 @@ async def upsert_user(user_data: dict) -> dict:
         user_data.get("video_minutes_limit", limits["video_minutes_limit"]),
         user_data.get("created_at"),
     )
-    return row or {}
+    return await _enforce_expired_subscriptions(row or {}) or {}
 
 
 async def count_active_jobs(user_id: str) -> int:

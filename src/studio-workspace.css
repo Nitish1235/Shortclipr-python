@@ -300,5 +300,72 @@
   .studio-workspace .dashboard-processing-grid,
   .studio-workspace .clips-library-grid{grid-template-columns:1fr!important}
 }
+
+/* Persistent mobile style preview */
+@media(max-width:768px){
+  .studio-workspace .clip-engine-preview{
+    position:fixed!important;
+    top:74px!important;
+    right:max(10px,env(safe-area-inset-right))!important;
+    left:auto!important;
+    bottom:auto!important;
+    order:initial!important;
+    display:block!important;
+    width:clamp(124px,38vw,156px)!important;
+    min-width:0!important;
+    max-width:none!important;
+    flex:0 0 auto!important;
+    align-self:auto!important;
+    margin:0!important;
+    padding:7px!important;
+    background:rgba(238,232,246,.94)!important;
+    border:1px solid rgba(255,255,255,.92)!important;
+    border-radius:16px!important;
+    box-shadow:0 18px 45px rgba(35,52,61,.24)!important;
+    backdrop-filter:blur(16px)!important;
+    -webkit-backdrop-filter:blur(16px)!important;
+    z-index:390!important;
+    pointer-events:none!important;
+    overflow:visible!important;
+    animation:pip-slide-in .38s cubic-bezier(.2,.8,.2,1) both!important;
+  }
+  .studio-workspace .clip-engine-preview .pip-title,
+  .studio-workspace .clip-engine-preview p{display:none!important}
+  .studio-workspace .clip-engine-preview>div:not(.pip-title){
+    display:block!important;
+    width:100%!important;
+    max-height:none!important;
+    border:2px solid rgba(255,255,255,.95)!important;
+    border-radius:11px!important;
+    box-shadow:0 8px 24px rgba(24,38,45,.28)!important;
+    overflow:hidden!important;
+  }
+  .studio-workspace .clip-engine-preview::after{
+    content:'● LIVE'!important;
+    position:absolute!important;
+    top:13px!important;
+    right:13px!important;
+    display:block!important;
+    padding:4px 6px!important;
+    border-radius:999px!important;
+    background:rgba(24,37,44,.78)!important;
+    color:#fff!important;
+    font-size:8px!important;
+    font-weight:800!important;
+    line-height:1!important;
+    letter-spacing:.08em!important;
+    text-shadow:none!important;
+    box-shadow:0 3px 10px rgba(0,0,0,.18)!important;
+    animation:pulse-dot 2s ease-in-out infinite!important;
+  }
+}
+
+@media(max-width:360px){
+  .studio-workspace .clip-engine-preview{width:124px!important;right:8px!important}
+}
+
+@media(max-height:600px) and (max-width:768px){
+  .studio-workspace .clip-engine-preview{width:112px!important;top:68px!important}
+}
 .studio-workspace .standard-access [title*="YouTube"],.studio-workspace .standard-access [title*="TikTok"],.studio-workspace .standard-access [aria-label*="YouTube"],.studio-workspace .standard-access [aria-label*="TikTok"],.studio-workspace .standard-access [data-platform="youtube"],.studio-workspace .standard-access [data-platform="tiktok"]{display:none!important}
 @media(prefers-reduced-motion:reduce){.studio-workspace *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

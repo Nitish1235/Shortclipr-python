@@ -23,6 +23,7 @@ import asyncpg
 
 from watcher import config
 from watcher.dispatcher import (
+    expire_due_subscriptions,
     process_all_unclaimed,
     process_one_notification,
     reconcile_stuck,
@@ -121,6 +122,7 @@ async def _maybe_reconcile(pool: asyncpg.Pool) -> None:
         _last_reconcile = now
         try:
             await reconcile_stuck(pool)
+            await expire_due_subscriptions(pool)
         except Exception:
             logger.exception("Reconciliation error")
 

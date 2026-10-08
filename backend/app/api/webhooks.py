@@ -4,7 +4,8 @@ webhooks.py — Dodo Payments webhook handler.
 Handles:
   - payment.succeeded → upgrade user plan in Supabase
   - payment.refunded  → downgrade user plan
-  - subscription.cancelled → downgrade to free
+  - subscription lifecycle events → keep plan access in sync with Dodo
+  - payment.cancelled → record the abandoned checkout without changing access
 
 Verifies webhook signature using HMAC-SHA256.
 """
@@ -14,6 +15,7 @@ import hashlib
 import hmac
 import json
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request, status
 
@@ -90,12 +92,15 @@ async def dodo_webhook(request: Request):
     # /brainrot/checkout-session for Brainrot, which sets product="brainrot").
     is_brainrot = (payload.get("metadata") or {}).get("product") == "brainrot"
 
-    # Subscription activated (first payment) or plan changed or renewed → upgrade/reset
+    # Subscription activated (first payment), renewed, or changed → grant the
+    # current paid period. The paid-through deadline is persisted by the
+    # handlers and independently enforced on every user lookup.
     if event_type in (
         "payment.succeeded",
         "subscription.active",
         "subscription.renewed",
         "subscription.plan_changed",
+        "subscription.unpaused",
     ):
         # Fire TikTok Events
         from app.core.tiktok_events import send_tiktok_event_background
@@ -112,17 +117,42 @@ async def dodo_webhook(request: Request):
             await _handle_brainrot_payment_succeeded(payload)
         else:
             await _handle_payment_succeeded(payload)
+    elif event_type == "subscription.past_due":
+        # Dodo explicitly keeps access during the configured grace period.
+        # Sync the deadline without resetting monthly usage.
+        await _handle_subscription_state(payload, is_brainrot=is_brainrot)
+    elif event_type == "subscription.updated":
+        subscription_status = str(payload.get("status") or "").lower()
+        if subscription_status in ("active", "past_due"):
+            await _handle_subscription_state(payload, is_brainrot=is_brainrot)
+        elif subscription_status in ("on_hold", "paused", "cancelled", "failed", "expired"):
+            if is_brainrot:
+                await _handle_brainrot_downgrade(payload, subscription_status)
+            else:
+                await _handle_downgrade(payload, subscription_status)
+    elif event_type == "payment.cancelled":
+        # A cancelled checkout never granted an entitlement.  In particular,
+        # do not downgrade by customer email here: a customer can abandon a
+        # second checkout while still having an unrelated active subscription.
+        logger.info(
+            "Dodo payment cancelled; no entitlement change "
+            "(payment_id=%s, subscription_id=%s)",
+            payload.get("payment_id"),
+            payload.get("subscription_id"),
+        )
     elif event_type in (
         "payment.refunded",
         "subscription.cancelled",
         "subscription.expired",
+        "subscription.failed",
+        "subscription.on_hold",
+        "subscription.paused",
     ):
+        terminal_status = event_type.removeprefix("subscription.").removeprefix("payment.")
         if is_brainrot:
-            await _handle_brainrot_downgrade(payload)
+            await _handle_brainrot_downgrade(payload, terminal_status)
         else:
-            await _handle_downgrade(payload)
-    elif event_type == "subscription.on_hold":
-        logger.warning(f"Subscription on hold: {payload.get('subscription_id', '')}")
+            await _handle_downgrade(payload, terminal_status)
     else:
         logger.debug(f"Unhandled Dodo event type: {event_type}")
 
@@ -171,6 +201,80 @@ def _verify_signature(
     return False
 
 
+def _parse_webhook_datetime(value) -> datetime | None:
+    """Parse a Dodo ISO-8601 timestamp into an aware UTC datetime."""
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        logger.warning("Invalid Dodo subscription timestamp: %r", value)
+        return None
+
+
+def _subscription_access_until(payload: dict) -> datetime | None:
+    """Return the deadline through which the current charge grants access.
+
+    Dodo documents next_billing_date as the end of the current billing period.
+    A past-due subscription keeps access until past_due_ends_at, so that grace
+    deadline takes precedence while status is past_due.
+    """
+    subscription_status = str(payload.get("status") or "").lower()
+    if subscription_status == "past_due" or payload.get("past_due_ends_at"):
+        grace_end = _parse_webhook_datetime(payload.get("past_due_ends_at"))
+        if grace_end:
+            return grace_end
+    return _parse_webhook_datetime(payload.get("next_billing_date"))
+
+
+async def _handle_subscription_state(payload: dict, *, is_brainrot: bool) -> None:
+    """Sync lifecycle timestamps without granting credits or resetting usage."""
+    user_id = (payload.get("metadata") or {}).get("user_id")
+    customer = payload.get("customer")
+    email = customer.get("email", "") if isinstance(customer, dict) else ""
+
+    row = None
+    if user_id:
+        row = await db._fetchrow("SELECT id, email FROM users WHERE id=$1", user_id)
+    if not row and email:
+        row = await db._fetchrow("SELECT id, email FROM users WHERE email=$1", email)
+    if not row:
+        logger.error("Subscription state sync failed: no user for user_id=%s, email=%s", user_id, email)
+        return
+
+    subscription_id = payload.get("subscription_id") or ""
+    subscription_status = str(payload.get("status") or "active").lower()
+    access_until = _subscription_access_until(payload)
+
+    if is_brainrot:
+        await db._execute(
+            """
+            UPDATE users
+            SET brainrot_dodo_subscription_id = COALESCE(NULLIF($1, ''), brainrot_dodo_subscription_id),
+                brainrot_subscription_status  = $2,
+                brainrot_plan_expires_at      = COALESCE($3, brainrot_plan_expires_at),
+                updated_at                    = NOW()
+            WHERE id = $4
+            """,
+            subscription_id, subscription_status, access_until, row["id"],
+        )
+    else:
+        await db._execute(
+            """
+            UPDATE users
+            SET dodo_subscription_id = COALESCE(NULLIF($1, ''), dodo_subscription_id),
+                subscription_status  = $2,
+                plan_expires_at      = COALESCE($3, plan_expires_at),
+                updated_at           = NOW()
+            WHERE id = $4
+            """,
+            subscription_id, subscription_status, access_until, row["id"],
+        )
+
+
 async def _handle_payment_succeeded(payload: dict) -> None:
     # Prefer the plan we stamped into checkout metadata — the raw product_id
     # Dodo echoes is the prd_… id, which the friendly-name map won't match.
@@ -213,6 +317,9 @@ async def _handle_payment_succeeded(payload: dict) -> None:
     email = row["email"]
     new_credits      = get_credits_limit(plan_name)
     new_video_mins   = get_video_minutes_limit(plan_name)
+    subscription_id  = payload.get("subscription_id") or ""
+    subscription_status = str(payload.get("status") or "active").lower()
+    access_until = _subscription_access_until(payload)
 
     await db._execute(
         """
@@ -222,10 +329,15 @@ async def _handle_payment_succeeded(payload: dict) -> None:
             credits_used        = 0,
             video_minutes_limit = $3,
             video_minutes_used  = 0,
-            credits_reset_at    = date_trunc('month', NOW())
-        WHERE id = $4
+            credits_reset_at    = date_trunc('month', NOW()),
+            dodo_subscription_id = COALESCE(NULLIF($4, ''), dodo_subscription_id),
+            subscription_status  = $5,
+            plan_expires_at      = COALESCE($6, plan_expires_at, NOW() + INTERVAL '31 days'),
+            updated_at           = NOW()
+        WHERE id = $7
         """,
-        plan_name, new_credits, new_video_mins, user_id,
+        plan_name, new_credits, new_video_mins, subscription_id,
+        subscription_status, access_until, user_id,
     )
 
     logger.info(
@@ -234,7 +346,7 @@ async def _handle_payment_succeeded(payload: dict) -> None:
     )
 
 
-async def _handle_downgrade(payload: dict) -> None:
+async def _handle_downgrade(payload: dict, subscription_status: str = "cancelled") -> None:
     user_id = (payload.get("metadata") or {}).get("user_id")
     customer = payload.get("customer")
     email = customer.get("email", "") if isinstance(customer, dict) else ""
@@ -260,6 +372,7 @@ async def _handle_downgrade(payload: dict) -> None:
     # the accidental hard lockout.
     free_credits = get_credits_limit("free")
     free_video_mins = get_video_minutes_limit("free")
+    subscription_id = payload.get("subscription_id") or ""
     await db._execute(
         """
         UPDATE users
@@ -267,10 +380,14 @@ async def _handle_downgrade(payload: dict) -> None:
             credits_limit       = $1,
             credits_used        = LEAST(credits_used, $1),
             video_minutes_limit = $2,
-            video_minutes_used  = LEAST(video_minutes_used, $2)
-        WHERE id = $3
+            video_minutes_used  = LEAST(video_minutes_used, $2),
+            dodo_subscription_id = COALESCE(NULLIF($3, ''), dodo_subscription_id),
+            subscription_status  = $4,
+            plan_expires_at      = NOW(),
+            updated_at           = NOW()
+        WHERE id = $5
         """,
-        free_credits, free_video_mins, user_id,
+        free_credits, free_video_mins, subscription_id, subscription_status, user_id,
     )
 
     logger.info(f"Downgraded {email} → free plan")
@@ -312,6 +429,9 @@ async def _handle_brainrot_payment_succeeded(payload: dict) -> None:
     user_id     = row["id"]
     email       = row["email"]
     new_credits = get_brainrot_credits_limit(plan_name)
+    subscription_id = payload.get("subscription_id") or ""
+    subscription_status = str(payload.get("status") or "active").lower()
+    access_until = _subscription_access_until(payload)
 
     await db._execute(
         """
@@ -319,16 +439,20 @@ async def _handle_brainrot_payment_succeeded(payload: dict) -> None:
         SET brainrot_plan             = $1,
             brainrot_credits_limit    = $2,
             brainrot_credits_used     = 0,
-            brainrot_credits_reset_at = date_trunc('month', NOW())
-        WHERE id = $3
+            brainrot_credits_reset_at = date_trunc('month', NOW()),
+            brainrot_dodo_subscription_id = COALESCE(NULLIF($3, ''), brainrot_dodo_subscription_id),
+            brainrot_subscription_status  = $4,
+            brainrot_plan_expires_at      = COALESCE($5, brainrot_plan_expires_at, NOW() + INTERVAL '31 days'),
+            updated_at                    = NOW()
+        WHERE id = $6
         """,
-        plan_name, new_credits, user_id,
+        plan_name, new_credits, subscription_id, subscription_status, access_until, user_id,
     )
 
     logger.info(f"Upgraded {email} → brainrot:{plan_name} (credits: {new_credits})")
 
 
-async def _handle_brainrot_downgrade(payload: dict) -> None:
+async def _handle_brainrot_downgrade(payload: dict, subscription_status: str = "cancelled") -> None:
     user_id = (payload.get("metadata") or {}).get("user_id")
     customer = payload.get("customer")
     email = customer.get("email", "") if isinstance(customer, dict) else ""
@@ -347,15 +471,20 @@ async def _handle_brainrot_downgrade(payload: dict) -> None:
     email = row["email"]
     # Same clamp-rather-than-lockout reasoning as _handle_downgrade() above.
     free_credits = get_brainrot_credits_limit("free")
+    subscription_id = payload.get("subscription_id") or ""
     await db._execute(
         """
         UPDATE users
         SET brainrot_plan          = 'free',
             brainrot_credits_limit = $1,
-            brainrot_credits_used  = LEAST(brainrot_credits_used, $1)
-        WHERE id = $2
+            brainrot_credits_used  = LEAST(brainrot_credits_used, $1),
+            brainrot_dodo_subscription_id = COALESCE(NULLIF($2, ''), brainrot_dodo_subscription_id),
+            brainrot_subscription_status  = $3,
+            brainrot_plan_expires_at      = NOW(),
+            updated_at                    = NOW()
+        WHERE id = $4
         """,
-        free_credits, user_id,
+        free_credits, subscription_id, subscription_status, user_id,
     )
 
     logger.info(f"Downgraded {email} → brainrot free plan")
