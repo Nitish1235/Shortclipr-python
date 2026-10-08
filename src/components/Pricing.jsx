@@ -23,10 +23,10 @@ DodoPayments.Initialize({
 // Max (pro_2000, $145) discontinued — no longer sold; backend still honors existing
 // subscribers (see plan_limits.py / webhooks.py DODO_PLAN_MAP), just not offered here.
 const TIERS = [
-  { clips: 50,   price: 10,  label: '50 Shorts',   dodoId: 'starter_100', videoHours: 5,  maxVideoHours: 2, family: 'Starter' },
-  { clips: 180,  price: 25,  label: '180 Shorts',  dodoId: 'starter_250', videoHours: 10, maxVideoHours: 2, family: 'Starter Plus' },
-  { clips: 350,  price: 45,  label: '350 Shorts',  dodoId: 'pro_500',     videoHours: 18, maxVideoHours: 3, family: 'Pro' },
-  { clips: 700,  price: 79,  label: '700 Shorts',  dodoId: 'pro_1000',    videoHours: 35, maxVideoHours: 3, family: 'Pro Plus' },
+  { clips: 50,   price: 10, originalPrice: 20,  label: '50 Shorts',  dodoId: 'starter_100', videoHours: 5,  maxVideoHours: 2, family: 'Starter' },
+  { clips: 180,  price: 25, originalPrice: 50,  label: '180 Shorts', dodoId: 'starter_250', videoHours: 10, maxVideoHours: 2, family: 'Starter Plus' },
+  { clips: 350,  price: 45, originalPrice: 90,  label: '350 Shorts', dodoId: 'pro_500',     videoHours: 18, maxVideoHours: 3, family: 'Pro' },
+  { clips: 700,  price: 79, originalPrice: 158, label: '700 Shorts', dodoId: 'pro_1000',    videoHours: 35, maxVideoHours: 3, family: 'Pro Plus' },
 ]
 
 const FREE_FEATURES = [
@@ -121,9 +121,9 @@ export default function Pricing() {
             <div style={{ width:'32px', height:'2px', background:'#cf1322' }}/>
           </div>
           <h2 style={{ fontSize:'clamp(1.9rem,4vw,3.2rem)', fontWeight:700, color:'#0f0f0f', letterSpacing:'-0.04em', marginBottom:'12px' }}>
-            Simple, honest pricing.
+            Your first plan is half price.
           </h2>
-          <p style={{ color:'#666', fontSize:'1rem' }}>Start free. Upgrade when you're ready.</p>
+          <p style={{ color:'#666', fontSize:'1rem' }}>Sign up today and unlock 50% off every paid plan.</p>
         </div>
 
         {/* Two cards */}
@@ -179,6 +179,10 @@ export default function Pricing() {
 
             {/* Price display */}
             <div style={{ marginBottom:'16px' }}>
+              <div className="cloud-price-offer" style={{ display:'inline-flex', alignItems:'center', gap:'7px', marginBottom:'5px' }}>
+                <span style={{ fontSize:'0.67rem', fontWeight:800, letterSpacing:'.09em', textTransform:'uppercase', color:'#cf1322', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'100px', padding:'4px 8px' }}>New-member price · 50% off</span>
+                <s style={{ color:'#9ca3af', fontWeight:700, fontSize:'0.9rem' }}>${tier.originalPrice}/mo</s>
+              </div>
               <div style={{ fontSize:'3rem', fontWeight:700, color:'#0f0f0f', letterSpacing:'-0.05em', lineHeight:1 }}>
                 ${tier.price}<span style={{ fontSize:'1rem', color:'#aaa', fontWeight:400 }}>/mo</span>
               </div>
@@ -231,7 +235,7 @@ export default function Pricing() {
               onMouseEnter={e => { e.currentTarget.style.transform='translate(-1px,-1px)'; e.currentTarget.style.boxShadow='3px 3px 0 #111' }}
               onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='2px 2px 0 #111' }}
             >
-              {loading ? 'Opening checkout...' : `Get ${tier.label} — $${tier.price}/mo →`}
+              {loading ? 'Opening checkout...' : `Unlock 50% off — $${tier.price}/mo →`}
             </button>
 
             <p style={{ textAlign:'center', fontSize:'0.72rem', color:'#aaa', marginTop:'10px' }}>

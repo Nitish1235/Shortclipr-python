@@ -15,6 +15,7 @@ import VideoShowcase     from './components/VideoShowcase'
 import MultipleShorts    from './components/MultipleShorts'
 import SEOContentHub     from './components/SEOContentHub'
 import Pricing           from './components/Pricing'
+import PromotionBar      from './components/PromotionBar'
 import FAQ               from './components/FAQ'
 import CTA               from './components/CTA'
 import CloudStudioLanding, { CloudNavigation } from './components/CloudStudioLanding'
@@ -115,6 +116,7 @@ function LandingPage() {
           offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD', description: 'Free plan — 2 clips, no credit card required' },
         }}
       />
+      <PromotionBar />
       <CloudNavigation />
       <main>
         <CloudStudioLanding />

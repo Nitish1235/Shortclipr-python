@@ -15,10 +15,10 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 // Max (pro_2000, $145) discontinued — no longer sold; backend still honors existing
 // subscribers (see plan_limits.py / webhooks.py DODO_PLAN_MAP), just not offered here.
 const PLANS = [
-  { id: 'starter_100', name: 'Starter',  price: 10,  clips: 50,   videoHours: 5,  maxVideoHours: 2, badge: null,           perks: ['50 shorts/mo', '5 hrs of video/mo (2 hrs max per video)', 'HD 1080p vertical', 'All caption styles'] },
-  { id: 'starter_250', name: 'Starter Plus', price: 25,  clips: 180,  videoHours: 10, maxVideoHours: 2, badge: null,           perks: ['180 shorts/mo', '10 hrs of video/mo (2 hrs max per video)', 'HD 1080p vertical', 'All caption styles', 'Priority queue'] },
-  { id: 'pro_500',     name: 'Pro',      price: 45,  clips: 350,  videoHours: 18, maxVideoHours: 3, badge: 'Most Popular', perks: ['350 shorts/mo', '18 hrs of video/mo (3 hrs max per video)', 'Everything in Starter', 'Faster processing queue', 'Batch download'] },
-  { id: 'pro_1000',    name: 'Pro Plus',  price: 79,  clips: 700,  videoHours: 35, maxVideoHours: 3, badge: null,           perks: ['700 shorts/mo', '35 hrs of video/mo (3 hrs max per video)', 'Everything in Pro', 'Faster processing queue', 'Batch download'] },
+  { id: 'starter_100', name: 'Starter',  price: 10, originalPrice: 20,  clips: 50,  videoHours: 5,  maxVideoHours: 2, badge: null,           perks: ['50 shorts/mo', '5 hrs of video/mo (2 hrs max per video)', 'HD 1080p vertical', 'All caption styles'] },
+  { id: 'starter_250', name: 'Starter Plus', price: 25, originalPrice: 50, clips: 180, videoHours: 10, maxVideoHours: 2, badge: null,           perks: ['180 shorts/mo', '10 hrs of video/mo (2 hrs max per video)', 'HD 1080p vertical', 'All caption styles', 'Priority queue'] },
+  { id: 'pro_500',     name: 'Pro',      price: 45, originalPrice: 90,  clips: 350, videoHours: 18, maxVideoHours: 3, badge: 'Most Popular', perks: ['350 shorts/mo', '18 hrs of video/mo (3 hrs max per video)', 'Everything in Starter', 'Faster processing queue', 'Batch download'] },
+  { id: 'pro_1000',    name: 'Pro Plus', price: 79, originalPrice: 158, clips: 700, videoHours: 35, maxVideoHours: 3, badge: null,           perks: ['700 shorts/mo', '35 hrs of video/mo (3 hrs max per video)', 'Everything in Pro', 'Faster processing queue', 'Batch download'] },
 ]
 
 const FEATURES = [
@@ -197,7 +197,7 @@ export default function Billing() {
 
           {/* Plans grid */}
           <h3 ref={plansRef} style={{ fontSize: '.88rem', fontWeight: 700, color: '#111', marginBottom: 14, marginTop: 0 }}>
-            Choose a Plan
+            New-member pricing — 50% off every paid plan
           </h3>
           <div style={{
             display: 'grid',
@@ -225,6 +225,8 @@ export default function Billing() {
                   <div style={{ fontSize: '.68rem', color: '#9ca3af', marginBottom: 1 }}>{plan.videoHours}h of video per month</div>
                   <div style={{ fontSize: '.68rem', color: '#9ca3af', marginBottom: 10 }}>({plan.maxVideoHours}h max per single video)</div>
                   <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: '.62rem', color: '#cf1322', fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase', marginBottom: 3 }}>50% off new-member price</div>
+                    <s style={{ display: 'block', fontSize: '.75rem', color: '#9ca3af', fontWeight: 700, textDecorationColor: '#cf1322', textDecorationThickness: '2px' }}>${plan.originalPrice}/mo</s>
                     <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#111', letterSpacing: '-.04em' }}>${plan.price}</span>
                     <span style={{ fontSize: '.72rem', color: '#9ca3af' }}>/mo</span>
                   </div>
@@ -249,7 +251,7 @@ export default function Billing() {
                     onMouseEnter={e => { if (!isBuying) e.currentTarget.style.opacity = '.85' }}
                     onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
                   >
-                    {isBuying ? 'Opening…' : `Get ${plan.name} →`}
+                    {isBuying ? 'Opening…' : `Get 50% off →`}
                   </button>
                 </div>
               )
