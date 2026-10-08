@@ -281,14 +281,12 @@ async def get_showcase():
 @router.get("/library", tags=["public"])
 async def get_library():
     """
-    PUBLIC endpoint — returns all library videos for the paywall page.
-    No auth required.
+    Public, admin-curated library for the product experience. Every entry is
+    added from the admin Library tab; the dashboard uses its video URL for a
+    muted, tap-to-play preview.
     """
     loop = asyncio.get_running_loop()
     items = await loop.run_in_executor(None, _list_library_sync)
-    # Remove direct video URLs to prevent free users from downloading via inspect.
-    for i in items:
-        i.pop('video_url', None)
     return {"videos": items, "count": len(items)}
 
 

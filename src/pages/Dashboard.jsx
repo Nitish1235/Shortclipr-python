@@ -5,6 +5,7 @@ import AppLayout, { SIDEBAR_W } from '../components/AppLayout'
 import SocialProofModal from '../components/SocialProofModal'
 import { YTLogo, TTLogo } from '../components/PlatformLogos'
 import CtaBuilder from '../components/CtaBuilder'
+import PublicLibrary from '../components/PublicLibrary'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
@@ -860,6 +861,8 @@ export default function Dashboard() {
               <form className="studio-source-form" onSubmit={e => { e.preventDefault(); if(sourceUrl.trim()) sessionStorage.setItem('sc_pending_url',sourceUrl.trim()); navigate('/youtube-shorts/create') }}><input aria-label="YouTube video URL" type="url" placeholder="Paste your YouTube link…" value={sourceUrl} onChange={e => setSourceUrl(e.target.value)}/><button className="studio-primary">Start a project →</button></form>
             </div><div className="studio-welcome-art" aria-hidden="true"><span>01 <b>Find moments</b></span><span>02 <b>Frame beautifully</b></span><span>03 <b>Make it yours</b></span></div>
           </section>
+
+          <PublicLibrary />
 
           {/* ── Active job progress banner ── */}
           {isActive && (

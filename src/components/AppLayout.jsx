@@ -18,12 +18,18 @@ const Icon = {
       <rect x="9" y="9" width="6" height="6" rx="1.5" fill="currentColor" opacity=".45"/>
     </svg>
   ),
-  clips: (
+  create: (
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-      <rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.4"/>
-      <line x1="1" y1="6" x2="15" y2="6" stroke="currentColor" strokeWidth="1.1"/>
-      <rect x="3.5" y="8.5" width="3" height="2" rx=".5" fill="currentColor" opacity=".7"/>
-      <rect x="8" y="8.5" width="4.5" height="2" rx=".5" fill="currentColor" opacity=".4"/>
+      <path d="M2.2 5.2h11.6v7.1a1.5 1.5 0 0 1-1.5 1.5H3.7a1.5 1.5 0 0 1-1.5-1.5V5.2Z" stroke="currentColor" strokeWidth="1.35"/>
+      <path d="M1.8 2.4h12.4v2.8H1.8zM4.2 2.4l1.9 2.8M8.7 2.4l1.9 2.8" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round"/>
+      <path d="m6.6 8 3 1.75-3 1.75V8Z" fill="currentColor"/>
+    </svg>
+  ),
+  library: (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+      <rect x="3.6" y="2" width="10.3" height="9.4" rx="1.5" stroke="currentColor" strokeWidth="1.35" opacity=".55"/>
+      <rect x="1.9" y="4.6" width="10.3" height="9.4" rx="1.5" stroke="currentColor" strokeWidth="1.35"/>
+      <path d="m6 7.4 2.6 1.9L6 11.2V7.4Z" fill="currentColor"/>
     </svg>
   ),
   billing: (
@@ -57,8 +63,8 @@ const Icon = {
 
 const NAV_WORKSPACE = [
   { icon: Icon.dashboard, label: 'Dashboard',     path: '/youtube-shorts/dashboard', exact: true },
-  { icon: Icon.clips,     label: 'Create clips',  path: '/youtube-shorts/create', exact: true },
-  { icon: Icon.clips,     label: 'Clips History', path: '/youtube-shorts/clips',     exact: true },
+  { icon: Icon.create,    label: 'Create clips',  path: '/youtube-shorts/create', exact: true },
+  { icon: Icon.library,   label: 'Clips History', path: '/youtube-shorts/clips',     exact: true },
 ]
 const NAV_ACCOUNT = [
   { icon: Icon.billing,  label: 'Billing',  path: '/billing',                    exact: true },
