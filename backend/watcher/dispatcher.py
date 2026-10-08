@@ -31,7 +31,6 @@ import httpx
 
 from watcher import config
 from app.core.plan_limits import get_credits_limit, get_video_minutes_limit
-from app.core.brainrot_plan_limits import get_brainrot_credits_limit
 
 logger = logging.getLogger(__name__)
 
@@ -62,29 +61,13 @@ async def expire_due_subscriptions(pool: asyncpg.Pool) -> int:
         free_credits, free_video_mins,
     )
 
-    free_brainrot_credits = get_brainrot_credits_limit("free")
-    brainrot_result = await pool.execute(
-        """
-        UPDATE users
-        SET brainrot_plan                = 'free',
-            brainrot_credits_limit       = $1,
-            brainrot_credits_used        = LEAST(brainrot_credits_used, $1),
-            brainrot_subscription_status = 'expired',
-            updated_at                   = NOW()
-        WHERE brainrot_plan <> 'free'
-          AND brainrot_plan_expires_at IS NOT NULL
-          AND brainrot_plan_expires_at <= NOW()
-        """,
-        free_brainrot_credits,
-    )
-
     def _updated_count(result: str) -> int:
         try:
             return int(result.rsplit(" ", 1)[-1])
         except (TypeError, ValueError):
             return 0
 
-    expired = _updated_count(main_result) + _updated_count(brainrot_result)
+    expired = _updated_count(main_result)
     if expired:
         logger.info("Expired %s overdue subscription(s)", expired)
     return expired

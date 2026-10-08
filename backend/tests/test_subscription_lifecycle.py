@@ -14,7 +14,6 @@ class SubscriptionExpiryTests(unittest.IsolatedAsyncioTestCase):
             "plan_expires_at": datetime.now(timezone.utc) - timedelta(seconds=1),
             "credits_used": 12,
             "video_minutes_used": 50,
-            "brainrot_plan": "free",
         }
         with patch.object(db, "_execute", new=AsyncMock(return_value="UPDATE 1")) as execute:
             result = await db._enforce_expired_subscriptions(user)
@@ -28,7 +27,6 @@ class SubscriptionExpiryTests(unittest.IsolatedAsyncioTestCase):
             "id": "user-2",
             "plan": "growth_100",
             "plan_expires_at": datetime.now(timezone.utc) + timedelta(days=2),
-            "brainrot_plan": "free",
         }
         with patch.object(db, "_execute", new=AsyncMock()) as execute:
             result = await db._enforce_expired_subscriptions(user)
@@ -41,7 +39,6 @@ class SubscriptionExpiryTests(unittest.IsolatedAsyncioTestCase):
             "id": "user-3",
             "plan": "marketer",
             "plan_expires_at": datetime.now(timezone.utc) - timedelta(days=10),
-            "brainrot_plan": "free",
         }
         with patch.object(db, "_execute", new=AsyncMock()) as execute:
             result = await db._enforce_expired_subscriptions(user)
@@ -102,7 +99,7 @@ class SubscriptionExpiryTests(unittest.IsolatedAsyncioTestCase):
             })),
             patch.object(webhooks.db, "_execute", new=AsyncMock()) as execute,
         ):
-            await webhooks._handle_subscription_state(payload, is_brainrot=False)
+            await webhooks._handle_subscription_state(payload)
 
         query = execute.await_args.args[0]
         self.assertNotIn("credits_used", query)
