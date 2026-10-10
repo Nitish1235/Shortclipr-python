@@ -327,6 +327,21 @@ async def admin_list_all_tiktok_events(admin: AdminUser):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/admin/meta-events")
+async def admin_list_all_meta_events(admin: AdminUser):
+    """Admin: list recent Meta Conversions API tracking events."""
+    try:
+        events = await db.list_meta_events()
+        for event in events:
+            if "id" in event: event["id"] = str(event["id"])
+            if "created_at" in event and event["created_at"]:
+                event["created_at"] = event["created_at"].isoformat()
+        return {"events": events}
+    except Exception as e:
+        logger.error(f"Admin list Meta events failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/admin/jobs/{job_id}/clips")
 async def admin_get_job_clips(job_id: str, admin: AdminUser):
     """Admin: get all clips for any job."""

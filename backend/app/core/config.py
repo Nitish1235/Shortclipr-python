@@ -107,6 +107,14 @@ class Settings(BaseSettings):
     TIKTOK_PIXEL_ID: str = ""
     TIKTOK_ACCESS_TOKEN: str = ""
 
+    # ── Meta Pixel / Conversions API ──────────────────────────────────
+    # META_CONVERSIONS_API_TOKEN is generated in Meta Events Manager and
+    # must be kept server-side. VITE_META_PIXEL_ID is the matching frontend
+    # build variable (documented in .env.example).
+    META_PIXEL_ID: str = ""
+    META_CONVERSIONS_API_TOKEN: str = ""
+    META_TEST_EVENT_CODE: str = ""  # Set only while testing in Events Manager
+
     # ── Meta / Instagram (direct posting for Marketer plan) ──────────────
     # Client ID and secret from Facebook Developer portal
     META_CLIENT_ID: str = ""

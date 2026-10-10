@@ -967,6 +967,29 @@ async def get_user(user_id: str) -> dict | None:
     )
 
 
+# ── Meta Conversions API Events ─────────────────────────────────
+
+async def insert_meta_event(event_name: str, event_id: str, email: str | None, ip: str | None, user_agent: str | None) -> None:
+    await _execute(
+        """
+        INSERT INTO meta_events_log (event_name, event_id, email, ip, user_agent)
+        VALUES ($1, $2, $3, $4, $5)
+        """,
+        event_name, event_id, email, ip, user_agent,
+    )
+
+
+async def list_meta_events(limit: int = 100) -> list[dict]:
+    return await _fetch(
+        """
+        SELECT * FROM meta_events_log
+        ORDER BY created_at DESC
+        LIMIT $1
+        """,
+        limit,
+    )
+
+
 async def get_user_by_email(email: str) -> dict | None:
     return await _enforce_expired_subscriptions(
         await _fetchrow("SELECT * FROM users WHERE email=$1", email)

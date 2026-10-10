@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 
 // Your TikTok Pixel ID from Ads Manager
-const PIXEL_ID = 'DB1644BC77U534NECQ00'
+const PIXEL_ID = 'DB4V573C77U074LG2530'
 
 export default function TikTokPixel() {
   const location = useLocation()
