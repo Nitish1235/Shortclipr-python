@@ -74,7 +74,18 @@ export default function TikTokPixel() {
       location.pathname.includes('/pricing')
 
     if (highIntent) {
-      window.ttq.track('ViewContent')
+      // TikTok requires content_id for ViewContent to be eligible for
+      // catalogue/event diagnostics. These are stable product identifiers,
+      // not visitor-specific values.
+      const contentId = location.pathname.startsWith('/brainrot')
+        ? 'shortclipr_brainrot'
+        : location.pathname.startsWith('/factloop')
+          ? 'shortclipr_factloop'
+          : 'shortclipr_youtube_shorts'
+      window.ttq.track('ViewContent', {
+        content_id: contentId,
+        content_type: 'product',
+      })
     }
   }, [location.pathname])
 
