@@ -95,6 +95,14 @@ async def dodo_webhook(request: Request):
                 event_id=f"dodo_{event_type}_{payload.get('payment_id') or payload.get('subscription_id')}",
                 email=tt_email
             )
+            from app.core.google_ads_events import record_google_ads_event_background
+            google_event_name = "Purchase" if event_type == "payment.succeeded" else "Subscribe"
+            record_google_ads_event_background(
+                event_name=google_event_name,
+                event_id=f"dodo_{event_type}_{payload.get('payment_id') or payload.get('subscription_id')}",
+                email=tt_email,
+                product=(payload.get('metadata') or {}).get('plan'),
+            )
 
         await _handle_payment_succeeded(payload)
     elif event_type == "subscription.past_due":

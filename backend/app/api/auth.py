@@ -90,6 +90,13 @@ async def google_auth(body: GoogleAuthRequest):
                 event_id=f"reg_{user_id}",
                 email=user_email
             )
+            from app.core.google_ads_events import record_google_ads_event_background
+            record_google_ads_event_background(
+                event_name="CompleteRegistration",
+                event_id=f"registration_{user_id}",
+                email=user_email,
+                product="shortclipr",
+            )
 
         # Issue our JWT
         token = create_access_token({

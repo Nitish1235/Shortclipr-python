@@ -990,6 +990,29 @@ async def list_meta_events(limit: int = 100) -> list[dict]:
     )
 
 
+# ── Google Ads conversion audit log ─────────────────────────────
+
+async def insert_google_ads_event(event_name: str, event_id: str, email: str | None, product: str | None) -> None:
+    await _execute(
+        """
+        INSERT INTO google_ads_events_log (event_name, event_id, email, product)
+        VALUES ($1, $2, $3, $4)
+        """,
+        event_name, event_id, email, product,
+    )
+
+
+async def list_google_ads_events(limit: int = 100) -> list[dict]:
+    return await _fetch(
+        """
+        SELECT * FROM google_ads_events_log
+        ORDER BY created_at DESC
+        LIMIT $1
+        """,
+        limit,
+    )
+
+
 async def get_user_by_email(email: str) -> dict | None:
     return await _enforce_expired_subscriptions(
         await _fetchrow("SELECT * FROM users WHERE email=$1", email)

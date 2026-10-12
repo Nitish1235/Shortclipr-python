@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { trackGoogleAdsConversion } from '../lib/googleAds'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
@@ -47,6 +48,9 @@ export function AuthProvider({ children }) {
       const session = await res.json()
       localStorage.setItem('sc_token', session.access_token)
       setUser(session.user)
+      if (session.user.is_new_user) {
+        trackGoogleAdsConversion(import.meta.env.VITE_GOOGLE_ADS_SIGNUP_LABEL)
+      }
       return session.user   // truthy; carries is_new_user/tutorial_available for the caller
     } catch (err) {
       console.error('Login error:', err)

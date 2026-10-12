@@ -12,6 +12,7 @@ import { useAuth } from '../../context/AuthContext'
 import FactloopNav from './FactloopNav'
 import { T, FONT } from './factloopTheme'
 import { FACTLOOP_PLANS } from '../../data/factloopPlans'
+import { trackGoogleAdsConversion } from '../../lib/googleAds'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
@@ -45,6 +46,7 @@ export default function FactloopBilling() {
         throw new Error(e.detail || `Error ${res.status}`)
       }
       const { checkout_url } = await res.json()
+      trackGoogleAdsConversion(import.meta.env.VITE_GOOGLE_ADS_CHECKOUT_LABEL)
       await DodoPayments.Checkout.open({ checkoutUrl: checkout_url })
     } catch (err) {
       setCheckoutErr(err.message)

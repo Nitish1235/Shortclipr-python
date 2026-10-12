@@ -4,6 +4,7 @@ import { GoogleOAuthProvider } from '@react-oauth/google'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import TikTokPixel from './components/TikTokPixel'
 import MetaPixel from './components/MetaPixel'
+import GoogleAdsTag from './components/GoogleAdsTag'
 import SEO, { SITE } from './components/SEO'
 import './landing-theme.css'
 import './cloud-studio.css'
@@ -241,6 +242,7 @@ export default function App() {
           <ScrollToTop />
           <TikTokPixel />
           <MetaPixel />
+          <GoogleAdsTag />
           <Routes>
             {/* Root — client-side safety net; nginx 301s the actual HTTP request */}
             <Route path="/"                      element={<Navigate to="/youtube-shorts" replace />} />

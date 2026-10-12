@@ -12,6 +12,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { DodoPayments } from 'dodopayments-checkout'
 import { useAuth } from '../../context/AuthContext'
 import BrainrotNav from './BrainrotNav'
+import { trackGoogleAdsConversion } from '../../lib/googleAds'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 const BRAIN = '#a855f7'
@@ -62,6 +63,7 @@ export default function BrainrotBilling() {
         throw new Error(e.detail || `Error ${res.status}`)
       }
       const { checkout_url } = await res.json()
+      trackGoogleAdsConversion(import.meta.env.VITE_GOOGLE_ADS_CHECKOUT_LABEL)
       await DodoPayments.Checkout.open({ checkoutUrl: checkout_url })
     } catch (err) {
       setCheckoutErr(err.message)

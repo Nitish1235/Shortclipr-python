@@ -912,6 +912,61 @@ function TikTokEventsManager({ showToast }) {
   )
 }
 
+// ── Google Ads conversion tracker ─────────────────────────────
+function GoogleAdsEventsManager() {
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchEvents = async () => {
+    setLoading(true)
+    try {
+      const r = await authFetch('/admin/google-ads-events')
+      const d = await r.json()
+      setEvents(d.events || [])
+    } catch { setEvents([]) }
+    setLoading(false)
+  }
+
+  useEffect(() => { fetchEvents() }, [])
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+        <div>
+          <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111' }}>Google Ads Conversion Log</h2>
+          <p style={{ fontSize: '0.78rem', color: '#999', marginTop: '2px' }}>
+            Server-confirmed registrations, checkout starts, and successful payments. Browser conversions require the optional labels in the deployment environment.
+          </p>
+        </div>
+        <button onClick={fetchEvents} style={{ ...btnOutline, fontSize: '0.75rem', padding: '6px 12px' }}>🔄 Refresh</button>
+      </div>
+
+      {loading ? (
+        <div style={{ color: '#aaa', padding: '20px' }}>Loading events...</div>
+      ) : events.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#aaa', ...card }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>📊</div>
+          <p style={{ fontSize: '0.85rem' }}>No Google Ads conversion events logged yet.</p>
+        </div>
+      ) : (
+        <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
+            <thead><tr style={{ background: '#f8f8f8', borderBottom: '1px solid #e5e5e5', color: '#555' }}>
+              <th style={{ padding: '10px 14px', fontWeight: 600 }}>Event</th><th style={{ padding: '10px 14px', fontWeight: 600 }}>Product</th><th style={{ padding: '10px 14px', fontWeight: 600 }}>Email</th><th style={{ padding: '10px 14px', fontWeight: 600 }}>Time</th>
+            </tr></thead>
+            <tbody>{events.map(ev => <tr key={ev.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+              <td style={{ padding: '10px 14px', fontWeight: 700, color: '#4285f4' }}>{ev.event_name}</td>
+              <td style={{ padding: '10px 14px', color: '#555' }}>{ev.product || '—'}</td>
+              <td style={{ padding: '10px 14px', color: '#333' }}>{ev.email || '—'}</td>
+              <td style={{ padding: '10px 14px', color: '#999' }}>{new Date(ev.created_at).toLocaleString()}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main Admin Page ────────────────────────────────────────────
 
 export default function Admin() {
@@ -1133,6 +1188,7 @@ export default function Admin() {
             { key: 'gameplay', label: '🎮 Gameplay' },
             { key: 'tiktok', label: '🎵 TikTok' },
             { key: 'tiktok-tracking', label: '📈 Tracker' },
+            { key: 'google-ads-tracking', label: '🔵 Google Ads' },
             { key: 'email', label: '📧 Email' },
           ].map(t => (
             <button key={t.key} onClick={() => setTab(t.key)} style={tabStyle(tab === t.key)}>
@@ -1427,6 +1483,10 @@ export default function Admin() {
         {/* ── TikTok Events Tracking tab ── */}
         {tab === 'tiktok-tracking' && (
           <TikTokEventsManager showToast={showToast} />
+        )}
+
+        {tab === 'google-ads-tracking' && (
+          <GoogleAdsEventsManager />
         )}
       </div>
 

@@ -88,6 +88,13 @@ async def create_checkout_session(body: CheckoutRequest, current_user: CurrentUs
         event_id=f"chk_{uuid.uuid4().hex[:8]}_{current_user.user_id}",
         email=current_user.email
     )
+    from app.core.google_ads_events import record_google_ads_event_background
+    record_google_ads_event_background(
+        event_name="BeginCheckout",
+        event_id=f"checkout_{uuid.uuid4().hex}_{current_user.user_id}",
+        email=current_user.email,
+        product=plan,
+    )
 
     return {"checkout_url": checkout_url, "plan": plan}
 
@@ -137,6 +144,13 @@ async def create_brainrot_checkout_session(body: CheckoutRequest, current_user: 
         event_name="AddPaymentInfo",
         event_id=f"chk_{uuid.uuid4().hex[:8]}_{current_user.user_id}",
         email=current_user.email
+    )
+    from app.core.google_ads_events import record_google_ads_event_background
+    record_google_ads_event_background(
+        event_name="BeginCheckout",
+        event_id=f"brainrot_checkout_{uuid.uuid4().hex}_{current_user.user_id}",
+        email=current_user.email,
+        product=f"brainrot_{plan}",
     )
 
     return {"checkout_url": checkout_url, "plan": plan}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { DodoPayments } from 'dodopayments-checkout'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { trackGoogleAdsConversion } from '../lib/googleAds'
 
 // Initialise Dodo overlay once
 const DODO_MODE = import.meta.env.VITE_DODO_MODE || 'test'
@@ -82,6 +83,7 @@ export default function Pricing() {
         throw new Error(e.detail || `Error ${res.status}`)
       }
       const { checkout_url } = await res.json()
+      trackGoogleAdsConversion(import.meta.env.VITE_GOOGLE_ADS_CHECKOUT_LABEL)
       await DodoPayments.Checkout.open({ checkoutUrl: checkout_url })
     } catch (err) {
       setError(err.message)

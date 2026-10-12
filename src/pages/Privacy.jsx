@@ -210,7 +210,7 @@ export default function Privacy() {
             <p>We use minimal cookies:</p>
             <ul>
               <li><strong>Essential:</strong> Authentication token (JWT) stored in localStorage — required for login to work</li>
-              <li><strong>Analytics:</strong> None. We do not use Google Analytics, Facebook Pixel, or any third-party tracking cookies.</li>
+              <li><strong>Advertising measurement:</strong> We use the TikTok Pixel and Google Ads tag to measure visits and advertising performance. Where configured, we may also use the Meta Pixel. These services may set their own cookies or collect device and usage information under their respective privacy policies.</li>
             </ul>
           </div>
 
