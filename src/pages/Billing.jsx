@@ -23,7 +23,8 @@ const PLANS = [
 ]
 
 const FEATURES = [
-  { f: 'Generate up to 2 test clips',         free: true,  paid: true  },
+  { f: 'Explore project and caption settings', free: true, paid: true },
+  { f: 'Generate clips from your own video',   free: false, paid: true },
   { f: 'HD vertical shorts (9:16)',            free: false, paid: true  },
   { f: 'YouTube Shorts publish',               free: false, paid: true, soon: true },
   { f: 'TikTok publish',                       free: false, paid: true, soon: true },
@@ -42,15 +43,15 @@ export default function Billing() {
   const [checkoutErr, setCheckoutErr] = useState('')
 
   const isPaid    = user?.plan && user.plan !== 'free'
-  const used      = user?.credits_used || 0
-  const limit     = user?.credits_limit || 2  // matches free-tier default in backend/app/core/plan_limits.py
-  const usedPct   = Math.min(100, Math.round((used / limit) * 100))
-  const remaining = user?.videos_remaining ?? Math.max(0, limit - used)
+  const used      = Number(user?.credits_used) || 0
+  const limit     = Number(user?.credits_limit) || 0
+  const usedPct   = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0
+  const remaining = isPaid ? (user?.videos_remaining ?? Math.max(0, limit - used)) : 0
 
-  const minsUsed      = user?.video_minutes_used || 0
-  const minsLimit     = user?.video_minutes_limit || 30
-  const minsUsedPct   = Math.min(100, Math.round((minsUsed / minsLimit) * 100))
-  const minsRemaining = user?.video_minutes_remaining ?? Math.max(0, minsLimit - minsUsed)
+  const minsUsed      = Number(user?.video_minutes_used) || 0
+  const minsLimit     = Number(user?.video_minutes_limit) || 0
+  const minsUsedPct   = minsLimit > 0 ? Math.min(100, Math.round((minsUsed / minsLimit) * 100)) : 0
+  const minsRemaining = isPaid ? (user?.video_minutes_remaining ?? Math.max(0, minsLimit - minsUsed)) : 0
   const fmtMins = n => n < 60 ? `${n}m` : `${Math.floor(n / 60)}h ${n % 60}m`
 
   const handleCheckout = async (planId) => {
@@ -132,7 +133,7 @@ export default function Billing() {
                 <p style={{ margin: 0, fontSize: '.8rem', color: '#6b7280' }}>
                   {isPaid
                     ? `${remaining} clip credit${remaining !== 1 ? 's' : ''} remaining this period`
-                    : `${remaining} free trial clip${remaining !== 1 ? 's' : ''} remaining`}
+                    : 'Explore the workflow and caption controls. Choose a plan to generate clips from your video.'}
                 </p>
               </div>
               {!isPaid && (
