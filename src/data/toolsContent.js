@@ -4,13 +4,15 @@
 // Copy is unique per page — same template, different angle/voice — to avoid
 // thin/duplicate-content penalties.
 
+import { priorityToolsContent } from './prioritySeoContent'
+
 const toolsContent = {
   'youtube-long-video-to-short': {
     slug: 'youtube-long-video-to-short',
     badge: 'YouTube → Shorts',
-    metaTitle: 'YouTube Long Video to Short — Free AI Converter | ShortClipr',
+    metaTitle: 'YouTube Long Video to Short — AI Converter | ShortClipr',
     metaDescription:
-      'Turn any long YouTube video into short, viral-ready clips automatically. Paste a link, get 10+ scored vertical Shorts with captions in minutes. Free to start, no watermark.',
+      'Explore how a long YouTube video can become captioned vertical clips. Follow the workflow, inspect framing and captions, then choose a plan when you are ready to generate from your own source.',
     keywords:
       'youtube long video to short, convert long youtube video to shorts, youtube video to short clips, long video to short converter, youtube shorts from long video',
     h1: 'Turn a Long YouTube Video Into Shorts — Automatically',
@@ -29,7 +31,7 @@ const toolsContent = {
       { icon: '📊', title: 'Virality scoring', desc: 'Every clip is ranked by hook strength, pacing, and payoff so you spend your posting time on the ones likeliest to land.' },
     ],
     faqs: [
-      { q: 'Can I really convert a YouTube video to Shorts for free?', a: 'Yes — ShortClipr’s free plan converts your first 3 videos into Shorts with no watermark and no credit card required. Paid plans unlock longer videos and batch exports.' },
+      { q: 'Can I explore the YouTube-to-Shorts workflow before choosing a plan?', a: 'Yes. Watch the workflow, browse real showcase clips, and use the project setup and caption controls. Choose a paid plan when you are ready to generate clips from your own video.' },
       { q: 'How long can the source video be?', a: 'ShortClipr handles videos up to 6 hours long — long enough for full podcasts, conference talks, and multi-hour streams, which most converters can’t process in one pass.' },
       { q: 'Will the Shorts have captions automatically?', a: 'Yes. Every clip is exported with burned-in captions generated from the video’s own audio — choose from 11 styles and 28 languages before you export.' },
       { q: 'Do I need to download the original video first?', a: 'No. Just paste the YouTube URL — ShortClipr fetches and processes the video on our end, so there’s nothing to download, store, or upload.' },
@@ -41,7 +43,7 @@ const toolsContent = {
     badge: 'AI Repurposing',
     metaTitle: 'Long Video to Shorts AI — Auto-Generate Viral Clips | ShortClipr',
     metaDescription:
-      'AI that converts long-form video into short-form clips automatically — finds the hooks, reframes to 9:16, adds captions, and scores each clip for virality. Try it free.',
+      'AI workflow for turning long-form video into short-form clips: it identifies candidate moments, reframes to 9:16, adds captions, and helps you prepare a project before selecting a generation plan.',
     keywords:
       'long video to shorts ai, ai video to short converter, long form to short form ai, ai shorts generator, convert long video to short clips with ai',
     h1: 'The AI That Turns Long Videos Into Shorts For You',
@@ -69,30 +71,30 @@ const toolsContent = {
 
   'youtube-to-shorts-converter': {
     slug: 'youtube-to-shorts-converter',
-    badge: 'Free Converter',
-    metaTitle: 'YouTube to Shorts Converter (Free) — No Watermark | ShortClipr',
+    badge: 'YouTube to Shorts',
+    metaTitle: 'YouTube to Shorts Converter — Captioned Vertical Clips | ShortClipr',
     metaDescription:
-      'Free YouTube to Shorts converter with no watermark on the free plan. Paste a link, get AI-picked highlight clips reframed to 9:16 with captions — ready to post in minutes.',
+      'Explore a YouTube-to-Shorts workflow with AI-picked highlight candidates, 9:16 framing, captions, and real showcase examples before selecting a generation plan.',
     keywords:
-      'youtube to shorts converter, youtube to shorts converter free, free youtube shorts maker, convert youtube video to shorts no watermark, youtube clip generator',
-    h1: 'YouTube to Shorts Converter — Free, No Watermark',
+      'youtube to shorts converter, youtube shorts maker, convert youtube video to shorts, youtube clip generator, ai video clip maker',
+    h1: 'YouTube to Shorts Converter — Review the Workflow',
     subhead:
-      'Most "free" converters slap a logo on every export. ShortClipr’s free plan gives you 3 full videos’ worth of clean, watermark-free Shorts — so you can actually judge the output before paying for anything.',
-    heroStat: { value: '0', label: 'watermarks on the free plan' },
+      'See the project setup, framing choices, caption controls, and real example clips before selecting a paid plan to generate ShortClipr clips from your own video.',
+    heroStat: { value: '9:16', label: 'portrait framing shown in the workflow' },
     steps: [
       { n: '01', title: 'Paste your YouTube link', desc: 'Works with regular uploads, premieres, podcasts, and livestream replays.' },
       { n: '02', title: 'Pick your style', desc: 'Choose a caption style, layout template, and (optionally) a topic to focus on.' },
       { n: '03', title: 'Download individually or as a ZIP', desc: 'Export each clip separately or grab a batch ZIP — ready to post to TikTok / Reels / Shorts. Direct in-app publishing is coming soon.' },
     ],
     features: [
-      { icon: '🚫', title: 'No watermark, even on free', desc: 'Free-plan exports are fully clean — what you see is exactly what you can post, with no upsell hidden in the output.' },
+      { icon: '◉', title: 'Real examples to inspect', desc: 'Watch ShortClipr showcase clips to see the vertical framing, captions, and pacing before you select a paid generation plan.' },
       { icon: '💳', title: 'Per-video pricing', desc: 'Paid plans charge per video processed, not per minute of source — so a 2-hour documentary costs the same as a 10-minute clip.' },
       { icon: '🎨', title: '9 layout templates, 11 caption styles', desc: 'More formatting variety than Opus Clip, Klap, or Vidyo — so your clips don’t all look like they came from the same factory.' },
       { icon: '🌍', title: '28-language support', desc: 'Generate captions and translate clips for international audiences without leaving the tool.' },
     ],
     faqs: [
-      { q: 'Is the YouTube to Shorts converter actually free?', a: 'Yes — your first 3 videos are processed free, with no watermark and no credit card required. After that, plans are billed per video rather than per minute.' },
-      { q: 'Will my exported clips have a ShortClipr logo on them?', a: 'No. Unlike most "free" converters, ShortClipr does not place a watermark on free-plan exports — the clips are export-ready as-is.' },
+      { q: 'Can I explore the YouTube to Shorts workflow before choosing a plan?', a: 'Yes. Watch the workflow, browse real showcase clips, and use the project setup and caption controls. A paid plan is required to generate and export clips from your own video.' },
+      { q: 'Will my exported clips have a ShortClipr logo on them?', a: 'Paid plans include clean clip downloads. Review the current plan details before subscribing.' },
       { q: 'Can I publish directly to TikTok, Reels, and Shorts?', a: 'Direct in-app publishing is coming soon. For now, export clips individually or as a batch ZIP, ready to upload to any platform.' },
       { q: 'What video lengths does the converter support?', a: 'Up to 6 hours of source video — well beyond the 2-3 hour caps most competing converters impose.' },
     ],
@@ -226,7 +228,7 @@ const toolsContent = {
     badge: 'Instagram Reels',
     metaTitle: 'Video to Reels AI — Convert Any Video to Instagram Reels | ShortClipr',
     metaDescription:
-      'Convert long videos to Instagram Reels automatically with AI. ShortClipr finds the best moments, reframes to 9:16, adds captions, and scores each Reel for engagement — free to start.',
+      'Explore how long videos can become Instagram Reels with AI-selected moments, 9:16 framing, captions, and a review-first workflow.',
     keywords:
       'video to reels, convert video to instagram reels, ai video to reels converter, long video to reels, instagram reels from youtube',
     h1: 'Convert Any Long Video Into Instagram Reels — Automatically',
@@ -279,7 +281,7 @@ const toolsContent = {
       { q: 'What makes a clip good for TikTok vs. other platforms?', a: 'TikTok rewards fast hooks, clear payoff, and high-energy pacing. ShortClipr\'s scoring specifically weights these signals — so higher-scored clips are better optimized for TikTok\'s algorithm by default.' },
       { q: 'Can I turn a YouTube video into a TikTok without downloading it?', a: 'Yes — paste the YouTube URL and ShortClipr processes everything on its end. You get back finished TikTok-formatted clips without ever downloading the original video yourself.' },
       { q: 'Will the clips be the right length for TikTok?', a: 'Yes — ShortClipr targets 30-90 second clips, the sweet spot for TikTok performance. Longer segments are trimmed to the highest-value portion within that window.' },
-      { q: 'Can I make TikTok clips for free?', a: 'Yes — the free plan processes 3 full videos into TikTok-ready clips with no watermark and no credit card required.' },
+      { q: 'Can I explore TikTok clip creation before choosing a plan?', a: 'Yes. You can watch the workflow, browse real showcase clips, and use the project setup and caption controls before selecting a paid plan to generate clips from your own video.' },
     ],
   },
 
@@ -310,10 +312,12 @@ const toolsContent = {
       { q: 'How does ShortClipr find the best moments in an interview?', a: 'It reads the full transcript looking for clear insights, bold claims, surprising admissions, and self-contained exchanges — moments that work as standalone clips without requiring the audience to have watched the rest of the interview.' },
       { q: 'Does ShortClipr handle two-person interviews and panels?', a: 'Yes — multi-speaker face tracking keeps the right person centered in the 9:16 frame as the conversation shifts between speakers, even in multi-guest panel formats.' },
       { q: 'Can I focus the AI on one specific guest in a panel interview?', a: 'Yes — topic and keyword targeting let you tell ShortClipr to prioritize a specific guest name, topic, or subject. It filters the whole transcript and only clips the relevant segments.' },
-      { q: 'Is there a free way to try interview clipping?', a: 'Yes — the free plan processes 3 complete interview videos with no watermark and no credit card required, so you can evaluate clip quality before committing to a paid plan.' },
+      { q: 'Can I explore interview clipping before choosing a plan?', a: 'Yes. You can watch the workflow, browse real showcase clips, and use the project setup and caption controls before selecting a paid plan to generate interview clips from your own video.' },
     ],
   },
 }
+
+Object.assign(toolsContent, priorityToolsContent)
 
 export default toolsContent
 export const toolSlugs = Object.keys(toolsContent)

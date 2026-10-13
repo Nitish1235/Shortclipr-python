@@ -1,24 +1,19 @@
 import './legal.css'
 import Navigation from '../components/Navigation'
 import Footer from '../components/Footer'
-
-const STATS = [
-  { num: '47K+',  label: 'Creators'          },
-  { num: '2M+',   label: 'Clips Generated'   },
-  { num: '< 60s', label: 'Avg Process Time'  },
-  { num: '99.1%', label: 'Uptime'            },
-]
+import SEO from '../components/SEO'
 
 const VALUES = [
-  { icon:'⚡', title:'Speed First',    desc:`We built our entire pipeline around one principle: minutes, not hours. Our InnerTube + parallel FFmpeg approach skips the full-video download step that slows most competitors down.` },
-  { icon:'💸', title:'Fair Pricing',   desc:`No credit confusion. You pay per video, not per minute of source video. A 2-hour documentary costs the same as a 10-minute tutorial.` },
-  { icon:'🎯', title:'User Control',   desc:`Your AI, your rules. Tell the AI exactly what to look for with topic/keyword search. No more blind-box clip selection — you define the strategy.` },
-  { icon:'🔒', title:'No Watermarks', desc:`Even on the free plan. We don't hold your clips hostage. Try the full product, then decide if you need more.` },
+  { icon:'✂', title:'Useful suggestions', desc:'We help surface moments from long YouTube videos so creators can focus their review on possible clips.' },
+  { icon:'▯', title:'Vertical presentation', desc:'Portrait framing and captions make a starting point for a Short. The final result still deserves a careful watch.' },
+  { icon:'✓', title:'Editorial control', desc:'Creators decide whether a clip is clear, accurate, and worth sharing.' },
+  { icon:'◉', title:'A clear path to creation', desc:'Explore the workflow, real showcase clips, and editing controls before choosing a paid plan to generate from your own video.' },
 ]
 
 export default function About() {
   return (
     <>
+      <SEO title="About ShortClipr | Video Clipping for Creators" description="Learn how ShortClipr helps creators find and review short clips from YouTube videos, video podcasts, interviews, and tutorials." path="/about" />
       <Navigation />
       <div className="legal-page">
         <div className="legal-inner">
@@ -28,29 +23,19 @@ export default function About() {
 
           <div className="legal-section">
             <h2>Our Mission</h2>
-            <p>Long-form video is the most valuable content format on the internet. Podcasts, interviews, tutorials, documentaries — they contain hundreds of viral moments most creators never surface because manual editing is prohibitively time-consuming.</p>
-            <p>ShortClipr was built to fix this. Paste a YouTube URL. Get 10 viral-ready short clips in minutes, not hours. No editing skills required. No complicated software. No credit card for the first 3 videos.</p>
-          </div>
-
-          <div className="about-stats">
-            {STATS.map(s => (
-              <div key={s.label} className="stat-box">
-                <span className="stat-num">{s.num}</span>
-                <span className="stat-label">{s.label}</span>
-              </div>
-            ))}
+            <p>Creators often record more useful ideas than they can share from a single YouTube video. ShortClipr helps turn a video podcast, interview, or tutorial into short clip candidates with portrait framing and captions.</p>
+            <p>Our aim is to make review easier. A suggested clip still needs a person to check context, the opening and ending, the crop, and caption accuracy before publishing.</p>
           </div>
 
           <div className="legal-section">
             <h2>Why We Built This</h2>
-            <p>We studied every major competitor — OpusClip, Klap, WayinAI, Vidyo — and found the same problems everywhere:</p>
+            <p>Short-form editing asks creators to make several decisions for every clip:</p>
             <ul>
-              <li>Credit systems no one understands (1 credit = 1 minute of source video? Really?)</li>
-              <li>Processing windows long enough for users to give up and close the tab</li>
-              <li>AI that misses comedy, sarcasm, and nuance — picks the wrong moments</li>
-              <li>Watermarks on free plans that make it impossible to actually test the product</li>
+              <li>Which moment makes sense without the rest of the video?</li>
+              <li>What must remain in the frame when wide footage becomes vertical?</li>
+              <li>Are the captions and the final cut faithful to the source?</li>
             </ul>
-            <p>We built ShortClipr as the answer to every one of these problems. Never downloads the full video → much faster end-to-end. Per video pricing. No watermarks on free plan.</p>
+            <p>ShortClipr provides a starting point for those choices, while the creator makes the final call.</p>
           </div>
 
           <div className="legal-section">

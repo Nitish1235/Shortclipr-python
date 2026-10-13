@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom'
-import Navigation from '../components/Navigation'
+import SeoNavigation from '../components/SeoNavigation'
+import SeoHeroMedia from '../components/SeoHeroMedia'
 import Footer from '../components/Footer'
 import SEO, { SITE } from '../components/SEO'
-import alternativesContent, { alternativeSlugs } from '../data/alternativesContent'
+import alternativesContent, { reviewedAlternativeSlugs } from '../data/alternativesContent'
 import './seo-landing.css'
 
 export default function AlternativesIndex() {
@@ -11,8 +12,8 @@ export default function AlternativesIndex() {
     '@type': 'CollectionPage',
     name: 'ShortClipr — Compare Alternatives',
     url: `${SITE}/youtube-shorts/alternatives`,
-    description: 'Side-by-side comparisons of ShortClipr against Opus Clip, Klap, 2short.ai, Vidyo, Munch, Riverside Magic Clips, Spikes Studio, Vizard, Wisecut, and other AI video clipping tools — speed, pricing, watermarks, and feature breakdowns.',
-    hasPart: alternativeSlugs.map(s => ({
+    description: 'Current workflow comparisons of ShortClipr, OpusClip, and Klap, with links to official competitor information.',
+    hasPart: reviewedAlternativeSlugs.map(s => ({
       '@type': 'WebPage',
       name: `ShortClipr vs ${alternativesContent[s].name}`,
       url: `${SITE}/youtube-shorts/alternatives/${s}`,
@@ -20,15 +21,15 @@ export default function AlternativesIndex() {
   }
 
   return (
-    <>
+    <div className="seo-site">
       <SEO
-        title="ShortClipr Alternatives — Compare vs Opus Clip, Klap, Munch, Riverside & More"
-        description="See exactly how ShortClipr stacks up against Opus Clip, Klap, 2short.ai, Vidyo, Munch, Riverside Magic Clips, Spikes Studio, Vizard, and Wisecut — speed, pricing, watermarks, and feature breakdowns."
-        keywords="opus clip alternative, klap alternative, 2short alternative, vidyo alternative, munch alternative, riverside clips alternative, spikes studio alternative, vizard alternative, ai clipping tool comparison"
+        title="Compare ShortClipr with OpusClip and Klap | ShortClipr"
+        description="Compare ShortClipr with OpusClip and Klap on project setup, clip creation workflow, exports, and publishing."
+        keywords="opus clip alternative, klap alternative, video clipping workflow comparison, ai clip maker comparison"
         path="/youtube-shorts/alternatives"
         schema={schema}
       />
-      <Navigation />
+      <SeoNavigation />
 
       <div className="seo-page">
         <section className="seo-hero">
@@ -36,17 +37,17 @@ export default function AlternativesIndex() {
             <span className="seo-badge">Compare</span>
             <h1 className="seo-h1">How ShortClipr Stacks Up Against the Competition</h1>
             <p className="seo-sub">
-              We built ShortClipr after using every major AI clipping tool ourselves —
-              and ran into the same friction points everywhere: per-minute pricing, watermarked
-              free plans, and short video-length caps. Here's exactly how we compare, feature by feature.
+              Choose a clip tool based on the source video, the review process,
+              and what happens after a clip is ready. These comparisons link to official plan information.
             </p>
+            <SeoHeroMedia label="Compare clip workflows" />
           </div>
         </section>
 
         <section className="seo-section">
           <h2 className="seo-section-title">Pick a comparison</h2>
           <div className="seo-features">
-            {alternativeSlugs.map(s => {
+            {reviewedAlternativeSlugs.map(s => {
               const a = alternativesContent[s]
               return (
                 <Link key={s} to={`/youtube-shorts/alternatives/${s}`} className="seo-feature" style={{ textDecoration: 'none' }}>
@@ -62,13 +63,13 @@ export default function AlternativesIndex() {
         </section>
 
         <section className="seo-cta-band">
-          <h2>Try it yourself — free</h2>
-          <p>3 videos, no watermark, no credit card. Compare the output directly.</p>
-          <Link to="/youtube-shorts" className="seo-btn-primary">Get started free →</Link>
+          <h2>See the ShortClipr workflow for yourself</h2>
+          <p>Browse real showcase clips and explore the project and caption controls before choosing a plan to generate from your own video.</p>
+          <Link to="/youtube-shorts" className="seo-btn-primary">Explore the workflow →</Link>
         </section>
       </div>
 
       <Footer />
-    </>
+    </div>
   )
 }

@@ -1,8 +1,11 @@
 import { useParams, Navigate, Link } from 'react-router-dom'
-import Navigation from '../components/Navigation'
+import SeoNavigation from '../components/SeoNavigation'
+import SeoHeroMedia from '../components/SeoHeroMedia'
 import Footer from '../components/Footer'
 import SEO, { SITE } from '../components/SEO'
 import toolsContent, { toolSlugs } from '../data/toolsContent'
+import guidesContent from '../data/guidesContent'
+import SeoVisual from '../components/SeoVisual'
 import './seo-landing.css'
 
 export default function ToolLanding() {
@@ -22,7 +25,6 @@ export default function ToolLanding() {
       operatingSystem: 'Web',
       url: `${SITE}${path}`,
       description: data.metaDescription,
-      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD', description: 'Free plan — 2 clips, no credit card' },
     },
     {
       '@context': 'https://schema.org',
@@ -44,10 +46,12 @@ export default function ToolLanding() {
     },
   ]
 
-  const others = toolSlugs.filter(s => s !== data.slug).slice(0, 4)
+  const others = (data.relatedTools || toolSlugs.filter(s => s !== data.slug).slice(0, 4))
+    .filter(s => toolsContent[s] && s !== data.slug)
+  const relatedGuides = (data.relatedGuides || []).filter(s => guidesContent[s])
 
   return (
-    <>
+    <div className="seo-site">
       <SEO
         title={data.metaTitle}
         description={data.metaDescription}
@@ -55,7 +59,7 @@ export default function ToolLanding() {
         path={path}
         schema={schema}
       />
-      <Navigation />
+      <SeoNavigation />
 
       <div className="seo-page">
         {/* Hero */}
@@ -65,8 +69,8 @@ export default function ToolLanding() {
             <h1 className="seo-h1">{data.h1}</h1>
             <p className="seo-sub">{data.subhead}</p>
             <div className="seo-cta-row">
-              <Link to="/youtube-shorts" className="seo-btn-primary">Try it free →</Link>
-              <Link to="/youtube-shorts" className="seo-btn-secondary">See how it works</Link>
+              <Link to="/youtube-shorts" className="seo-btn-primary">Explore the workflow →</Link>
+              <Link to="/youtube-shorts" state={{ scrollToSection: 'moments' }} className="seo-btn-secondary">See how it works</Link>
             </div>
             {data.heroStat && (
               <div className="seo-stat">
@@ -74,8 +78,11 @@ export default function ToolLanding() {
                 <span className="seo-stat-label">{data.heroStat.label}</span>
               </div>
             )}
+            <SeoHeroMedia label={data.badge} />
           </div>
         </section>
+
+        {data.visual && <div className="seo-section" style={{ paddingBottom: 0 }}><SeoVisual kind={data.visual} /></div>}
 
         {/* Steps */}
         <section className="seo-section">
@@ -90,6 +97,15 @@ export default function ToolLanding() {
             ))}
           </div>
         </section>
+
+        {data.editorial && (
+          <section className="seo-section seo-prose" style={{ paddingTop: 0 }}>
+            <h2>{data.editorial.title}</h2>
+            {data.editorial.paragraphs.map(p => <p key={p}>{p}</p>)}
+            <h3>Before you share a clip</h3>
+            <ul>{data.editorial.checklist.map(item => <li key={item}>{item}</li>)}</ul>
+          </section>
+        )}
 
         {/* Features */}
         <section className="seo-section" style={{ paddingTop: 0 }}>
@@ -127,19 +143,19 @@ export default function ToolLanding() {
             {others.map(s => (
               <Link key={s} to={`/youtube-shorts/tools/${s}`} className="seo-crosslink">{toolsContent[s].h1}</Link>
             ))}
-            <Link to="/youtube-shorts/alternatives/opus-clip" className="seo-crosslink">ShortClipr vs Opus Clip</Link>
+            {relatedGuides.map(s => <Link key={s} to={`/youtube-shorts/guides/${s}`} className="seo-crosslink">{guidesContent[s].h1}</Link>)}
           </div>
         </section>
 
         {/* CTA band */}
         <section className="seo-cta-band">
-          <h2>Try it on your own video — free</h2>
-          <p>3 videos, no watermark, no credit card. Your first clips ready in minutes.</p>
-          <Link to="/youtube-shorts" className="seo-btn-primary">Get started free →</Link>
+          <h2>See this workflow in action</h2>
+          <p>Browse real showcase clips and explore the project and caption controls before choosing a plan to generate from your own video.</p>
+          <Link to="/youtube-shorts" className="seo-btn-primary">Explore the workflow →</Link>
         </section>
       </div>
 
       <Footer />
-    </>
+    </div>
   )
 }

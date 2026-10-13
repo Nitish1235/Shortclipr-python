@@ -1,8 +1,9 @@
 import { useParams, Navigate, Link } from 'react-router-dom'
-import Navigation from '../components/Navigation'
+import SeoNavigation from '../components/SeoNavigation'
+import SeoHeroMedia from '../components/SeoHeroMedia'
 import Footer from '../components/Footer'
 import SEO, { SITE } from '../components/SEO'
-import alternativesContent, { alternativeSlugs } from '../data/alternativesContent'
+import alternativesContent, { reviewedAlternativeSlugs } from '../data/alternativesContent'
 import toolsContent from '../data/toolsContent'
 import './seo-landing.css'
 
@@ -35,19 +36,20 @@ export default function AlternativeLanding() {
     },
   ]
 
-  const others = alternativeSlugs.filter(s => s !== data.slug)
+  const others = reviewedAlternativeSlugs.filter(s => s !== data.slug)
   const toolLinks = Object.keys(toolsContent).slice(0, 3)
 
   return (
-    <>
+    <div className="seo-site">
       <SEO
         title={data.metaTitle}
         description={data.metaDescription}
         keywords={data.keywords}
         path={path}
         schema={schema}
+        noindex={!data.reviewed}
       />
-      <Navigation />
+      <SeoNavigation />
 
       <div className="seo-page">
         {/* Hero */}
@@ -57,15 +59,16 @@ export default function AlternativeLanding() {
             <h1 className="seo-h1">{data.h1}</h1>
             <p className="seo-sub">{data.intro}</p>
             <div className="seo-cta-row">
-              <Link to="/youtube-shorts" className="seo-btn-primary">Try ShortClipr free →</Link>
-              <Link to="/youtube-shorts" className="seo-btn-secondary">Compare pricing</Link>
+              <Link to="/youtube-shorts" className="seo-btn-primary">Explore the workflow →</Link>
+              <Link to="/youtube-shorts" state={{ scrollToSection: 'pricing' }} className="seo-btn-secondary">Compare pricing</Link>
             </div>
+            <SeoHeroMedia label={`ShortClipr and ${data.name}`} />
           </div>
         </section>
 
         {/* Comparison table */}
         <section className="seo-section">
-          <h2 className="seo-section-title">ShortClipr vs {data.name} — feature by feature</h2>
+          <h2 className="seo-section-title">ShortClipr vs {data.name} — workflow details</h2>
           <div className="seo-table-wrap">
             <table className="seo-table">
               <thead>
@@ -86,14 +89,14 @@ export default function AlternativeLanding() {
               </tbody>
             </table>
           </div>
-          <p style={{ fontSize: '0.78rem', color: '#999', marginTop: 14, textAlign: 'center' }}>
-            Figures reflect publicly available plan details and our own benchmark testing as of {new Date().getFullYear()}; competitor offerings change — verify current specifics on {data.name}'s site before switching.
-          </p>
+          {data.source && <p style={{ fontSize: '0.84rem', color: '#666', marginTop: 14, textAlign: 'center' }}>
+            Checked {data.reviewed} against <a href={data.source} target="_blank" rel="noopener noreferrer">{data.sourceLabel}</a>{data.extraSource && <> and <a href={data.extraSource} target="_blank" rel="noopener noreferrer">{data.extraSourceLabel}</a></>}. Plans change, so verify current details before choosing.
+          </p>}
         </section>
 
         {/* Why switch */}
         <section className="seo-section" style={{ paddingTop: 0 }}>
-          <h2 className="seo-section-title">Why creators switch to ShortClipr</h2>
+          <h2 className="seo-section-title">What to consider</h2>
           <div className="seo-why">
             {data.why.map(w => (
               <div className="seo-why-card" key={w.title}>
@@ -132,13 +135,13 @@ export default function AlternativeLanding() {
 
         {/* CTA band */}
         <section className="seo-cta-band">
-          <h2>See the difference on your own video</h2>
-          <p>3 free videos, no watermark, no credit card — compare the output yourself.</p>
-          <Link to="/youtube-shorts" className="seo-btn-primary">Get started free →</Link>
+          <h2>See the ShortClipr workflow in action</h2>
+          <p>Browse real showcase clips and explore the project and caption controls before choosing a plan to generate from your own video.</p>
+          <Link to="/youtube-shorts" className="seo-btn-primary">Explore the workflow →</Link>
         </section>
       </div>
 
       <Footer />
-    </>
+    </div>
   )
 }

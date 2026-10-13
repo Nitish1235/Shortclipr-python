@@ -9,14 +9,10 @@ Columns this maps to in the `users` table:
   max_video_minutes    INT  — max duration of a SINGLE submitted YouTube video
                               (enforced pre-flight in jobs.py, NOT stored in DB)
 
-Free-tier feature caps (NOT stored in DB — enforced per-request in jobs.py /
-orchestrator.py). All three are None for every paid plan, meaning "no extra
-cap beyond the global default already enforced by JobOptions validators":
-  max_clip_count                INT|None — max clips per job (free: 3)
-  max_clip_duration_seconds     INT|None — max single-clip length (free: 60s)
-  max_transcript_minutes_for_ai INT|None — cap how much transcript is sent to
-                                           GPT for viral-moment finding, to
-                                           bound free-tier AI cost (free: 10)
+Plan-specific generation settings are NOT stored in the DB and are enforced
+per request in jobs.py / orchestrator.py. Paid plans omit these values, which
+means "no extra cap beyond the global JobOptions validators." Free accounts
+have a zero generation allowance and are stopped before pipeline work begins.
 """
 
 # ─────────────────────────────────────────────────────────────────
@@ -25,7 +21,7 @@ cap beyond the global default already enforced by JobOptions validators":
 #
 #  Plan           $/mo   Shorts  Monthly hrs  Per-video max
 #  ─────────────────────────────────────────────────────────
-#  free             $0      2      30 min        30 min
+#  free             $0      0       0 min         n/a
 #  starter_30      $15     30    10 hrs (600)   2 hrs (120)
 #  growth_100      $39     80    30 hrs (1800)  3 hrs (180)  ← key is legacy, real cap is 80
 #  unlimited       $99   ∞/999K 100 hrs (6000)  6 hrs (360)
@@ -52,16 +48,15 @@ UNLIMITED_CREDITS = 999999
 
 PLAN_LIMITS: dict[str, dict] = {
     "free": {
-        # credits_limit = 2, matching max_clip_count = 2: a free user gets
-        # exactly one 2-clip job per month (credits are reserved per clip
-        # requested and refunded for any that fail — see reserve_credits /
-        # release_credits in db/supabase.py), then blocked until reset.
-        "credits_limit":       2,
-        "video_minutes_limit": 30,    # 30 min/month total
-        "max_video_minutes":   30,    # 30 min max single video
-        "max_clip_count":               2,    # only 2 clips per job
-        "max_clip_duration_seconds":    60,   # no clip longer than 60s
-        "max_transcript_minutes_for_ai": 10,  # GPT only sees first 10 min
+        # A free account can explore the public workflow and example library,
+        # but generation begins on a paid plan. This remains the server-side
+        # source of truth for newly created accounts.
+        "credits_limit":       0,
+        "video_minutes_limit": 0,
+        "max_video_minutes":   0,
+        "max_clip_count":               0,
+        "max_clip_duration_seconds":    0,
+        "max_transcript_minutes_for_ai": 0,
     },
 
     # ── Current pricing (3 tiers) ─────────────────────────────

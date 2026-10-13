@@ -51,7 +51,6 @@ export default function MetaPixel() {
     const highIntent =
       location.pathname === '/' ||
       location.pathname === '/youtube-shorts' ||
-      location.pathname === '/brainrot' ||
       location.pathname.includes('/pricing')
 
     if (highIntent) trackMetaEvent('ViewContent')

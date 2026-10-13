@@ -132,9 +132,9 @@ export default function AppLayout({ children }) {
 
   const isPaid    = user?.plan && user.plan !== 'free'
   const isMarketer = user?.plan === 'marketer'
-  const used      = user?.credits_used || 0
-  const limit     = user?.credits_limit || 3
-  const usedPct   = Math.min(100, Math.round((used / limit) * 100))
+  const used      = Number(user?.credits_used) || 0
+  const limit     = Number(user?.credits_limit) || 0
+  const usedPct   = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0
   const remaining = user?.videos_remaining ?? (limit - used)
   const initials  = (user?.full_name || user?.email || 'U')[0].toUpperCase()
 
@@ -220,7 +220,7 @@ export default function AppLayout({ children }) {
           <SocialRow icon={<YTLogo size={14}/>} label="YouTube" connected={ytConn} onConnect={connectYT} onDisconnect={() => disconnect('youtube')}/>
           <SocialRow icon={<TTLogo size={14}/>} label="TikTok" connected={ttConn} onConnect={connectTT} onDisconnect={() => disconnect('tiktok')}/>
         </div>}
-        <div className="studio-allowance"><span className="studio-eyebrow">YOUR MONTHLY SPACE</span><h3>{Math.max(0, remaining)} <small>clips remaining</small></h3><div className="studio-meter"><i style={{width:`${usedPct}%`}} /></div><p>{used} of {limit} credits used · {isPaid ? user.plan : 'Free'} plan</p><Link to="/billing">Manage plan ↗</Link></div>
+        <div className="studio-allowance"><span className="studio-eyebrow">YOUR MONTHLY SPACE</span><h3><span>{Math.max(0, remaining)}</span><small>clips remaining</small></h3><div className="studio-meter"><i style={{width:`${usedPct}%`}} /></div><p>{used} of {limit} credits used · {isPaid ? user.plan : 'Explore'} access</p><Link to="/billing">Manage plan ↗</Link></div>
         <div className="studio-profile"><span className="studio-avatar">{user?.avatar_url ? <img src={user.avatar_url} alt=""/> : initials}</span><div><b>{user?.full_name || user?.email?.split('@')[0] || 'Creator'}</b><small>Your creative workspace</small></div><button onClick={logout} title="Sign out" aria-label="Sign out">{Icon.signout}</button></div>
       </aside>
       <div className="main-content studio-main"><header className="studio-topbar"><span>Workspace <i>/</i> <b>{currentPage}</b></span><Link to="/youtube-shorts/settings" className="studio-avatar" aria-label="Account settings">{initials}</Link></header>{children}</div>

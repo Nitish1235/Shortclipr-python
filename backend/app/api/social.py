@@ -189,7 +189,8 @@ def _studio_url(product: str, status: str, reason: str = "") -> str:
     if product == "factloop":
         base = "/factloop/studio"
     elif product == "brainrot":
-        base = "/brainrot/studio"
+        # Legacy OAuth states should not send anyone to retired pages.
+        base = "/youtube-shorts/dashboard"
     else:
         base = "/youtube-shorts/dashboard"
     url = f"{settings.FRONTEND_URL}{base}?status={status}"

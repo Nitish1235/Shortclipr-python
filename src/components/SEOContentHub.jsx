@@ -25,8 +25,8 @@ const tools = [
 
 const guides = [
   ['How to turn long videos into Shorts', '/youtube-shorts/guides/how-to-turn-long-videos-into-shorts'],
-  ['How to make YouTube Shorts go viral', '/youtube-shorts/guides/how-to-make-youtube-shorts-go-viral'],
-  ['Best caption styles for short-form video', '/youtube-shorts/guides/best-caption-styles-for-short-form-video'],
+  ['How to choose podcast clips', '/youtube-shorts/guides/how-to-choose-podcast-clips'],
+  ['How to crop horizontal video for Shorts', '/youtube-shorts/guides/crop-horizontal-video-for-shorts'],
 ]
 
 export default function SEOContentHub() {

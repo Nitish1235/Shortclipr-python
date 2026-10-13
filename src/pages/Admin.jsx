@@ -1240,7 +1240,7 @@ export default function Admin() {
               <div>
                 <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111' }}>Paywall Library</h2>
                 <p style={{ fontSize: '0.78rem', color: '#999', marginTop: '2px' }}>
-                  These clips appear to free users when they attempt to generate clips, showing what's possible with a paid plan.
+                  These clips are available as ShortClipr showcase examples, helping visitors understand the workflow before choosing a paid generation plan.
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>

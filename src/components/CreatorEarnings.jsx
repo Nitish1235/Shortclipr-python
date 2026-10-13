@@ -756,7 +756,7 @@ export default function CreatorEarnings() {
             <span style={{ color: '#cf1322' }}> Pick your archetype.</span>
           </div>
           <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '18px' }}>
-            Start free. First 3 shorts on us — no card, no watermark.
+            Explore the workflow and showcase clips, then choose a plan when you are ready to generate.
           </div>
           <button
             onClick={handleCta}

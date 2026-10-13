@@ -319,7 +319,7 @@ export default function Editor() {
           </h1>
           <p style={{ fontSize:'0.875rem', color:'#666', lineHeight:1.7, marginBottom:'28px' }}>
             The clip editor — caption styles, templates, position controls, colour combos —
-            is available on paid plans. Free accounts get <strong style={{ color:'#cf1322' }}>3 free generations</strong> to preview ShortClipr.
+            is available on paid plans. You can explore ShortClipr’s workflow and showcase clips before choosing a plan.
           </p>
           <div style={{ display:'flex', flexDirection:'column', gap:'10px', marginBottom:'24px', textAlign:'left' }}>
             {[

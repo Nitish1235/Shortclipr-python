@@ -9,11 +9,11 @@ const rows = [
     vidyo:    '15–30 min',
   },
   {
-    feature: 'Free plan watermarks',
-    us:       '❌ None',
-    opus:     '✓ Watermarked',
-    klap:     '✓ Watermarked',
-    vidyo:    '✓ Watermarked',
+    feature: 'Getting started',
+    us:       'Workflow and project controls',
+    opus:     'See current plans',
+    klap:     'See current plans',
+    vidyo:    'See current plans',
   },
   {
     feature: 'Pricing model',
@@ -111,7 +111,7 @@ export default function Comparison() {
             Why creators switch to ShortClipr
           </h2>
           <p style={{ fontSize: '1rem', color: '#666', maxWidth: '500px', margin: '0 auto', lineHeight: 1.7 }}>
-            Faster processing, no watermarks on free plan, fair per-video pricing.
+            A clear workflow, real examples, and project controls before you choose a generation plan.
             The best OpusClip alternative — and the best Klap alternative.
           </p>
         </div>

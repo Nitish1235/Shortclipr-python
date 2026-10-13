@@ -17,6 +17,8 @@
 //     relatedAlt?: [alternativeSlug, ...] // /alternatives/* cross-links
 //   }
 
+import { priorityGuidesContent } from './prioritySeoContent'
+
 const guidesContent = {
   'how-to-turn-long-videos-into-shorts': {
     slug: 'how-to-turn-long-videos-into-shorts',
@@ -435,6 +437,8 @@ const guidesContent = {
     relatedAlt: ['opus-clip', 'vizard'],
   },
 }
+
+Object.assign(guidesContent, priorityGuidesContent)
 
 export default guidesContent
 export const guideSlugs = Object.keys(guidesContent)

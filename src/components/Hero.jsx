@@ -40,12 +40,12 @@ export default function Hero() {
           <label className="studio-sr-only" htmlFor="studio-video-url">YouTube video URL</label>
           <span className="studio-link-icon" aria-hidden="true">↗</span>
           <input id="studio-video-url" type="url" required value={url} onChange={event => setUrl(event.target.value)} placeholder="Paste your YouTube link" autoComplete="url" />
-          <button type="submit">Create my clips <span aria-hidden="true">→</span></button>
+          <button type="submit">Plan my clips <span aria-hidden="true">→</span></button>
         </form>
-        <p className="studio-reassurance">2 free clips <span aria-hidden="true">·</span> No credit card required</p>
+        <p className="studio-reassurance">Explore the workflow <span aria-hidden="true">·</span> Choose a plan when you’re ready to generate</p>
         {showAuth && !user && (
           <div className="studio-auth">
-            <div><strong>Your link is saved.</strong><p>Sign in to create your first clips.</p></div>
+            <div><strong>Your link is saved.</strong><p>Sign in to set up your project and explore the editing controls.</p></div>
             <GoogleLogin
               onSuccess={async response => {
                 const ok = await loginWithGoogleToken(response.credential)

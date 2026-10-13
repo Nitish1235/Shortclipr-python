@@ -1866,8 +1866,8 @@ export default function Dashboard() {
             }}>🔒</div>
             <h2 style={{ fontSize:'1.2rem', fontWeight:700, color:'#111', marginBottom:8 }}>{upgradeReason}</h2>
             <p style={{ fontSize:'.875rem', color:'#666', lineHeight:1.6, marginBottom:24 }}>
-              This feature requires a paid plan. Free accounts get <strong style={{ color:'#cf1322' }}>3 free generations</strong> to try ShortClipr.
-              Upgrade to unlock downloads and a larger monthly clip allowance.
+              This feature requires a paid plan. You can explore the project and caption controls before subscribing.
+              Upgrade to unlock generation, downloads, and a monthly clip allowance.
             </p>
             <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:24 }}>
               {[

@@ -70,16 +70,13 @@ export default function TikTokPixel() {
     const highIntent =
       location.pathname === '/' ||
       location.pathname === '/youtube-shorts' ||
-      location.pathname === '/brainrot' ||
       location.pathname.includes('/pricing')
 
     if (highIntent) {
       // TikTok requires content_id for ViewContent to be eligible for
       // catalogue/event diagnostics. These are stable product identifiers,
       // not visitor-specific values.
-      const contentId = location.pathname.startsWith('/brainrot')
-        ? 'shortclipr_brainrot'
-        : location.pathname.startsWith('/factloop')
+      const contentId = location.pathname.startsWith('/factloop')
           ? 'shortclipr_factloop'
           : 'shortclipr_youtube_shorts'
       window.ttq.track('ViewContent', {

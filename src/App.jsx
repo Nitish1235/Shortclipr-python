@@ -16,6 +16,7 @@ import Footer        from './components/Footer'
 import VideoShowcase     from './components/VideoShowcase'
 import MultipleShorts    from './components/MultipleShorts'
 import SEOContentHub     from './components/SEOContentHub'
+import ContentExplainer from './components/ContentExplainer'
 import Pricing           from './components/Pricing'
 import PromotionBar      from './components/PromotionBar'
 import FAQ               from './components/FAQ'
@@ -34,7 +35,6 @@ import Login          from './pages/Login'
 import Settings       from './pages/Settings'
 import ClipsHistory   from './pages/ClipsHistory'
 import Billing        from './pages/Billing'
-import BrainrotBilling from './pages/brainrot/BrainrotBilling'
 import Changelog      from './pages/Changelog'
 import PressKit       from './pages/PressKit'
 import Careers        from './pages/Careers'
@@ -43,16 +43,6 @@ import Lab            from './pages/Lab'
 import Tutorial       from './pages/Tutorial'
 import Admin          from './pages/Admin'
 import AdminClips     from './pages/AdminClips'
-import BrainrotStudio    from './pages/brainrot/BrainrotStudio'
-import BrainrotLogin     from './pages/brainrot/BrainrotLogin'
-import BrainrotSettings  from './pages/brainrot/BrainrotSettings'
-import BrainrotLanding from './pages/brainrot/BrainrotLanding'
-import BrainrotToolsIndex from './pages/brainrot/BrainrotToolsIndex'
-import BrainrotToolLanding from './pages/brainrot/BrainrotToolLanding'
-import BrainrotAlternativesIndex from './pages/brainrot/BrainrotAlternativesIndex'
-import BrainrotAlternativeLanding from './pages/brainrot/BrainrotAlternativeLanding'
-import BrainrotGuidesIndex from './pages/brainrot/BrainrotGuidesIndex'
-import BrainrotGuideArticle from './pages/brainrot/BrainrotGuideArticle'
 
 // Factloop imports
 import FactloopStudio    from './pages/factloop/FactloopStudio'
@@ -103,8 +93,8 @@ function LandingPage() {
   return (
     <div className="youtube-shorts-landing">
       <SEO
-        title="AI YouTube Shorts Maker — Turn Long Videos Into Short Clips | ShortClipr"
-        description="Turn long YouTube videos, podcasts, interviews, and tutorials into ready-to-post YouTube Shorts, TikToks, and Instagram Reels. ShortClipr finds strong moments, reframes them for vertical video, and adds captions in minutes."
+        title="AI YouTube Shorts Maker | Turn Videos into Clips | ShortClipr"
+        description="Turn YouTube podcasts, interviews, and tutorials into vertical clip previews with AI-selected moments and captions. Review your clips in ShortClipr."
         keywords="AI YouTube Shorts maker, YouTube to Shorts, AI clip maker, long video to short clips, podcast to shorts, video to reels, TikTok clip maker"
         path="/youtube-shorts"
         schema={{
@@ -114,8 +104,7 @@ function LandingPage() {
           applicationCategory: 'VideoApplication',
           operatingSystem: 'Web',
           url: `${SITE}/youtube-shorts`,
-          description: 'ShortClipr turns long-form YouTube videos into ready-to-post short clips with AI-selected moments, vertical reframing, and captions.',
-          offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD', description: 'Free plan — 2 clips, no credit card required' },
+          description: 'ShortClipr helps creators explore a YouTube-to-Shorts workflow with AI-selected moments, vertical reframing, captions, and real showcase examples. A paid plan is required to generate clips from a source video.',
         }}
       />
       <PromotionBar />
@@ -127,6 +116,8 @@ function LandingPage() {
         <VideoShowcase />
 
         <MultipleShorts />
+
+        <ContentExplainer />
 
         <SEOContentHub />
 
@@ -144,15 +135,7 @@ function LandingPage() {
   )
 }
 
-// `fallback` is where a logged-out visitor gets bounced to. Defaults to
-// /youtube-shorts since that's correct for every YT-Shorts protected route
-// (dashboard, clips, editor, lab, billing, admin) — but it must NOT be
-// hardcoded, because this same component also guards /brainrot/studio.
-// Without an explicit fallback there, a logged-out user clicking any
-// brainrot CTA ("Get started", "Make a clip", etc.) would land on the
-// YouTube-Shorts dashboard instead of back on the brainrot product they
-// were actually trying to use — see the /brainrot/studio route below,
-// which passes fallback="/brainrot".
+// Protected product routes use their own landing page as the login fallback.
 function ProtectedRoute({ children, fallback = '/youtube-shorts' }) {
   const { user, loading } = useAuth()
   if (loading) return (
@@ -172,34 +155,6 @@ function ProtectedRoute({ children, fallback = '/youtube-shorts' }) {
   )
   if (!user) return <Navigate to={fallback} replace />
   return children
-}
-
-// ── Brainrot kill switch ──────────────────────────────────────────
-// Flip to false to bring the whole product back — nothing else needs to
-// change, every original route below is still intact. Matching flag on
-// the backend: backend/app/api/brainrot.py's BRAINROT_OFFLINE (blocks the
-// API itself; this flag only blocks the frontend routes/links — flip both
-// together, since one without the other leaves either a dead UI in front
-// of a live API, or a working UI whose every call 503s).
-const BRAINROT_OFFLINE = true
-
-function BrainrotOfflinePage() {
-  return (
-    <div style={{
-      minHeight: '100vh', display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', gap: 12,
-      fontFamily: `'Inter', system-ui, -apple-system, sans-serif`,
-      textAlign: 'center', padding: 24, background: '#fff', color: '#111',
-    }}>
-      <h1 style={{ fontSize: '1.4rem', fontWeight: 600, margin: 0 }}>Brainrot is temporarily unavailable</h1>
-      <p style={{ color: '#888', maxWidth: 420, margin: 0, fontSize: '.92rem' }}>
-        We've taken it offline for now. Check back soon.
-      </p>
-      <a href="/youtube-shorts" style={{ marginTop: 12, color: '#cf1322', fontWeight: 600, fontSize: '.9rem' }}>
-        Go to ShortClipr →
-      </a>
-    </div>
-  )
 }
 
 // ── Factloop kill switch ──────────────────────────────────────────
@@ -285,30 +240,8 @@ export default function App() {
             <Route path="/youtube-shorts/settings"              element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/youtube-shorts/tutorial"              element={<ProtectedRoute><Tutorial /></ProtectedRoute>} />
 
-            {/* ── Brainrot Clips Maker product — OFFLINE, see BRAINROT_OFFLINE above ── */}
-            {BRAINROT_OFFLINE ? (
-              <Route path="/brainrot/*" element={<BrainrotOfflinePage />} />
-            ) : (
-              <>
-                <Route path="/brainrot"          element={<BrainrotLanding />} />
-
-                {/* Brainrot SEO pages */}
-                <Route path="/brainrot/tools"                element={<BrainrotToolsIndex />} />
-                <Route path="/brainrot/tools/:slug"           element={<BrainrotToolLanding />} />
-                <Route path="/brainrot/alternatives"          element={<BrainrotAlternativesIndex />} />
-                <Route path="/brainrot/alternatives/:slug"    element={<BrainrotAlternativeLanding />} />
-                <Route path="/brainrot/guides"                element={<BrainrotGuidesIndex />} />
-                <Route path="/brainrot/guides/:slug"          element={<BrainrotGuideArticle />} />
-
-                {/* Auth */}
-                <Route path="/brainrot/login"    element={<BrainrotLogin />} />
-
-                {/* Protected — user must be logged in */}
-                <Route path="/brainrot/studio"   element={<ProtectedRoute fallback="/brainrot/login"><BrainrotStudio /></ProtectedRoute>} />
-                <Route path="/brainrot/billing"  element={<ProtectedRoute fallback="/brainrot"><BrainrotBilling /></ProtectedRoute>} />
-                <Route path="/brainrot/settings" element={<ProtectedRoute fallback="/brainrot"><BrainrotSettings /></ProtectedRoute>} />
-              </>
-            )}
+            {/* Retired product: the server returns 410 for direct requests. */}
+            <Route path="/brainrot/*" element={<Navigate to="/youtube-shorts" replace />} />
 
             {/* ── Factloop product — OFFLINE, see FACTLOOP_OFFLINE above ── */}
             {FACTLOOP_OFFLINE ? (

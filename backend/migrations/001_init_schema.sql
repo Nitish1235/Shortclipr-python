@@ -22,17 +22,17 @@ CREATE TABLE IF NOT EXISTS users (
 
     -- Plan & shorts quota
     -- credits_limit = max shorts/clips per billing month
-    -- Free plan default = 1 (changed from old default of 3)
+    -- Free accounts can browse the workflow but receive no generation credits.
     plan            TEXT        NOT NULL DEFAULT 'free',
     credits_used    INTEGER     NOT NULL DEFAULT 0,
-    credits_limit   INTEGER     NOT NULL DEFAULT 1,
+    credits_limit   INTEGER     NOT NULL DEFAULT 0,
 
     -- Monthly video-hours quota
     -- video_minutes_limit = max total source-video minutes per billing month
     -- video_minutes_used  = running total this month (ceiling-rounded per job)
-    -- Free plan default = 30 min/month, 30 min max per single video
+    -- Free accounts receive no source-video generation allowance.
     video_minutes_used    INTEGER     NOT NULL DEFAULT 0,
-    video_minutes_limit   INTEGER     NOT NULL DEFAULT 30,
+    video_minutes_limit   INTEGER     NOT NULL DEFAULT 0,
 
     -- Billing-cycle reset tracker
     -- Set to date_trunc('month', NOW()) on first use / on upgrade.
@@ -56,9 +56,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url          TEXT        NOT N
 ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub          TEXT        NOT NULL DEFAULT '';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS plan                TEXT        NOT NULL DEFAULT 'free';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS credits_used        INTEGER     NOT NULL DEFAULT 0;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS credits_limit       INTEGER     NOT NULL DEFAULT 1;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS credits_limit       INTEGER     NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS video_minutes_used  INTEGER     NOT NULL DEFAULT 0;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS video_minutes_limit INTEGER     NOT NULL DEFAULT 30;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS video_minutes_limit INTEGER     NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS credits_reset_at    TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS social_tokens       JSONB        DEFAULT '{}';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW();
@@ -68,7 +68,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at          TIMESTAMPTZ      
 -- Sets each user's limit based on their current plan.
 -- Safe to run multiple times (WHERE clause prevents double-apply).
 UPDATE users SET video_minutes_limit = CASE plan
-    WHEN 'free'        THEN 30
+    WHEN 'free'        THEN 0
     WHEN 'starter'     THEN 300
     WHEN 'starter_100' THEN 300
     WHEN 'starter_250' THEN 600
@@ -82,7 +82,7 @@ WHERE video_minutes_limit = 0 OR video_minutes_limit IS NULL;
 
 -- ── Backfill credits_limit for existing rows still at old default of 3 ─
 UPDATE users SET credits_limit = CASE plan
-    WHEN 'free'        THEN 1
+    WHEN 'free'        THEN 0
     WHEN 'starter'     THEN 20
     WHEN 'starter_100' THEN 100
     WHEN 'starter_250' THEN 250
@@ -188,7 +188,7 @@ CREATE INDEX IF NOT EXISTS idx_clips_viral_score  ON clips(viral_score DESC);
 --
 --  Plan           $/mo   credits_limit  video_minutes_limit  max per video
 --  ─────────────────────────────────────────────────────────────────────
---  free             $0          1             30 min            30 min
+--  free             $0          0              0 min             n/a
 --  starter_100     $10        100            300 min (5 h)     120 min (2 h)
 --  starter_250     $25        250            600 min (10 h)    120 min (2 h)
 --  pro_500         $45        500           1080 min (18 h)    180 min (3 h)

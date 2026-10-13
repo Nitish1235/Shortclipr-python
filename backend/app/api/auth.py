@@ -116,7 +116,7 @@ async def google_auth(body: GoogleAuthRequest):
                 "subscription_status": user.get("subscription_status", "none"),
                 "plan_expires_at": user.get("plan_expires_at"),
                 "credits_used": user.get("credits_used", 0),
-                "credits_limit": user.get("credits_limit", 1),
+                "credits_limit": user.get("credits_limit", get_credits_limit("free")),
                 "brainrot_plan": user.get("brainrot_plan", "free"),
                 "brainrot_credits_used": user.get("brainrot_credits_used", 0),
                 "brainrot_credits_limit": user.get("brainrot_credits_limit", 2),
@@ -154,7 +154,7 @@ def _build_user_response(user: dict, token: str) -> AuthResponse:
             "subscription_status": user.get("subscription_status", "none"),
             "plan_expires_at": user.get("plan_expires_at"),
             "credits_used": user.get("credits_used", 0),
-            "credits_limit": user.get("credits_limit", 1),
+            "credits_limit": user.get("credits_limit", get_credits_limit("free")),
             "brainrot_plan": user.get("brainrot_plan", "free"),
             "brainrot_credits_used": user.get("brainrot_credits_used", 0),
             "brainrot_credits_limit": user.get("brainrot_credits_limit", 2),
@@ -222,9 +222,9 @@ async def get_me(current_user: CurrentUser):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     credits_used  = int(user.get("credits_used",  0) or 0)
-    credits_limit = int(user.get("credits_limit", 1) or 1)
+    credits_limit = int(user.get("credits_limit", get_credits_limit("free")) or 0)
     vm_used       = int(user.get("video_minutes_used",  0) or 0)
-    vm_limit      = int(user.get("video_minutes_limit", 30) or 30)
+    vm_limit      = int(user.get("video_minutes_limit", get_video_minutes_limit("free")) or 0)
     br_used       = int(user.get("brainrot_credits_used",  0) or 0)
     br_limit      = int(user.get("brainrot_credits_limit", 2) or 2)
 

@@ -30,14 +30,13 @@ const TIERS = [
   { clips: 700,  price: 79, originalPrice: 158, label: '700 Shorts', dodoId: 'pro_1000',    videoHours: 35, maxVideoHours: 3, family: 'Pro Plus' },
 ]
 
-const FREE_FEATURES = [
-  '2 free clips (no card needed)',
-  '30 min of video per month (30 min max per single video)',
-  '30s & 60s short formats',
-  '720p output quality',
-  '3 caption styles',
-  'Viral score for every clip',
-  'Preview clips on platform',
+const EXPLORE_FEATURES = [
+  'Watch the YouTube-to-Shorts workflow',
+  'Browse real ShortClipr showcase clips',
+  'Set up a project from a YouTube link',
+  'Explore caption and framing controls',
+  'Compare formats before committing',
+  'Choose a paid plan when you are ready to generate',
 ]
 
 function getFeatures(tier) {
@@ -136,14 +135,14 @@ export default function Pricing() {
             border:'1px solid #e5e5e5', borderRadius:'16px',
             padding:'32px', background:'#fff',
           }}>
-            <div style={{ fontSize:'0.8rem', fontWeight:700, color:'#666', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'8px' }}>Free plan</div>
-            <div style={{ fontSize:'3rem', fontWeight:700, color:'#0f0f0f', letterSpacing:'-0.05em', marginBottom:'4px' }}>
-              $0<span style={{ fontSize:'1rem', color:'#aaa', fontWeight:400 }}>/forever</span>
+            <div style={{ fontSize:'0.8rem', fontWeight:700, color:'#666', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'8px' }}>Explore the workflow</div>
+            <div style={{ fontSize:'2rem', fontWeight:700, color:'#0f0f0f', letterSpacing:'-0.04em', marginBottom:'8px' }}>
+              See it before you create
             </div>
-            <p style={{ fontSize:'0.85rem', color:'#666', marginBottom:'28px' }}>Perfect for trying it out.</p>
+            <p style={{ fontSize:'0.85rem', color:'#666', marginBottom:'28px' }}>Use the product walkthrough and editing controls to understand the process before selecting a generation plan.</p>
 
             <ul style={{ listStyle:'none', marginBottom:'32px', display:'flex', flexDirection:'column', gap:'10px' }}>
-              {FREE_FEATURES.map(f => (
+              {EXPLORE_FEATURES.map(f => (
                 <li key={f} style={{ fontSize:'0.875rem', color:'#333', display:'flex', alignItems:'flex-start' }}>
                   <span style={checkStyle}>✓</span>{f}
                 </li>
@@ -159,7 +158,7 @@ export default function Pricing() {
               onMouseEnter={e => { e.currentTarget.style.background='#cf1322'; e.currentTarget.style.color='#fff' }}
               onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='#cf1322' }}
             >
-              {freeLoading ? 'Loading...' : 'Start for free →'}
+              {freeLoading ? 'Loading...' : 'Explore how it works →'}
             </button>
           </div>
 

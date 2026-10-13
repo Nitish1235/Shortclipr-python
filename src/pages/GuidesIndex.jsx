@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
-import Navigation from '../components/Navigation'
+import SeoNavigation from '../components/SeoNavigation'
+import SeoHeroMedia from '../components/SeoHeroMedia'
 import Footer from '../components/Footer'
 import SEO, { SITE } from '../components/SEO'
 import guidesContent, { guideSlugs } from '../data/guidesContent'
@@ -13,7 +14,7 @@ export default function GuidesIndex() {
       '@type': 'CollectionPage',
       name: 'ShortClipr Guides — Short-Form Video & Repurposing',
       url: `${SITE}/youtube-shorts/guides`,
-      description: 'In-depth guides on turning long videos into Shorts, making clips go viral, caption styles, podcast repurposing, and how AI video clipping works.',
+      description: 'Guides to choosing useful moments, preserving context, cropping wide video, checking captions, and repurposing video podcasts.',
       hasPart: guideSlugs.map(s => ({
         '@type': 'Article',
         headline: guidesContent[s].h1,
@@ -31,15 +32,15 @@ export default function GuidesIndex() {
   ]
 
   return (
-    <>
+    <div className="seo-site">
       <SEO
-        title="Guides — Turn Long Videos Into Shorts, Go Viral & Repurpose Smarter | ShortClipr"
-        description="Free guides on short-form video: how to turn long videos into Shorts, make YouTube Shorts go viral, pick caption styles, repurpose podcasts, and understand how AI clipping works."
+        title="Video Clipping Guides | YouTube Shorts & Podcast Clips | ShortClipr"
+        description="Practical guides to choosing moments, cropping wide video, reviewing captions, and repurposing video podcasts into short clips."
         keywords="short form video guides, how to make shorts, repurpose video guide, youtube shorts tips, tiktok reels guide, ai clipping explained"
         path="/youtube-shorts/guides"
         schema={schema}
       />
-      <Navigation />
+      <SeoNavigation />
 
       <div className="seo-page">
         <section className="seo-hero">
@@ -47,12 +48,12 @@ export default function GuidesIndex() {
             <span className="seo-badge">Guides</span>
             <h1 className="seo-h1">Learn Short-Form Video, End to End</h1>
             <p className="seo-sub">
-              Practical, no-fluff guides on turning long-form content into Shorts, Reels, and TikToks —
-              finding the moments worth clipping, formatting them to win the feed, and posting consistently
-              enough to grow. Everything we learned building ShortClipr, written down.
+              Learn to select complete moments, make a clear portrait edit, check captions,
+              and preserve the meaning of the original video.
             </p>
+            <SeoHeroMedia label="Read, review, create" />
             <div className="seo-cta-row">
-              <Link to="/youtube-shorts" className="seo-btn-primary">Try ShortClipr free →</Link>
+              <Link to="/youtube-shorts" className="seo-btn-primary">Explore the workflow →</Link>
               <Link to="/youtube-shorts/tools" className="seo-btn-secondary">Browse tools</Link>
             </div>
           </div>
@@ -87,13 +88,13 @@ export default function GuidesIndex() {
         </section>
 
         <section className="seo-cta-band">
-          <h2>Reading is good. Clipping is better.</h2>
-          <p>Put any guide into practice — 3 free videos, no watermark, no credit card.</p>
-          <Link to="/youtube-shorts" className="seo-btn-primary">Get started free →</Link>
+          <h2>See the workflow behind the guide</h2>
+          <p>Watch real showcase clips and explore the project and caption controls before selecting a plan to generate clips from your own source.</p>
+          <Link to="/youtube-shorts" className="seo-btn-primary">Explore the workflow →</Link>
         </section>
       </div>
 
       <Footer />
-    </>
+    </div>
   )
 }

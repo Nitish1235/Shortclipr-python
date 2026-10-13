@@ -224,6 +224,18 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
     supabase.py for why a plain "check, then bill later" pattern allowed
     concurrent submissions to double-spend the same remaining quota.
     """
+    # ── 0. Confirm a generation allowance is available ─────────
+    # New free accounts start at zero credits. Do this before URL validation
+    # and metadata work so direct API calls cannot trigger the pipeline.
+    account = await db.get_user(current_user.user_id)
+    credits_limit = int((account or {}).get("credits_limit", 0) or 0)
+    credits_used = int((account or {}).get("credits_used", 0) or 0)
+    if credits_limit <= credits_used:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Choose a paid plan to generate clips. You can explore the workflow and example clips before subscribing.",
+        )
+
     # ── 1. Validate YouTube URL ────────────────────────────────
     video_id = extract_video_id(body.youtube_url)
     if not video_id:
@@ -346,7 +358,7 @@ async def create_job(body: CreateJobRequest, current_user: CurrentUser):
     if reserved_credits <= 0:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="Monthly shorts limit reached for your plan. Resets next month — upgrade to continue.",
+            detail="Your available clip allowance has been used. Choose a paid plan to generate more clips.",
         )
     body.options.clip_count = reserved_credits
 

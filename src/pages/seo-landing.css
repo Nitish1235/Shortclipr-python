@@ -181,37 +181,6 @@
   color: #cf1322; font-weight: 800;
 }
 
-/* Visual "formula" strip — character art / icons joined by + and = to explain
-   a concept at a glance (e.g. Character + Character + Gameplay = Viral clip).
-   Purple-accented for Brainrot; --seo-formula-accent can be overridden per page. */
-.seo-formula {
-  --seo-formula-accent: #a855f7;
-  display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
-  gap: 10px 6px; margin: 12px 0 40px; padding: 28px 20px;
-  background: #fff; border: 1px solid #e5e5e5; border-radius: 16px;
-}
-.seo-formula-item, .seo-formula-result {
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
-  width: 96px; flex-shrink: 0;
-}
-.seo-formula-thumb {
-  width: 68px; height: 68px; border-radius: 14px; overflow: hidden;
-  background: #faf5ff; border: 2px solid #0f0f0f;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.7rem; flex-shrink: 0;
-}
-.seo-formula-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.seo-formula-label { font-size: 0.72rem; font-weight: 700; color: #333; text-align: center; line-height: 1.3; }
-.seo-formula-op { font-size: 1.3rem; font-weight: 800; color: var(--seo-formula-accent); flex-shrink: 0; padding: 0 2px; }
-.seo-formula-result .seo-formula-thumb { background: var(--seo-formula-accent); border-color: #0f0f0f; color: #fff; }
-.seo-formula-result .seo-formula-label { color: var(--seo-formula-accent); }
-@media (max-width: 560px) {
-  .seo-formula { padding: 20px 14px; gap: 8px 4px; }
-  .seo-formula-item, .seo-formula-result { width: 78px; }
-  .seo-formula-thumb { width: 56px; height: 56px; font-size: 1.4rem; border-radius: 12px; }
-  .seo-formula-label { font-size: 0.66rem; }
-}
-
 /* Cross-links */
 .seo-crosslinks { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 18px; }
 .seo-crosslink {
@@ -220,3 +189,126 @@
   padding: 8px 16px; text-decoration: none; transition: all 0.15s;
 }
 .seo-crosslink:hover { border-color: #cf1322; color: #cf1322; }
+
+/* Active YouTube Shorts editorial pages share the studio landing design.
+   Factloop's .fl-seo pages keep their separate theme. */
+.seo-site {
+  --cloud-ink: #202c3c;
+  --cloud-muted: #566579;
+  --cloud-blue: #eff7fb;
+  --cloud-coral: #c94438;
+  --cloud-teal: #227d89;
+  --cloud-line: #dbe6ea;
+  min-height: 100vh;
+  background: var(--cloud-blue);
+  color: var(--cloud-ink);
+  font-family: Manrope, Arial, sans-serif;
+}
+.seo-site *, .seo-site h1, .seo-site h2, .seo-site h3 { font-family: Manrope, Arial, sans-serif; }
+.seo-site :focus-visible { outline: 3px solid var(--cloud-teal); outline-offset: 4px; }
+.seo-site .seo-nav { margin-bottom: 0; }
+.seo-site .seo-nav-links { gap: clamp(16px, 2.8vw, 32px); }
+.seo-site .seo-nav-links a { text-decoration: none; }
+.seo-site .seo-nav-links a:hover { color: var(--cloud-teal); }
+.seo-nav-actions { display: flex; align-items: center; gap: 10px; }
+.seo-nav-menu { display: none; position: relative; }
+.seo-nav-menu summary { list-style: none; cursor: pointer; padding: 9px 12px; border: 1px solid var(--cloud-line); border-radius: 9px; font-size: 12px; font-weight: 700; }
+.seo-nav-menu summary::-webkit-details-marker { display: none; }
+.seo-nav-menu > div { position: absolute; top: calc(100% + 10px); right: 0; width: 180px; padding: 8px; border: 1px solid var(--cloud-line); border-radius: 12px; background: #fff; box-shadow: 0 14px 30px #203d4c1c; }
+.seo-nav-menu a { display: block; padding: 10px; border-radius: 7px; color: var(--cloud-ink); font-size: 12px; font-weight: 700; }
+.seo-nav-menu a:hover { background: #eef7f8; color: var(--cloud-teal); }
+
+.seo-site .seo-page { background: var(--cloud-blue); color: var(--cloud-ink); }
+.seo-site .seo-hero { padding: 0; text-align: left; background: radial-gradient(circle at 77% 36%, #dceef3 0, transparent 35%), linear-gradient(180deg, #eff7fb 0%, #f8fcfd 100%); border: 0; }
+.seo-site .seo-hero-inner { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); column-gap: clamp(34px, 5vw, 80px); align-items: start; width: min(1160px, calc(100% - 64px)); max-width: none; min-height: 600px; margin: auto; padding: 92px 0 85px; }
+.seo-site .seo-hero-inner > :not(.seo-hero-media) { grid-column: 1; }
+.seo-site .seo-badge { width: fit-content; margin: 6px 0 17px; padding: 0; border: 0; background: none; color: var(--cloud-teal); font-size: 11px; font-weight: 800; letter-spacing: .16em; }
+.seo-site .seo-badge::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 9px; border-radius: 50%; background: var(--cloud-teal); vertical-align: 1px; }
+.seo-site .seo-h1 { max-width: 720px; margin: 0 0 23px; color: var(--cloud-ink); font-size: clamp(43px, 4.9vw, 69px); font-weight: 600; letter-spacing: -.055em; line-height: 1.09; }
+.seo-site .seo-sub { max-width: 620px; margin: 0 0 29px; color: var(--cloud-muted); font-size: clamp(15px, 1.4vw, 17px); line-height: 1.8; }
+.seo-site .seo-cta-row { justify-content: flex-start; margin: 0 0 20px; }
+.seo-site .seo-btn-primary { padding: 13px 21px; border: 0; border-radius: 10px; background: var(--cloud-coral); box-shadow: 0 8px 19px #c9443820; color: #fff; font-size: 13px; }
+.seo-site .seo-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 13px 24px #c9443830; background: #ad362d; }
+.seo-site .seo-btn-secondary { padding: 12px 21px; border: 1px solid #bfd4dc; border-radius: 10px; background: #fff9; color: var(--cloud-ink); font-size: 13px; }
+.seo-site .seo-btn-secondary:hover { border-color: var(--cloud-teal); color: var(--cloud-teal); }
+.seo-site .seo-stat { width: fit-content; align-items: flex-start; padding: 12px 18px; border-color: #d5e5e9; background: #ffffffa8; }
+.seo-site .seo-stat-value { color: var(--cloud-teal); }
+.seo-site .seo-stat-label { color: var(--cloud-muted); }
+.seo-site .seo-guide-meta { justify-content: flex-start; margin-top: 0; color: var(--cloud-muted); }
+
+.seo-hero-media { grid-column: 2; grid-row: 1 / span 7; align-self: center; width: 100%; margin: 0; padding: 18px; border: 1px solid #fff; border-radius: 27px; background: linear-gradient(145deg, #dfeff2, #eeecf8); box-shadow: 0 22px 55px #3b5a6b1b; }
+.seo-hero-media-top { display: flex; justify-content: space-between; align-items: center; padding: 1px 3px 14px; color: #667e8c; font-size: 9px; font-weight: 800; letter-spacing: .1em; }
+.seo-hero-media-top i { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--cloud-teal); }
+.seo-hero-media-canvas { display: grid; grid-template-columns: minmax(0, 1.5fr) 22px minmax(0, .72fr); gap: 9px; align-items: center; }
+.seo-hero-source, .seo-hero-output { position: relative; overflow: hidden; border: 5px solid #fff; background: #d9e9eb; box-shadow: 0 12px 28px #273f511c; }
+.seo-hero-source { border-radius: 15px; }
+.seo-hero-source img { display: block; width: 100%; aspect-ratio: 16/10; height: auto; object-fit: cover; }
+.seo-hero-source > span, .seo-hero-output > span { position: absolute; top: 9px; left: 9px; padding: 5px 7px; border-radius: 5px; background: #162a39b8; color: #fff; font-size: 8px; font-weight: 800; letter-spacing: .06em; }
+.seo-hero-selection { position: absolute; top: 15%; bottom: 15%; left: 36%; width: 30%; border: 2px solid #b2e4e0; border-radius: 9px; box-shadow: 0 0 0 120px #0b263b3d; }
+.seo-hero-arrow { color: var(--cloud-teal); font-size: 25px; text-align: center; }
+.seo-hero-output { aspect-ratio: 9/15; border-radius: 16px; }
+.seo-hero-output img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.seo-hero-output strong { position: absolute; right: 5px; bottom: 22%; left: 5px; color: #fff; font-size: clamp(11px, 1.2vw, 18px); line-height: 1.25; text-align: center; text-shadow: 0 2px 7px #0009; }
+.seo-hero-output mark { padding: 0 3px; border-radius: 3px; background: #f4bc89; color: var(--cloud-ink); text-shadow: none; }
+.seo-hero-media figcaption { display: flex; justify-content: space-between; gap: 8px; padding: 15px 4px 0; border-top: 1px solid #ffffffa8; margin-top: 17px; color: #5a7380; font-size: 9px; font-weight: 700; }
+.seo-hero-media figcaption span::first-letter { color: var(--cloud-teal); }
+.seo-hero-media p { margin: 10px 0 0; color: #6e8290; font-size: 10px; text-align: center; }
+
+.seo-site .seo-section { width: min(1160px, calc(100% - 64px)); max-width: none; padding: 76px 0; }
+.seo-site .seo-section-title { color: var(--cloud-ink); font-size: clamp(30px, 3.8vw, 47px); font-weight: 600; letter-spacing: -.05em; }
+.seo-site .seo-steps, .seo-site .seo-features { gap: 17px; }
+.seo-site .seo-step, .seo-site .seo-feature, .seo-site .seo-faq-item { border: 1px solid #d9e7eb; border-radius: 18px; background: #fff; box-shadow: 0 12px 30px #2746530a; }
+.seo-site .seo-step { padding: 30px; }
+.seo-site .seo-step-num { color: var(--cloud-teal); }
+.seo-site .seo-step h3, .seo-site .seo-feature h3, .seo-site .seo-faq-item h3 { color: var(--cloud-ink); }
+.seo-site .seo-step p, .seo-site .seo-feature p, .seo-site .seo-faq-item p { color: var(--cloud-muted); }
+.seo-site .seo-feature { padding: 26px; }
+.seo-site .seo-feature-icon { display: grid; flex: 0 0 36px; width: 36px; height: 36px; place-items: center; border-radius: 11px; background: #e8f4f5; color: var(--cloud-teal); font-size: 20px; }
+.seo-site .seo-table-wrap { border: 1px solid #d8e7e9; border-radius: 19px; box-shadow: 0 14px 34px #2746530d; }
+.seo-site .seo-table th { background: #f5fafb; color: #607684; }
+.seo-site .seo-table td { color: var(--cloud-ink); }
+.seo-site .seo-table th.us-col, .seo-site .seo-table td.us-col { background: #eaf6f6; color: var(--cloud-teal); }
+.seo-site .seo-table tr:last-child td { border-bottom: 0; }
+.seo-site .seo-why-card { border: 1px solid #d9e7eb; border-left: 4px solid var(--cloud-teal); border-radius: 14px; background: #fff; }
+.seo-site .seo-why-card h3 { color: var(--cloud-ink); }
+.seo-site .seo-why-card p { color: var(--cloud-muted); }
+.seo-site .seo-prose { width: min(900px, calc(100% - 64px)); max-width: none; margin: 42px auto 72px; padding: 52px 64px; border: 1px solid #d9e7eb; border-radius: 24px; background: #fff; box-shadow: 0 18px 40px #2746530c; }
+.seo-site .seo-prose h2 { color: var(--cloud-ink); }
+.seo-site .seo-prose p, .seo-site .seo-prose li { color: var(--cloud-muted); }
+.seo-site .seo-prose ul li::before { background: var(--cloud-teal); }
+.seo-site .seo-howto { border-color: #d4e6e9; background: #f7fbfc; }
+.seo-site .seo-howto-num { background: var(--cloud-teal); }
+.seo-site .seo-takeaways { border-color: #cbe5e6; background: #e9f5f5; }
+.seo-site .seo-takeaways li::before { color: var(--cloud-teal); }
+.seo-site .seo-crosslink { padding: 10px 16px; border-color: #d4e5e9; color: var(--cloud-ink); }
+.seo-site .seo-crosslink:hover { border-color: var(--cloud-teal); background: #eaf6f6; color: var(--cloud-teal); }
+.seo-site .seo-guide-tag { color: var(--cloud-teal); }
+.seo-site .seo-visual { border-color: #d9e7eb; box-shadow: 0 14px 34px #2746530c; }
+.seo-site .seo-visual-podcast > div { background: #eaf6f6; border-color: #cbe5e6; }
+.seo-site .seo-visual-podcast span { color: var(--cloud-teal); }
+.seo-site .seo-visual-wide, .seo-site .seo-visual-tall { border-color: var(--cloud-teal); background: #eaf6f6; }
+.seo-site .seo-visual-person, .seo-site .seo-visual-screen i:last-child { background: var(--cloud-teal); }
+.seo-site .seo-visual-screen i:first-child { border-color: var(--cloud-teal); }
+.seo-site .seo-cta-band { background: linear-gradient(130deg, #1a6672, #3d90a0); }
+.seo-site .seo-cta-band h2 { font-weight: 600; letter-spacing: -.05em; }
+.seo-site .seo-cta-band .seo-btn-primary { background: var(--cloud-coral); color: #fff; }
+.seo-site .footer-v2 { background: var(--cloud-blue); border-color: #d7e6e8; }
+.seo-site .footer-v2-bottom, .seo-site .footer-v2-groups, .seo-site .footer-v2-group { border-color: #d7e6e8; }
+.seo-site .footer-v2-brand > a, .seo-site .footer-v2-links a:hover { color: var(--cloud-teal); }
+
+@media (max-width: 900px) {
+  .seo-site .seo-hero-inner { grid-template-columns: 1fr; min-height: 0; padding: 70px 0; }
+  .seo-site .seo-hero-inner > :not(.seo-hero-media) { grid-column: 1; }
+  .seo-hero-media { grid-column: 1; grid-row: auto; max-width: 620px; margin-top: 26px; }
+}
+@media (max-width: 800px) { .seo-site .seo-nav-links { display: none; } .seo-nav-menu { display: block; } }
+@media (max-width: 620px) {
+  .seo-site .seo-hero-inner, .seo-site .seo-section { width: calc(100% - 36px); }
+  .seo-site .seo-hero-inner { padding: 54px 0 62px; }
+  .seo-site .seo-h1 { font-size: clamp(37px, 10vw, 51px); }
+  .seo-site .seo-prose { width: calc(100% - 36px); padding: 28px 23px; }
+  .seo-site .seo-section { padding: 58px 0; }
+  .seo-hero-media { padding: 12px; border-radius: 20px; }
+  .seo-hero-media figcaption { font-size: 7px; }
+  .seo-hero-media-top { font-size: 7px; }
+}

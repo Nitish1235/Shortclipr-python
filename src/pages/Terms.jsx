@@ -82,7 +82,7 @@ export default function Terms() {
             <h2>5. Subscription Plans &amp; Billing</h2>
             <h3>5.1 Plan Structure</h3>
             <ul>
-              <li><strong>Free:</strong> 2 shorts per month, no credit card required</li>
+              <li><strong>Explore access:</strong> Workflow and showcase access; a paid plan is required for clip generation</li>
               <li><strong>Starter (from $10/month):</strong> 50–180 shorts per month</li>
               <li><strong>Pro (from $45/month):</strong> 350–1,500 shorts per month</li>
             </ul>

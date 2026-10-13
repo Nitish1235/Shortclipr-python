@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { GoogleLogin } from '@react-oauth/google'
@@ -190,13 +190,6 @@ const FONT_OPTIONS = [
   { val:'caveat', label:'Caveat (Cursive)' },
 ]
 
-// ── Free-tier caps — mirrors backend/app/core/plan_limits.py "free" plan ──
-// Backend re-validates and clamps these server-side regardless (see
-// jobs.py POST /jobs) — this is just so free users SEE the lock before
-// submitting, instead of being silently clamped after the fact.
-const FREE_MAX_CLIPS        = 3
-const FREE_MAX_CLIP_SECONDS = 60
-
 // Minutes gateway — mirrors backend MIN_GATEWAY_SECONDS (jobs.py / orchestrator.py)
 const MIN_GATEWAY_GAP = 60
 
@@ -206,7 +199,7 @@ const CLIP_LENGTH_OPTIONS = [
 ]
 
 const CLIP_COUNT_OPTIONS = [
-  { val:'3',  label:'3 Shorts',           sub:'Free plan' },
+  { val:'3',  label:'3 Shorts',           sub:'' },
   { val:'5',  label:'5 Shorts',           sub:'' },
   { val:'10', label:'10 Shorts',          sub:'Max' },
 ]
@@ -218,7 +211,7 @@ function LockableButton({ active, locked, label, sub, onClick }) {
   return (
     <button
       className="ce-option-btn"
-      onClick={locked ? () => alert('🔒 This option needs a paid plan. Free accounts get 2 clips per job, up to 60s each — upgrade to unlock more.') : onClick}
+      onClick={locked ? () => alert('🔒 Choose a paid plan to generate clips.') : onClick}
       title={locked ? '🔒 Upgrade to a paid plan to unlock' : undefined}
       style={{
         flex:1, minWidth:'70px', padding:'8px 6px', borderRadius:'8px', textAlign:'center',
@@ -361,7 +354,7 @@ function ManualClipSlider({ durationSeconds, windowSize, value, onChange }) {
 
 export default function ClipEngine({ onJobCreated }) {
   const [url, setUrl]               = useState('')
-  const [mode, setMode]             = useState('input') // input | login | config | processing | paywall_library
+  const [mode, setMode]             = useState('input') // input | login | config | processing
   const [videoData, setVideoData]   = useState(null)
   const [processing, setProcessing] = useState(false)
   const [progress, setProgress]     = useState(0)
@@ -369,8 +362,8 @@ export default function ClipEngine({ onJobCreated }) {
   const [urlFocused, setUrlFocused] = useState(false)
   
   // Library Paywall State
-  const [libraryVideos, setLibraryVideos] = useState([])
-  const [loadingLibrary, setLoadingLibrary] = useState(false)
+  const [libraryVideos] = useState([])
+  const [loadingLibrary] = useState(false)
 
   // Config options
   const [lang,          setLang]          = useState('Auto / No translation')
@@ -453,16 +446,6 @@ export default function ClipEngine({ onJobCreated }) {
     }
   }, [videoData, clipCount, clipLen, gatewayRange])
 
-  // Free-tier: if a previously-selected option becomes locked once we know
-  // the user's plan, snap it back to the nearest unlocked option instead of
-  // silently letting the user submit something the backend will clamp anyway.
-  useEffect(() => {
-    if (!user || isPaid) return
-    if (Number(clipCount) > FREE_MAX_CLIPS) setClipCount(String(FREE_MAX_CLIPS))
-    const lenOpt = CLIP_LENGTH_OPTIONS.find(o => o.val === clipLen)
-    if (lenOpt && lenOpt.max > FREE_MAX_CLIP_SECONDS) setClipLen('mid')
-  }, [user, isPaid])
-
   const handleFetchMetadata = async () => {
     if (!url.trim()) return
     const token = localStorage.getItem('sc_token')
@@ -496,19 +479,10 @@ export default function ClipEngine({ onJobCreated }) {
     }
 
     if (!isPaid) {
-        setMode('paywall_library')
-        setLoadingLibrary(true)
-        try {
-            const res = await fetch(`${API_BASE}/library`)
-            if (res.ok) {
-                const data = await res.json()
-                setLibraryVideos(data.videos || [])
-            }
-        } catch (e) {
-            console.error('Failed to fetch library', e)
-        }
-        setLoadingLibrary(false)
-        return
+      // Free users can configure the full clip and caption experience. A
+      // plan is only required at the point a generation would be started.
+      navigate('/billing')
+      return
     }
 
     setMode('processing')
@@ -525,12 +499,9 @@ export default function ClipEngine({ onJobCreated }) {
         body:JSON.stringify({
           youtube_url: url,
           options:{
-            // Free-tier clamps are enforced again server-side (jobs.py) —
-            // these client clamps just prevent submitting something the
-            // backend would silently clamp anyway.
-            clip_count:     Math.min(parseInt(clipCount) || 10, isPaid ? 10 : FREE_MAX_CLIPS),
-            min_duration:   Math.min(clipLenOpt.min, isPaid ? clipLenOpt.min : FREE_MAX_CLIP_SECONDS),
-            max_duration:   Math.min(clipLenOpt.max, isPaid ? clipLenOpt.max : FREE_MAX_CLIP_SECONDS),
+            clip_count:     Math.min(parseInt(clipCount) || 10, 10),
+            min_duration:   clipLenOpt.min,
+            max_duration:   clipLenOpt.max,
             language:       lang,
             style:          captionStyle,
             color:          colorCombo,
@@ -731,7 +702,7 @@ export default function ClipEngine({ onJobCreated }) {
                 <span className="ce-row-label" style={labelStyle}>Clip Length</span>
                 <div className="ce-option-row" style={{ display:'flex', gap:'8px', flex:'1 1 auto', flexWrap:'wrap' }}>
                   {CLIP_LENGTH_OPTIONS.map(opt => {
-                    const locked = !isPaid && opt.max > FREE_MAX_CLIP_SECONDS
+                    const locked = false
                     return (
                       <LockableButton key={opt.val}
                         active={clipLen === opt.val} locked={locked}
@@ -742,17 +713,12 @@ export default function ClipEngine({ onJobCreated }) {
                   })}
                 </div>
               </div>
-              {!isPaid && (
-                <p style={{ fontSize:'0.7rem', color:'#bbb', margin:'-2px 0 8px' }}>
-                  🔒 Free plan: clips up to 60s. <strong style={{ color:'#cf1322' }}>Upgrade</strong> for up to 90s.
-                </p>
-              )}
 
               <div className="ce-control-row" style={{ ...rowStyle, flexWrap:'wrap' }}>
                 <span className="ce-row-label" style={labelStyle}>Clip Count</span>
                 <div className="ce-option-row" style={{ display:'flex', gap:'8px', flex:'1 1 auto', flexWrap:'wrap' }}>
                   {CLIP_COUNT_OPTIONS.map(opt => {
-                    const locked = !isPaid && Number(opt.val) > FREE_MAX_CLIPS
+                    const locked = false
                     return (
                       <LockableButton key={opt.val}
                         active={clipCount === opt.val} locked={locked}
@@ -763,11 +729,6 @@ export default function ClipEngine({ onJobCreated }) {
                   })}
                 </div>
               </div>
-              {!isPaid && (
-                <p style={{ fontSize:'0.7rem', color:'#bbb', margin:'-2px 0 8px' }}>
-                  🔒 Free plan: 2 clips per job. <strong style={{ color:'#cf1322' }}>Upgrade</strong> for up to 10.
-                </p>
-              )}
 
               {/* ✂️ Minutes gateway — pick a sub-window of the video to
                   process instead of the whole thing. Only billed/analyzed
@@ -788,9 +749,9 @@ export default function ClipEngine({ onJobCreated }) {
                     onChange={setGatewayRange}
                   />
                   <p style={{ fontSize:'0.74rem', color:'#888', marginTop:'8px', lineHeight:1.6 }}>
-                    Only this window is analyzed for clips — and only{' '}
+                    This is the part of the video that will be analyzed after you choose a plan —{' '}
                     <strong style={{ color:'#cf1322' }}>{formatDuration(gatewayRange[1] - gatewayRange[0])}</strong>{' '}
-                    is deducted from your video-minutes credit, not the full video.
+                    from the selected source window.
                   </p>
                 </div>
               )}

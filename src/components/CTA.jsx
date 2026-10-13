@@ -4,7 +4,7 @@ export default function CTA() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const handleStartFree = (e) => {
+  const handleExploreWorkflow = (e) => {
     e.preventDefault()
     if (location.pathname === '/youtube-shorts') {
       const el = document.getElementById('hero')
@@ -46,7 +46,7 @@ export default function CTA() {
           textTransform: 'uppercase', letterSpacing: '0.12em',
         }}>
           <span style={{ width:'7px', height:'7px', background:'#fff', borderRadius:'50%', display:'inline-block' }}/>
-          Free forever — no credit card
+          See the workflow before you create
         </div>
 
         {/* Big headline */}
@@ -63,11 +63,11 @@ export default function CTA() {
           color: 'rgba(255,255,255,0.78)', fontSize: 'clamp(0.95rem, 1.5vw, 1.1rem)',
           maxWidth: '520px', margin: '0 auto 40px', lineHeight: 1.7,
         }}>
-          Paste any YouTube URL and turn the strongest moments into ready-to-post clips in minutes.
+          Watch how a long YouTube video becomes a captioned vertical short, then explore the project and caption controls before choosing a plan to generate.
         </p>
 
         {/* Inline URL input */}
-        <form onSubmit={handleStartFree} style={{
+        <form onSubmit={handleExploreWorkflow} style={{
           display: 'flex', maxWidth: '580px', margin: '0 auto 16px',
           borderRadius: '12px', overflow: 'hidden',
           border: '2px solid rgba(255,255,255,0.3)',
@@ -75,14 +75,14 @@ export default function CTA() {
         }}>
           <input
             type="url"
-            placeholder="Paste a YouTube URL to start free..."
+            placeholder="See how a YouTube video becomes a Short..."
             style={{
               flex: 1, padding: '16px 18px',
               border: 'none', outline: 'none',
               fontSize: '0.95rem', background: 'rgba(255,255,255,0.95)',
               color: '#111', minWidth: 0,
             }}
-            onClick={handleStartFree}
+            onClick={handleExploreWorkflow}
             readOnly
           />
           <button type="submit" style={{
@@ -94,11 +94,11 @@ export default function CTA() {
           }}
             onMouseEnter={e => e.currentTarget.style.background = '#333'}
             onMouseLeave={e => e.currentTarget.style.background = '#0f0f0f'}
-          >Start free →</button>
+          >See how it works →</button>
         </form>
 
         <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem', marginBottom: '32px' }}>
-          No credit card · No software install · Cancel anytime
+          Explore examples · Configure a project · Choose a plan to generate
         </p>
 
       </div>

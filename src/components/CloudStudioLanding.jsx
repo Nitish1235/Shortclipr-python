@@ -47,10 +47,10 @@ function CloudClipForm() {
     <form className="cloud-clip-form" onSubmit={submit}>
       <label className="cloud-sr-only" htmlFor="cloud-video-url">YouTube video URL</label>
       <input id="cloud-video-url" type="url" required value={url} onChange={event => setUrl(event.target.value)} placeholder="Paste your YouTube link" autoComplete="url" />
-      <button type="submit">Create my clips <span aria-hidden="true">↗</span></button>
+      <button type="submit">Plan my clips <span aria-hidden="true">↗</span></button>
     </form>
-    <p className="cloud-reassurance">2 free clips <span aria-hidden="true">·</span> No credit card required</p>
-    {showAuth && !user && <div className="cloud-auth"><strong>Your link is saved.</strong><p>Sign in to create your first clips.</p><GoogleLogin onSuccess={async response => { const ok = await loginWithGoogleToken(response.credential); if (ok) navigate('/youtube-shorts/dashboard', { state: { pendingUrl: sessionStorage.getItem('sc_pending_url') || url } }); else setError('Sign-in did not finish. Please try again.') }} onError={() => setError('Sign-in did not finish. Please try again.')} theme="outline" shape="rectangular" text="signin_with" size="medium" /></div>}
+    <p className="cloud-reassurance">Explore the workflow <span aria-hidden="true">·</span> Choose a plan when you’re ready to generate</p>
+    {showAuth && !user && <div className="cloud-auth"><strong>Your link is saved.</strong><p>Sign in to set up your project and explore the editing controls.</p><GoogleLogin onSuccess={async response => { const ok = await loginWithGoogleToken(response.credential); if (ok) navigate('/youtube-shorts/dashboard', { state: { pendingUrl: sessionStorage.getItem('sc_pending_url') || url } }); else setError('Sign-in did not finish. Please try again.') }} onError={() => setError('Sign-in did not finish. Please try again.')} theme="outline" shape="rectangular" text="signin_with" size="medium" /></div>}
     {error && <p className="cloud-form-error" role="alert">{error}</p>}
   </div>
 }

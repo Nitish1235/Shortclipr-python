@@ -1,6 +1,6 @@
 // Social proof + feature ticker — between hero and how-it-works
 const items = [
-  { text: '✅ No watermarks on free plan'           },
+  { text: '🎬 Real ShortClipr showcase clips'       },
   { text: '⚡ Minutes, not hours'                    },
   { text: '🎬 11 caption styles'                    },
   { text: '📐 Auto 9:16 reframe'                    },
@@ -8,7 +8,7 @@ const items = [
   { text: '📊 Virality score per clip'               },
   { text: '🔥 Viral score for every clip'           },
   { text: '📦 Batch process 20 videos'             },
-  { text: '💳 No credit card for free plan'         },
+  { text: '🧭 Explore the workflow before choosing a plan' },
   { text: '🎙️ Works with podcasts & interviews'    },
   { text: '📱 TikTok · Reels · Shorts · LinkedIn'  },
   { text: '🏆 Best OpusClip alternative'           },

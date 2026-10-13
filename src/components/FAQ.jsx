@@ -4,31 +4,31 @@ import { useNavigate, useLocation } from 'react-router-dom'
 const faqs = [
   {
     q: 'What is ShortClipr and how does it work?',
-    a: 'Paste a YouTube URL — our AI transcribes, scores viral moments, reframes to 9:16, burns in captions, and delivers ready-to-post clips in minutes. No editing software needed.',
+    a: 'Paste a YouTube URL and ShortClipr proposes short moments with vertical framing and captions. Review each clip before sharing it.',
   },
   {
-    q: 'Is ShortClipr better than OpusClip?',
-    a: 'ShortClipr is noticeably faster (we never download the full source video), has no watermarks on the free plan, uses per-video pricing (not confusing per-minute), and offers 11 caption styles vs OpusClip\'s 4.',
+    q: 'What should I check before posting a clip?',
+    a: 'Watch for missing context, incorrect names or numbers in captions, and a portrait crop that cuts off a speaker or important detail.',
   },
   {
     q: 'How long does it take to generate clips?',
-    a: 'Typically 5–10 minutes per video, depending on length and clip count. Stream extraction means we never download the full source file — a 3-hour podcast usually returns 10+ clips in that window.',
+    a: 'Processing time varies with the video length, available source, and the number of clips selected. Your plan determines the generation allowance available to your account.',
   },
   {
-    q: 'Can I use ShortClipr for free?',
-    a: 'Yes — the free plan includes 2 clips, 720p output, and a preview on the platform. No credit card is required.',
+    q: 'Can I explore ShortClipr before choosing a plan?',
+    a: 'Yes. You can watch the workflow, browse real showcase clips, and use the project setup and caption controls. Choose a paid plan when you are ready to generate clips from your own video.',
   },
   {
     q: 'Which YouTube videos work best?',
-    a: 'Talking-head content performs best: interviews, podcasts, tutorials, and vlogs. Minimum recommended length is 5 minutes; optimal is 20 minutes to 3 hours.',
+    a: 'Clear spoken content such as video podcasts, interviews, and tutorials is a good starting point. The best clips contain a self-contained idea and a useful ending.',
   },
   {
-    q: 'Does ShortClipr support other languages?',
-    a: '28 languages supported for transcription and captions, including Spanish, French, German, Hindi, Japanese, and Arabic. English and Spanish accuracy is 99%+.',
+    q: 'Can I use any YouTube video?',
+    a: 'Use a video you own or have permission to reuse. A public URL does not grant permission to republish someone else’s content.',
   },
   {
     q: 'How do I download my clips?',
-    a: 'Every clip has a Download button — click it for a single clip, or select multiple clips and use "Download all" for a bulk ZIP. All clips are 1080p MP4, captioned, and ready to upload anywhere.',
+    a: 'Downloads are available on paid plans after generation. You can explore the public workflow and example clips before selecting a plan.',
   },
 ]
 
@@ -120,10 +120,10 @@ export default function FAQ() {
           }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translate(-1px,-1px)'; e.currentTarget.style.boxShadow = '3px 3px 0 #111' }}
             onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '2px 2px 0 #111' }}
-          >Start free — paste a URL →</a>
+          >Explore the workflow →</a>
         </div>
 
-        {/* Internal link cluster — SEO link equity to tool + alternatives pages */}
+        {/* Curated resource links make the most useful workflows easy to find. */}
         <div style={{ marginTop: '40px', borderTop: '1px solid #e8e8e8', paddingTop: '28px' }}>
           <p style={{ fontSize: '0.78rem', color: '#bbb', textAlign: 'center', marginBottom: '14px', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 600 }}>Explore ShortClipr</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
@@ -132,12 +132,10 @@ export default function FAQ() {
               { label: 'Podcast to Shorts',    href: '/youtube-shorts/tools/podcast-to-shorts'              },
               { label: 'TikTok Clip Maker',    href: '/youtube-shorts/tools/tiktok-clip-maker'              },
               { label: 'Video to Reels',       href: '/youtube-shorts/tools/video-to-reels'                 },
-              { label: 'Webinar to Clips',     href: '/youtube-shorts/tools/webinar-to-clips'               },
-              { label: 'Opus Clip Alternative',href: '/youtube-shorts/alternatives/opus-clip'               },
-              { label: '2short.ai Alternative',href: '/youtube-shorts/alternatives/2short'                  },
-              { label: 'Riverside Alternative',href: '/youtube-shorts/alternatives/riverside'               },
-              { label: 'Munch Alternative',    href: '/youtube-shorts/alternatives/munch'                   },
-              { label: 'Vizard Alternative',   href: '/youtube-shorts/alternatives/vizard'                  },
+              { label: 'Long Video to Shorts Guide', href: '/youtube-shorts/guides/how-to-turn-long-videos-into-shorts' },
+              { label: 'Choose Podcast Clips', href: '/youtube-shorts/guides/how-to-choose-podcast-clips'   },
+              { label: 'Crop Wide Video for Shorts', href: '/youtube-shorts/guides/crop-horizontal-video-for-shorts' },
+              { label: 'Repurpose a Podcast',  href: '/youtube-shorts/guides/how-to-repurpose-a-podcast-into-clips' },
             ].map(({ label, href }) => (
               <a key={href} href={href} style={{
                 fontSize: '0.78rem', color: '#999', textDecoration: 'none',

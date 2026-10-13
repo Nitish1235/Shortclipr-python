@@ -33,7 +33,7 @@ def clips_ready_email_html(video_title: str, clip_count: int, is_paid: bool) -> 
     Paid users get a CTA straight to the dashboard (where downloads live).
     Free users get the same visual weight of CTA, but it points at
     /billing and the copy is explicit that downloading requires a plan —
-    clips can still be previewed free, just not exported.
+    clips are available according to the account's paid plan.
     """
     fe = _frontend_url()
     title = _esc(video_title or "your video")
@@ -50,7 +50,7 @@ def clips_ready_email_html(video_title: str, clip_count: int, is_paid: bool) -> 
           <tr>
             <td style="padding:4px 32px 24px 32px;">
               <div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;padding:14px 16px;font-size:13px;color:#92400e;line-height:1.6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
-                &#128274; <strong>Downloads are a paid feature.</strong> Your clips are ready to preview free right now &mdash; upgrade any time to download them in full HD, watermark-free.
+                &#128274; <strong>Downloads are a paid feature.</strong> Choose a paid plan to access full-HD, watermark-free downloads.
               </div>
             </td>
           </tr>

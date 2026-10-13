@@ -1,10 +1,12 @@
 import { useParams, Navigate, Link } from 'react-router-dom'
-import Navigation from '../components/Navigation'
+import SeoNavigation from '../components/SeoNavigation'
+import SeoHeroMedia from '../components/SeoHeroMedia'
 import Footer from '../components/Footer'
 import SEO, { SITE } from '../components/SEO'
 import guidesContent, { guideSlugs } from '../data/guidesContent'
 import toolsContent from '../data/toolsContent'
 import alternativesContent from '../data/alternativesContent'
+import SeoVisual from '../components/SeoVisual'
 import './seo-landing.css'
 
 export default function GuideArticle() {
@@ -29,6 +31,8 @@ export default function GuideArticle() {
       },
       mainEntityOfPage: { '@type': 'WebPage', '@id': `${SITE}${path}` },
       articleSection: data.category,
+      ...(data.published && { datePublished: data.published }),
+      ...(data.modified && { dateModified: data.modified }),
     },
     {
       '@context': 'https://schema.org',
@@ -64,12 +68,12 @@ export default function GuideArticle() {
     })
   }
 
-  const otherGuides = guideSlugs.filter(s => s !== data.slug).slice(0, 4)
+  const otherGuides = (data.relatedGuides || guideSlugs.filter(s => s !== data.slug).slice(0, 4)).filter(s => guidesContent[s] && s !== data.slug)
   const relatedTools = (data.related || []).filter(s => toolsContent[s])
   const relatedAlts = (data.relatedAlt || []).filter(s => alternativesContent[s])
 
   return (
-    <>
+    <div className="seo-site">
       <SEO
         title={data.metaTitle}
         description={data.metaDescription}
@@ -77,7 +81,7 @@ export default function GuideArticle() {
         path={path}
         schema={schema}
       />
-      <Navigation />
+      <SeoNavigation />
 
       <div className="seo-page">
         {/* Hero */}
@@ -93,8 +97,11 @@ export default function GuideArticle() {
               <span>·</span>
               <span>{data.updated}</span>
             </div>
+            <SeoHeroMedia label={data.category} />
           </div>
         </section>
+
+        {data.visual && <div className="seo-section" style={{ paddingBottom: 0 }}><SeoVisual kind={data.visual} /></div>}
 
         {/* Article body */}
         <article className="seo-section seo-prose">
@@ -188,13 +195,13 @@ export default function GuideArticle() {
 
         {/* CTA band */}
         <section className="seo-cta-band">
-          <h2>Stop editing. Start clipping.</h2>
-          <p>Put this guide into practice — 3 free videos, no watermark, no credit card.</p>
-          <Link to="/youtube-shorts" className="seo-btn-primary">Get started free →</Link>
+          <h2>See the workflow in action</h2>
+          <p>Watch real showcase clips and explore the project and caption controls before selecting a plan to generate clips from your own source.</p>
+          <Link to="/youtube-shorts" className="seo-btn-primary">Explore the workflow →</Link>
         </section>
       </div>
 
       <Footer />
-    </>
+    </div>
   )
 }

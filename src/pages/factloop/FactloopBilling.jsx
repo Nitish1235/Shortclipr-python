@@ -2,8 +2,7 @@
 //
 // Reads user.brainrot_plan / brainrot_credits_used / brainrot_credits_limit
 // (kept under that internal name — see the pivot plan's DB decisions) and
-// checks out through POST /payments/brainrot/checkout-session, same as
-// before the rebrand — only the UI changed.
+// checks out through POST /payments/factloop/checkout-session.
 
 import { useState, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -36,7 +35,7 @@ export default function FactloopBilling() {
     try {
       const token = localStorage.getItem('sc_token')
       if (!token) { navigate('/factloop'); return }
-      const res = await fetch(`${API_BASE}/payments/brainrot/checkout-session`, {
+      const res = await fetch(`${API_BASE}/payments/factloop/checkout-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ plan: planId, period: 'monthly' }),
