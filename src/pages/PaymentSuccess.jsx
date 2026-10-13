@@ -1,15 +1,30 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import Navigation from '../components/Navigation'
 import Footer from '../components/Footer'
 import { useAuth } from '../context/AuthContext'
+import { trackGoogleAdsConversion } from '../lib/googleAds'
+
+const SUBSCRIBE_CONVERSION_LABEL = import.meta.env.VITE_GOOGLE_ADS_SUBSCRIBE_LABEL || '1mVtCO-uipgdEJ3EjfhE'
 
 export default function PaymentSuccess() {
   const [params] = useSearchParams()
   const plan = params.get('plan') || 'Pro'
   const { fetchUser } = useAuth()
+  const conversionTracked = useRef(false)
 
   useEffect(() => {
+    // This is the Subscribe conversion supplied in Google Ads. The route is
+    // reached only from Dodo's successful checkout return URL.
+    if (!conversionTracked.current) {
+      conversionTracked.current = true
+      trackGoogleAdsConversion(SUBSCRIBE_CONVERSION_LABEL, {
+        value: 1.0,
+        currency: 'INR',
+        transaction_id: params.get('payment_id') || undefined,
+      })
+    }
+
     const token = localStorage.getItem('sc_token')
     if (token) {
       // Webhook may take a few seconds — poll /auth/me until plan upgrades (max 10s)
@@ -22,7 +37,7 @@ export default function PaymentSuccess() {
       }
       setTimeout(poll, 1500) // initial delay — give webhook time to land
     }
-  }, [])
+  }, [fetchUser, params])
 
   const planName = plan.charAt(0).toUpperCase() + plan.slice(1)
 
