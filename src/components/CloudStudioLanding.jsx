@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { GoogleLogin } from '@react-oauth/google'
 import Logo from './Logo'
 import { useAuth } from '../context/AuthContext'
@@ -11,9 +11,8 @@ const samples = [
 ]
 
 export function CloudNavigation() {
-  const location = useLocation(); const navigate = useNavigate()
+  const navigate = useNavigate()
   const { user } = useAuth()
-  const toHero = event => { event.preventDefault(); if (location.pathname === '/youtube-shorts') document.getElementById('hero')?.scrollIntoView({ behavior: 'smooth' }); else navigate('/youtube-shorts', { state: { scrollToSection: 'hero' } }) }
   const handleCTA = event => { event.preventDefault(); if (user) navigate('/youtube-shorts/dashboard'); else navigate('/youtube-shorts/login') }
   return <nav className="cloud-nav"><Link className="cloud-brand" to="/youtube-shorts"><Logo size={28} /><span>ShortClipr</span></Link><div className="cloud-nav-links"><a href="#examples">Examples</a><a href="#moments">How it works</a><a href="#pricing">Pricing</a>{user && <Link to="/youtube-shorts/dashboard" className="cloud-nav-dashboard">Dashboard</Link>}</div><a className="cloud-button cloud-button-small" href="#" onClick={handleCTA}>{user ? 'Go to Dashboard ↗' : 'Create clips ↗'}</a></nav>
 }
@@ -39,8 +38,9 @@ function CloudClipForm() {
     const trimmed = url.trim()
     if (!trimmed) return
     setError('')
-    if (user) navigate('/youtube-shorts/dashboard', { state: { pendingUrl: trimmed } })
-    else { sessionStorage.setItem('sc_pending_url', trimmed); setShowAuth(true) }
+    sessionStorage.setItem('sc_pending_url', trimmed)
+    if (user) navigate('/youtube-shorts/create')
+    else setShowAuth(true)
   }
 
   return <div className="cloud-clip-form-wrap">
@@ -50,7 +50,7 @@ function CloudClipForm() {
       <button type="submit">Plan my clips <span aria-hidden="true">↗</span></button>
     </form>
     <p className="cloud-reassurance">Explore the workflow <span aria-hidden="true">·</span> Choose a plan when you’re ready to generate</p>
-    {showAuth && !user && <div className="cloud-auth"><strong>Your link is saved.</strong><p>Sign in to set up your project and explore the editing controls.</p><GoogleLogin onSuccess={async response => { const ok = await loginWithGoogleToken(response.credential); if (ok) navigate('/youtube-shorts/dashboard', { state: { pendingUrl: sessionStorage.getItem('sc_pending_url') || url } }); else setError('Sign-in did not finish. Please try again.') }} onError={() => setError('Sign-in did not finish. Please try again.')} theme="outline" shape="rectangular" text="signin_with" size="medium" /></div>}
+    {showAuth && !user && <div className="cloud-auth"><strong>Your link is saved.</strong><p>Sign in to set up your project and explore the editing controls.</p><GoogleLogin onSuccess={async response => { const ok = await loginWithGoogleToken(response.credential); if (ok) navigate('/youtube-shorts/create'); else setError('Sign-in did not finish. Please try again.') }} onError={() => setError('Sign-in did not finish. Please try again.')} theme="outline" shape="rectangular" text="signin_with" size="medium" /></div>}
     {error && <p className="cloud-form-error" role="alert">{error}</p>}
   </div>
 }

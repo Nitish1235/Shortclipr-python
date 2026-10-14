@@ -3,7 +3,6 @@ import { useNavigate, Link } from 'react-router-dom'
 import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../context/AuthContext'
 import Logo from '../components/Logo'
-import SignupOfferModal from '../components/SignupOfferModal'
 
 // ── palette (matches landing-theme.css) ──────────────────────────────────
 const C = {
@@ -41,11 +40,10 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false)
   const [activeIdx,  setActiveIdx]  = useState(0)
   const [fading,     setFading]     = useState(false)
-  const [showSignupOffer, setShowSignupOffer] = useState(false)
   const justSignedInRef             = useRef(false)
 
   useEffect(() => {
-    if (user && !justSignedInRef.current) navigate('/youtube-shorts/dashboard', { replace: true })
+    if (user && !justSignedInRef.current) navigate(sessionStorage.getItem('sc_pending_url') ? '/youtube-shorts/create' : '/youtube-shorts/dashboard', { replace: true })
   }, [user, navigate])
 
   useEffect(() => {
@@ -60,16 +58,10 @@ export default function Login() {
     justSignedInRef.current = true
     const result = await loginWithGoogleToken(cr.credential)
     if (!result) return
-    const destination = result.is_new_user && result.tutorial_available
-      ? '/youtube-shorts/tutorial'
-      : '/youtube-shorts/dashboard'
-    if (result.is_new_user) setShowSignupOffer(true)
-    else navigate(destination)
-  }
-
-  const continueAfterSignupOffer = () => {
-    setShowSignupOffer(false)
-    navigate('/youtube-shorts', { state: { scrollToSection: 'pricing' } })
+    const hasPendingProject = Boolean(sessionStorage.getItem('sc_pending_url'))
+    navigate(result.is_new_user || hasPendingProject
+      ? '/youtube-shorts/create'
+      : '/youtube-shorts/dashboard')
   }
 
   const handleEmail = async (e) => {
@@ -78,7 +70,7 @@ export default function Login() {
     if (!email.trim() || !password) return
     setSubmitting(true)
     const result = await loginWithEmailPassword(email.trim(), password)
-    if (result.ok) navigate('/youtube-shorts/dashboard')
+    if (result.ok) navigate(sessionStorage.getItem('sc_pending_url') ? '/youtube-shorts/create' : '/youtube-shorts/dashboard')
     else setError(result.error)
     setSubmitting(false)
   }
@@ -373,7 +365,6 @@ export default function Login() {
           .scl-mobile-logo { display: flex !important; }
         }
       `}</style>
-      {showSignupOffer && <SignupOfferModal onContinue={continueAfterSignupOffer} />}
     </div>
   )
 }

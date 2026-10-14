@@ -23,11 +23,9 @@ export default function Hero() {
     const trimmed = url.trim()
     if (!trimmed) return
     setError('')
-    if (user) navigate('/youtube-shorts/dashboard', { state: { pendingUrl: trimmed } })
-    else {
-      sessionStorage.setItem('sc_pending_url', trimmed)
-      setShowAuth(true)
-    }
+    sessionStorage.setItem('sc_pending_url', trimmed)
+    if (user) navigate('/youtube-shorts/create')
+    else setShowAuth(true)
   }
 
   return (
@@ -49,7 +47,7 @@ export default function Hero() {
             <GoogleLogin
               onSuccess={async response => {
                 const ok = await loginWithGoogleToken(response.credential)
-                if (ok) navigate('/youtube-shorts/dashboard', { state: { pendingUrl: sessionStorage.getItem('sc_pending_url') || url } })
+                if (ok) navigate('/youtube-shorts/create')
                 else setError('Sign-in did not finish. Please try again.')
               }}
               onError={() => setError('Sign-in did not finish. Please try again.')}
