@@ -64,6 +64,19 @@ const STYLE_OPTIONS = [
   { val:'none',       label:'None',       sub:'No subtitles', preview:'—',    upper:false, weight:500 },
 ]
 
+// Legacy gameplay uploads may predate automatic poster generation.  A video
+// frame is a useful visual fallback while the API regenerates its JPEG, and
+// avoids leaving a broken-image icon in the creator UI.
+function GameplayThumbnail({ clip }) {
+  const [imageFailed, setImageFailed] = useState(!clip.thumbnail_url)
+  const mediaStyle = { width:'100%', height:'100%', objectFit:'cover', display:'block' }
+
+  if (imageFailed) {
+    return <video src={clip.video_url} muted autoPlay loop playsInline preload="metadata" style={mediaStyle} />
+  }
+  return <img src={clip.thumbnail_url} alt="" onError={() => setImageFailed(true)} style={mediaStyle} />
+}
+
 // ── Template live-preview renderer ──────────────────────────────
 // Pure CSS over the existing video thumbnail — no server round-trip, no
 // frame extraction, so it updates instantly as the user clicks a template.
@@ -1133,7 +1146,7 @@ export default function ClipEngine({ onJobCreated }) {
                         transform: selectedGameplayId === clip.id ? 'translateY(-1px)' : 'none', transition:'all .15s ease',
                       }}>
                         <div style={{ position:'relative', background:'#111', height:'66px' }}>
-                          <img src={clip.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                          <GameplayThumbnail clip={clip} />
                           {selectedGameplayId === clip.id && <span style={{ position:'absolute', top:5, right:5, display:'grid', placeItems:'center', width:18, height:18, borderRadius:'50%', background:'#cf1322', color:'#fff', fontSize:'.67rem', fontWeight:900 }}>✓</span>}
                         </div>
                         <span title={clip.title || 'Gameplay Clip'} style={{ display:'block', padding:'7px 8px 8px', color:'#333', fontSize:'.68rem', fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{clip.title || 'Gameplay Clip'}</span>

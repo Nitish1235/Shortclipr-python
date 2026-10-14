@@ -1036,11 +1036,36 @@ def _finalize_gameplay_upload_sync(clip_id: str) -> dict:
     }
 
 
+def _ensure_gameplay_thumbnail_sync(bucket, video_blob, clip_id: str) -> str:
+    """Return a gameplay poster URL, backfilling it for older video objects.
+
+    The first gameplay uploader stored only MP4s for some clips.  Listing the
+    library now repairs those records once, rather than returning a permanent
+    broken image URL to every creator.
+    """
+    thumb_blob = bucket.blob(f"gameplay_thumbs/{clip_id}.jpg")
+    if thumb_blob.exists():
+        return thumb_blob.public_url
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            video_path = Path(tmp) / "input.mp4"
+            video_blob.download_to_filename(str(video_path))
+            thumb_bytes = _generate_thumb_from_file(video_path)
+        thumb_blob.upload_from_string(thumb_bytes, content_type="image/jpeg")
+        logger.info("Generated missing gameplay thumbnail for %s", clip_id)
+        return thumb_blob.public_url
+    except Exception as exc:
+        # The frontend falls back to a muted first-frame video preview, so a
+        # transient FFmpeg/object issue never becomes a broken image icon.
+        logger.warning("Could not backfill gameplay thumbnail for %s: %s", clip_id, exc)
+        return ""
+
+
 def _list_gameplay_sync() -> list[dict]:
     try:
         bucket = _gameplay_bucket()
         blobs = list(bucket.list_blobs(prefix="gameplay_clips/"))
-        gcs_base = f"https://storage.googleapis.com/{_gameplay_bucket_name()}"
         items = []
         for blob in blobs:
             if not blob.name.endswith(".mp4"):
@@ -1051,8 +1076,8 @@ def _list_gameplay_sync() -> list[dict]:
             items.append({
                 "id": clip_id,
                 "title": meta.get("title", "Gameplay Clip"),
-                "video_url": f"{gcs_base}/gameplay_clips/{clip_id}.mp4",
-                "thumbnail_url": f"{gcs_base}/gameplay_thumbs/{clip_id}.jpg",
+                "video_url": blob.public_url,
+                "thumbnail_url": _ensure_gameplay_thumbnail_sync(bucket, blob, clip_id),
                 "added_at": meta.get("added_at", ""),
                 "blob_name": blob.name,
             })
