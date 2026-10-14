@@ -12,13 +12,6 @@ export default function GoogleAdsTag() {
     window.gtag = window.gtag || function gtag(...args) { window.dataLayer.push(args) }
     window.gtag('js', new Date())
     window.gtag('config', ADS_ID)
-
-    const existing = document.querySelector(`script[src*="googletagmanager.com/gtag/js?id=${ADS_ID}"]`)
-    if (existing) return
-    const script = document.createElement('script')
-    script.async = true
-    script.src = `https://www.googletagmanager.com/gtag/js?id=${ADS_ID}`
-    document.head.appendChild(script)
   }, [])
 
   useEffect(() => {

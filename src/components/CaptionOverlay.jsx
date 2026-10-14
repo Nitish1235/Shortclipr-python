@@ -256,6 +256,7 @@ export default function CaptionOverlay({
   highlightColor,
   font = DEFAULT_FONT,
   captionY = null,
+  captionScale = 1,
 }) {
   const [time, setTime] = useState(0)
   const [demoIdx, setDemoIdx] = useState(0)
@@ -285,6 +286,7 @@ export default function CaptionOverlay({
   }, [mode, style, wordsPerLine, previewText]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const combo = COLOR_COMBOS[color] || COLOR_COMBOS[DEFAULT_COLOR]
+  const scale = Math.max(0.7, Math.min(1.4, Number(captionScale) || 1))
   const pos   = Number.isFinite(captionY)
     ? { x:50, y:Math.max(0, Math.min(1, captionY)) * 100, tx:'-50%', ty:'-50%' }
     : resolvePos(hAlign, vAlign)
@@ -320,6 +322,7 @@ export default function CaptionOverlay({
         position: 'absolute',
         left: `${pos.x}%`, top: `${pos.y}%`,
         transform: `translate(${pos.tx}, ${pos.ty})`,
+        fontSize: `${scale}em`,
         maxWidth: '92%', textAlign: 'center', pointerEvents: 'none',
         display: 'flex', justifyContent: 'center', flexWrap: 'wrap',
       }}>

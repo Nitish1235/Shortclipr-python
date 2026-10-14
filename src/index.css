@@ -539,6 +539,13 @@ h1,h2,h3,h4,h5 { line-height: 1.2; letter-spacing: -0.04em; font-weight: 700; co
   outline-offset: 2px;
 }
 
+/* Gameplay choices stay readable at desktop and phone widths without
+   turning the editor into a tall grid. */
+.ce-gameplay-rail { scrollbar-width:thin; scrollbar-color:#d5dadd transparent; }
+.ce-gameplay-rail::-webkit-scrollbar { height:6px; }
+.ce-gameplay-rail::-webkit-scrollbar-thumb { background:#d5dadd; border-radius:99px; }
+.ce-gameplay-rail button:hover { border-color:#cf1322 !important; transform:translateY(-1px); }
+
 .dashboard-clips-section {
   border: 1px solid var(--dash-line) !important;
   border-radius: 8px !important;

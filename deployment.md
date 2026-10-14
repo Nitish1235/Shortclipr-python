@@ -330,6 +330,23 @@ Same as before — React/Vite bundle behind Nginx.
 4. **Admin access**: Set `ADMIN_EMAILS` (comma-separated) on the API to grant `/admin/*` endpoint access.
 5. **Smoke test**: `https://<frontend-url>/health` + `https://<api-url>/docs`, then a full Google login → YouTube URL → clip generation flow.
 
+### Gameplay uploads (required for files over 32 MiB)
+
+Gameplay MP4s upload directly from the admin browser to GCS through a short-lived resumable upload session. This avoids Cloud Run's fixed 32 MiB HTTP request limit. Configure CORS on the bucket named by `GAMEPLAY_GCS_BUCKET_NAME` (or `BRAINROT_GCS_BUCKET_NAME` when the dedicated bucket is blank) before using the uploader:
+
+```json
+[
+  {
+    "origin": ["https://shortclipr.com", "https://www.shortclipr.com", "http://localhost:5173"],
+    "method": ["PUT", "POST", "OPTIONS"],
+    "responseHeader": ["Content-Type", "Range"],
+    "maxAgeSeconds": 3600
+  }
+]
+```
+
+Apply that JSON with your normal Cloud Storage CORS configuration process. The Cloud Run API service account must retain object create/read permissions for this bucket so it can create upload sessions and generate thumbnails.
+
 ---
 
 ## 7. What Changed (Migration Guide for Existing Deployments)

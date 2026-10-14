@@ -401,11 +401,18 @@ for _last_word_style in ("last_word_box", "last_word_editorial", "last_word_ink"
     )
 
 
-def _style_line(style: str, color: str, alignment: int, font: str = DEFAULT_FONT) -> str:
+def _style_line(
+    style: str,
+    color: str,
+    alignment: int,
+    font: str = DEFAULT_FONT,
+    caption_scale: float = 1.0,
+) -> str:
     """Build one ASS [V4+ Styles] Style: line for the given style+colour+font."""
     cfg = _BASE_STYLES.get(style, _BASE_STYLES["minimal"])
     clr = COLOR_COMBOS.get(color, COLOR_COMBOS[DEFAULT_COLOR])
     font_name = FONT_OPTIONS.get(font, FONT_OPTIONS[DEFAULT_FONT])
+    scale = max(0.7, min(1.4, float(caption_scale)))
 
     primary   = clr["primary"]
     secondary = clr["secondary"]
@@ -420,14 +427,14 @@ def _style_line(style: str, color: str, alignment: int, font: str = DEFAULT_FONT
     return (
         f"Style: Default,"
         f"{font_name},"
-        f"{cfg['size']},"
+        f"{round(cfg['size'] * scale)},"
         f"{primary},{secondary},{outline_c},{back_c},"
         f"{cfg['bold']},0,0,0,"
         f"{cfg['scale_x']},{cfg['scale_y']},"
         f"{cfg['spacing']},0,"
         f"{cfg['border_style']},"
-        f"{cfg['outline']},"
-        f"{cfg['shadow']},"
+        f"{max(1, round(cfg['outline'] * scale))},"
+        f"{round(cfg['shadow'] * scale)},"
         f"{alignment},"
         f"40,40,40,1"
     )
@@ -1034,6 +1041,7 @@ def build_ass_content(
     font:          str = DEFAULT_FONT,
     title_color:   str = "#FFFFFF",
     caption_y:     float | None = None,
+    caption_scale: float = 1.0,
 ) -> str:
     """
     Build a complete .ass subtitle file string.
@@ -1070,6 +1078,8 @@ def build_ass_content(
                          _resolve_slider_pos), instead of snapping to the
                          9-preset grid. None keeps the existing preset
                          behaviour — fully backward compatible.
+        caption_scale:  0.7-1.4 multiplier for caption font, outline, and
+                         shadow sizes. The hook title is intentionally unchanged.
     """
     x, y, alignment = (
         _resolve_slider_pos(caption_y) if caption_y is not None
@@ -1080,7 +1090,7 @@ def build_ass_content(
     font_key  = font if font in FONT_OPTIONS else DEFAULT_FONT
     wpl       = max(1, min(int(words_per_line), 4))   # clamp 1-4
 
-    style_lines = [_style_line(style_key, color_key, alignment, font_key)]
+    style_lines = [_style_line(style_key, color_key, alignment, font_key, caption_scale)]
     build  = _BUILDERS.get(style_key, _lines_minimal)
     events = (_lines_last_word(captions, x, y, wpl, color_key, style_key)
               if style_key.startswith("last_word_")

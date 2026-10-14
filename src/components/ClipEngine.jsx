@@ -378,6 +378,9 @@ export default function ClipEngine({ onJobCreated }) {
   // Captions stay horizontally centered. This normalized Y value controls
   // their vertical centre in both the live preview and exported short.
   const [captionY,      setCaptionY]      = useState(0.80)
+  // A multiplier keeps every caption style proportional while letting users
+  // make subtitles more subtle or more prominent.
+  const [captionScale,  setCaptionScale]  = useState(1)
   const [shortTemplate, setShortTemplate] = useState('zoom_blur')
   const [barColor,      setBarColor]      = useState('#0d0d0d')
   const [aspect,        setAspect]        = useState('9:16')
@@ -508,6 +511,7 @@ export default function ClipEngine({ onJobCreated }) {
             words_per_line: wordsPerLine,
             font:           captionFont,
             caption_y:      captionY,
+            caption_scale:  captionScale,
             short_template: shortTemplate,
             bar_color:      barColor,
             aspect:         aspect,
@@ -937,6 +941,32 @@ export default function ClipEngine({ onJobCreated }) {
                 </div>
               )}
 
+              {captionStyle !== 'none' && (
+                <div className="ce-caption-size" style={{ padding:'14px 0 4px', borderTop:'1px solid #f0f0f0' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, marginBottom:8 }}>
+                    <div>
+                      <span className="ce-row-label" style={labelStyle}>Caption Size</span>
+                      <span style={{ display:'block', marginTop:3, color:'#8b9aa1', fontSize:'.68rem' }}>Applies to the preview and exported clips</span>
+                    </div>
+                    <strong style={{ color:'#cf1322', fontSize:'.74rem' }}>{Math.round(captionScale * 100)}%</strong>
+                  </div>
+                  <input
+                    className="ce-caption-size-slider"
+                    type="range"
+                    min={70}
+                    max={140}
+                    step={5}
+                    value={Math.round(captionScale * 100)}
+                    onChange={e => setCaptionScale(Number(e.target.value) / 100)}
+                    aria-label="Caption size"
+                    style={{ width:'100%', accentColor:'#cf1322', cursor:'pointer' }}
+                  />
+                  <div style={{ display:'flex', justifyContent:'space-between', marginTop:3, color:'#9aa8ae', fontSize:'.65rem', fontWeight:600 }}>
+                    <span>Smaller</span><span>Default</span><span>Larger</span>
+                  </div>
+                </div>
+              )}
+
               {/* Caption font */}
               {captionStyle !== 'none' && (
               <div style={{ padding:'12px 0 4px', borderTop:'1px solid #f0f0f0' }}>
@@ -1088,19 +1118,29 @@ export default function ClipEngine({ onJobCreated }) {
 
               {/* Gameplay picker */}
               {shortTemplate.startsWith('gameplay_') && gameplayClips.length > 0 && (
-                <div className="ce-control-row" style={{ ...rowStyle, borderBottom:'none', flexDirection:'column', alignItems:'flex-start' }}>
-                  <span style={{ ...labelStyle, display:'block' }}>Gameplay Clip</span>
-                  <div style={{ display:'flex', gap:'8px', overflowX:'auto', width:'100%', paddingBottom:'4px' }}>
+                <div className="ce-gameplay-picker ce-control-row" style={{ ...rowStyle, borderBottom:'none', flexDirection:'column', alignItems:'stretch', gap:'10px', paddingBottom:'14px' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px' }}>
+                    <span style={{ ...labelStyle, display:'block', minWidth:0 }}>Gameplay Clip</span>
+                    <span style={{ color:'#8b9aa1', fontSize:'.68rem', fontWeight:700, whiteSpace:'nowrap' }}>Choose a background</span>
+                  </div>
+                  <div className="ce-gameplay-rail" role="radiogroup" aria-label="Gameplay background" style={{ display:'flex', gap:'10px', overflowX:'auto', width:'100%', padding:'2px 2px 8px' }}>
                     {gameplayClips.map(clip => (
-                      <div key={clip.id} onClick={() => setSelectedGameplayId(clip.id)} style={{
-                        width: '80px', flexShrink: 0, cursor: 'pointer',
-                        border: selectedGameplayId === clip.id ? '2px solid #cf1322' : '2px solid transparent',
-                        borderRadius: '6px', overflow: 'hidden', position: 'relative'
+                      <button key={clip.id} type="button" role="radio" aria-checked={selectedGameplayId === clip.id} onClick={() => setSelectedGameplayId(clip.id)} style={{
+                        width: '116px', flexShrink: 0, cursor: 'pointer', padding:0, textAlign:'left',
+                        background:'#fff', border: selectedGameplayId === clip.id ? '2px solid #cf1322' : '2px solid #e5e5e5',
+                        borderRadius: '9px', overflow: 'hidden', position: 'relative',
+                        boxShadow: selectedGameplayId === clip.id ? '0 5px 14px rgba(207,19,34,.18)' : 'none',
+                        transform: selectedGameplayId === clip.id ? 'translateY(-1px)' : 'none', transition:'all .15s ease',
                       }}>
-                        <img src={clip.thumbnail_url} alt={clip.title || 'Gameplay'} style={{ width: '100%', height: '50px', objectFit: 'cover', display: 'block' }} />
-                      </div>
+                        <div style={{ position:'relative', background:'#111', height:'66px' }}>
+                          <img src={clip.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                          {selectedGameplayId === clip.id && <span style={{ position:'absolute', top:5, right:5, display:'grid', placeItems:'center', width:18, height:18, borderRadius:'50%', background:'#cf1322', color:'#fff', fontSize:'.67rem', fontWeight:900 }}>✓</span>}
+                        </div>
+                        <span title={clip.title || 'Gameplay Clip'} style={{ display:'block', padding:'7px 8px 8px', color:'#333', fontSize:'.68rem', fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{clip.title || 'Gameplay Clip'}</span>
+                      </button>
                     ))}
                   </div>
+                  <span style={{ color:'#8b9aa1', fontSize:'.66rem', lineHeight:1.4 }}>The selected clip plays beneath your source video in the live preview.</span>
                 </div>
               )}
 
@@ -1159,6 +1199,7 @@ export default function ClipEngine({ onJobCreated }) {
                 wordsPerLine={wordsPerLine}
                 font={captionFont}
                 captionY={captionY}
+                captionScale={captionScale}
               />
               <div style={{
                 position:'absolute', top:'6px', left:'6px',

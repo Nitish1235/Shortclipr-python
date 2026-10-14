@@ -161,6 +161,7 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
     v_align          = options.get("v_align",         "bottom")
     words_per_line   = options.get("words_per_line",  3)
     caption_y        = options.get("caption_y")
+    caption_scale    = options.get("caption_scale", 1.0)
     short_template   = options.get("short_template",  "full_screen")
     title_permanent  = options.get("title_permanent",  False)
     hook_title_enabled = options.get("hook_title_enabled", True)
@@ -195,12 +196,12 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
         raw_clip_results = None
 
         gameplay_bg_path = None
-        if gameplay_clip_id and settings.GAMEPLAY_GCS_BUCKET_NAME:
+        if gameplay_clip_id and settings.gameplay_gcs_bucket_name:
             async with _step(job_id, "downloading gameplay bg"):
                 gameplay_bg_path = job_dir / "gameplay_bg.mp4"
                 def _dl_gameplay():
                     from google.cloud import storage
-                    bucket = storage.Client().bucket(settings.GAMEPLAY_GCS_BUCKET_NAME)
+                    bucket = storage.Client().bucket(settings.gameplay_gcs_bucket_name)
                     blob = bucket.blob(f"gameplay_clips/{gameplay_clip_id}.mp4")
                     if blob.exists():
                         blob.download_to_filename(str(gameplay_bg_path))
@@ -343,7 +344,7 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
                         zoom_beats=zoom_beats, aspect=aspect,
                         captions=captions, style=clip_style, color=color_combo,
                         h_align=h_align, v_align=v_align, words_per_line=words_per_line,
-                        caption_y=caption_y,
+                        caption_y=caption_y, caption_scale=caption_scale,
                         hook_title=(ts.title_with_emoji if hook_title_enabled else None),
                         face_track=face_track, src_w=src_w, src_h=src_h,
                         title_permanent=title_permanent, clip_duration=clip_actual_dur,

@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <!-- Google Ads tag: load before the React app so conversion events are
+         available during the first sign-in interaction. -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18505490973"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      window.gtag = window.gtag || gtag;
+      window.gtag('js', new Date());
+      window.gtag('config', 'AW-18505490973');
+    </script>
     <meta charset="UTF-8" />
 
     <!-- ── Favicons & PWA ────────────────────────────────────────────── -->
@@ -14,19 +24,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <!-- ── Primary SEO ───────────────────────────────────────────────── -->
-    <title>AI YouTube Shorts Maker — Turn Long Videos Into Short Clips | ShortClipr</title>
-    <meta name="description" content="Turn long YouTube videos, podcasts, interviews, and tutorials into ready-to-post YouTube Shorts, TikToks, and Instagram Reels. ShortClipr finds strong moments, reframes them for vertical video, and adds captions in minutes." />
-    <meta name="keywords" content="ai short clip maker, youtube clips maker, AI shorts generator, YouTube to shorts, ai video clip generator, short clip maker online, auto clip generator, youtube video to shorts converter, ai clip maker, automatic clip creator, repurpose YouTube videos, TikTok clip maker, Instagram Reels maker, podcast clip maker, viral clip tool, video to shorts AI, long video to short clips, ai video editor, OpusClip alternative, Klap alternative, Vidyo alternative, short form video AI, youtube shorts maker, ai content repurposing tool" />
+    <title>AI YouTube Shorts Maker | Turn Videos into Clips | ShortClipr</title>
+    <meta name="description" content="Turn YouTube podcasts, interviews, and tutorials into vertical clip previews with AI-selected moments and captions. Review your clips in ShortClipr." />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://shortclipr.com/youtube-shorts" />
     <meta name="author" content="ShortClipr" />
 
     <!-- ── Open Graph ────────────────────────────────────────────────── -->
     <meta property="og:type"        content="website" />
     <meta property="og:site_name"   content="ShortClipr" />
     <meta property="og:url"         content="https://shortclipr.com/youtube-shorts" />
-    <meta property="og:title"       content="ShortClipr — AI Short Clip Maker | YouTube Clips Maker" />
-    <meta property="og:description" content="The #1 AI short clip maker. Turn any YouTube video into viral TikTok, Reels & Shorts automatically. AI captions, 9:16 reframe, virality scoring — free to start." />
+    <meta property="og:title"       content="AI YouTube Shorts Maker | ShortClipr" />
+    <meta property="og:description" content="Find moments in your YouTube video, preview vertical clips, and check captions before sharing." />
     <meta property="og:image"       content="https://shortclipr.com/og-image.png" />
     <meta property="og:image:width"  content="1200" />
     <meta property="og:image:height" content="630" />
@@ -35,31 +43,9 @@
     <!-- ── Twitter Card ──────────────────────────────────────────────── -->
     <meta name="twitter:card"        content="summary_large_image" />
     <meta name="twitter:site"        content="@shortclipr" />
-    <meta name="twitter:title"       content="ShortClipr — AI Short Clip Maker | YouTube Clips Maker" />
-    <meta name="twitter:description" content="The best AI short clip maker and YouTube clips maker. Auto captions, 9:16 reframe, virality scoring. Under 3 mins. Free to start." />
+    <meta name="twitter:title"       content="AI YouTube Shorts Maker | ShortClipr" />
+    <meta name="twitter:description" content="Find moments in your YouTube video, preview vertical clips, and check captions before sharing." />
     <meta name="twitter:image"       content="https://shortclipr.com/og-image.png" />
-
-    <!-- ── Schema.org — SoftwareApplication ─────────────────────────── -->
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      "name": "ShortClipr",
-      "applicationCategory": "VideoApplication",
-      "operatingSystem": "Web",
-      "url": "https://shortclipr.com/youtube-shorts",
-      "logo": "https://shortclipr.com/logo.svg",
-      "image": "https://shortclipr.com/og-image.png",
-      "description": "ShortClipr is the best AI short clip maker and YouTube clips maker. Automatically turn long videos into viral TikTok, Instagram Reels, and YouTube Shorts with AI captions, 9:16 reframe, and virality scoring. Free AI video clip generator — no editing needed.",
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD",
-        "description": "Free plan — 2 clips, no credit card"
-      },
-      "sameAs": ["https://twitter.com/shortclipr"]
-    }
-    </script>
 
     <!-- ── Schema.org — Organization ────────────────────────────────── -->
     <script type="application/ld+json">
@@ -74,40 +60,6 @@
         "email": "hello@shortclipr.com",
         "contactType": "customer support"
       }
-    }
-    </script>
-
-    <!-- ── Schema.org — FAQPage ──────────────────────────────────────── -->
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "FAQPage",
-      "mainEntity": [
-        {
-          "@type": "Question",
-          "name": "What is ShortClipr?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "ShortClipr turns long YouTube videos into short-form clips for TikTok, Instagram Reels, and YouTube Shorts. It finds strong moments, reframes them for vertical video, and adds captions."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "Is ShortClipr better than OpusClip?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "ShortClipr helps creators turn long-form videos into short clips with AI-selected moments, vertical reframing, and captions. Compare the workflows and plans to decide which tool fits your needs."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "How long does it take to generate clips?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Processing time depends on the source video length and the number of clips requested. Most videos are ready to review in minutes."
-          }
-        }
-      ]
     }
     </script>
 

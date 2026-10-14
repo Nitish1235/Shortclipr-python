@@ -727,17 +727,33 @@ function GameplayManager({ showToast }) {
     }
     setUploading(true)
     try {
-      const form = new FormData()
-      form.append('video', file)
-      form.append('title', title.trim() || file.name.replace('.mp4', ''))
-      const r = await fetch(`${API}/admin/gameplay/upload`, {
+      // Large MP4s cannot transit Cloud Run's 32 MiB request limit. Ask the
+      // authenticated API for a resumable GCS session, then send file bytes
+      // directly to the configured gameplay bucket.
+      const sessionResponse = await authFetch('/admin/gameplay/upload-session', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token()}` },
-        body: form,
+        body: JSON.stringify({ title: title.trim() || file.name.replace(/\.mp4$/i, ''), filename: file.name }),
       })
-      if (!r.ok) {
-        const e2 = await r.json().catch(() => ({}))
+      if (!sessionResponse.ok) {
+        const e2 = await sessionResponse.json().catch(() => ({}))
         throw new Error(e2.detail || 'Upload failed')
+      }
+      const session = await sessionResponse.json()
+      const uploadResponse = await fetch(session.upload_url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type || 'video/mp4',
+          'Content-Range': `bytes 0-${file.size - 1}/${file.size}`,
+        },
+        body: file,
+      })
+      if (!uploadResponse.ok) {
+        throw new Error(`Video upload failed (${uploadResponse.status}). Check the gameplay bucket CORS configuration.`)
+      }
+      const finalizeResponse = await authFetch(`/admin/gameplay/${session.id}/finalize`, { method: 'POST' })
+      if (!finalizeResponse.ok) {
+        const e2 = await finalizeResponse.json().catch(() => ({}))
+        throw new Error(e2.detail || 'Video uploaded but thumbnail generation failed')
       }
       showToast('Gameplay clip uploaded — thumbnail auto-generated!')
       setTitle('')

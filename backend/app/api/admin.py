@@ -918,7 +918,14 @@ async def admin_delete_tutorial(admin: AdminUser):
 
 def _gameplay_bucket():
     from google.cloud import storage
-    return storage.Client().bucket(settings.GAMEPLAY_GCS_BUCKET_NAME)
+    bucket_name = settings.gameplay_gcs_bucket_name
+    if not bucket_name:
+        raise RuntimeError("No gameplay GCS bucket is configured")
+    return storage.Client().bucket(bucket_name)
+
+
+def _gameplay_bucket_name() -> str:
+    return settings.gameplay_gcs_bucket_name
 
 
 def _generate_thumb_from_video(video_bytes: bytes) -> bytes:
@@ -938,10 +945,23 @@ def _generate_thumb_from_video(video_bytes: bytes) -> bytes:
             return f.read()
 
 
+def _generate_thumb_from_file(video_path: Path) -> bytes:
+    """Extract the poster without loading a potentially large MP4 into RAM."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tpath = Path(tmp) / "thumb.jpg"
+        import subprocess
+        subprocess.run(
+            ["ffmpeg", "-y", "-ss", "1", "-i", str(video_path), "-frames:v", "1",
+             "-q:v", "3", "-vf", "scale=640:-1", str(tpath)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True,
+        )
+        return tpath.read_bytes()
+
+
 def _upload_gameplay_sync(video_bytes: bytes, title: str) -> dict:
     clip_id = str(uuid.uuid4())
     bucket = _gameplay_bucket()
-    gcs_base = f"https://storage.googleapis.com/{settings.GAMEPLAY_GCS_BUCKET_NAME}"
+    gcs_base = f"https://storage.googleapis.com/{_gameplay_bucket_name()}"
 
     # Auto-generate JPEG thumbnail from the video (no manual upload needed)
     thumb_bytes = _generate_thumb_from_video(video_bytes)
@@ -964,11 +984,63 @@ def _upload_gameplay_sync(video_bytes: bytes, title: str) -> dict:
     }
 
 
+def _create_gameplay_upload_session_sync(title: str) -> dict:
+    """Create a browser-uploadable GCS resumable session for one MP4.
+
+    The video bypasses the API service entirely. This is essential on Cloud
+    Run, whose HTTP request limit is 32 MiB—well below normal gameplay files.
+    """
+    clip_id = str(uuid.uuid4())
+    bucket = _gameplay_bucket()
+    blob = bucket.blob(f"gameplay_clips/{clip_id}.mp4")
+    blob.metadata = {
+        "title": title[:200], "clip_id": clip_id,
+        "added_at": datetime.now(timezone.utc).isoformat(),
+    }
+    return {
+        "id": clip_id,
+        "upload_url": blob.create_resumable_upload_session(content_type="video/mp4"),
+    }
+
+
+def _finalize_gameplay_upload_sync(clip_id: str) -> dict:
+    """Verify a direct upload, generate its thumbnail, and return its library row."""
+    try:
+        uuid.UUID(clip_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid gameplay clip id") from exc
+
+    bucket = _gameplay_bucket()
+    video_blob = bucket.blob(f"gameplay_clips/{clip_id}.mp4")
+    if not video_blob.exists():
+        raise ValueError("Gameplay video was not found after upload")
+    video_blob.reload()
+    if not video_blob.size:
+        raise ValueError("Gameplay video upload is empty")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        video_path = Path(tmp) / "input.mp4"
+        video_blob.download_to_filename(str(video_path))
+        thumb_bytes = _generate_thumb_from_file(video_path)
+
+    thumb_blob = bucket.blob(f"gameplay_thumbs/{clip_id}.jpg")
+    thumb_blob.upload_from_string(thumb_bytes, content_type="image/jpeg")
+    metadata = video_blob.metadata or {}
+    gcs_base = f"https://storage.googleapis.com/{_gameplay_bucket_name()}"
+    return {
+        "id": clip_id,
+        "title": metadata.get("title", "Gameplay Clip"),
+        "video_url": f"{gcs_base}/gameplay_clips/{clip_id}.mp4",
+        "thumbnail_url": f"{gcs_base}/gameplay_thumbs/{clip_id}.jpg",
+        "added_at": metadata.get("added_at", ""),
+    }
+
+
 def _list_gameplay_sync() -> list[dict]:
     try:
         bucket = _gameplay_bucket()
         blobs = list(bucket.list_blobs(prefix="gameplay_clips/"))
-        gcs_base = f"https://storage.googleapis.com/{settings.GAMEPLAY_GCS_BUCKET_NAME}"
+        gcs_base = f"https://storage.googleapis.com/{_gameplay_bucket_name()}"
         items = []
         for blob in blobs:
             if not blob.name.endswith(".mp4"):
@@ -1002,7 +1074,7 @@ def _delete_gameplay_sync(clip_id: str) -> None:
 
 @router.get("/gameplay/list", tags=["public"])
 async def list_gameplay_clips():
-    if not settings.GAMEPLAY_GCS_BUCKET_NAME:
+    if not settings.gameplay_gcs_bucket_name:
         return {"clips": [], "count": 0}
     loop = asyncio.get_running_loop()
     items = await loop.run_in_executor(None, _list_gameplay_sync)
@@ -1011,8 +1083,8 @@ async def list_gameplay_clips():
 
 @router.get("/admin/gameplay")
 async def admin_list_gameplay(admin: AdminUser):
-    if not settings.GAMEPLAY_GCS_BUCKET_NAME:
-        raise HTTPException(status_code=503, detail="GAMEPLAY_GCS_BUCKET_NAME not configured")
+    if not settings.gameplay_gcs_bucket_name:
+        raise HTTPException(status_code=503, detail="No gameplay GCS bucket is configured")
     loop = asyncio.get_running_loop()
     items = await loop.run_in_executor(None, _list_gameplay_sync)
     return {"clips": items, "count": len(items)}
@@ -1025,8 +1097,8 @@ async def admin_upload_gameplay(
     video: UploadFile = File(...),
 ):
     """Admin: upload a gameplay MP4. Thumbnail is auto-generated by FFmpeg."""
-    if not settings.GAMEPLAY_GCS_BUCKET_NAME:
-        raise HTTPException(status_code=503, detail="GAMEPLAY_GCS_BUCKET_NAME not configured")
+    if not settings.gameplay_gcs_bucket_name:
+        raise HTTPException(status_code=503, detail="No gameplay GCS bucket is configured")
     if not (video.filename or "").lower().endswith(".mp4"):
         raise HTTPException(status_code=400, detail="Video must be .mp4")
 
@@ -1042,10 +1114,47 @@ async def admin_upload_gameplay(
     return {"success": True, "clip": entry}
 
 
+class GameplayUploadSessionRequest(BaseModel):
+    title: str = "Gameplay Clip"
+    filename: str = "gameplay.mp4"
+
+
+@router.post("/admin/gameplay/upload-session")
+async def admin_create_gameplay_upload_session(body: GameplayUploadSessionRequest, admin: AdminUser):
+    """Start a direct-to-GCS resumable upload for a gameplay MP4."""
+    if not settings.gameplay_gcs_bucket_name:
+        raise HTTPException(status_code=503, detail="No gameplay GCS bucket is configured")
+    if not body.filename.lower().endswith(".mp4"):
+        raise HTTPException(status_code=400, detail="Video must be .mp4")
+    loop = asyncio.get_running_loop()
+    try:
+        session = await loop.run_in_executor(None, _create_gameplay_upload_session_sync, body.title)
+    except Exception as exc:
+        logger.exception("Could not create gameplay upload session")
+        raise HTTPException(status_code=502, detail="Could not prepare gameplay upload") from exc
+    logger.info(f"Admin {admin.email} started direct gameplay upload {session['id']}")
+    return session
+
+
+@router.post("/admin/gameplay/{clip_id}/finalize")
+async def admin_finalize_gameplay_upload(clip_id: str, admin: AdminUser):
+    """Create the thumbnail and publish a completed direct gameplay upload."""
+    loop = asyncio.get_running_loop()
+    try:
+        entry = await loop.run_in_executor(None, _finalize_gameplay_upload_sync, clip_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception(f"Gameplay upload finalization failed for {clip_id}")
+        raise HTTPException(status_code=500, detail="Gameplay upload completed but could not be finalized") from exc
+    logger.info(f"Admin {admin.email} finalized gameplay clip {clip_id}")
+    return {"success": True, "clip": entry}
+
+
 @router.delete("/admin/gameplay/{clip_id}")
 async def admin_delete_gameplay(clip_id: str, admin: AdminUser):
-    if not settings.GAMEPLAY_GCS_BUCKET_NAME:
-        raise HTTPException(status_code=503, detail="GAMEPLAY_GCS_BUCKET_NAME not configured")
+    if not settings.gameplay_gcs_bucket_name:
+        raise HTTPException(status_code=503, detail="No gameplay GCS bucket is configured")
     loop = asyncio.get_running_loop()
     try:
         await loop.run_in_executor(None, _delete_gameplay_sync, clip_id)

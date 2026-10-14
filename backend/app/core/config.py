@@ -56,6 +56,17 @@ class Settings(BaseSettings):
     # Separate from GCS_BUCKET_NAME so lifecycle/IAM stays independent.
     GAMEPLAY_GCS_BUCKET_NAME: str = ""   # e.g. "shortclipr-gameplay-bg"
 
+    @property
+    def gameplay_gcs_bucket_name(self) -> str:
+        """Dedicated gameplay bucket, or the existing shared-assets bucket.
+
+        Older deployments configured only BRAINROT_GCS_BUCKET_NAME. Falling
+        back keeps the gameplay picker and its admin uploader on the same
+        storage library without silently falling back to the main user-output
+        bucket.
+        """
+        return self.GAMEPLAY_GCS_BUCKET_NAME.strip() or self.BRAINROT_GCS_BUCKET_NAME.strip()
+
     # ── Runware (AI image generation) ──────────────────────────
     # Was only ever read directly out of .env by backend/scripts/
     # generate_characters.py's own regex-based load_api_key() — wiring it
