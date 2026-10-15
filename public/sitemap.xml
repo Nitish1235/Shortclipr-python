@@ -150,6 +150,24 @@
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
+  <url>
+    <loc>https://shortclipr.com/youtube-shorts/guides/gameplay-shorts-maker-guide</loc>
+    <lastmod>2026-10-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://shortclipr.com/youtube-shorts/guides/title-card-shorts-guide</loc>
+    <lastmod>2026-10-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://shortclipr.com/youtube-shorts/guides/caption-only-shorts-guide</loc>
+    <lastmod>2026-10-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
   <!-- ── Static marketing pages ─────────────────────────────────────── -->
   <url>
     <loc>https://shortclipr.com/about</loc>

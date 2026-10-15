@@ -146,6 +146,21 @@
   content: ''; position: absolute; left: 4px; top: 10px;
   width: 8px; height: 8px; border-radius: 2px; background: #cf1322;
 }
+.seo-guide-gallery { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin:12px 0 48px; }
+.seo-guide-gallery.is-single { grid-template-columns:minmax(0,430px); justify-content:center; }
+.seo-guide-figure { min-width:0; margin:0; }
+.seo-guide-figure.is-wide { grid-column:1 / -1; }
+.seo-guide-figure:last-child:nth-child(odd) { grid-column:1 / -1; width:calc(50% - 9px); justify-self:center; }
+.seo-guide-image { position:relative; overflow:hidden; aspect-ratio:9/16; border:5px solid #fff; border-radius:20px; background:#142530; box-shadow:0 16px 34px #2944541f; }
+.seo-guide-figure.is-wide .seo-guide-image { aspect-ratio:16/9; }
+.seo-guide-image:after { position:absolute; inset:48% 0 0; content:''; background:linear-gradient(transparent,#0e1b278f); pointer-events:none; }
+.seo-guide-image img { display:block; width:100%; height:100%; object-fit:cover; }
+.seo-guide-image.has-title>b { position:absolute; z-index:2; top:6%; right:8%; left:8%; color:#fff; font-size:clamp(22px,4vw,38px); font-weight:900; line-height:1; letter-spacing:-.04em; text-align:center; text-shadow:0 3px 12px #000b; }
+.seo-guide-image>strong { position:absolute; z-index:2; right:7%; bottom:12%; left:7%; color:#fff; font-size:clamp(18px,3vw,31px); font-weight:900; line-height:1.12; text-align:center; text-transform:uppercase; text-shadow:0 3px 12px #000b; }
+.seo-guide-image>strong mark { padding:1px 5px; background:#cf1322; color:#fff; text-shadow:none; }
+.seo-guide-image.has-gameplay>strong mark { background:#f4bc89; color:#24313b; }
+.seo-guide-figure figcaption { display:flex; gap:10px; align-items:flex-start; margin:11px 3px 0; color:#667985; font-size:.74rem; line-height:1.55; }
+.seo-guide-figure figcaption span { flex:0 0 auto; color:#227d89; font-size:.66rem; font-weight:900; letter-spacing:.1em; }
 
 /* How-to numbered block */
 .seo-howto {
@@ -311,4 +326,8 @@
   .seo-hero-media { padding: 12px; border-radius: 20px; }
   .seo-hero-media figcaption { font-size: 7px; }
   .seo-hero-media-top { font-size: 7px; }
+  .seo-guide-gallery { grid-template-columns:1fr; gap:24px; }
+  .seo-guide-figure.is-wide { grid-column:auto; }
+  .seo-guide-figure:last-child:nth-child(odd) { grid-column:auto; width:auto; justify-self:stretch; }
+  .seo-guide-figure.is-wide .seo-guide-image { aspect-ratio:16/10; }
 }

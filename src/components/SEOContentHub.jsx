@@ -24,6 +24,9 @@ const tools = [
 ]
 
 const guides = [
+  ['Gameplay Shorts maker: 40/60 split guide', '/youtube-shorts/guides/gameplay-shorts-maker-guide'],
+  ['How to use title cards in Shorts', '/youtube-shorts/guides/title-card-shorts-guide'],
+  ['How to make caption-only Shorts', '/youtube-shorts/guides/caption-only-shorts-guide'],
   ['How to turn long videos into Shorts', '/youtube-shorts/guides/how-to-turn-long-videos-into-shorts'],
   ['How to choose podcast clips', '/youtube-shorts/guides/how-to-choose-podcast-clips'],
   ['How to crop horizontal video for Shorts', '/youtube-shorts/guides/crop-horizontal-video-for-shorts'],

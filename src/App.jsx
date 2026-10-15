@@ -117,12 +117,12 @@ function LandingPage() {
 
         <MultipleShorts />
 
+        {/* Pricing follows the multi-short workflow, before articles and guides */}
+        <Pricing />
+
         <ContentExplainer />
 
         <SEOContentHub />
-
-        {/* 10. Pricing */}
-        <Pricing />
 
         {/* 11. SEO FAQ */}
         <FAQ />

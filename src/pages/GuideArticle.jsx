@@ -31,6 +31,7 @@ export default function GuideArticle() {
       },
       mainEntityOfPage: { '@type': 'WebPage', '@id': `${SITE}${path}` },
       articleSection: data.category,
+      ...(data.images?.length && { image: data.images.map(image => `${SITE}${image.src}`) }),
       ...(data.published && { datePublished: data.published }),
       ...(data.modified && { dateModified: data.modified }),
     },
@@ -106,6 +107,22 @@ export default function GuideArticle() {
         {/* Article body */}
         <article className="seo-section seo-prose">
           <p className="seo-prose-lead">{data.intro}</p>
+
+          {data.images?.length > 0 && (
+            <div className={`seo-guide-gallery ${data.images.length === 1 ? 'is-single' : ''}`} aria-label="Guide visuals">
+              {data.images.map((image, index) => (
+                <figure className={`seo-guide-figure ${image.wide ? 'is-wide' : ''}`} key={image.src}>
+                  <div className={`seo-guide-image ${image.overlay ? `has-${image.overlay}` : ''}`}>
+                    <img src={image.src} alt={image.alt} loading={index === 0 ? 'eager' : 'lazy'} />
+                    {image.overlay === 'gameplay' && <strong>This gameplay keeps<br /><mark>people watching.</mark></strong>}
+                    {image.overlay === 'title' && <><b>A signature<br />finish.</b><strong>Now I’m <mark>signing</mark><br />the tile.</strong></>}
+                    {image.overlay === 'caption' && <strong>And <mark>no longer</mark><br />work.</strong>}
+                  </div>
+                  <figcaption><span>0{index + 1}</span>{image.caption}</figcaption>
+                </figure>
+              ))}
+            </div>
+          )}
 
           {data.sections.map(sec => (
             <div key={sec.h2}>
