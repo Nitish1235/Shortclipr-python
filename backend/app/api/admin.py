@@ -36,9 +36,10 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-from app.api.deps import CurrentUser, get_current_user
+from app.api.deps import CurrentUser, decode_access_token, get_current_user
 from app.core.config import get_settings
 from app.core.worker_routing import has_multi_region_workers
 from app.db import supabase as db
@@ -51,6 +52,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 router = APIRouter(tags=["admin"])
+optional_gameplay_bearer = HTTPBearer(auto_error=False)
 
 # ── Admin gate ────────────────────────────────────────────────
 # Reads from settings (which loads .env / Cloud Run secrets) — not raw os.environ
@@ -1098,12 +1100,34 @@ def _delete_gameplay_sync(clip_id: str) -> None:
 
 
 @router.get("/gameplay/list", tags=["public"])
-async def list_gameplay_clips():
+async def list_gameplay_clips(
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(optional_gameplay_bearer),
+    ],
+):
     if not settings.gameplay_gcs_bucket_name:
-        return {"clips": [], "count": 0}
+        return {"clips": [], "count": 0, "locked_count": 0}
     loop = asyncio.get_running_loop()
     items = await loop.run_in_executor(None, _list_gameplay_sync)
-    return {"clips": items, "count": len(items)}
+
+    # The public picker previews one clip. Resolve the plan from the current
+    # user record rather than the JWT claim, which can predate an upgrade.
+    is_paid = False
+    if credentials:
+        try:
+            payload = decode_access_token(credentials.credentials)
+            user = await db.get_user(payload.sub)
+            is_paid = bool(user and user.get("plan") and user["plan"] != "free")
+        except HTTPException:
+            pass
+
+    visible = items if is_paid else items[:1]
+    return {
+        "clips": visible,
+        "count": len(items),
+        "locked_count": len(items) - len(visible),
+    }
 
 
 @router.get("/admin/gameplay")

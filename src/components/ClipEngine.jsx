@@ -403,7 +403,9 @@ export default function ClipEngine({ onJobCreated }) {
   const [titleBgOpacity, setTitleBgOpacity] = useState(0.55)
   
   const [gameplayClips, setGameplayClips] = useState([])
+  const [gameplayClipCount, setGameplayClipCount] = useState(0)
   const [selectedGameplayId, setSelectedGameplayId] = useState('')
+  const [gameplayUpsellOpen, setGameplayUpsellOpen] = useState(false)
   // "Minutes gateway" — [startSeconds, endSeconds] sub-window of the video
   // to actually process. null until video metadata loads (full video by
   // default — the gateway is opt-in, not required).
@@ -412,18 +414,34 @@ export default function ClipEngine({ onJobCreated }) {
   const { user, loginWithGoogleToken } = useAuth()
   const navigate = useNavigate()
   const isPaid = !!(user?.plan && user.plan !== 'free')
+  // Keep the preview limited in the UI as well, including while an older API
+  // deployment still returns the full public list.
+  const visibleGameplayClips = isPaid ? gameplayClips : gameplayClips.slice(0, 1)
+  const lockedGameplayCount = isPaid ? 0 : Math.max(0, gameplayClipCount - visibleGameplayClips.length)
+  const activeGameplayId = visibleGameplayClips.some(clip => clip.id === selectedGameplayId)
+    ? selectedGameplayId
+    : (visibleGameplayClips[0]?.id || '')
 
   useEffect(() => {
-    fetch(API_BASE + '/gameplay/list')
-      .then(res => res.json())
-      .then(data => {
-        if (data.clips && data.clips.length > 0) {
-          setGameplayClips(data.clips)
-          setSelectedGameplayId(data.clips[0].id)
-        }
+    const controller = new AbortController()
+    const token = localStorage.getItem('sc_token')
+    fetch(API_BASE + '/gameplay/list', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      signal: controller.signal,
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Could not load gameplay clips')
+        return res.json()
       })
-      .catch(err => console.error(err))
-  }, [])
+      .then(data => {
+        const clips = Array.isArray(data.clips) ? data.clips : []
+        setGameplayClips(clips)
+        setGameplayClipCount(data.count ?? clips.length)
+        setSelectedGameplayId(current => clips.some(clip => clip.id === current) ? current : (clips[0]?.id || ''))
+      })
+      .catch(err => { if (err.name !== 'AbortError') console.error(err) })
+    return () => controller.abort()
+  }, [user?.plan])
 
   // Restore pending URL after login
   useEffect(() => {
@@ -539,7 +557,7 @@ export default function ClipEngine({ onJobCreated }) {
             gateway_start: gatewayRange ? gatewayRange[0] : 0,
             gateway_end:   gatewayRange ? gatewayRange[1] : null,
             manual_clip_ranges: clipGenerationMethod === 'manual' ? manualRanges.map(r => ({ start: r[0], end: r[1] })) : null,
-            gameplay_clip_id: shortTemplate.startsWith('gameplay_') ? selectedGameplayId : null,
+            gameplay_clip_id: shortTemplate.startsWith('gameplay_') ? activeGameplayId : null,
           },
         }),
       })
@@ -654,7 +672,7 @@ export default function ClipEngine({ onJobCreated }) {
       { val:'glass',        label:'🪟 Glass',          sub:'Premium' },
       { val:'full_screen',  label:'📺 Full Screen',   sub:'No Bars · Full Fill' },
       // Gameplay options only shown when admin has uploaded at least one clip
-      ...(gameplayClips.length > 0 ? [
+      ...(visibleGameplayClips.length > 0 ? [
         { val:'gameplay_50_50', label:'🎮 Gameplay 50/50', sub:'50% Split' },
         { val:'gameplay_40_60', label:'🎮 Gameplay 60%',   sub:'60% Gaming' },
         { val:'gameplay_face',  label:'🎯 Face Tracked',    sub:'Full Width' },
@@ -1115,7 +1133,7 @@ export default function ClipEngine({ onJobCreated }) {
                 <span className="ce-row-label" style={{ ...labelStyle, display:'block', marginBottom:'10px' }}>Short Style</span>
                 <div className="ce-template-grid" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'6px' }}>
                   {templates.map(({ val, label, sub }) => (
-                    <button className="ce-choice-btn" key={val} onClick={() => setShortTemplate(val)} style={{
+                    <button className="ce-choice-btn" key={val} onClick={() => { setShortTemplate(val); setGameplayUpsellOpen(false) }} style={{
                       padding:'8px 6px', borderRadius:'8px', textAlign:'center',
                       background: shortTemplate === val ? '#fef2f2' : '#f9f9f9',
                       color: shortTemplate === val ? '#cf1322' : '#555',
@@ -1130,29 +1148,44 @@ export default function ClipEngine({ onJobCreated }) {
               </div>
 
               {/* Gameplay picker */}
-              {shortTemplate.startsWith('gameplay_') && gameplayClips.length > 0 && (
-                <div className="ce-gameplay-picker ce-control-row" style={{ ...rowStyle, borderBottom:'none', flexDirection:'column', alignItems:'stretch', gap:'10px', paddingBottom:'14px' }}>
+              {shortTemplate.startsWith('gameplay_') && visibleGameplayClips.length > 0 && (
+                <div className="ce-gameplay-picker ce-control-row" onMouseLeave={() => setGameplayUpsellOpen(false)} onKeyDown={event => { if (event.key === 'Escape') setGameplayUpsellOpen(false) }} style={{ ...rowStyle, borderBottom:'none', flexDirection:'column', alignItems:'stretch', gap:'10px', paddingBottom:'14px' }}>
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px' }}>
                     <span style={{ ...labelStyle, display:'block', minWidth:0 }}>Gameplay Clip</span>
                     <span style={{ color:'#8b9aa1', fontSize:'.68rem', fontWeight:700, whiteSpace:'nowrap' }}>Choose a background</span>
                   </div>
-                  <div className="ce-gameplay-rail" role="radiogroup" aria-label="Gameplay background" style={{ display:'flex', gap:'10px', overflowX:'auto', width:'100%', padding:'2px 2px 8px' }}>
-                    {gameplayClips.map(clip => (
-                      <button key={clip.id} type="button" role="radio" aria-checked={selectedGameplayId === clip.id} onClick={() => setSelectedGameplayId(clip.id)} style={{
-                        width: '116px', flexShrink: 0, cursor: 'pointer', padding:0, textAlign:'left',
-                        background:'#fff', border: selectedGameplayId === clip.id ? '2px solid #cf1322' : '2px solid #e5e5e5',
-                        borderRadius: '9px', overflow: 'hidden', position: 'relative',
-                        boxShadow: selectedGameplayId === clip.id ? '0 5px 14px rgba(207,19,34,.18)' : 'none',
-                        transform: selectedGameplayId === clip.id ? 'translateY(-1px)' : 'none', transition:'all .15s ease',
-                      }}>
-                        <div style={{ position:'relative', background:'#111', height:'66px' }}>
-                          <GameplayThumbnail clip={clip} />
-                          {selectedGameplayId === clip.id && <span style={{ position:'absolute', top:5, right:5, display:'grid', placeItems:'center', width:18, height:18, borderRadius:'50%', background:'#cf1322', color:'#fff', fontSize:'.67rem', fontWeight:900 }}>✓</span>}
-                        </div>
-                        <span title={clip.title || 'Gameplay Clip'} style={{ display:'block', padding:'7px 8px 8px', color:'#333', fontSize:'.68rem', fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{clip.title || 'Gameplay Clip'}</span>
+                  <div className="ce-gameplay-rail" style={{ display:'flex', gap:'10px', overflowX:'auto', width:'100%', padding:'2px 2px 8px' }}>
+                    <div className="ce-gameplay-options" role="radiogroup" aria-label="Gameplay background">
+                      {visibleGameplayClips.map(clip => (
+                        <button key={clip.id} type="button" role="radio" aria-checked={activeGameplayId === clip.id} onClick={() => setSelectedGameplayId(clip.id)} style={{
+                          width: '116px', flexShrink: 0, cursor: 'pointer', padding:0, textAlign:'left',
+                          background:'#fff', border: activeGameplayId === clip.id ? '2px solid #cf1322' : '2px solid #e5e5e5',
+                          borderRadius: '9px', overflow: 'hidden', position: 'relative',
+                          boxShadow: activeGameplayId === clip.id ? '0 5px 14px rgba(207,19,34,.18)' : 'none',
+                          transform: activeGameplayId === clip.id ? 'translateY(-1px)' : 'none', transition:'all .15s ease',
+                        }}>
+                          <div style={{ position:'relative', background:'#111', height:'66px' }}>
+                            <GameplayThumbnail clip={clip} />
+                            {activeGameplayId === clip.id && <span style={{ position:'absolute', top:5, right:5, display:'grid', placeItems:'center', width:18, height:18, borderRadius:'50%', background:'#cf1322', color:'#fff', fontSize:'.67rem', fontWeight:900 }}>✓</span>}
+                          </div>
+                          <span title={clip.title || 'Gameplay Clip'} style={{ display:'block', padding:'7px 8px 8px', color:'#333', fontSize:'.68rem', fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{clip.title || 'Gameplay Clip'}</span>
+                        </button>
+                      ))}
+                    </div>
+                    {lockedGameplayCount > 0 && (
+                      <button type="button" className="ce-gameplay-more" aria-controls={gameplayUpsellOpen ? 'ce-gameplay-upgrade' : undefined} aria-expanded={gameplayUpsellOpen} onMouseEnter={() => setGameplayUpsellOpen(true)} onFocus={() => setGameplayUpsellOpen(true)} onClick={() => setGameplayUpsellOpen(true)}>
+                        <span className="ce-gameplay-more-art"><span className="ce-gameplay-lock" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg></span><strong>+ more</strong></span>
+                        <span className="ce-gameplay-more-label">{lockedGameplayCount} more {lockedGameplayCount === 1 ? 'clip' : 'clips'}</span>
                       </button>
-                    ))}
+                    )}
                   </div>
+                  {lockedGameplayCount > 0 && gameplayUpsellOpen && (
+                    <aside className="ce-gameplay-upsell" id="ce-gameplay-upgrade" aria-live="polite">
+                      <div><strong>Unlock the full gameplay library</strong><p>Choose a paid plan to see and use {lockedGameplayCount} more {lockedGameplayCount === 1 ? 'background' : 'backgrounds'}.</p></div>
+                      <button type="button" className="ce-gameplay-upgrade-link" onClick={() => navigate('/billing')}>See plans <span aria-hidden="true">→</span></button>
+                      <button type="button" className="ce-gameplay-upgrade-close" aria-label="Dismiss upgrade message" onClick={() => setGameplayUpsellOpen(false)}>×</button>
+                    </aside>
+                  )}
                   <span style={{ color:'#8b9aa1', fontSize:'.66rem', lineHeight:1.4 }}>The selected clip plays beneath your source video in the live preview.</span>
                 </div>
               )}
@@ -1196,7 +1229,7 @@ export default function ClipEngine({ onJobCreated }) {
               border:'2px solid #111', boxShadow:'3px 3px 0 #cf1322',
             }}>
               {videoData.thumbnail && (
-                <TemplatePreviewBg template={shortTemplate} thumbnail={videoData.thumbnail} barColor={barColor} gameplayUrl={gameplayClips.find(c => c.id === selectedGameplayId)?.video_url} />
+                <TemplatePreviewBg template={shortTemplate} thumbnail={videoData.thumbnail} barColor={barColor} gameplayUrl={visibleGameplayClips.find(c => c.id === activeGameplayId)?.video_url} />
               )}
               <div style={{
                 position:'absolute', left:0, right:0, bottom:0, height:'40%',
