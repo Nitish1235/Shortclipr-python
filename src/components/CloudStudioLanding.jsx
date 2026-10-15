@@ -18,12 +18,83 @@ export function CloudNavigation() {
 }
 
 export default function CloudStudioLanding() {
-  const [motionPaused, setMotionPaused] = useState(false)
   return <>
-    <section className="cloud-hero cloud-wrap" id="hero"><p className="cloud-eyebrow"><i /> AI YOUTUBE SHORTS MAKER</p><h1>Turn long YouTube videos<br />into <span>clips people stop for.</span></h1><p className="cloud-lede">Turn podcasts, interviews, tutorials, and long videos into ready-to-post<br />YouTube Shorts, TikToks, and Instagram Reels—with AI-selected moments, vertical reframing, and captions.</p><CloudClipForm /><div className="cloud-actions"><a className="cloud-text-link" href="#examples"><b>▶</b> Explore an example</a></div><div className={`cloud-stage ${motionPaused ? 'is-paused' : ''}`}><div className="cloud-stage-top"><span><i /> A little less editing. A lot more you.</span><button onClick={() => setMotionPaused(value => !value)}>{motionPaused ? 'Resume motion ▷' : 'Pause motion Ⅱ'}</button></div><div className="cloud-transform"><div className="cloud-source"><div className="cloud-window-top"><span>YOUR ORIGINAL RECORDING</span><span>16:9</span></div><div className="cloud-source-image"><img src={samples[0].image} alt="Creator speaking in a studio" /><div className="cloud-face-guide"><span>Speaker found</span></div><small>Studio conversation</small></div></div><div className="cloud-connector"><span>✧</span><small>A good moment,<br />beautifully framed.</small><b>→</b></div><div className="cloud-output"><img src={samples[0].image} alt="Portrait crop of the creator" /><span>YOUR NEXT SHORT</span><strong>Small changes.<br /><mark>Big difference.</mark></strong><small>Sample caption</small></div></div><div className="cloud-stage-bottom"><span><b>01</b> Find a moment</span><span><b>02</b> Follow the speaker</span><span><b>03</b> Add your style</span></div></div><div className="cloud-under-hero"><span>Built for the videos you already make.</span><b>Podcasts <i>✦</i> Tutorials <i>✦</i> Conversations <i>✦</i> Creator videos</b></div></section>
+    <section className="cloud-hero cloud-wrap" id="hero">
+      <div className="cloud-hero-grid">
+        <div className="cloud-hero-copy">
+          <p className="cloud-eyebrow"><i /> AI YOUTUBE SHORTS MAKER</p>
+          <h1>Turn long YouTube videos into <span>clips people stop for.</span></h1>
+          <p className="cloud-lede">Turn podcasts, interviews, tutorials, and long videos into ready-to-post YouTube Shorts, TikToks, and Instagram Reels—with AI-selected moments, vertical reframing, and captions.</p>
+          <CloudClipForm />
+          <div className="cloud-actions"><a className="cloud-text-link" href="#examples"><b>▶</b> Explore real examples</a></div>
+        </div>
+        <HeroDepthCarousel />
+      </div>
+      <div className="cloud-under-hero"><span>Built for the videos you already make.</span><b>Podcasts <i>✦</i> Tutorials <i>✦</i> Conversations <i>✦</i> Creator videos</b></div>
+    </section>
     <section className="cloud-examples cloud-section cloud-wrap" id="examples"><CloudHeading eyebrow="THE END RESULT, FIRST" title={<>Good footage.<br />Even better little moments.</>} copy="Different stories. Different treatments. Always something worth sharing." center /><div className="cloud-gallery">{samples.map((sample, index) => <article className="cloud-example" key={sample.title}><div><img src={sample.image} alt={sample.title} /><small>{['THE CONVERSATION', 'THE CHALLENGE', 'THE BIG IDEA'][index]}</small><strong>{index === 1 ? <>ONE MORE<br /><mark>DAY.</mark></> : <>A fresh<br /><em>perspective.</em></>}</strong><span>↗ Explore edit</span></div><h3>{sample.title}</h3><p>Portrait · {index === 1 ? 'Bold highlight' : 'Editorial'}</p></article>)}</div></section>
     <CloudAiWorkflow />
   </>
+}
+
+const heroCards = [
+  { id:'gameplay', eyebrow:'40:60 GAMEPLAY', title:'Minecraft split', note:'Face-aware crop · captions' },
+  { id:'title', eyebrow:'TITLE CARD', title:'Editorial opener', note:'Hook title · captions' },
+  { id:'captions', eyebrow:'CAPTION ONLY', title:'Clean & focused', note:'Default caption position' },
+]
+
+function HeroDepthCarousel() {
+  const [activeCard, setActiveCard] = useState(0)
+
+  const selectRelative = direction => setActiveCard(current => (current + direction + heroCards.length) % heroCards.length)
+  const handleKeys = event => {
+    if (event.key === 'ArrowRight') { event.preventDefault(); selectRelative(1) }
+    if (event.key === 'ArrowLeft') { event.preventDefault(); selectRelative(-1) }
+    if (event.key === 'Home') { event.preventDefault(); setActiveCard(0) }
+    if (event.key === 'End') { event.preventDefault(); setActiveCard(heroCards.length - 1) }
+  }
+
+  return <div className="hero-depth" aria-label="Three ShortClipr edit styles">
+    <div className="hero-depth-kicker"><span>REAL CLIP STYLES</span><b>Click a card to bring it forward</b></div>
+    <div className="hero-depth-stage" onKeyDown={handleKeys}>
+      {heroCards.map((card, index) => {
+        const offset = (index - activeCard + heroCards.length) % heroCards.length
+        const position = offset === 0 ? 'front' : offset === 1 ? 'right' : 'left'
+        return <button
+          type="button"
+          className={`hero-depth-card is-${position}`}
+          key={card.id}
+          onClick={() => setActiveCard(index)}
+          aria-label={`${card.title}: ${card.note}`}
+          aria-pressed={index === activeCard}
+          tabIndex={index === activeCard ? 0 : -1}
+        >
+          <span className="hero-depth-card-label">{card.eyebrow}</span>
+          {card.id === 'gameplay' && <span className="hero-depth-media hero-depth-gameplay">
+            <img src="/assets/hero-depth-gameplay-v2.png" alt="Streamer above Minecraft gameplay in a 40:60 split" />
+            <i>40:60 · FACE CROP</i>
+            <strong className="hero-depth-caption">This gameplay keeps<br /><mark>people watching.</mark></strong>
+          </span>}
+          {card.id === 'title' && <span className="hero-depth-media hero-depth-title-card">
+            <img src="/assets/hero-depth-workshop-v2.png" alt="Craftsperson working on a tile" />
+            <strong className="hero-depth-title">A signature<br />finish.</strong>
+            <span className="hero-depth-card-caption">Now I’m <mark>signing</mark><br />the tile.</span>
+          </span>}
+          {card.id === 'captions' && <span className="hero-depth-media hero-depth-caption-card">
+            <img src="/assets/hero-depth-podcast-v2.png" alt="Podcast speaker in a purple studio" />
+            <strong>And <mark>no longer</mark><br />work.</strong>
+          </span>}
+          <span className="hero-depth-card-meta"><b>{card.title}</b><small>{card.note}</small></span>
+        </button>
+      })}
+    </div>
+    <div className="hero-depth-controls">
+      <button type="button" onClick={() => selectRelative(-1)} aria-label="Previous clip style">←</button>
+      <span><b>0{activeCard + 1}</b> / 03</span>
+      <div aria-hidden="true">{heroCards.map((card, index) => <i className={index === activeCard ? 'active' : ''} key={card.id} />)}</div>
+      <button type="button" onClick={() => selectRelative(1)} aria-label="Next clip style">→</button>
+    </div>
+  </div>
 }
 
 function CloudClipForm() {
