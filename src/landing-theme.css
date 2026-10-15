@@ -7,7 +7,7 @@
 
 .youtube-shorts-landing { --sc-ink:#202c3c; --sc-muted:#566579; --sc-blue:#eff7fb; --sc-lilac:#f0ecf8; --sc-peach:#fff0e7; --sc-coral:#c94438; --sc-teal:#227d89; --sc-line:#dbe6ea; background:var(--sc-blue); color:var(--sc-ink); font-family:Manrope,Arial,sans-serif; }
 .youtube-shorts-landing *, .youtube-shorts-landing h1, .youtube-shorts-landing h2, .youtube-shorts-landing h3, .youtube-shorts-landing h4 { font-family:Manrope,Arial,sans-serif; }
-.youtube-shorts-landing main { overflow:hidden; }.youtube-shorts-landing :focus-visible { outline:3px solid var(--sc-teal); outline-offset:4px; }
+.youtube-shorts-landing main { overflow:visible; }.youtube-shorts-landing :focus-visible { outline:3px solid var(--sc-teal); outline-offset:4px; }
 
 /* Existing landing chapters share the calm cloud-studio palette. */
 .youtube-shorts-landing #how-it-works { background:#fcfdfc !important; }

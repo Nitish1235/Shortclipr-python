@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { GoogleLogin } from '@react-oauth/google'
 import Logo from './Logo'
+import ScrollWorkflow from './ScrollWorkflow'
 import { useAuth } from '../context/AuthContext'
 
 const samples = [
@@ -33,7 +34,7 @@ export default function CloudStudioLanding() {
       <div className="cloud-under-hero"><span>Built for the videos you already make.</span><b>Podcasts <i>✦</i> Tutorials <i>✦</i> Conversations <i>✦</i> Creator videos</b></div>
     </section>
     <section className="cloud-examples cloud-section cloud-wrap" id="examples"><CloudHeading eyebrow="THE END RESULT, FIRST" title={<>Good footage.<br />Even better little moments.</>} copy="Different stories. Different treatments. Always something worth sharing." center /><div className="cloud-gallery">{samples.map((sample, index) => <article className="cloud-example" key={sample.title}><div><img src={sample.image} alt={sample.title} /><small>{['THE CONVERSATION', 'THE CHALLENGE', 'THE BIG IDEA'][index]}</small><strong>{index === 1 ? <>ONE MORE<br /><mark>DAY.</mark></> : <>A fresh<br /><em>perspective.</em></>}</strong><span>↗ Explore edit</span></div><h3>{sample.title}</h3><p>Portrait · {index === 1 ? 'Bold highlight' : 'Editorial'}</p></article>)}</div></section>
-    <CloudAiWorkflow />
+    <ScrollWorkflow />
   </>
 }
 
@@ -45,13 +46,35 @@ const heroCards = [
 
 function HeroDepthCarousel() {
   const [activeCard, setActiveCard] = useState(0)
+  const autoTimers = useRef([])
 
-  const selectRelative = direction => setActiveCard(current => (current + direction + heroCards.length) % heroCards.length)
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    autoTimers.current = [
+      window.setTimeout(() => setActiveCard(1), 1600),
+      window.setTimeout(() => setActiveCard(2), 3200),
+    ]
+    return () => autoTimers.current.forEach(window.clearTimeout)
+  }, [])
+
+  const stopAutoSequence = () => {
+    autoTimers.current.forEach(window.clearTimeout)
+    autoTimers.current = []
+  }
+  const selectCard = index => {
+    stopAutoSequence()
+    setActiveCard(index)
+  }
+  const selectRelative = direction => {
+    stopAutoSequence()
+    setActiveCard(current => (current + direction + heroCards.length) % heroCards.length)
+  }
   const handleKeys = event => {
     if (event.key === 'ArrowRight') { event.preventDefault(); selectRelative(1) }
     if (event.key === 'ArrowLeft') { event.preventDefault(); selectRelative(-1) }
-    if (event.key === 'Home') { event.preventDefault(); setActiveCard(0) }
-    if (event.key === 'End') { event.preventDefault(); setActiveCard(heroCards.length - 1) }
+    if (event.key === 'Home') { event.preventDefault(); selectCard(0) }
+    if (event.key === 'End') { event.preventDefault(); selectCard(heroCards.length - 1) }
   }
 
   return <div className="hero-depth" aria-label="Three ShortClipr edit styles">
@@ -64,7 +87,7 @@ function HeroDepthCarousel() {
           type="button"
           className={`hero-depth-card is-${position}`}
           key={card.id}
-          onClick={() => setActiveCard(index)}
+          onClick={() => selectCard(index)}
           aria-label={`${card.title}: ${card.note}`}
           aria-pressed={index === activeCard}
           tabIndex={index === activeCard ? 0 : -1}
@@ -124,12 +147,6 @@ function CloudClipForm() {
     {showAuth && !user && <div className="cloud-auth"><strong>Your link is saved.</strong><p>Sign in to set up your project and explore the editing controls.</p><GoogleLogin onSuccess={async response => { const ok = await loginWithGoogleToken(response.credential); if (ok) navigate('/youtube-shorts/create'); else setError('Sign-in did not finish. Please try again.') }} onError={() => setError('Sign-in did not finish. Please try again.')} theme="outline" shape="rectangular" text="signin_with" size="medium" /></div>}
     {error && <p className="cloud-form-error" role="alert">{error}</p>}
   </div>
-}
-
-function CloudAiWorkflow() {
-  const ref = useRef(null); const [active, setActive] = useState(false)
-  useEffect(() => { const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) { setActive(true); observer.disconnect() } }, { threshold: .3 }); if (ref.current) observer.observe(ref.current); return () => observer.disconnect() }, [])
-  return <section id="moments" ref={ref} className={`cloud-ai-workflow ${active ? 'is-active' : ''}`}><div className="cloud-wrap cloud-section"><CloudHeading eyebrow="HOW SHORTCLIPR WORKS" title={<>How to turn a YouTube video<br />into Shorts with AI.</>} copy="Paste a link, review the strongest moments, and export clips formatted for every short-form platform." center /><div className="cloud-ai-film" aria-label="ShortClipr clip creation workflow"><div className="cloud-film-top"><span><i /> SHORTCLIPR STUDIO</span><span>AI workflow</span></div><div className="cloud-film-url"><span>⌕</span><b>https://www.youtube.com/watch?v=</b><em>1sajFpHn38M</em><i /></div><div className="cloud-film-stage source"><img src="/assets/workflow-source-conversation.png" alt="YouTube source video" /><span className="cloud-film-duration">39:30</span><div className="cloud-film-source-label">YouTube video connected</div></div><div className="cloud-film-stage find"><img src="/assets/workflow-moment-found.png" alt="AI found a strong moment" /><i className="cloud-film-scan" /><span className="cloud-film-ai-label">✦ AI found 3 strong moments</span><div className="cloud-film-timeline"><b /><b /><b className="active" /><b /><b /></div></div><div className="cloud-film-stage reframe"><div className="cloud-film-wide"><img src="/assets/workflow-moment-found.png" alt="Original wide source" /></div><span>→</span><div className="cloud-film-portrait"><img src="/assets/workflow-moment-found.png" alt="Portrait reframe" /><b>9:16</b></div></div><div className="cloud-film-stage captions"><img src="/assets/workflow-moment-found.png" alt="Captioned vertical short" /><p>That is the moment<br /><mark>people will remember.</mark></p><span className="cloud-film-ready">Ready to post</span></div><div className="cloud-film-status"><span>01 Connect</span><span>02 Find</span><span>03 Reframe</span><span>04 Caption</span></div></div><p className="cloud-ai-note">It starts automatically when you reach this section.</p></div></section>
 }
 
 function CloudHeading({ eyebrow, title, copy, center = false }) { return <div className={`cloud-heading ${center ? 'center' : ''}`}><p className="cloud-eyebrow">{eyebrow}</p><h2>{title}</h2><p>{copy}</p></div> }
