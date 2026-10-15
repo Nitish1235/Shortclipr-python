@@ -21,7 +21,7 @@ try {
   const [{ AuthProvider }, { default: ToolsIndex }, { default: ToolLanding },
     { default: GuidesIndex }, { default: GuideArticle },
     { default: AlternativesIndex }, { default: AlternativeLanding },
-    { toolSlugs }, { guideSlugs }, { reviewedAlternativeSlugs }] = await Promise.all([
+    { toolSlugs }, { guideSlugs }, { alternativeSlugs }] = await Promise.all([
     vite.ssrLoadModule('/src/context/AuthContext.jsx'),
     vite.ssrLoadModule('/src/pages/ToolsIndex.jsx'),
     vite.ssrLoadModule('/src/pages/ToolLanding.jsx'),
@@ -40,7 +40,7 @@ try {
     ['/youtube-shorts/guides', '/youtube-shorts/guides', GuidesIndex],
     ...guideSlugs.map(slug => [`/youtube-shorts/guides/${slug}`, '/youtube-shorts/guides/:slug', GuideArticle]),
     ['/youtube-shorts/alternatives', '/youtube-shorts/alternatives', AlternativesIndex],
-    ...reviewedAlternativeSlugs.map(slug => [`/youtube-shorts/alternatives/${slug}`, '/youtube-shorts/alternatives/:slug', AlternativeLanding]),
+    ...alternativeSlugs.map(slug => [`/youtube-shorts/alternatives/${slug}`, '/youtube-shorts/alternatives/:slug', AlternativeLanding]),
   ]
 
   for (const [url, routePattern, Page] of routes) {
