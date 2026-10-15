@@ -5,6 +5,7 @@
 // thin/duplicate-content penalties.
 
 import { priorityToolsContent } from './prioritySeoContent'
+import { seoIntentContent } from './seoIntentContent'
 
 const toolsContent = {
   'youtube-long-video-to-short': {
@@ -318,6 +319,7 @@ const toolsContent = {
 }
 
 Object.assign(toolsContent, priorityToolsContent)
+Object.assign(toolsContent, seoIntentContent)
 
 export default toolsContent
 export const toolSlugs = Object.keys(toolsContent)

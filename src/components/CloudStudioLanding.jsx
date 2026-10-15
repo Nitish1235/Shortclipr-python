@@ -23,7 +23,7 @@ export default function CloudStudioLanding() {
       <div className="cloud-hero-grid">
         <div className="cloud-hero-copy">
           <p className="cloud-eyebrow"><i /> AI YOUTUBE SHORTS MAKER</p>
-          <h1>Turn long YouTube videos into <span>clips people stop for.</span></h1>
+          <h1>Turn long YouTube videos into <span>Shorts worth watching.</span></h1>
           <p className="cloud-lede">Turn podcasts, interviews, tutorials, and long videos into ready-to-post YouTube Shorts, TikToks, and Instagram Reels—with AI-selected moments, vertical reframing, and captions.</p>
           <CloudClipForm />
           <div className="cloud-actions"><a className="cloud-text-link" href="#examples"><b>▶</b> Explore real examples</a></div>

@@ -3,9 +3,10 @@ import { useAuth } from '../context/AuthContext'
 import Logo from './Logo'
 
 const links = [
+  ['YouTube to Shorts', '/youtube-shorts/tools/youtube-to-shorts-converter'],
+  ['Podcast clips', '/youtube-shorts/tools/podcast-to-shorts'],
   ['Tools', '/youtube-shorts/tools'],
   ['Guides', '/youtube-shorts/guides'],
-  ['Compare', '/youtube-shorts/alternatives'],
 ]
 
 export default function SeoNavigation() {
