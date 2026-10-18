@@ -4,6 +4,7 @@ import Navigation from '../components/Navigation'
 import Footer from '../components/Footer'
 import { useAuth } from '../context/AuthContext'
 import { trackGoogleAdsConversion } from '../lib/googleAds'
+import { trackRedditEvent } from '../lib/redditAds'
 
 const SUBSCRIBE_CONVERSION_LABEL = import.meta.env.VITE_GOOGLE_ADS_SUBSCRIBE_LABEL || '1mVtCO-uipgdEJ3EjfhE'
 
@@ -22,6 +23,10 @@ export default function PaymentSuccess() {
         value: 1.0,
         currency: 'INR',
         transaction_id: params.get('payment_id') || undefined,
+      })
+      trackRedditEvent('Purchase', {
+        itemCount: 1,
+        products: [{ id: plan, category: 'subscription', name: plan, quantity: 1 }],
       })
     }
 

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { DodoPayments } from 'dodopayments-checkout'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { trackGoogleAdsConversion } from '../lib/googleAds'
+import { trackRedditEvent } from '../lib/redditAds'
 
 // Initialise Dodo overlay once
 const DODO_MODE = import.meta.env.VITE_DODO_MODE || 'test'
@@ -83,6 +84,10 @@ export default function Pricing() {
       }
       const { checkout_url } = await res.json()
       trackGoogleAdsConversion(import.meta.env.VITE_GOOGLE_ADS_CHECKOUT_LABEL)
+      trackRedditEvent('AddToCart', {
+        itemCount: 1,
+        products: [{ id: tier.dodoId, category: 'subscription', name: tier.name, quantity: 1 }],
+      })
       await DodoPayments.Checkout.open({ checkoutUrl: checkout_url })
     } catch (err) {
       setError(err.message)

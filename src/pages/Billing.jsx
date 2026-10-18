@@ -4,6 +4,7 @@ import { DodoPayments } from 'dodopayments-checkout'
 import { useAuth } from '../context/AuthContext'
 import AppLayout from '../components/AppLayout'
 import { trackGoogleAdsConversion } from '../lib/googleAds'
+import { trackRedditEvent } from '../lib/redditAds'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 // DodoPayments is already initialized in Pricing.jsx at bundle load time — do NOT call Initialize() again here
@@ -71,6 +72,10 @@ export default function Billing() {
       }
       const { checkout_url } = await res.json()
       trackGoogleAdsConversion(import.meta.env.VITE_GOOGLE_ADS_CHECKOUT_LABEL)
+      trackRedditEvent('AddToCart', {
+        itemCount: 1,
+        products: [{ id: planId, category: 'subscription', name: planId, quantity: 1 }],
+      })
       await DodoPayments.Checkout.open({ checkoutUrl: checkout_url })
     } catch (err) {
       setCheckoutErr(err.message)
