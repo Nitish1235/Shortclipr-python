@@ -68,7 +68,7 @@ import GuideArticle      from './pages/GuideArticle'
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'dummy-client-id.apps.googleusercontent.com'
 
-function LandingPage() {
+export function LandingPage() {
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -94,10 +94,11 @@ function LandingPage() {
   return (
     <div className="youtube-shorts-landing">
       <SEO
-        title="AI YouTube Shorts Maker | Turn Videos into Clips | ShortClipr"
+        title="Turn Long Videos into Shorts with AI | ShortClipr"
         description="Turn YouTube podcasts, interviews, and tutorials into vertical clip previews with AI-selected moments and captions. Review your clips in ShortClipr."
         keywords="AI YouTube Shorts maker, YouTube to Shorts, AI clip maker, long video to short clips, podcast to shorts, video to reels, TikTok clip maker"
         path="/youtube-shorts"
+        imageAlt="ShortClipr preview showing a long video transformed into vertical captioned Shorts"
         schema={{
           '@context': 'https://schema.org',
           '@type': 'SoftwareApplication',

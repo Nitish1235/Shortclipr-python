@@ -1,18 +1,25 @@
 import { useState } from 'react'
-import { DodoPayments } from 'dodopayments-checkout'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { trackGoogleAdsConversion } from '../lib/googleAds'
 import { trackRedditEvent } from '../lib/redditAds'
 
-// Initialise Dodo overlay once
 const DODO_MODE = import.meta.env.VITE_DODO_MODE || 'test'
-DodoPayments.Initialize({
-  mode: DODO_MODE,
-  displayType: 'overlay',
-  onEvent: (e) => {
-    if (e.event_type === 'checkout.error') console.error('Dodo:', e.data?.message)
-  },
-})
+let dodoInitialized = false
+
+async function openDodoCheckout(checkoutUrl) {
+  const { DodoPayments } = await import('dodopayments-checkout')
+  if (!dodoInitialized) {
+    DodoPayments.Initialize({
+      mode: DODO_MODE,
+      displayType: 'overlay',
+      onEvent: event => {
+        if (event.event_type === 'checkout.error') console.error('Dodo:', event.data?.message)
+      },
+    })
+    dodoInitialized = true
+  }
+  await DodoPayments.Checkout.open({ checkoutUrl })
+}
 
 // clips / videoHours / maxVideoHours mirror backend/app/core/plan_limits.py — keep in
 // sync. These are the "legacy slider" tiers — the only ones with real Dodo products
@@ -88,7 +95,7 @@ export default function Pricing() {
         itemCount: 1,
         products: [{ id: tier.dodoId, category: 'subscription', name: tier.name, quantity: 1 }],
       })
-      await DodoPayments.Checkout.open({ checkoutUrl: checkout_url })
+      await openDodoCheckout(checkout_url)
     } catch (err) {
       setError(err.message)
     } finally {

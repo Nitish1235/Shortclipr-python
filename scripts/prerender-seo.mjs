@@ -18,11 +18,12 @@ const vite = await createServer({
 })
 
 try {
-  const [{ AuthProvider }, { default: ToolsIndex }, { default: ToolLanding },
+  const [{ AuthProvider }, { LandingPage }, { default: ToolsIndex }, { default: ToolLanding },
     { default: GuidesIndex }, { default: GuideArticle },
     { default: AlternativesIndex }, { default: AlternativeLanding },
     { toolSlugs }, { guideSlugs }, { alternativeSlugs }] = await Promise.all([
     vite.ssrLoadModule('/src/context/AuthContext.jsx'),
+    vite.ssrLoadModule('/src/App.jsx'),
     vite.ssrLoadModule('/src/pages/ToolsIndex.jsx'),
     vite.ssrLoadModule('/src/pages/ToolLanding.jsx'),
     vite.ssrLoadModule('/src/pages/GuidesIndex.jsx'),
@@ -35,6 +36,7 @@ try {
   ])
 
   const routes = [
+    ['/youtube-shorts', '/youtube-shorts', LandingPage],
     ['/youtube-shorts/tools', '/youtube-shorts/tools', ToolsIndex],
     ...toolSlugs.map(slug => [`/youtube-shorts/tools/${slug}`, '/youtube-shorts/tools/:slug', ToolLanding]),
     ['/youtube-shorts/guides', '/youtube-shorts/guides', GuidesIndex],
@@ -59,7 +61,10 @@ try {
 
     // React 19 hoists title, metadata, canonical, and JSON-LD ahead of the
     // rendered page during static rendering. Keep that exact page metadata.
-    const pageStart = body.indexOf('<div class="seo-site"')
+    const pageStart = Math.max(
+      body.indexOf('<div class="seo-site"'),
+      body.indexOf('<div class="youtube-shorts-landing"')
+    )
     if (pageStart < 0) throw new Error(`Missing page markup for ${url}`)
     const head = body.slice(0, pageStart)
     const pageMarkup = body.slice(pageStart)
