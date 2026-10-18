@@ -44,6 +44,7 @@ from app.pipeline.extractor import (
     _compute_zoom_beats, _get_source, extract_clip, probe_clip_start_offset, reframe_and_caption,
 )
 from app.pipeline.face_tracker import compute_face_track
+from app.pipeline.landing_examples import LANDING_VARIANTS, publish_landing_examples
 from app.pipeline.stream import get_stream_urls
 from app.pipeline.uploader import (
     cleanup_job_files, generate_thumbnail,
@@ -172,6 +173,11 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
     bar_color        = options.get("bar_color",       "#0d0d0d")
     aspect           = options.get("aspect",          "9:16")
     gameplay_clip_id = options.get("gameplay_clip_id", None)
+    landing_showcase = bool(options.get("landing_showcase"))
+    if landing_showcase:
+        # Landing examples are a product demo, not a marketer CTA export.
+        is_marketer = False
+        cta_settings = None
 
     reserved_credits       = options.get("reserved_credits",       0)
     video_minutes_reserved = options.get("video_minutes_reserved", 0.0)
@@ -263,6 +269,11 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
         async def _process_one_clip(i: int, ts: ClipTimestamp) -> dict:
             nonlocal clips_done
 
+            variant = LANDING_VARIANTS[i] if landing_showcase and i < len(LANDING_VARIANTS) else None
+            render_style = variant["style"] if variant else clip_style
+            render_color = variant["color"] if variant else color_combo
+            render_template = variant["short_template"] if variant else short_template
+
             raw_clip_path = job_dir / f"clip_{i:02d}_trimmed.mp4"
             caption_base: float = ts.start   # see orchestrator.py for full explanation
 
@@ -312,12 +323,21 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
                 "viral_score":        ts.viral_score,
                 "top_title":          ts.title_with_emoji,
                 "bottom_tag":         f"#{ts.title.lower().replace(' ', '')}",
-                "caption_style":      clip_style,
+                "caption_style":      render_style,
                 "ai_reason":          ts.reason,
                 "captions_data":      [],
-                "editor_config":      {},
+                "editor_config":      {
+                    "short_template": render_template,
+                    "caption_style": render_style,
+                    "color_combo": render_color,
+                    "caption_y": caption_y,
+                    "caption_scale": caption_scale,
+                } if landing_showcase else {},
             }
-            await db.insert_clip(clip_data)
+            # Landing outputs are not user clips: keep renders temporary and
+            # publish them only to the dedicated gameplay bucket below.
+            if not landing_showcase:
+                await db.insert_clip(clip_data)
 
             try:
                 job_check = await db.get_job(job_id)
@@ -340,9 +360,9 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
                         raw_clip_path,
                         job_dir / f"clip_{i:02d}_vertical.mp4",
                         job_dir / f"clip_{i:02d}_captioned.mp4",
-                        template=short_template, bar_color=bar_color,
+                        template=render_template, bar_color=bar_color,
                         zoom_beats=zoom_beats, aspect=aspect,
-                        captions=captions, style=clip_style, color=color_combo,
+                        captions=captions, style=render_style, color=render_color,
                         h_align=h_align, v_align=v_align, words_per_line=words_per_line,
                         caption_y=caption_y, caption_scale=caption_scale,
                         hook_title=(ts.title_with_emoji if hook_title_enabled else None),
@@ -359,38 +379,49 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
                 thumb_path = job_dir / f"clip_{i:02d}_thumb.jpg"
                 await generate_thumbnail(captioned_path, thumb_path)
 
-                async with _step(job_id, f"clip {i} phase2 upload"):
-                    thumb_exists = thumb_path.exists() and thumb_path.stat().st_size > 0
-                    upload_tasks = [
-                        upload_clip(captioned_path, job_id, clip_id),
-                        upload_raw_clip(reframed_path, job_id, clip_id),
-                        upload_thumbnail(thumb_path, job_id, clip_id) if thumb_exists else _empty_str(),
-                    ]
-                    final_url, raw_vertical_url, thumb_url = await asyncio.gather(*upload_tasks)
+                if not landing_showcase:
+                    async with _step(job_id, f"clip {i} phase2 upload"):
+                        thumb_exists = thumb_path.exists() and thumb_path.stat().st_size > 0
+                        upload_tasks = [
+                            upload_clip(captioned_path, job_id, clip_id),
+                            upload_raw_clip(reframed_path, job_id, clip_id),
+                            upload_thumbnail(thumb_path, job_id, clip_id) if thumb_exists else _empty_str(),
+                        ]
+                        final_url, raw_vertical_url, thumb_url = await asyncio.gather(*upload_tasks)
 
-                await db.update_clip_final_url(
-                    clip_id=clip_id,
-                    video_url=final_url,
-                    raw_video_url=raw_vertical_url,
-                    thumbnail_url=thumb_url,
-                    captions_data=captions_to_dict(captions),
-                )
+                    await db.update_clip_final_url(
+                        clip_id=clip_id,
+                        video_url=final_url,
+                        raw_video_url=raw_vertical_url,
+                        thumbnail_url=thumb_url,
+                        captions_data=captions_to_dict(captions),
+                    )
             except BaseException:
-                # Row was inserted (clip_ready=FALSE) before this point —
-                # without cleanup it's a permanent orphan since nothing else
-                # ever marks it ready or removes it.
-                await db.delete_clip(clip_id)
+                if not landing_showcase:
+                    # A normal clip row was inserted as not-ready above.
+                    await db.delete_clip(clip_id)
                 raise
 
             clips_done += 1
             pct = 33 + int(57 * clips_done / total)
             await db.update_job_progress(job_id, pct, f"HD ready: {clips_done}/{total} clips encoded...")
-            logger.info(f"[{job_id}] Clip {i} HD live (clip_id={clip_id})")
+            logger.info(f"[{job_id}] Clip {i} HD ready (clip_id={clip_id})")
 
-            for p in [raw_clip_path, captioned_path, reframed_path, thumb_path]:
+            disposable_paths = [raw_clip_path, reframed_path]
+            if not landing_showcase:
+                disposable_paths.extend([captioned_path, thumb_path])
+            for p in disposable_paths:
                 p.unlink(missing_ok=True)
 
-            return {**clip_data, "video_url": final_url}
+            result = {**clip_data, "video_url": "" if landing_showcase else final_url}
+            if landing_showcase:
+                result.update({
+                    "index": i,
+                    "title": ts.title,
+                    "video_path": str(captioned_path),
+                    "thumbnail_path": str(thumb_path),
+                })
+            return result
 
         results = await asyncio.gather(
             *[_process_one_clip(i, ts) for i, ts in enumerate(timestamps)],
@@ -421,7 +452,18 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
         if job_check and job_check.get("status") == "cancelled":
             raise RuntimeError(f"Job {job_id} cancelled")
 
-        await db.update_job_progress(job_id, 90, "Finalizing...")
+        if landing_showcase:
+            if uploaded_count != len(LANDING_VARIANTS):
+                raise RuntimeError(
+                    f"Landing set needs {len(LANDING_VARIANTS)} clips; only {uploaded_count} encoded successfully"
+                )
+            await db.update_job_progress(job_id, 91, "Publishing three landing previews...")
+            await publish_landing_examples(
+                job_id, video_id, metadata.get("title", ""),
+                int(metadata.get("duration") or 0), results, job_dir,
+            )
+
+        await db.update_job_progress(job_id, 95 if landing_showcase else 90, "Finalizing...")
         await db.complete_job(job_id, uploaded_count)
 
         # Partial-refund: reserved N credits (one per requested clip), only
@@ -441,19 +483,20 @@ async def _execute_ffmpeg_stage(job_id: str) -> None:
         # "Your clips are ready" email — best-effort, never allowed to fail
         # a job that already succeeded. send_email() itself never raises,
         # but the DB lookup here could, so this whole block is wrapped too.
-        try:
-            user = await db.get_user(user_id)
-            if user and user.get("email"):
-                is_paid = bool(user.get("plan")) and user.get("plan") != "free"
-                plural = uploaded_count != 1
-                await asyncio.to_thread(
-                    send_email,
-                    user["email"],
-                    f"Your {uploaded_count} clip{'s' if plural else ''} {'are' if plural else 'is'} ready 🎬",
-                    clips_ready_email_html(metadata.get("title", ""), uploaded_count, is_paid),
-                )
-        except Exception as email_exc:
-            logger.warning(f"[{job_id}] Failed to send 'clips ready' email: {email_exc}")
+        if not landing_showcase:
+            try:
+                user = await db.get_user(user_id)
+                if user and user.get("email"):
+                    is_paid = bool(user.get("plan")) and user.get("plan") != "free"
+                    plural = uploaded_count != 1
+                    await asyncio.to_thread(
+                        send_email,
+                        user["email"],
+                        f"Your {uploaded_count} clip{'s' if plural else ''} {'are' if plural else 'is'} ready 🎬",
+                        clips_ready_email_html(metadata.get("title", ""), uploaded_count, is_paid),
+                    )
+            except Exception as email_exc:
+                logger.warning(f"[{job_id}] Failed to send 'clips ready' email: {email_exc}")
 
     finally:
         if not success:

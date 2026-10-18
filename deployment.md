@@ -347,6 +347,12 @@ Gameplay MP4s upload directly from the admin browser to GCS through a short-live
 
 Apply that JSON with your normal Cloud Storage CORS configuration process. The Cloud Run API service account must retain object create/read permissions for this bucket so it can create upload sessions and generate thumbnails.
 
+### Landing-page Shorts example set
+
+In Admin → Generate & Assign → Landing page examples, submit a YouTube URL with a transcript. The normal API/FFmpeg rendering stages produce three captioned Shorts, but landing-mode output bypasses the regular user clips table and main clips bucket. After all three finish, the FFmpeg worker uploads the source thumbnail, full clips, posters, and silent 10-second previews only under `gs://shortclipr-gameplay-bg/landing/multiple-shorts/<job-id>/`, then switches `current.json`. Local worker files are temporary and removed after the job. The previous landing set stays live if a generation or upload fails.
+
+Set `GAMEPLAY_GCS_BUCKET_NAME=shortclipr-gameplay-bg` on both the API service and every FFmpeg worker (and the API worker if separately deployed). The API and FFmpeg worker service accounts need object read/write access to this bucket; the published objects need public-read bucket IAM, as with gameplay thumbnails. The admin form rejects a mismatched bucket configuration instead of silently writing elsewhere. No local upload or new pipeline service is needed.
+
 ---
 
 ## 7. What Changed (Migration Guide for Existing Deployments)

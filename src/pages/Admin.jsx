@@ -1012,6 +1012,9 @@ export default function Admin() {
   const [genLoading, setGenLoading] = useState(false)
   const [genJobId, setGenJobId] = useState(null)
   const [genJob, setGenJob] = useState(null)               // { status, progress, current_step, error_message }
+  const [genMode, setGenMode] = useState('assign')
+  const [genJobLanding, setGenJobLanding] = useState(false)
+  const [landingSet, setLandingSet] = useState(null)
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type })
@@ -1046,6 +1049,13 @@ export default function Admin() {
 
   useEffect(() => { fetchShowcase(); fetchLibrary(); }, [])
   useEffect(() => { if (tab === 'jobs') fetchJobs() }, [tab])
+  useEffect(() => {
+    if (tab !== 'generate') return
+    fetch(`${API}/landing/multiple-shorts`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setLandingSet(d?.set || null))
+      .catch(() => {})
+  }, [tab])
 
   const handleAddToShowcase = async (payload) => {
     const r = await authFetch('/admin/showcase/add', { method: 'POST', body: JSON.stringify(payload) })
@@ -1091,16 +1101,17 @@ export default function Admin() {
 
   const handleGenerate = async (e) => {
     e.preventDefault()
-    if (!genUrl.trim() || !genFoundUser) return
+    if (!genUrl.trim() || (genMode === 'assign' && !genFoundUser)) return
     setGenLoading(true)
     setGenJob(null)
     try {
       const r = await authFetch('/admin/jobs/assign', {
         method: 'POST',
         body: JSON.stringify({
-          email: genFoundUser.email,
+          email: genMode === 'assign' ? genFoundUser.email : '',
           youtube_url: genUrl.trim(),
-          options: {
+          landing_showcase: genMode === 'landing',
+          options: genMode === 'landing' ? {} : {
             clip_count: genClipCount,
             min_duration: genMinDuration,
             max_duration: genMaxDuration,
@@ -1115,6 +1126,7 @@ export default function Admin() {
       }
       const d = await r.json()
       setGenJobId(d.job_id)
+      setGenJobLanding(genMode === 'landing')
       setGenJob({ status: 'processing', progress: 0, current_step: 'Starting...' })
     } catch (err) {
       showToast(err.message, 'error')
@@ -1128,11 +1140,20 @@ export default function Admin() {
     const t = setInterval(async () => {
       try {
         const r = await authFetch(`/admin/jobs/${genJobId}/status`)
-        if (r.ok) setGenJob(await r.json())
+        if (r.ok) {
+          const status = await r.json()
+          setGenJob(status)
+          if (genJobLanding && status.status === 'completed') {
+            fetch(`${API}/landing/multiple-shorts`)
+              .then(response => response.ok ? response.json() : null)
+              .then(data => setLandingSet(data?.set || null))
+              .catch(() => {})
+          }
+        }
       } catch { /* keep polling */ }
     }, 3000)
     return () => clearInterval(t)
-  }, [genJobId, genJob])
+  }, [genJobId, genJob, genJobLanding])
 
   // Status badge helper
   const statusBadge = (status) => {
@@ -1368,16 +1389,35 @@ export default function Admin() {
         {tab === 'generate' && (
           <div style={{ maxWidth: '600px' }}>
             <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#111', marginBottom: '8px' }}>
-              Generate & Assign Clip
+              Generate & Assign
             </h2>
             <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '20px', lineHeight: 1.6 }}>
-              Support tool: generate clips for a YouTube URL and hand them directly to a user — e.g. when their
-              own job failed. The job runs exactly like a normal user job: it shows up in their dashboard and
-              they get the same "clips ready" email, but it doesn't cost them any plan credits.
+              Generate clips for a user, or publish a three-style example set for the landing page. Both use the same production ShortClipr pipeline.
             </p>
 
+            <div role="group" aria-label="Generation destination" style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              {[['assign', 'Assign to user'], ['landing', 'Landing page examples']].map(([mode, label]) => (
+                <button key={mode} type="button" onClick={() => setGenMode(mode)} aria-pressed={genMode === mode}
+                  style={{ ...btnOutline, flex: 1, background: genMode === mode ? '#cf1322' : '#fff', color: genMode === mode ? '#fff' : '#cf1322' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {genMode === 'landing' && (
+              <div style={{ ...card, marginBottom: '16px', background: '#f5f8fc', borderColor: '#dbe6ef', lineHeight: 1.6, fontSize: '0.8rem', color: '#334155' }}>
+                <strong style={{ display: 'block', color: '#132b3b', marginBottom: '7px' }}>One link → three distinct Shorts</strong>
+                <div>01 · Fullscreen · Editorial captions · Rose Ink</div>
+                <div>02 · Zoom blur · Pop captions · Green Dark</div>
+                <div>03 · Glass · Shake captions · Electric Blue</div>
+                <small style={{ display: 'block', marginTop: '8px', color: '#64748b' }}>
+                  Default caption size and position. The source thumbnail, full clips, posters, and lightweight 10-second previews save only to shortclipr-gameplay-bg after all three finish—not to user clip storage.
+                </small>
+              </div>
+            )}
+
             <form onSubmit={handleGenerate} style={{ ...card }}>
-              <div style={{ marginBottom: '14px' }}>
+              {genMode === 'assign' && <div style={{ marginBottom: '14px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '8px' }}>
                   User email
                 </label>
@@ -1399,7 +1439,7 @@ export default function Admin() {
                     <span style={badge('#666', '#f4f4f4')}>{genFoundUser.plan} plan</span>
                   </div>
                 )}
-              </div>
+              </div>}
 
               <div style={{ marginBottom: '14px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '8px' }}>
@@ -1412,7 +1452,7 @@ export default function Admin() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '14px' }}>
+              {genMode === 'assign' && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '14px' }}>
                 <div>
                   <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#555', display: 'block', marginBottom: '6px' }}>Clip count</label>
                   <input type="number" min={1} max={10} value={genClipCount} onChange={e => setGenClipCount(Number(e.target.value))}
@@ -1442,11 +1482,11 @@ export default function Admin() {
                     {['9:16', '16:9', '1:1'].map(a => <option key={a} value={a}>{a}</option>)}
                   </select>
                 </div>
-              </div>
+              </div>}
 
-              <button type="submit" disabled={genLoading || !genUrl.trim() || !genFoundUser || (genJob && genJob.status === 'processing')}
+              <button type="submit" disabled={genLoading || !genUrl.trim() || (genMode === 'assign' && !genFoundUser) || (genJob && !['completed', 'failed', 'error'].includes(genJob.status))}
                 style={{ ...btnRed, width: '100%', padding: '13px', fontSize: '0.88rem' }}>
-                {genLoading ? 'Starting…' : `⚡ Generate & assign to ${genFoundUser ? genFoundUser.email : 'user'}`}
+                {genLoading ? 'Starting…' : genMode === 'landing' ? '✦ Generate & publish landing examples' : `⚡ Generate & assign to ${genFoundUser ? genFoundUser.email : 'user'}`}
               </button>
             </form>
 
@@ -1468,9 +1508,17 @@ export default function Admin() {
                 )}
                 {genJob.status === 'completed' && (
                   <div style={{ marginTop: '10px', color: '#16a34a', fontSize: '0.85rem', fontWeight: 600 }}>
-                    ✓ Done — {genFoundUser?.email} has been notified and can see the clips in their dashboard.
+                    {genJobLanding ? '✓ All three examples are published on the landing page.' : `✓ Done — ${genFoundUser?.email} has been notified and can see the clips in their dashboard.`}
                   </div>
                 )}
+              </div>
+            )}
+
+            {genMode === 'landing' && landingSet && (
+              <div style={{ ...card, marginTop: '16px', fontSize: '0.8rem', color: '#334155' }}>
+                <strong>Currently live</strong>
+                <p style={{ margin: '6px 0' }}>{landingSet.source?.title || 'YouTube source'} · {landingSet.clips?.length || 0} Shorts</p>
+                <small>Published {landingSet.published_at ? new Date(landingSet.published_at).toLocaleString() : 'recently'} · Job {landingSet.job_id}</small>
               </div>
             )}
           </div>

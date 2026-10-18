@@ -175,7 +175,7 @@ async def _execute_api_stage(
     # Mirrors jobs.py — only fires when jobs.py's own prefetch failed and
     # deferred validation here. Clamp instead of reject so a free-plan user
     # who submitted a 61-min video still gets 30 min processed.
-    if prefetched_duration <= 0:
+    if prefetched_duration <= 0 and not options.get("admin_comped"):
         max_video_sec = get_max_video_minutes(plan) * 60
         if billable_seconds > max_video_sec:
             old_end = gateway_end
@@ -208,7 +208,7 @@ async def _execute_api_stage(
     # Only runs when jobs.py couldn't pre-flight (metadata prefetch failed).
     # Same reason as orchestrator.py's version — see supabase.reserve_video_minutes.
     video_minutes_reserved = options.get("video_minutes_reserved", 0.0)
-    if video_minutes_reserved <= 0:
+    if video_minutes_reserved <= 0 and not options.get("admin_comped"):
         ok, quota_msg, video_minutes_reserved = await db.reserve_video_minutes(
             user_id, billable_seconds, plan,
         )
@@ -264,6 +264,8 @@ async def _execute_api_stage(
     # back to the original transcript on any failure, never blocks the job.
     await db.update_job_progress(job_id, 12, "Cleaning up transcript...")
     transcript = await clean_transcript(transcript, video_id=job_id)
+    if options.get("landing_showcase") and not transcript:
+        raise RuntimeError("Landing examples need a YouTube video with a transcript so all three Shorts have captions")
 
     # ── STEP 5: Clip selection — AI (transcript available) or random fallback ──
     # or manual override if user provided exact ranges
@@ -294,6 +296,11 @@ async def _execute_api_stage(
 
     if not timestamps:
         raise RuntimeError("Could not find any suitable clip moments in this video")
+
+    if options.get("landing_showcase"):
+        timestamps = timestamps[:3]
+        if len(timestamps) != 3:
+            raise RuntimeError("Could not find three captioned moments in this video; try a longer source")
 
     logger.info(f"[{job_id}] {'AI' if transcript else 'Random (no transcript)'} found {len(timestamps)} clips")
 

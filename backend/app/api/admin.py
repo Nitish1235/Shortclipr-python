@@ -45,6 +45,9 @@ from app.core.worker_routing import has_multi_region_workers
 from app.db import supabase as db
 from app.api.jobs import JobOptions
 from app.pipeline.orchestrator import run_pipeline
+from app.pipeline.landing_examples import (
+    LANDING_BUCKET_NAME, LANDING_VARIANTS, read_landing_examples, require_landing_bucket,
+)
 from app.pipeline.stream import extract_video_id, get_video_metadata
 from app.pipeline.uploader import _upload_to_gcs
 
@@ -278,6 +281,17 @@ async def get_showcase():
     loop = asyncio.get_running_loop()
     items = await loop.run_in_executor(None, _list_showcase_sync)
     return {"videos": items, "count": len(items)}
+
+
+@router.get("/landing/multiple-shorts", tags=["public"])
+async def get_landing_multiple_shorts():
+    """Current atomic three-clip set for the landing page, if published."""
+    try:
+        current = await asyncio.to_thread(read_landing_examples)
+    except Exception as exc:
+        logger.warning("Could not read landing example set: %s", exc)
+        current = None
+    return {"set": current}
 
 
 @router.get("/library", tags=["public"])
@@ -764,9 +778,10 @@ async def admin_set_user_plan(body: AdminSetPlanRequest, admin: AdminUser):
 
 
 class AdminAssignJobRequest(BaseModel):
-    email: str
+    email: str = ""
     youtube_url: str
     options: JobOptions = JobOptions()
+    landing_showcase: bool = False
 
 
 @router.post("/admin/jobs/assign")
@@ -780,9 +795,16 @@ async def admin_assign_job(body: AdminAssignJobRequest, admin: AdminUser):
     POST /jobs enforces — this is an admin-comped job and must not eat
     into the target user's plan quota.
     """
-    target_user = await db.get_user_by_email(body.email.strip().lower())
+    if body.landing_showcase:
+        try:
+            require_landing_bucket()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        target_user = await db.get_user(admin.user_id)
+    else:
+        target_user = await db.get_user_by_email(body.email.strip().lower())
     if not target_user:
-        raise HTTPException(status_code=404, detail="No user with that email")
+        raise HTTPException(status_code=404, detail="Target user not found")
     target_user_id = str(target_user["id"])
 
     video_id = extract_video_id(body.youtube_url)
@@ -799,10 +821,32 @@ async def admin_assign_job(body: AdminAssignJobRequest, admin: AdminUser):
         video_meta = {"title": "", "duration": 0, "thumbnail": ""}
 
     options = body.options.model_dump()
+    if body.landing_showcase:
+        # Only the admin endpoint may request this preset. The standard API
+        # stage still chooses three moments; FFmpeg applies one variant per
+        # resulting clip through the same encoder used for user jobs.
+        options.update({
+            "clip_count": len(LANDING_VARIANTS),
+            "min_duration": 30,
+            "max_duration": 60,
+            "quality": "1080p",
+            "aspect": "9:16",
+            "h_align": "center",
+            "v_align": "bottom",
+            "words_per_line": 2,
+            "caption_y": 0.80,
+            "caption_scale": 1.0,
+            "hook_title_enabled": False,
+            "landing_showcase": True,
+        })
+    # Admin-generated work never consumes a user's plan allowance. This flag
+    # is handled by the ordinary API stage's fallback quota path as well.
+    options["admin_comped"] = True
     video_duration_seconds = int(video_meta.get("duration", 0))
     if video_duration_seconds > 0:
         options["prefetched_duration"] = video_duration_seconds
         options["prefetched_title"]    = video_meta.get("title", "")
+        options["gateway_end"] = video_duration_seconds
     options["plan"] = target_user.get("plan") or "free"
     # No reserved_credits key — ffmpeg_stage.py's refund-on-failure logic
     # treats a missing/zero value as "nothing to release", so this is a
@@ -832,7 +876,7 @@ async def admin_assign_job(body: AdminAssignJobRequest, admin: AdminUser):
         initial_status,
         0,
         "Starting pipeline..." if not multi_region else "Queued...",
-        body.options.clip_count,
+        options["clip_count"],
         queue_payload,
         now,
     )
@@ -846,8 +890,14 @@ async def admin_assign_job(body: AdminAssignJobRequest, admin: AdminUser):
             name=f"admin-assign-{job_id[:8]}",
         )
 
-    logger.info(f"Admin {admin.email} generated job {job_id} for {body.email}")
-    return {"job_id": job_id, "assigned_to": body.email}
+    assigned_to = target_user.get("email") or admin.email
+    logger.info("Admin %s generated job %s for %s%s", admin.email, job_id, assigned_to, " (landing set)" if body.landing_showcase else "")
+    return {
+        "job_id": job_id,
+        "assigned_to": assigned_to,
+        "landing_showcase": body.landing_showcase,
+        "landing_bucket": LANDING_BUCKET_NAME if body.landing_showcase else None,
+    }
 
 
 @router.get("/admin/jobs/{job_id}/status")
