@@ -13,14 +13,30 @@ async function fetchClipPage(offset, signal) {
   return response.json()
 }
 
-function ClipTile({ clip, onPlay }) {
+function ClipTile({ clip, isPlaying, onToggle }) {
   const [imageFailed, setImageFailed] = useState(false)
   return (
-    <button type="button" className="admin-clip-tile" onClick={() => onPlay(clip)} aria-label="Play clip">
-      {clip.thumbnail_url && !imageFailed ? (
+    <button
+      type="button"
+      className={`admin-clip-tile${isPlaying ? ' is-playing' : ''}`}
+      onClick={() => onToggle(clip.clip_id)}
+      aria-label={isPlaying ? 'Stop clip' : 'Play clip'}
+      aria-pressed={isPlaying}
+    >
+      {isPlaying ? (
+        <video
+          key={clip.clip_id}
+          src={clip.video_url}
+          poster={clip.thumbnail_url || undefined}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+        />
+      ) : clip.thumbnail_url && !imageFailed ? (
         <img src={clip.thumbnail_url} alt="" loading="lazy" decoding="async" onError={() => setImageFailed(true)} />
       ) : <span className="admin-clip-no-image" aria-hidden="true">▧</span>}
-      <span className="admin-clip-play" aria-hidden="true">▶</span>
     </button>
   )
 }
@@ -31,7 +47,7 @@ export default function AdminClipGallery() {
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [playing, setPlaying] = useState(null)
+  const [playingIds, setPlayingIds] = useState(() => new Set())
 
   useEffect(() => {
     const controller = new AbortController()
@@ -47,12 +63,14 @@ export default function AdminClipGallery() {
     return () => controller.abort()
   }, [])
 
-  useEffect(() => {
-    if (!playing) return
-    const onKeyDown = event => { if (event.key === 'Escape') setPlaying(null) }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [playing])
+  const toggleClip = clipId => {
+    setPlayingIds(current => {
+      const next = new Set(current)
+      if (next.has(clipId)) next.delete(clipId)
+      else next.add(clipId)
+      return next
+    })
+  }
 
   const refresh = async () => {
     if (loading) return
@@ -96,21 +114,20 @@ export default function AdminClipGallery() {
       {error && <div className="admin-clip-error" role="alert">{error}</div>}
       {clips.length > 0 && (
         <div className="admin-clip-grid">
-          {clips.map(clip => <ClipTile key={clip.clip_id} clip={clip} onPlay={setPlaying} />)}
+          {clips.map(clip => (
+            <ClipTile
+              key={clip.clip_id}
+              clip={clip}
+              isPlaying={playingIds.has(clip.clip_id)}
+              onToggle={toggleClip}
+            />
+          ))}
         </div>
       )}
       {loading && <p className="admin-clip-message">Loading clips…</p>}
       {!loading && !error && clips.length === 0 && <p className="admin-clip-message">No generated clips yet.</p>}
       {hasMore && clips.length > 0 && <button type="button" className="admin-clip-more" onClick={loadMore} disabled={loading}>Load more clips</button>}
 
-      {playing && (
-        <div className="admin-clip-modal-backdrop" role="presentation" onClick={() => setPlaying(null)}>
-          <div className="admin-clip-modal" role="dialog" aria-modal="true" aria-label="Clip player" onClick={event => event.stopPropagation()}>
-            <button type="button" className="admin-clip-close" onClick={() => setPlaying(null)} aria-label="Close clip player">×</button>
-            <video key={playing.clip_id} src={playing.video_url} poster={playing.thumbnail_url || undefined} controls autoPlay playsInline preload="metadata" />
-          </div>
-        </div>
-      )}
     </section>
   )
 }
