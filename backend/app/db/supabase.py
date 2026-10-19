@@ -693,17 +693,17 @@ async def get_clips_for_job(job_id: str) -> list[dict]:
     )
 
 
-async def get_all_ready_clips(limit: int = 150) -> list[dict]:
-    """Fetch raw successfully-encoded clips for the admin infinite wall."""
+async def get_all_ready_clips(limit: int = 150, offset: int = 0) -> list[dict]:
+    """Page through ready clips without returning user details or scores."""
     return await _fetch(
         """
         SELECT clip_id, video_url, thumbnail_url
         FROM clips
-        WHERE clip_ready = TRUE AND video_url IS NOT NULL
-        ORDER BY created_at DESC
-        LIMIT $1
+        WHERE clip_ready = TRUE AND video_url IS NOT NULL AND video_url <> ''
+        ORDER BY created_at DESC, clip_id DESC
+        LIMIT $1 OFFSET $2
         """,
-        limit,
+        limit, offset,
     )
 
 
