@@ -112,10 +112,8 @@ export function LandingPage() {
       <PromotionBar />
       <CloudNavigation />
       <main>
-        <CloudStudioLanding />
-
-        {/* Live admin-curated showcase, newest clips first */}
-        <VideoShowcase />
+        {/* The live admin-curated reel sits immediately below the hero. */}
+        <CloudStudioLanding afterHero={<VideoShowcase />} />
 
         <MultipleShorts />
 

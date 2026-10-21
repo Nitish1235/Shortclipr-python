@@ -83,7 +83,100 @@ class SubscriptionExpiryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(args[4], "sub_123")
         self.assertEqual(args[5], "active")
         self.assertEqual(args[6], datetime(2026, 11, 8, tzinfo=timezone.utc))
-        self.assertEqual(args[7], "user-4")
+        self.assertIsNone(args[7])
+        self.assertEqual(args[8], "user-4")
+
+    async def test_product_id_overrides_stale_plan_change_metadata(self):
+        payload = {
+            "subscription_id": "sub_changed",
+            "status": "active",
+            "next_billing_date": "2026-11-08T00:00:00Z",
+            "product_id": "pdt_0NgeHduLpMYA9bXMHQopz",
+            "metadata": {"user_id": "user-9", "plan": "growth_100"},
+            "customer": {"email": "changed@example.com"},
+        }
+        with (
+            patch.object(webhooks.db, "_fetchrow", new=AsyncMock(return_value={
+                "id": "user-9", "email": "changed@example.com"
+            })),
+            patch.object(webhooks.db, "_execute", new=AsyncMock()) as execute,
+        ):
+            await webhooks._handle_payment_succeeded(payload, reset_usage=False)
+
+        self.assertEqual(execute.await_args.args[1], "starter_100")
+
+    def test_payment_service_period_is_paid_period_deadline(self):
+        parsed = webhooks._subscription_access_until({
+            "subscription_id": "sub_123",
+            "service_periods": [
+                {
+                    "subscription_id": "sub_123",
+                    "ends_at": "2026-12-08T00:00:00Z",
+                }
+            ],
+        })
+        self.assertEqual(parsed, datetime(2026, 12, 8, tzinfo=timezone.utc))
+
+    async def test_unpause_restores_plan_without_resetting_usage(self):
+        payload = {
+            "subscription_id": "sub_resume",
+            "status": "active",
+            "next_billing_date": "2026-11-08T00:00:00Z",
+            "metadata": {"user_id": "user-6", "plan": "starter_30"},
+            "customer": {"email": "resume@example.com"},
+        }
+        with (
+            patch.object(webhooks.db, "_fetchrow", new=AsyncMock(return_value={
+                "id": "user-6", "email": "resume@example.com"
+            })),
+            patch.object(webhooks.db, "_execute", new=AsyncMock()) as execute,
+        ):
+            await webhooks._handle_payment_succeeded(payload, reset_usage=False)
+
+        query = execute.await_args.args[0]
+        self.assertNotIn("credits_used", query)
+        self.assertNotIn("video_minutes_used", query)
+
+    async def test_same_paid_period_does_not_reset_usage_twice(self):
+        payload = {
+            "subscription_id": "sub_same_period",
+            "status": "active",
+            "next_billing_date": "2026-11-08T00:00:00Z",
+            "metadata": {"user_id": "user-8", "plan": "starter_30"},
+            "customer": {"email": "same-period@example.com"},
+        }
+        with (
+            patch.object(webhooks.db, "_fetchrow", new=AsyncMock(return_value={
+                "id": "user-8", "email": "same-period@example.com"
+            })),
+            patch.object(webhooks.db, "_execute", new=AsyncMock()) as execute,
+        ):
+            await webhooks._handle_payment_succeeded(payload)
+
+        query = execute.await_args.args[0]
+        self.assertIn("plan_expires_at < $6", query)
+        self.assertIn("THEN 0 ELSE credits_used END", query)
+
+    async def test_failed_payment_preserves_entitlement_and_deadline(self):
+        payload = {
+            "subscription_id": "sub_failed",
+            "metadata": {"user_id": "user-7"},
+            "customer": {"email": "failed@example.com"},
+        }
+        with (
+            patch.object(webhooks.db, "_fetchrow", new=AsyncMock(return_value={
+                "id": "user-7",
+                "email": "failed@example.com",
+                "dodo_subscription_id": "sub_failed",
+            })),
+            patch.object(webhooks.db, "_execute", new=AsyncMock()) as execute,
+        ):
+            await webhooks._handle_payment_failed(payload)
+
+        query = execute.await_args.args[0]
+        self.assertNotIn("SET plan", query)
+        self.assertNotIn("plan_expires_at", query)
+        self.assertIn("subscription_status = 'payment_failed'", query)
 
     async def test_past_due_sync_does_not_reset_usage_or_credits(self):
         payload = {

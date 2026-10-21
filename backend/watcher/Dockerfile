@@ -13,7 +13,11 @@ WORKDIR /app
 COPY watcher/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy just the watcher package — nothing else from the backend tree
+# The dispatcher shares the canonical plan-limit definitions with the API.
+# Copy that tiny module too so the watcher can start without duplicating limits.
 COPY watcher/ ./watcher/
+COPY app/__init__.py ./app/__init__.py
+COPY app/core/__init__.py ./app/core/__init__.py
+COPY app/core/plan_limits.py ./app/core/plan_limits.py
 
 CMD ["python", "-m", "watcher.main"]

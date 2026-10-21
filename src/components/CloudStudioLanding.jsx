@@ -18,7 +18,7 @@ export function CloudNavigation() {
   return <nav className="cloud-nav"><Link className="cloud-brand" to="/youtube-shorts"><Logo size={28} /><span>ShortClipr</span></Link><div className="cloud-nav-links"><a href="#examples">Examples</a><a href="#moments">How it works</a><a href="#pricing">Pricing</a>{user && <Link to="/youtube-shorts/dashboard" className="cloud-nav-dashboard">Dashboard</Link>}</div><a className="cloud-button cloud-button-small" href="#" onClick={handleCTA}>{user ? 'Go to Dashboard ↗' : 'Create clips ↗'}</a></nav>
 }
 
-export default function CloudStudioLanding() {
+export default function CloudStudioLanding({ afterHero = null }) {
   return <>
     <section className="cloud-hero cloud-wrap" id="hero">
       <div className="cloud-hero-grid">
@@ -33,6 +33,7 @@ export default function CloudStudioLanding() {
       </div>
       <div className="cloud-under-hero"><span>Built for the videos you already make.</span><b>Podcasts <i>✦</i> Tutorials <i>✦</i> Conversations <i>✦</i> Creator videos</b></div>
     </section>
+    {afterHero}
     <section className="cloud-examples cloud-section cloud-wrap" id="examples"><CloudHeading eyebrow="THE END RESULT, FIRST" title={<>Good footage.<br />Even better little moments.</>} copy="Different stories. Different treatments. Always something worth sharing." center /><div className="cloud-gallery">{samples.map((sample, index) => <article className="cloud-example" key={sample.title}><div><img src={sample.image} alt={sample.title} /><small>{['THE CONVERSATION', 'THE CHALLENGE', 'THE BIG IDEA'][index]}</small><strong>{index === 1 ? <>ONE MORE<br /><mark>DAY.</mark></> : <>A fresh<br /><em>perspective.</em></>}</strong><span>↗ Explore edit</span></div><h3>{sample.title}</h3><p>Portrait · {index === 1 ? 'Bold highlight' : 'Editorial'}</p></article>)}</div></section>
     <ScrollWorkflow />
   </>

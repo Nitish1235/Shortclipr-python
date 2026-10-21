@@ -280,7 +280,9 @@ async def get_showcase():
     """
     loop = asyncio.get_running_loop()
     items = await loop.run_in_executor(None, _list_showcase_sync)
-    return {"videos": items, "count": len(items)}
+    # The landing reel intentionally stays small: newest admin selections only.
+    latest = items[:12]
+    return {"videos": latest, "count": len(latest)}
 
 
 @router.get("/landing/multiple-shorts", tags=["public"])

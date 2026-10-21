@@ -1064,6 +1064,9 @@ async def admin_set_user_plan(
         sets.append(f"plan = {_arg(plan)}")
         sets.append("dodo_subscription_id = NULL")
         sets.append("plan_expires_at = NULL")
+        # Make an explicit admin override newer than any already-queued Dodo
+        # delivery so a delayed webhook cannot silently undo it.
+        sets.append("dodo_event_at = NOW()")
         sets.append(f"subscription_status = '{'admin_free' if plan == 'free' else 'admin_granted'}'")
     if credits_limit is not None:
         p = _arg(credits_limit)

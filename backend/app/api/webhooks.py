@@ -40,8 +40,21 @@ DODO_PLAN_MAP = {
     "pdt_0NgeITaaybng8nbFGGQVJ": "pro_500",       # Shortclipr Pro — $45
     "pdt_0NgeIeZ1xzG2zp0LrON1E": "pro_1000",      # Shortclipr Pro — $79
     "pdt_0NgeIyALtdIRfRW1CrXc1": "pro_2000",      # Shortclipr Max — $145
-    # Current pricing tiers — no Dodo product created yet, add here once one exists
 }
+# Current products are configured through environment variables. Include them
+# dynamically so dashboard/API plan changes resolve from the authoritative
+# product id even when checkout metadata still names the previous tier.
+for _plan_name, _product_id in (
+    ("starter_30", settings.DODO_PRODUCT_STARTER_30),
+    ("growth_100", settings.DODO_PRODUCT_GROWTH_100),
+    ("unlimited", settings.DODO_PRODUCT_UNLIMITED),
+    ("starter_100", settings.DODO_PRODUCT_STARTER_100),
+    ("starter_250", settings.DODO_PRODUCT_STARTER_250),
+    ("pro_500", settings.DODO_PRODUCT_PRO_500),
+    ("pro_1000", settings.DODO_PRODUCT_PRO_1000),
+):
+    if _product_id:
+        DODO_PLAN_MAP[_product_id] = _plan_name
 
 # Successful payment with an unresolvable plan → grant the lowest paid tier
 # rather than free (they DID pay). Only hit if both metadata.plan and the
@@ -72,71 +85,100 @@ async def dodo_webhook(request: Request):
 
     event_type = event.get("type", "")
     payload    = event.get("data", {})
+    event_time = _parse_webhook_datetime(event.get("timestamp"))
 
     logger.info(f"Dodo webhook: {event_type}")
 
-    # Subscription activated (first payment), renewed, or changed → grant the
-    # current paid period. The paid-through deadline is persisted by the
-    # handlers and independently enforced on every user lookup.
-    if event_type in (
-        "payment.succeeded",
-        "subscription.active",
-        "subscription.renewed",
-        "subscription.plan_changed",
-        "subscription.unpaused",
-    ):
-        # Fire TikTok Events
-        from app.core.tiktok_events import send_tiktok_event_background
-        tt_event_name = "Purchase" if event_type == "payment.succeeded" else "Subscribe"
-        tt_email = (payload.get("customer") or {}).get("email")
-        if tt_email:
-            send_tiktok_event_background(
-                event_name=tt_event_name,
-                event_id=f"dodo_{event_type}_{payload.get('payment_id') or payload.get('subscription_id')}",
-                email=tt_email
-            )
-            from app.core.google_ads_events import record_google_ads_event_background
-            google_event_name = "Purchase" if event_type == "payment.succeeded" else "Subscribe"
-            record_google_ads_event_background(
-                event_name=google_event_name,
-                event_id=f"dodo_{event_type}_{payload.get('payment_id') or payload.get('subscription_id')}",
-                email=tt_email,
-                product=(payload.get('metadata') or {}).get('plan'),
-            )
+    # Dodo retries failed deliveries and can deliver the same event more than
+    # once. Claim the webhook id before touching entitlements. If processing
+    # fails, release the claim so Dodo's retry can try again.
+    claimed = await db._fetchrow(
+        """
+        INSERT INTO dodo_webhook_events (webhook_id, event_type, event_created_at)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (webhook_id) DO NOTHING
+        RETURNING webhook_id
+        """,
+        webhook_id, event_type, event_time,
+    )
+    if not claimed:
+        logger.info("Skipping duplicate Dodo webhook %s", webhook_id)
+        return {"received": True, "duplicate": True}
 
-        await _handle_payment_succeeded(payload)
-    elif event_type == "subscription.past_due":
-        # Dodo explicitly keeps access during the configured grace period.
-        # Sync the deadline without resetting monthly usage.
-        await _handle_subscription_state(payload)
-    elif event_type == "subscription.updated":
-        subscription_status = str(payload.get("status") or "").lower()
-        if subscription_status in ("active", "past_due"):
-            await _handle_subscription_state(payload)
-        elif subscription_status in ("on_hold", "paused", "cancelled", "failed", "expired"):
-            await _handle_downgrade(payload, subscription_status)
-    elif event_type == "payment.cancelled":
-        # A cancelled checkout never granted an entitlement.  In particular,
-        # do not downgrade by customer email here: a customer can abandon a
-        # second checkout while still having an unrelated active subscription.
-        logger.info(
-            "Dodo payment cancelled; no entitlement change "
-            "(payment_id=%s, subscription_id=%s)",
-            payload.get("payment_id"),
-            payload.get("subscription_id"),
-        )
-    elif event_type in (
-        "payment.refunded",
-        "subscription.cancelled",
-        "subscription.expired",
-        "subscription.failed",
-        "subscription.on_hold",
-        "subscription.paused",
-    ):
-        terminal_status = event_type.removeprefix("subscription.").removeprefix("payment.")
-        await _handle_downgrade(payload, terminal_status)
-    else:
-        logger.debug(f"Unhandled Dodo event type: {event_type}")
+    try:
+        # Only events that begin a newly-paid billing period reset allowance.
+        # Plan changes and unpauses restore the correct tier without gifting a
+        # fresh month's usage.
+        if event_type in (
+            "payment.succeeded",
+            "subscription.active",
+            "subscription.renewed",
+            "subscription.plan_changed",
+            "subscription.unpaused",
+        ):
+            # Fire TikTok Events
+            from app.core.tiktok_events import send_tiktok_event_background
+            tt_event_name = "Purchase" if event_type == "payment.succeeded" else "Subscribe"
+            tt_email = (payload.get("customer") or {}).get("email")
+            if tt_email:
+                send_tiktok_event_background(
+                    event_name=tt_event_name,
+                    event_id=f"dodo_{event_type}_{payload.get('payment_id') or payload.get('subscription_id')}",
+                    email=tt_email
+                )
+                from app.core.google_ads_events import record_google_ads_event_background
+                google_event_name = "Purchase" if event_type == "payment.succeeded" else "Subscribe"
+                record_google_ads_event_background(
+                    event_name=google_event_name,
+                    event_id=f"dodo_{event_type}_{payload.get('payment_id') or payload.get('subscription_id')}",
+                    email=tt_email,
+                    product=(payload.get('metadata') or {}).get('plan'),
+                )
+
+            reset_usage = event_type in (
+                "payment.succeeded", "subscription.active", "subscription.renewed"
+            )
+            await _handle_payment_succeeded(payload, event_time, reset_usage=reset_usage)
+        elif event_type == "subscription.past_due":
+            # Dodo explicitly keeps access during the configured grace period.
+            # Sync the deadline without resetting monthly usage.
+            await _handle_subscription_state(payload, event_time)
+        elif event_type == "subscription.updated":
+            subscription_status = str(payload.get("status") or "").lower()
+            if subscription_status in ("active", "past_due"):
+                await _handle_subscription_state(payload, event_time)
+            elif subscription_status in ("on_hold", "paused", "cancelled", "expired"):
+                await _handle_downgrade(payload, subscription_status, event_time)
+            elif subscription_status == "failed":
+                await _handle_payment_failed(payload, event_time)
+        elif event_type in ("payment.failed", "subscription.failed"):
+            # A failed attempt/mandate never granted a new entitlement. Record
+            # it, but do not revoke an unrelated existing subscription.
+            await _handle_payment_failed(payload, event_time)
+        elif event_type == "payment.cancelled":
+            # A cancelled checkout never granted an entitlement.  In particular,
+            # do not downgrade by customer email here: a customer can abandon a
+            # second checkout while still having an unrelated active subscription.
+            logger.info(
+                "Dodo payment cancelled; no entitlement change "
+                "(payment_id=%s, subscription_id=%s)",
+                payload.get("payment_id"),
+                payload.get("subscription_id"),
+            )
+        elif event_type in (
+            "payment.refunded",
+            "subscription.cancelled",
+            "subscription.expired",
+            "subscription.on_hold",
+            "subscription.paused",
+        ):
+            terminal_status = event_type.removeprefix("subscription.").removeprefix("payment.")
+            await _handle_downgrade(payload, terminal_status, event_time)
+        else:
+            logger.debug(f"Unhandled Dodo event type: {event_type}")
+    except Exception:
+        await db._execute("DELETE FROM dodo_webhook_events WHERE webhook_id=$1", webhook_id)
+        raise
 
     return {"received": True}
 
@@ -209,10 +251,34 @@ def _subscription_access_until(payload: dict) -> datetime | None:
         grace_end = _parse_webhook_datetime(payload.get("past_due_ends_at"))
         if grace_end:
             return grace_end
-    return _parse_webhook_datetime(payload.get("next_billing_date"))
+    deadline = _parse_webhook_datetime(payload.get("next_billing_date"))
+    if deadline:
+        return deadline
+
+    # Payment webhooks carry paid periods as service_periods rather than a
+    # next_billing_date. This keeps the fallback deadline current even if the
+    # corresponding subscription.renewed delivery is delayed or missed.
+    subscription_id = payload.get("subscription_id")
+    periods = payload.get("service_periods") or []
+    if isinstance(periods, list):
+        matching = [
+            period for period in periods
+            if isinstance(period, dict)
+            and (not subscription_id or period.get("subscription_id") == subscription_id)
+        ]
+        deadlines = [
+            parsed for parsed in (
+                _parse_webhook_datetime(period.get("ends_at")) for period in matching
+            ) if parsed is not None
+        ]
+        if deadlines:
+            return max(deadlines)
+    return None
 
 
-async def _handle_subscription_state(payload: dict) -> None:
+async def _handle_subscription_state(
+    payload: dict, event_time: datetime | None = None
+) -> None:
     """Sync lifecycle timestamps without granting credits or resetting usage."""
     user_id = (payload.get("metadata") or {}).get("user_id")
     customer = payload.get("customer")
@@ -237,22 +303,30 @@ async def _handle_subscription_state(payload: dict) -> None:
         SET dodo_subscription_id = COALESCE(NULLIF($1, ''), dodo_subscription_id),
             subscription_status  = $2,
             plan_expires_at      = COALESCE($3, plan_expires_at),
+            dodo_event_at        = COALESCE($4, dodo_event_at),
             updated_at           = NOW()
-        WHERE id = $4
+        WHERE id = $5
+          AND ($4::timestamptz IS NULL OR dodo_event_at IS NULL OR dodo_event_at <= $4)
         """,
-        subscription_id, subscription_status, access_until, row["id"],
+        subscription_id, subscription_status, access_until, event_time, row["id"],
     )
 
 
-async def _handle_payment_succeeded(payload: dict) -> None:
-    # Prefer the plan we stamped into checkout metadata — the raw product_id
-    # Dodo echoes is the prd_… id, which the friendly-name map won't match.
+async def _handle_payment_succeeded(
+    payload: dict,
+    event_time: datetime | None = None,
+    *,
+    reset_usage: bool = True,
+) -> None:
+    # Product id is authoritative, especially after a plan change where the
+    # checkout metadata may still contain the original tier. Metadata remains
+    # a reliable fallback for ordinary checkout-created subscriptions.
     product_id = payload.get("product_id", "")
     meta_plan = (payload.get("metadata") or {}).get("plan")
-    if meta_plan in PLAN_LIMITS:
-        plan_name = meta_plan
-    elif product_id in DODO_PLAN_MAP:
+    if product_id in DODO_PLAN_MAP:
         plan_name = DODO_PLAN_MAP[product_id]
+    elif meta_plan in PLAN_LIMITS:
+        plan_name = meta_plan
     else:
         # Neither the checkout-time metadata nor the product-id map resolved
         # to a known plan. This is a real config bug (new Dodo product added
@@ -290,23 +364,34 @@ async def _handle_payment_succeeded(payload: dict) -> None:
     subscription_status = str(payload.get("status") or "active").lower()
     access_until = _subscription_access_until(payload)
 
+    usage_sql = """
+            credits_used        = CASE
+                WHEN $6::timestamptz IS NULL OR plan_expires_at IS NULL OR plan_expires_at < $6
+                THEN 0 ELSE credits_used END,
+            video_minutes_used  = CASE
+                WHEN $6::timestamptz IS NULL OR plan_expires_at IS NULL OR plan_expires_at < $6
+                THEN 0 ELSE video_minutes_used END,
+            credits_reset_at    = CASE
+                WHEN $6::timestamptz IS NULL OR plan_expires_at IS NULL OR plan_expires_at < $6
+                THEN date_trunc('month', NOW()) ELSE credits_reset_at END,
+    """ if reset_usage else ""
     await db._execute(
-        """
+        f"""
         UPDATE users
         SET plan                = $1,
             credits_limit       = $2,
-            credits_used        = 0,
+            {usage_sql}
             video_minutes_limit = $3,
-            video_minutes_used  = 0,
-            credits_reset_at    = date_trunc('month', NOW()),
             dodo_subscription_id = COALESCE(NULLIF($4, ''), dodo_subscription_id),
             subscription_status  = $5,
             plan_expires_at      = COALESCE($6, plan_expires_at, NOW() + INTERVAL '31 days'),
+            dodo_event_at        = COALESCE($7, dodo_event_at),
             updated_at           = NOW()
-        WHERE id = $7
+        WHERE id = $8
+          AND ($7::timestamptz IS NULL OR dodo_event_at IS NULL OR dodo_event_at <= $7)
         """,
         plan_name, new_credits, new_video_mins, subscription_id,
-        subscription_status, access_until, user_id,
+        subscription_status, access_until, event_time, user_id,
     )
 
     logger.info(
@@ -315,7 +400,11 @@ async def _handle_payment_succeeded(payload: dict) -> None:
     )
 
 
-async def _handle_downgrade(payload: dict, subscription_status: str = "cancelled") -> None:
+async def _handle_downgrade(
+    payload: dict,
+    subscription_status: str = "cancelled",
+    event_time: datetime | None = None,
+) -> None:
     user_id = (payload.get("metadata") or {}).get("user_id")
     customer = payload.get("customer")
     email = customer.get("email", "") if isinstance(customer, dict) else ""
@@ -353,10 +442,56 @@ async def _handle_downgrade(payload: dict, subscription_status: str = "cancelled
             dodo_subscription_id = COALESCE(NULLIF($3, ''), dodo_subscription_id),
             subscription_status  = $4,
             plan_expires_at      = NOW(),
+            dodo_event_at        = COALESCE($5, dodo_event_at),
             updated_at           = NOW()
-        WHERE id = $5
+        WHERE id = $6
+          AND ($5::timestamptz IS NULL OR dodo_event_at IS NULL OR dodo_event_at <= $5)
+          AND (NULLIF($3, '') IS NULL OR dodo_subscription_id IS NULL OR dodo_subscription_id = $3)
         """,
-        free_credits, free_video_mins, subscription_id, subscription_status, user_id,
+        free_credits, free_video_mins, subscription_id, subscription_status,
+        event_time, user_id,
     )
 
     logger.info(f"Downgraded {email} → free plan")
+
+
+async def _handle_payment_failed(
+    payload: dict, event_time: datetime | None = None
+) -> None:
+    """Record a failed renewal/mandate without revoking unrelated access.
+
+    The subscription.past_due event supplies the grace deadline and remains
+    authoritative for entitlement. The existing paid-through deadline is left
+    untouched so the watcher/request-time safety nets still expire access.
+    """
+    user_id = (payload.get("metadata") or {}).get("user_id")
+    customer = payload.get("customer")
+    email = customer.get("email", "") if isinstance(customer, dict) else ""
+
+    row = None
+    if user_id:
+        row = await db._fetchrow(
+            "SELECT id, email, dodo_subscription_id FROM users WHERE id=$1", user_id
+        )
+    if not row and email:
+        row = await db._fetchrow(
+            "SELECT id, email, dodo_subscription_id FROM users WHERE email=$1", email
+        )
+    if not row:
+        logger.warning("Failed Dodo payment has no matching user: user_id=%s, email=%s", user_id, email)
+        return
+
+    subscription_id = payload.get("subscription_id") or ""
+    await db._execute(
+        """
+        UPDATE users
+        SET subscription_status = 'payment_failed',
+            dodo_event_at       = COALESCE($1, dodo_event_at),
+            updated_at          = NOW()
+        WHERE id = $2
+          AND ($1::timestamptz IS NULL OR dodo_event_at IS NULL OR dodo_event_at <= $1)
+          AND (NULLIF($3, '') IS NULL OR dodo_subscription_id IS NULL OR dodo_subscription_id = $3)
+        """,
+        event_time, row["id"], subscription_id,
+    )
+    logger.info("Recorded failed Dodo payment for %s without changing access", row["email"])
