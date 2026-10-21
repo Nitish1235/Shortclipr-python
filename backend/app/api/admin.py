@@ -296,14 +296,29 @@ def _delete_library_sync_and_get_source(blob_name: str) -> str:
 @router.get("/showcase", tags=["public"])
 async def get_showcase():
     """
-    PUBLIC endpoint — returns all showcase videos for the landing page carousel.
-    No auth required.
+    Return twelve real, admin-curated clips for the landing-page reel.
+
+    Explicit Showcase selections take priority. If fewer than twelve exist,
+    fill the remaining positions from the separately curated public Library.
+    Arbitrary user clips are never exposed by this endpoint.
     """
-    loop = asyncio.get_running_loop()
-    items = await loop.run_in_executor(None, _list_showcase_sync)
-    # The landing reel intentionally stays small: newest admin selections only.
-    latest = items[:12]
-    return {"videos": latest, "count": len(latest)}
+    showcase_items, library_items = await asyncio.gather(
+        asyncio.to_thread(_list_showcase_sync),
+        asyncio.to_thread(_list_library_sync),
+    )
+
+    videos: list[dict] = []
+    seen: set[str] = set()
+    for item in [*showcase_items, *library_items]:
+        identity = item.get("source_clip_id") or item.get("video_url") or item.get("id")
+        if not identity or identity in seen:
+            continue
+        seen.add(identity)
+        videos.append(item)
+        if len(videos) == 12:
+            break
+
+    return {"videos": videos, "count": len(videos)}
 
 
 @router.get("/landing/multiple-shorts", tags=["public"])

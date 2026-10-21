@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 const MAX_SHOWCASE_CLIPS = 12
 
-function ShowcaseClip({ clip, index, duplicate = false, onPlaybackChange }) {
+function ShowcaseClip({ clip, duplicate = false }) {
   const videoRef = useRef(null)
   const [playing, setPlaying] = useState(false)
   const [posterAvailable, setPosterAvailable] = useState(Boolean(clip.thumbnail_url))
@@ -22,10 +22,7 @@ function ShowcaseClip({ clip, index, duplicate = false, onPlaybackChange }) {
       return
     }
     video.play()
-      .then(() => {
-        setPlaying(true)
-        onPlaybackChange(true)
-      })
+      .then(() => setPlaying(true))
       .catch(() => {})
   }
 
@@ -66,7 +63,6 @@ function ShowcaseClip({ clip, index, duplicate = false, onPlaybackChange }) {
               }}
               onPause={() => {
                 setPlaying(false)
-                onPlaybackChange(false)
               }}
               aria-label={clip.title || 'ShortClipr showcase clip'}
             />
@@ -84,7 +80,6 @@ function ShowcaseClip({ clip, index, duplicate = false, onPlaybackChange }) {
         ) : (
           <img src={clip.thumbnail_url} alt={duplicate ? '' : (clip.title || 'ShortClipr showcase clip')} loading="lazy" />
         )}
-        <span className="sc-review-order">{String(index + 1).padStart(2, '0')}</span>
         {!playing && clip.video_url && <span className="sc-review-play" aria-hidden="true">▶</span>}
         <div className="sc-review-gradient" />
         <div className="sc-review-caption">
@@ -99,7 +94,6 @@ function ShowcaseClip({ clip, index, duplicate = false, onPlaybackChange }) {
 export default function VideoShowcase() {
   const [clips, setClips] = useState([])
   const [loading, setLoading] = useState(true)
-  const [playingCount, setPlayingCount] = useState(0)
   const navigate = useNavigate()
   const location = useLocation()
   const { user } = useAuth()
@@ -129,10 +123,6 @@ export default function VideoShowcase() {
     return Array.from({ length: copies }, () => clips).flat()
   }, [clips])
 
-  const handlePlaybackChange = isPlaying => {
-    setPlayingCount(count => Math.max(0, count + (isPlaying ? 1 : -1)))
-  }
-
   const handleCTA = event => {
     event.preventDefault()
     if (user) {
@@ -149,9 +139,7 @@ export default function VideoShowcase() {
         <ShowcaseClip
           key={`${duplicate ? 'copy' : 'original'}-${clip.id}-${index}`}
           clip={clip}
-          index={index % clips.length}
           duplicate={duplicate}
-          onPlaybackChange={handlePlaybackChange}
         />
       ))}
     </div>
@@ -176,7 +164,7 @@ export default function VideoShowcase() {
         <div className="sc-review-state" aria-live="polite">Loading the latest showcase clips…</div>
       ) : clips.length ? (
         <div
-          className={`sc-review-reel${playingCount ? ' is-paused' : ''}`}
+          className="sc-review-reel"
           aria-label={`${clips.length} latest ShortClipr showcase clips`}
         >
           <div className="sc-review-track">
