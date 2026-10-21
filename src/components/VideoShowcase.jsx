@@ -8,6 +8,7 @@ const MAX_SHOWCASE_CLIPS = 12
 function ShowcaseClip({ clip, index, duplicate = false, onPlaybackChange }) {
   const videoRef = useRef(null)
   const [playing, setPlaying] = useState(false)
+  const [posterAvailable, setPosterAvailable] = useState(Boolean(clip.thumbnail_url))
 
   const stop = () => {
     if (videoRef.current) videoRef.current.pause()
@@ -47,20 +48,39 @@ function ShowcaseClip({ clip, index, duplicate = false, onPlaybackChange }) {
     >
       <div className="sc-review-media">
         {clip.video_url ? (
-          <video
-            ref={videoRef}
-            src={clip.video_url}
-            poster={clip.thumbnail_url || undefined}
-            muted
-            loop
-            playsInline
-            preload="none"
-            onPause={() => {
-              setPlaying(false)
-              onPlaybackChange(false)
-            }}
-            aria-label={clip.title || 'ShortClipr showcase clip'}
-          />
+          <>
+            <video
+              ref={videoRef}
+              src={clip.video_url}
+              muted
+              loop
+              playsInline
+              preload={posterAvailable ? 'none' : 'metadata'}
+              onLoadedMetadata={event => {
+                // A few legacy showcase entries outlived their source-job poster.
+                // Seeking a fraction into the clip asks the browser for one frame
+                // without eagerly downloading every showcase video.
+                if (!posterAvailable && !playing && event.currentTarget.duration > 0.06) {
+                  event.currentTarget.currentTime = 0.05
+                }
+              }}
+              onPause={() => {
+                setPlaying(false)
+                onPlaybackChange(false)
+              }}
+              aria-label={clip.title || 'ShortClipr showcase clip'}
+            />
+            {posterAvailable && !playing && (
+              <img
+                className="sc-review-poster"
+                src={clip.thumbnail_url}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                onError={() => setPosterAvailable(false)}
+              />
+            )}
+          </>
         ) : (
           <img src={clip.thumbnail_url} alt={duplicate ? '' : (clip.title || 'ShortClipr showcase clip')} loading="lazy" />
         )}

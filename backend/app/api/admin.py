@@ -111,12 +111,33 @@ def _copy_to_showcase_sync(
     source_blob = bucket.blob(source_blob_name)
     dest_blob = bucket.copy_blob(source_blob, bucket, dest_blob_name)
 
+    # Keep the poster with the showcase copy. Source-job thumbnails are subject
+    # to normal retention cleanup, which previously left landing cards pointing
+    # at deleted images even though their permanent showcase videos survived.
+    permanent_thumbnail_url = thumbnail_url
+    bucket_public_prefix = f"{settings.GCS_PUBLIC_BASE_URL}/{settings.GCS_BUCKET_NAME}/"
+    if thumbnail_url.startswith(bucket_public_prefix):
+        source_thumbnail_name = thumbnail_url[len(bucket_public_prefix):]
+        try:
+            source_thumbnail = bucket.blob(source_thumbnail_name)
+            if source_thumbnail.exists():
+                thumbnail_suffix = Path(source_thumbnail_name).suffix or ".jpg"
+                showcase_thumbnail_name = f"showcase/thumbnails/{showcase_id}{thumbnail_suffix}"
+                showcase_thumbnail = bucket.copy_blob(
+                    source_thumbnail, bucket, showcase_thumbnail_name,
+                )
+                permanent_thumbnail_url = showcase_thumbnail.public_url
+        except Exception as exc:
+            # The video is still usable; the frontend can reveal its first
+            # frame when an older or missing poster cannot be preserved.
+            logger.warning("Could not preserve showcase thumbnail %s: %s", source_thumbnail_name, exc)
+
     # Store metadata on the GCS blob
     dest_blob.metadata = {
         "showcase_id":    showcase_id,
         "title":          title[:200],
         "viral_score":    str(viral_score),
-        "thumbnail_url":  thumbnail_url,
+        "thumbnail_url":  permanent_thumbnail_url,
         "added_at":       datetime.now(timezone.utc).isoformat(),
         # Back-references to the source row so removal from showcase can
         # un-flag the original clip in the DB (see admin_delete_showcase).
@@ -137,7 +158,7 @@ def _copy_to_showcase_sync(
     return {
         "id": showcase_id,
         "video_url": dest_blob.public_url,
-        "thumbnail_url": thumbnail_url,
+        "thumbnail_url": permanent_thumbnail_url,
         "title": title,
         "viral_score": viral_score,
         "added_at": dest_blob.metadata["added_at"],
@@ -484,6 +505,12 @@ def _delete_showcase_sync_and_get_source(blob_name: str) -> str:
     except Exception:
         source_clip_id = ""
     blob.delete()
+    showcase_id = Path(blob_name).stem
+    for thumbnail in bucket.list_blobs(prefix=f"showcase/thumbnails/{showcase_id}."):
+        try:
+            thumbnail.delete()
+        except Exception as exc:
+            logger.warning("Could not delete showcase thumbnail %s: %s", thumbnail.name, exc)
     return source_clip_id
 
 
