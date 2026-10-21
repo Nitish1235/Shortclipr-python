@@ -20,4 +20,12 @@ COPY app/__init__.py ./app/__init__.py
 COPY app/core/__init__.py ./app/core/__init__.py
 COPY app/core/plan_limits.py ./app/core/plan_limits.py
 
+# Fail the image build if the watcher gains an import that is not packaged in
+# this deliberately-small image.  The placeholder configuration is only used
+# while importing the module; no database or worker connection is attempted.
+RUN SUPABASE_DB_URL=postgresql://build-check.invalid/shortclipr \
+    WORKER_SERVICE_URLS=http://worker.invalid \
+    INTERNAL_TASK_SECRET=build-import-check \
+    python -c "import watcher.main"
+
 CMD ["python", "-m", "watcher.main"]

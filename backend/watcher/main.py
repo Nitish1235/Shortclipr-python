@@ -17,6 +17,7 @@ and drains only the legacy queue.
 import asyncio
 import json
 import logging
+import os
 import time
 
 import asyncpg
@@ -189,9 +190,10 @@ async def _health_handler(reader: asyncio.StreamReader, writer: asyncio.StreamWr
 
 
 async def _start_health_server():
-    """Start a TCP server on port 8080 that responds 200 OK to any request."""
-    server = await asyncio.start_server(_health_handler, "0.0.0.0", 8080)
-    logger.info("Health server listening on :8080")
+    """Start an HTTP health server on Cloud Run's assigned port."""
+    port = int(os.environ.get("PORT", "8080"))
+    server = await asyncio.start_server(_health_handler, "0.0.0.0", port)
+    logger.info("Health server listening on :%s", port)
     await server.serve_forever()
 
 
