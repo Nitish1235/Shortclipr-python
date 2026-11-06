@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#171914">
+  <title>ShortClipr Studio</title>
+  <link rel="icon" href="../public/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=DM+Sans:wght@400;500;600;700&family=Permanent+Marker&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="studio-app.css">
+  <style>.project-cell small{display:block}.toast{opacity:0;visibility:hidden;transform:translateY(calc(100% + 60px))}.toast.show{opacity:1;visibility:visible;transform:translateY(0)}</style>
+</head>
+<body>
+  <a class="skip-link" href="#studio-main">Skip to studio</a>
+  <div class="studio-shell">
+    <aside class="rail" id="studio-rail">
+      <div class="rail-head">
+        <a class="wordmark" href="index.html" aria-label="ShortClipr home"><img src="../public/logo.svg" alt=""><span>ShortClipr<i>.</i></span></a>
+        <button class="rail-close" type="button" aria-label="Close menu">×</button>
+      </div>
+      <a class="new-film" href="#create" data-route="create"><span>+</span> Start a new film</a>
+      <nav class="rail-nav" aria-label="Studio navigation">
+        <p>Control room</p>
+        <a href="#overview" data-route="overview"><span class="nav-mark">⌂</span>Overview<small>01</small></a>
+        <a href="#create" data-route="create"><span class="nav-mark">✦</span>Create video<small>02</small></a>
+        <a href="#projects" data-route="projects"><span class="nav-mark">▤</span>My projects<small>03</small></a>
+        <a href="#screening" data-route="screening"><span class="nav-mark">▶</span>Screening room<small>04</small></a>
+        <p>Studio account</p>
+        <a href="#credits" data-route="credits"><span class="nav-mark">◒</span>Render time & plan<small>05</small></a>
+        <a href="#admin" data-route="admin"><span class="nav-mark">⌘</span>Admin media desk<small>06</small></a>
+      </nav>
+      <div class="rail-foot">
+        <div class="mini-credit"><span><b id="rail-credits">15 sec</b> render time left</span><i><em id="rail-credit-fill"></em></i></div>
+        <button class="profile-button" type="button"><span>NS</span><b>Nitish</b><small>Studio owner</small><i>•••</i></button>
+      </div>
+    </aside>
+
+    <div class="workbench">
+      <header class="topbar">
+        <button class="menu-button" type="button" aria-label="Open menu">☰</button>
+        <div><span class="live-dot"></span><b>SHORTCLIPR / CREATIVE STUDIO</b><small id="page-breadcrumb">CONTROL ROOM / OVERVIEW</small></div>
+        <div class="top-actions">
+          <button class="search-button" type="button" data-route="projects"><span>⌕</span> Find a project <kbd>⌘ K</kbd></button>
+          <button class="notice-button" type="button" aria-label="Notifications">◌<i></i></button>
+          <a class="top-avatar" href="#credits" data-route="credits">NS</a>
+        </div>
+      </header>
+
+      <main id="studio-main" tabindex="-1">
+        <section class="studio-page overview-page" data-page="overview">
+          <div class="page-intro overview-intro">
+            <div><p class="kicker">01 / THE CONTROL ROOM</p><h1>GOOD MORNING.<br><em>WHAT ARE WE MAKING?</em></h1></div>
+            <p class="hand-note">Your idea.<br>Our whole studio. ↙</p>
+          </div>
+
+          <div class="command-grid">
+            <article class="quick-create">
+              <div class="panel-label"><span>NEW PRODUCTION</span><small>FINAL OUTPUT ONLY</small></div>
+              <h2>PUT AN IDEA<br>IN MOTION<span>.</span></h2>
+              <p>Start with a topic or brief. The studio handles the scenes, voice, animation and final assembly.</p>
+              <a class="ink-button" href="#create" data-route="create">Open the creation desk <span>↗</span></a>
+              <div class="orbit-art" aria-hidden="true"><i></i><i></i><i></i><b>60<small>SEC</small></b></div>
+            </article>
+            <article class="credit-card">
+              <div class="panel-label"><span>RENDER TIME</span><small>FREE DEMO</small></div>
+              <div class="credit-number"><strong id="credit-remaining">15 sec</strong><span>render time<br>remaining</span></div>
+              <div class="credit-meter"><i id="credit-meter-fill"></i></div>
+              <div class="credit-split"><span><small>USED</small><b id="credit-used">0 sec</b></span><span><small>MONTHLY TOTAL</small><b id="credit-total">15 sec</b></span></div>
+              <a href="#credits" data-route="credits">See usage & plan <span>→</span></a>
+            </article>
+          </div>
+
+          <section class="recent-block">
+            <div class="section-heading"><div><p class="kicker">ON THE EDITING TABLE</p><h2>RECENT PRODUCTIONS.</h2></div><a href="#projects" data-route="projects">View every project <span>↗</span></a></div>
+            <div class="project-table" id="overview-projects"></div>
+          </section>
+
+          <section class="screening-peek">
+            <div class="screening-copy"><p class="kicker">NOW SCREENING</p><h2>REAL CLIPS.<br><em>FROM THE STUDIO.</em></h2><p>Publish finished work from the admin media desk. It appears here automatically—ready to play, study and share.</p><a class="paper-button" href="#screening" data-route="screening">Enter the screening room <span>↗</span></a></div>
+            <div class="screening-stack" id="overview-screening"></div>
+          </section>
+        </section>
+
+        <section class="studio-page create-page" data-page="create" hidden>
+          <div class="page-intro create-intro"><div><p class="kicker">02 / THE CREATION DESK</p><h1>ONE BRIEF.<br><em>ONE FINISHED FILM.</em></h1></div><p>No storyboards to approve. No timeline to edit. Choose the direction and receive the final output.</p></div>
+          <form class="creation-form" id="creation-form">
+            <section class="brief-panel numbered-panel">
+              <span class="panel-number">01</span>
+              <div class="form-heading"><p class="kicker">THE SPARK</p><h2>WHAT SHOULD<br>THE FILM SAY?</h2></div>
+              <label class="brief-field"><span>Topic or creative brief</span><textarea id="brief" required maxlength="1600" placeholder="Example: Explain why the moon sometimes appears during the day. Make it curious, cinematic and easy for a 12-year-old to understand."></textarea><small><b id="brief-count">0</b> / 1,600</small></label>
+            </section>
+
+            <section class="library-panel numbered-panel">
+              <span class="panel-number">02</span>
+              <div class="form-heading"><p class="kicker">THE STORY LIBRARY</p><h2>WHAT KIND<br>OF SHORT?</h2><p>16 production types, arranged as three studio departments.</p></div>
+              <div class="library-tabs" role="tablist" aria-label="Video type departments">
+                <button type="button" data-library="learn" aria-selected="true"><span>01</span><b>Learn & explain</b><small>Knowledge in motion</small></button>
+                <button type="button" data-library="story" aria-selected="false"><span>02</span><b>Story & spectacle</b><small>Worlds worth watching</small></button>
+                <button type="button" data-library="engage" aria-selected="false"><span>03</span><b>Engage & transform</b><small>Action, play and change</small></button>
+              </div>
+              <div class="type-grid" id="type-grid"></div>
+              <input type="hidden" id="video-type" value="Animated explainer">
+            </section>
+
+            <section class="direction-panel numbered-panel">
+              <span class="panel-number">03</span>
+              <div class="form-heading"><p class="kicker">THE DIRECTION</p><h2>SET THE<br>CREATIVE RULES.</h2></div>
+              <div class="direction-grid">
+                <fieldset><legend>Voice language</legend><select id="language"><option>English (US)</option><option>English (UK)</option><option>Hindi</option><option>Spanish</option><option>French</option><option>German</option><option>Portuguese</option><option>Japanese</option></select></fieldset>
+                <fieldset><legend>Narration voice</legend><select id="voice"><option>Scarlett — warm & clear</option><option>Dan — confident</option><option>Liv — bright</option><option>Will — conversational</option><option>Amy — composed</option></select></fieldset>
+                <fieldset class="style-field"><legend>Visual direction</legend><div class="choice-row" data-choice="style"><button type="button" class="choice active" data-value="AI Auto">✦ AI Auto</button><button type="button" class="choice" data-value="Editorial">Editorial</button><button type="button" class="choice" data-value="Cinematic">Cinematic</button><button type="button" class="choice" data-value="Diagrammatic">Diagrammatic</button><button type="button" class="choice" data-value="Paper craft">Paper craft</button></div></fieldset>
+                <fieldset><legend>Duration</legend><div class="choice-row" data-choice="duration"><button type="button" class="choice active" data-value="15">15 sec</button><span class="duration-choice locked" title="Upgrade plan to unlock 30-second shorts"><button type="button" class="choice" data-value="30" disabled>🔒 30 sec</button><span class="duration-tooltip">Upgrade plan to unlock 30-second shorts.</span></span><span class="duration-choice locked" title="Upgrade plan to unlock 45-second shorts"><button type="button" class="choice" data-value="45" disabled>🔒 45 sec</button><span class="duration-tooltip">Upgrade plan to unlock 45-second shorts.</span></span><span class="duration-choice locked" title="Upgrade plan to unlock 60-second shorts"><button type="button" class="choice" data-value="60" disabled>🔒 60 sec</button><span class="duration-tooltip">Upgrade plan to unlock 60-second shorts.</span></span></div><small class="free-duration-note">Free includes one 15-second finished short each month. Hover a locked duration to see the upgrade cue.</small></fieldset>
+                <fieldset><legend>Frame</legend><div class="choice-row frame-choices" data-choice="format"><button type="button" class="choice active" data-value="9:16"><i class="frame vertical"></i>9:16</button><button type="button" class="choice" data-value="1:1"><i class="frame square"></i>1:1</button><button type="button" class="choice" data-value="16:9"><i class="frame wide"></i>16:9</button></div></fieldset>
+              </div>
+            </section>
+
+            <section class="launch-panel">
+              <div><p class="kicker">READY FOR PRODUCTION</p><h2>THE STUDIO TAKES IT<br>FROM HERE<span>.</span></h2><p>Scene planning, narration, animation, sound and final assembly happen behind the screen.</p></div>
+              <div class="launch-ticket"><span>RENDER TIME RESERVED</span><strong><b id="estimated-cost">15 sec</b></strong><small>Every short reserves its selected duration.</small><button class="lime-button" type="submit">Create final video <span>↗</span></button></div>
+            </section>
+          </form>
+        </section>
+
+        <section class="studio-page projects-page" data-page="projects" hidden>
+          <div class="page-intro"><div><p class="kicker">03 / THE PRODUCTION ARCHIVE</p><h1>EVERY FILM.<br><em>ONE PLACE.</em></h1></div><a class="lime-button compact" href="#create" data-route="create">+ New production</a></div>
+          <div class="project-toolbar"><div class="filter-row" role="group"><button class="active" data-status="all">All</button><button data-status="in-production">In production</button><button data-status="complete">Complete</button><button data-status="draft">Draft</button></div><label><span>⌕</span><input type="search" id="project-search" placeholder="Search the archive"></label></div>
+          <div class="project-table full-table" id="all-projects"></div>
+        </section>
+
+        <section class="studio-page screening-page" data-page="screening" hidden>
+          <div class="page-intro screening-intro"><div><p class="kicker">04 / THE SCREENING ROOM</p><h1>WATCH WHAT<br><em>THE STUDIO CAN DO.</em></h1></div><p>Real exported clips live here. Curate the shelves from the admin media desk—no code changes required.</p></div>
+          <section class="premiere-stage" id="premiere-stage"></section>
+          <section class="reel-section"><div class="section-heading"><div><p class="kicker">FRESH OUT OF THE STUDIO</p><h2>THE LATEST CUTS.</h2></div><span class="hand-note">Press play. Stay curious. ↘</span></div><div class="video-rail" id="latest-reel"></div></section>
+          <section class="reel-section"><div class="section-heading"><div><p class="kicker">BROWSE BY DEPARTMENT</p><h2>THREE WAYS IN.</h2></div></div><div class="department-shelves" id="department-shelves"></div></section>
+        </section>
+
+        <section class="studio-page credits-page" data-page="credits" hidden>
+          <div class="page-intro"><div><p class="kicker">05 / RENDER TIME & PLAN</p><h1>KNOW YOUR<br><em>STUDIO FUEL.</em></h1></div><p>A simple view of this month’s render time, used time and remaining time.</p></div>
+          <div class="credit-ledger">
+            <article class="ledger-balance"><p class="kicker">CURRENT BALANCE / DEMO</p><strong id="ledger-remaining">15 sec</strong><span>render time remaining</span><div class="big-meter"><i id="ledger-meter"></i></div><small>Renews on the first day of your billing cycle</small></article>
+            <article class="ledger-card lime"><span>MONTHLY TOTAL</span><strong id="ledger-total">15 sec</strong><small>render time included</small></article>
+            <article class="ledger-card lavender"><span>USED THIS CYCLE</span><strong id="ledger-used">0 sec</strong><small>across studio jobs</small></article>
+          </div>
+          <section class="usage-section"><div><p class="kicker">HOW RENDER TIME MOVES</p><h2>USAGE LEDGER.</h2><p>Each short reserves its exact selected duration. The estimate is always shown before a job is sent to production.</p></div><div class="usage-list" id="usage-list"></div></section>
+        </section>
+
+        <section class="studio-page admin-page" data-page="admin" hidden>
+          <div class="page-intro admin-intro"><div><p class="kicker">06 / ADMIN MEDIA DESK</p><h1>CURATE THE<br><em>SCREENING ROOM.</em></h1></div><div class="admin-stamp">OWNER<br>ACCESS ↗</div></div>
+          <div class="admin-grid">
+            <form class="upload-panel" id="upload-form">
+              <div class="panel-label"><span>ADD A REAL CLIP</span><small>LOCAL STUDIO STORAGE</small></div>
+              <h2>NEW SCREENING<br>ROOM ENTRY.</h2>
+              <label>Film title<input id="media-title" required maxlength="80" placeholder="The Moon Before Dark"></label>
+              <div class="admin-fields"><label>Department<select id="media-department"><option value="learn">Learn & explain</option><option value="story">Story & spectacle</option><option value="engage">Engage & transform</option></select></label><label>Format<select id="media-format"><option>9:16</option><option>1:1</option><option>16:9</option></select></label></div>
+              <label>Short description<textarea id="media-description" maxlength="220" placeholder="A one-line note about this film."></textarea></label>
+              <label class="file-drop" id="video-drop"><input type="file" id="media-video" accept="video/*" required><span class="file-icon">▶</span><b id="video-file-label">Drop or choose the final video</b><small>MP4, WebM or other browser-supported video</small></label>
+              <label class="file-drop compact-drop"><input type="file" id="media-poster" accept="image/*"><span class="file-icon">▧</span><b id="poster-file-label">Optional poster image</b><small>If omitted, the studio generates a graphic cover.</small></label>
+              <div class="publish-checks"><label><input type="checkbox" id="media-published" checked><span></span>Publish now</label><label><input type="checkbox" id="media-featured"><span></span>Make premiere</label></div>
+              <button class="lime-button" type="submit">Add to screening room <span>↗</span></button>
+              <p class="storage-note">For this local frontend, media is stored in this browser using IndexedDB. The production version can connect the same UI to the production media and admin service.</p>
+            </form>
+            <section class="media-library"><div class="section-heading"><div><p class="kicker">MEDIA LIBRARY</p><h2>PUBLISHED & DRAFTS.</h2></div><span id="media-count">0 clips</span></div><div class="admin-media-list" id="admin-media-list"></div></section>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <dialog id="video-dialog"><button type="button" class="dialog-close" aria-label="Close video">×</button><video controls playsinline></video><div><span></span><h2></h2><p></p></div></dialog>
+  <script src="studio-app.js"></script>
+</body>
+</html>

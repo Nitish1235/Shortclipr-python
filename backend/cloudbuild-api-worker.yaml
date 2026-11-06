@@ -1,0 +1,16 @@
+substitutions: {_REGION: us-central1, _CPU: '4', _MAX_INSTANCES: '5'}
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args: [build, -f, backend/Dockerfile.api-worker, -t, us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-api-worker:$COMMIT_SHA, -t, us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-api-worker:latest, ./backend]
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build]
+    args: [push, --all-tags, us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-api-worker]
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    waitFor: [push]
+    entrypoint: gcloud
+    args: [run, deploy, shortclipr-api-worker-$_REGION, --image=us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-api-worker:$COMMIT_SHA, --region=$_REGION, --platform=managed, --allow-unauthenticated, --port=8080, --memory=2Gi, --cpu=$_CPU, --cpu-boost, --no-cpu-throttling, --timeout=300, --concurrency=12, --min-instances=0, --max-instances=$_MAX_INSTANCES, --startup-probe=httpGet.path=/ready,httpGet.port=8080,initialDelaySeconds=0,timeoutSeconds=5,periodSeconds=10,failureThreshold=6]
+images: [us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-api-worker:$COMMIT_SHA, us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-api-worker:latest]
+options: {logging: CLOUD_LOGGING_ONLY}

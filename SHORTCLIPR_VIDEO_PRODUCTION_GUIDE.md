@@ -1,6 +1,6 @@
 # ShortClipr: producing excellent code-generated shorts
 
-Research and proposal date: 2 November 2026. Covers all 19 options in [the approved product scope](SHORTCLIPR_PRODUCT_SCOPE.md), up to 60 seconds, in 9:16, 16:9, and 1:1. The six excluded standalone categories remain excluded.
+Research and proposal date: 2 November 2026. Covers all 16 options in [the approved product scope](SHORTCLIPR_PRODUCT_SCOPE.md), up to 60 seconds, in 9:16, 16:9, and 1:1. The excluded standalone categories remain excluded.
 
 This guide proposes a production system and creative standards. No application code, rendering benchmark, audience experiment, or deployment was completed as part of this research.
 
@@ -10,7 +10,7 @@ Build a directed animation workflow: **idea → story beats → storyboard → t
 
 The strongest product promise to aim for is a coherent, distinctive video that the creator can finish easily. A successful render is only one requirement. The video must also make sense, look intentional, move convincingly, sound appropriate, and fulfill its opening promise.
 
-All 19 types stay in scope. They need different production methods: a factual comparison, a character comedy, and an action sequence should share infrastructure without sharing one universal scene template.
+All 16 types stay in scope. They need different production methods: a factual comparison, a character comedy, and a room transformation should share infrastructure without sharing one universal scene template.
 
 ### What the additional research establishes
 
@@ -25,15 +25,15 @@ All 19 types stay in scope. They need different production methods: a factual co
 
 The production architecture, recipes, prompts, and test defaults below are ShortClipr proposals inferred from this evidence and the earlier [community research](SHORTCLIPR_REDDIT_X_INSIGHTS.md). They have not been experimentally validated.
 
-## 2. Five production families behind the 19 options
+## 2. Five production families behind the 16 options
 
 | Family | Main requirements | Primary categories |
 | --- | --- | --- |
-| Explanations and models | Exact state, legible diagrams, calibrated scales, causal actions | Explainers, comparisons, quizzes, simulations, myth-busting, recipes, sports tactics |
+| Explanations and models | Exact state, legible diagrams, calibrated scales, causal actions | Explainers, comparisons, quizzes, simulations, myth-busting, sports tactics |
 | Documentary and editorial | Source-backed claims, time/location context, maps, consistent labels | History, geography, space/scale, news |
 | Character performance | Persistent rigs, poses, gaze, contact, reaction timing | Comedy, fables, conversations |
-| Cinematic storytelling | Shot geography, lighting, suspense, choreographed action | Mystery, horror, cinematic/anime-style scenes |
-| Spatial and commercial | Reusable environments or product assets, demonstrable outcomes | Architecture, animated advertisements |
+| Cinematic storytelling | Shot geography, lighting, suspense, controlled reveals | Mystery, horror |
+| Spatial transformation | Reusable environments, measurable layouts, demonstrable outcomes | Architecture |
 
 These families overlap. A horror story may use the same character rig as a comedy, but needs different pacing, lighting, poses, and sound. Keep story format, subject, visual style, and renderer as separate decisions.
 
@@ -56,14 +56,9 @@ Each row is an original starting recipe, not a proven best-performing formula.
 | 11 | What-if simulations | Define initial conditions, change one parameter, show the modeled outcome | Explicit assumptions and reproducible rules; a toy model is labeled as such |
 | 12 | Myth-busting experiments | State a testable claim, demonstrate a fair test, explain the result | The modeled experiment actually tests the claim; verify conclusions independently |
 | 13 | Animated conversations | Give speakers different intentions; use listening and reactions as well as speech | Stable eyelines, correct speaker/voice, purposeful interruptions and pauses |
-| 14 | Recipes and processes | Establish the result, show ordered transformations and important checkpoints | Objects retain state and quantities; no impossible step or unexplained finished result |
-| 15 | Sports tactics | Establish positions, show a movement, reveal the space or option it creates | Stable player identity and possession; paths match the explanation |
-| 16 | Architecture and room transformations | Establish the room, introduce a constraint, rearrange elements, reveal the improvement | Consistent room dimensions, clear access paths, coherent camera and lighting |
-| 17 | Animated advertisements | Show a specific problem, demonstrate the product's action, show a supported benefit, close with one action | Real product behavior and substantiated claims; no unrelated spectacle |
-| 18 | News and event recaps | Explain what changed, show essential context, separate known facts from uncertainty | Sources and an as-of date; illustrative animation is not presented as recorded evidence |
-| 19 | Cinematic action or anime-style scenes | Establish the goal and space, choreograph intent → movement → contact → consequence | Clear direction, contact, weight, and reaction; effects do not conceal unreadable action |
-
-For advertisements, TikTok's [Creative Codes](https://ads.tiktok.com/business/en-US/creative-codes) offers hook/body/close guidance. Apply it as an ad-specific starting point; it is not evidence that all stories need a sales-style ending.
+| 14 | Sports tactics | Establish positions, show a movement, reveal the space or option it creates | Stable player identity and possession; paths match the explanation |
+| 15 | Architecture and room transformations | Establish the room, introduce a constraint, rearrange elements, reveal the improvement | Consistent room dimensions, clear access paths, coherent camera and lighting |
+| 16 | News and event recaps | Explain what changed, show essential context, separate known facts from uncertainty | Sources and an as-of date; illustrative animation is not presented as recorded evidence |
 
 ## 4. The production workflow and its intermediate outputs
 
@@ -183,7 +178,7 @@ Captions should be editable, accurately timed, and placed outside important acti
 
 | Layer | Candidate | Why it is worth testing |
 | --- | --- | --- |
-| Text, vector diagrams, charts, captions, final composition | Remotion with React/SVG | Fits reusable components and frame-based animation |
+| Text, vector diagrams, charts, captions, final composition | Revideo with TypeScript/Canvas/SVG | MIT licensed; headless rendering, reusable components and code-driven animation |
 | Rigged 3D or lightweight spatial scenes | Three.js with authored assets | Supports bones, morph targets, clips, and blending |
 | Complex character shots, environments, or stylized line animation | Scripted Blender workflows | Supports automated rendering and a broader animation toolset |
 | Final media inspection, audio processing, and delivery encode | FFmpeg | Retain as a processing layer; validate actual output formats and filters during implementation |
@@ -192,7 +187,7 @@ The official [Three.js animation-system documentation](https://threejs.org/manua
 
 Do not immediately build three full rendering backends. Compare representative shots first, then choose the smallest set that passes our quality requirements. All approved categories remain planned even while their production methods are being validated.
 
-For frame-based rendering, use a reproducible relationship between time and state. Remotion explicitly warns against dependence on render order, unsynchronized animation, and unloaded assets. [Remotion documentation](https://www.remotion.dev/docs/flickering). In Three.js, [AnimationMixer.setTime](https://threejs.org/docs/pages/AnimationMixer.html) can seek to a specific time; it does not by itself make physics or custom state deterministic. Bake stateful simulations or evaluate them reproducibly before distributing frames.
+For distributed rendering, use a reproducible relationship between time and state. Revideo supports full and partial video rendering; ShortClipr must still verify reproducibility before parallelizing a scene. [Revideo rendering guide](https://midrender.com/revideo/docs/guide/rendering-videos). In Three.js, [AnimationMixer.setTime](https://threejs.org/docs/pages/AnimationMixer.html) can seek to a specific time; it does not by itself make physics or custom state deterministic. Bake stateful simulations or evaluate them reproducibly before distributing frames.
 
 Pin assets, fonts, engine versions, scene parameters, and random seeds. Share baked artifacts between preview and final rendering where possible. Check preview/export differences rather than assuming different engines will match.
 
@@ -296,7 +291,7 @@ Do not approve solely because the program ran or one frame looks attractive.
 2. Produce representative directed shots: a causal explanation, a comparison, a character interaction, a suspense reveal, a spatial transformation, and an action contact.
 3. Compare candidate rendering approaches on those shots, including preview/export parity and repair effort.
 4. Implement the shared scene contracts, asset versioning, timing dependencies, previews, and local editing.
-5. Expand the action/component library to cover the 19 approved options, then run the coverage evaluation.
+5. Expand the action/component library to cover the 16 approved options, then run the coverage evaluation.
 
 Do not claim studio-level cinematic animation before the cinematic examples pass review. The craft work—original assets, readable poses, useful shot design, and careful timing—is part of the product, not something a larger prompt automatically replaces.
 

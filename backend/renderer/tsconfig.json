@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "@revideo/2d/lib",
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src"]
+}

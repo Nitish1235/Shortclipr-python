@@ -38,6 +38,12 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# Generated visual verification artifacts
+*-check.png
 
 # Local debug/test scripts + downloaded source/clip files
 backend/scratch/

@@ -30,14 +30,11 @@ All support code-generated animation, a maximum duration of 60 seconds, and 9:16
 | 11 | What-if simulations | A queue receives too many requests | Medium; validate rules |
 | 12 | Myth-busting experiments | Test an assumption and show the result | Medium; verify facts |
 | 13 | Animated conversations | Two characters debate a question | Medium |
-| 14 | Recipes and processes | Ingredients assemble into a dish | Medium |
-| 15 | Sports tactics | A passing pattern creates space | Medium |
-| 16 | Architecture and room transformations | An empty room becomes different layouts | Medium–high |
-| 17 | Animated advertisements | Problem, demonstration, benefit, call to action | Medium |
-| 18 | News and event recaps | Explain an announcement through a timeline | Medium; use current sources |
-| 19 | Cinematic action or anime-style scenes | A chase with expressive characters and moving cameras | High |
+| 14 | Sports tactics | A passing pattern creates space | Medium |
+| 15 | Architecture and room transformations | An empty room becomes different layouts | Medium–high |
+| 16 | News and event recaps | Explain an announcement through a timeline | Medium; use current sources |
 
-These are named creative options, not 19 separate rendering systems or mutually exclusive genres. Shared scene components can support several options; for example, a historical story can also use a map or comparison.
+These are named creative options, not 16 separate rendering systems or mutually exclusive genres. Shared scene components can support several options; for example, a historical story can also use a map or comparison.
 
 ## Excluded as standalone clip categories
 
@@ -62,4 +59,6 @@ Preserve ShortClipr's name/logo and the deployment/service references in [PLATFO
 
 The earlier [animation research](SHORTCLIPR_ANIMATION_RESEARCH.md) and [Reddit/X notes](SHORTCLIPR_REDDIT_X_INSIGHTS.md) remain background evidence. This file is the current authority for included and excluded clip categories.
 
-For production methods, per-category creative recipes, rendering candidates, and quality gates across these 19 options, use [the video production guide](SHORTCLIPR_VIDEO_PRODUCTION_GUIDE.md).
+For production methods, per-category creative guidance, rendering candidates, and quality gates across these 16 options, use [the video production guide](SHORTCLIPR_VIDEO_PRODUCTION_GUIDE.md).
+
+For the final-output-only creator workflow, UnrealSpeech voice selection, AI style routing, scene contracts, service architecture, job system, storage, API, billing, admin, security, and implementation phases, use [the authoritative pipeline design](SHORTCLIPR_FINAL_OUTPUT_PIPELINE.md).

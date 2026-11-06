@@ -1,0 +1,15 @@
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /studio
+Disallow: /admin
+Disallow: /login
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: *
+Disallow: /studio
+Disallow: /admin
+Disallow: /login
+
+Sitemap: https://shortclipr.com/sitemap.xml

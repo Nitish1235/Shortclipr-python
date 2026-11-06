@@ -1,0 +1,4 @@
+.hero{position:relative;isolation:isolate;overflow:hidden}
+.hero.has-admin-background::before{content:"";position:absolute;z-index:0;inset:-20px;background-image:linear-gradient(90deg,#f7f5eb 12%,rgba(247,245,235,.84) 49%,rgba(247,245,235,.26)),var(--admin-background-image);background-size:cover;background-position:center;filter:saturate(.86)}
+.landing-background-video{position:absolute;z-index:0;inset:-1px;width:100%;height:100%;object-fit:cover;filter:brightness(.72) saturate(.8)}
+.hero.has-admin-background .hero-copy,.hero.has-admin-background .machine-wrap{position:relative;z-index:1}

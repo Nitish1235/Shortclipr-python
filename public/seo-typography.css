@@ -1,0 +1,6 @@
+/* Shared public-page typography: strong display type with comfortable rhythm. */
+h1,h2,h3{letter-spacing:-.006em;line-height:1.02;word-spacing:.035em}
+h1{letter-spacing:-.012em;line-height:.97}
+.article-cta h2{letter-spacing:.01em;line-height:1.1;word-spacing:.055em}
+.nav nav a,.nav-cta,.button,.text-link{letter-spacing:.01em;line-height:1.45}
+.card h3,.type-list h2,.clip-grid figcaption strong{line-height:1.05;letter-spacing:0}

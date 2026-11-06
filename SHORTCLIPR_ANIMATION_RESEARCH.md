@@ -1,8 +1,8 @@
 # ShortClipr: research and creative system for code-generated animated shorts
 
-Production follow-up: [How to produce strong clips across all 19 approved types](SHORTCLIPR_VIDEO_PRODUCTION_GUIDE.md) adds animation craft research, specialized production methods, per-category recipes, and a measurable quality workflow.
+Production follow-up: [How to produce strong clips across all 16 approved types](SHORTCLIPR_VIDEO_PRODUCTION_GUIDE.md) adds animation craft research, specialized production methods, per-category guidance, and a measurable quality workflow.
 
-**Scope update, 2 November 2026:** Follow [the approved product scope](SHORTCLIPR_PRODUCT_SCOPE.md): the original three core types plus all 16 Medium-or-higher expansion types. The six Low–medium expansion categories are excluded. Earlier narrow-launch recommendations below are historical research proposals and are superseded by this user decision; the taxonomy remains for reference.
+**Scope update, 4 November 2026:** Follow [the approved product scope](SHORTCLIPR_PRODUCT_SCOPE.md): the original three core types plus 13 retained expansion types. Earlier narrow-launch recommendations below are historical research proposals and are superseded by this user decision; the taxonomy remains for reference.
 
 Research date: 2 November 2026. Product scope: faceless animated videos up to 60 seconds, exported in 9:16, 16:9, and 1:1. Preserve ShortClipr's name/logo and reuse the service identifiers documented in `PLATFORM_HANDOFF.md`. This is a research and design proposal, not an implemented system or proof of market demand.
 
@@ -68,14 +68,11 @@ Fit below means suitability for dependable programmatic production. It does not 
 | Psychology/habits | A cue changes a daily routine | Loop diagram and concrete daily actions | High visually; avoid unsupported causal claims |
 | Sports tactics | How a passing triangle opens space | Field, players as markers, paths | High; do not imply actual footage |
 | Anatomy/health explainer | How a joint moves | Labeled simplified anatomical rig | Medium; expert review, anatomy correctness |
-| Recipe/process | Assemble a sandwich step by step | Ingredients, layers, tool movement | High for stylized instructions |
 | Architecture | How a room changes with layout | Top-down or isometric room, movable furniture | Medium; reusable asset kit |
 | Satisfying loop | A geometric machine sorts colored objects | Deterministic paths, cycles, synchronization | High; weak informational value unless designed well |
 | Music visualization | Shapes respond to a rhythm | Audio envelope, pulses, particles | High; licensed audio and motion restraint |
-| Product ad | Show a specific pain and its solution | Problem state, demonstration, result, CTA | High; accurate claims and product assets |
 | News/context explainer | What changed in a new announcement | Timeline, verified quotation, comparison | Medium; freshness and attribution |
 | Documentary collage | Explain an event with archival materials | Layered photos, map, date labels | Medium; asset rights and authenticity |
-| Cinematic action | A complex chase with moving cameras | 3D rigs, environments, interaction | Low for MVP; asset/physics/render cost |
 | Photorealistic character drama | Subtle human interaction | Detailed rigs, performance, facial acting | Low for pure procedural generation |
 
 For higher-risk factual domains, animate supplied/verified information. A polished illustration must not become a substitute for evidence.
@@ -237,17 +234,17 @@ The renderer computes quantities from the rules; it must not trust model-supplie
 
 | Engine | Best role | Tradeoff |
 | --- | --- | --- |
-| Remotion + React/SVG | Main candidate: scenes, typography, UI stories, preview/export parity | Browser rendering cost and commercial licensing need assessment |
+| Revideo + TypeScript/Canvas/SVG | Selected free candidate: headless scenes, typography, media, partial and parallel rendering | Newer ecosystem; pin and benchmark the exact release |
 | Motion Canvas | Strong alternative for explanatory vector choreography | A separate generator/timeline model to integrate |
 | Manim Community | Optional math/geometry specialist | Additional Python render path and preview integration |
 | Three.js | Optional stylized 3D inside a controlled renderer | Models, lighting, WebGL, and performance variability |
 | FFmpeg | Encoding, audio mix, probing, assembly | Not the main high-level storytelling engine |
 
-Remotion compositions define component, dimensions, frame rate, and duration. Motion Canvas specializes in vector animation and voice synchronization; Manim provides programmatic mathematical animation; Three.js provides scene/camera/renderer primitives. These capabilities justify the proposed roles, not an untested speed ranking. [Remotion](https://www.remotion.dev/docs/terminology/composition), [Motion Canvas](https://motioncanvas.io/docs/), [Manim](https://docs.manim.community/en/stable/), [Three.js](https://threejs.org/manual/pages/creating-a-scene.html).
+Revideo provides TypeScript scene definitions, headless rendering, dynamic input, partial/parallel rendering and a browser player. Motion Canvas specializes in vector animation and voice synchronization; Manim provides programmatic mathematical animation; Three.js provides scene/camera/renderer primitives. These capabilities justify the proposed roles, not an untested speed ranking. [Revideo](https://github.com/midrender/revideo), [Motion Canvas](https://motioncanvas.io/docs/), [Manim](https://docs.manim.community/en/stable/), [Three.js](https://threejs.org/manual/pages/creating-a-scene.html).
 
-**Recommendation:** benchmark Remotion for the main renderer, with SVG components and a small set of procedural Canvas effects. Add other engines only for proven gaps. Check Remotion's current license before commercial rollout: its terms distinguish free and company use and explicitly discuss AI-generated code services. Do not assume self-hosting removes license obligations. [Remotion terms](https://www.remotion.dev/docs/terms).
+**Current decision:** benchmark Revideo as the main renderer, with SVG/Canvas components and controlled Three.js effects. It is MIT licensed and its project documents headless and parallel rendering. Add other engines only for proven gaps. [Revideo license](https://github.com/midrender/revideo/blob/main/LICENSE).
 
-Rendering must be deterministic: identical frame number, project data, assets, and seed should produce identical output. Avoid wall-clock timers, unseeded randomness, or state that assumes sequential frame evaluation. Wait for assets/fonts before capture. [Remotion rendering guidance](https://www.remotion.dev/docs/flickering).
+Rendering must be deterministic: identical requested time/frame, project data, assets, and seed should produce identical output. Avoid wall-clock timers, unseeded randomness, or state that assumes uninterrupted sequential evaluation. Wait for assets/fonts before capture.
 
 ### Reuse the existing service identities
 
@@ -261,7 +258,7 @@ Rendering must be deterministic: identical frame number, project data, assets, a
 
 This is based on repository references, not a live audit of deployed Cloud Run settings. Keeping names avoids recreating service identities, but new images, dependencies, health checks, resources, and configuration still need deployment.
 
-Remotion documents a Cloud Run integration, but its provisioning workflow should not be assumed to match existing service names. A custom container using the renderer is a candidate for retaining the current topology. [Cloud Run integration](https://www.remotion.dev/docs/cloudrun).
+Revideo documents a production rendering service and its repository lists Google Cloud Run support. ShortClipr will use a custom container to preserve existing service names rather than copying an external deployment topology. [Revideo production rendering](https://midrender.com/revideo/docs/guide/building-webapps/deploy-rendering-service).
 
 Use durable job rows, polling in addition to notifications, stage leases, heartbeats, attempt limits, and idempotent completion/charging. Keep heavy rendering out of the public API. A returned HTTP response is not proof that background processing will finish; Cloud Run lifecycle, CPU allocation, termination, and request timeout behavior must be incorporated into the design. [Container contract](https://docs.cloud.google.com/run/docs/container-contract), [timeouts](https://docs.cloud.google.com/run/docs/configuring/request-timeout).
 

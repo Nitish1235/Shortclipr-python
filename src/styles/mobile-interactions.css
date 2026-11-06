@@ -1,0 +1,27 @@
+/* Mobile interaction hardening: keep provider controls, media actions and
+   Admin file pickers comfortable to use on touch devices. */
+.google-slot{width:min(100%,320px)}
+.google-slot iframe{max-width:100%!important}
+.project-stage video{width:100%;max-height:100%;object-fit:contain}
+.project-download{width:100%;min-height:50px;touch-action:manipulation}
+.voice-picker-control,.voice-selected-play,.voice-option-play{touch-action:manipulation}
+.file-drop{touch-action:manipulation}
+
+@media(max-width:700px){
+  .google-slot{width:100%;min-height:48px}
+  .google-slot>div,.google-slot iframe{max-width:100%!important}
+  .google-slot iframe{width:100%!important}
+
+  .plan-strip article button,.dashboard-pricing article a{width:100%;min-height:48px;align-items:center}
+  .project-stage video{max-height:clamp(290px,85vw,430px)}
+  .project-download{min-height:52px;margin-top:8px}
+
+  .voice-picker-control{min-height:52px}
+  .voice-selected-play,.voice-option-play{width:52px;min-height:52px}
+  .voice-option-select{min-height:52px;padding-top:12px;padding-bottom:12px}
+  .voice-options{max-height:min(55svh,420px);overscroll-behavior:contain}
+
+  .file-drop{min-height:84px}
+  .placement-file{min-height:92px}
+  .voice-admin-grid audio{height:44px}
+}

@@ -1,0 +1,21 @@
+/* Studio type is intentionally bold, but it must still be effortless to scan.
+   This layer softens the inherited condensed tracking across every dashboard
+   surface without changing the visual identity. */
+.studio-page h1{line-height:.97;letter-spacing:-.004em;word-spacing:.055em}
+.studio-page h2,.studio-page h3{line-height:1.04;letter-spacing:0;word-spacing:.045em}
+.studio-page .quick-create h2,.studio-page .launch-panel h2,.studio-page .screening-copy h2,.studio-page .premiere-info h2{line-height:.97}
+.studio-page .type-card b,.studio-page .admin-media-item h3,.studio-page .admin-job h3{line-height:1.08;letter-spacing:0}
+.studio-page .ledger-balance strong,.studio-page .ledger-card strong,.studio-page .credit-number strong{line-height:.88;letter-spacing:-.025em}
+.studio-page .plan-strip article>b{line-height:1.08;letter-spacing:-.005em}
+.studio-page .page-intro>p,.studio-page .form-heading>p:last-child,.studio-page .type-card small,.studio-page .project-title small,.studio-page .admin-job small{line-height:1.55}
+.studio-page .kicker,.studio-page .panel-label,.topbar b,.topbar small{line-height:1.5}
+.rail-nav p{margin:31px 10px 13px;line-height:1.5}
+.rail-nav a{padding-top:14px;padding-bottom:14px;line-height:1.4;letter-spacing:.02em}
+.new-film{letter-spacing:.01em}
+
+@media(max-width:700px){
+  .studio-page h1{line-height:1;letter-spacing:0}
+  .studio-page h2,.studio-page h3{line-height:1.07;letter-spacing:0}
+  .rail-nav p{margin-top:25px}
+  .rail-nav a{padding-top:12px;padding-bottom:12px}
+}
