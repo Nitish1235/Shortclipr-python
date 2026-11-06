@@ -62,7 +62,7 @@ for (const [file, service] of deployments) {
   const probeArguments = normalized.split('\n').map(line => line.trim()).filter(line => line.startsWith('- --startup-probe='));
   check(probeArguments.length === 1, `${file} must pass exactly one startup-probe argument`);
   const probe = probeArguments[0] ?? '';
-  for (const field of ['httpGet.path=/', 'httpGet.port=8080', 'initialDelaySeconds=', 'timeoutSeconds=', 'periodSeconds=', 'failureThreshold=']) {
+  for (const field of ['httpGet.path=/health', 'httpGet.port=8080', 'initialDelaySeconds=', 'timeoutSeconds=', 'periodSeconds=', 'failureThreshold=']) {
     check(probe.includes(field), `${file} startup probe is missing ${field}`);
   }
 }
@@ -80,7 +80,7 @@ for (const required of [
 ]) {
   check(combinedWorkers.includes(required), `backend/cloudbuild-workers-all.yaml is missing ${required}`);
 }
-const combinedProbes = combinedWorkers.match(/--startup-probe=httpGet\.path=\/ready,httpGet\.port=8080,initialDelaySeconds=0,timeoutSeconds=5,periodSeconds=10,failureThreshold=\d+/g) ?? [];
+const combinedProbes = combinedWorkers.match(/--startup-probe=httpGet\.path=\/health,httpGet\.port=8080,initialDelaySeconds=0,timeoutSeconds=5,periodSeconds=10,failureThreshold=\d+/g) ?? [];
 check(combinedProbes.length === 3, 'backend/cloudbuild-workers-all.yaml must keep one API and two FFmpeg startup probes');
 
 const apiDocker = await read('backend/Dockerfile');
