@@ -16,7 +16,9 @@ from .services.voices import UnrealSpeech, VoiceCatalogue
 
 
 settings=get_settings()
-logging.basicConfig(level=settings.LOG_LEVEL,format="%(asctime)s %(levelname)s %(name)s %(message)s")
+# Uvicorn's CLI accepts lower-case levels while Python logging expects names in
+# upper-case. Accept either spelling from the shared Cloud Run environment.
+logging.basicConfig(level=settings.LOG_LEVEL.upper(),format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
 
 @asynccontextmanager

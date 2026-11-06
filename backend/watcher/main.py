@@ -17,7 +17,7 @@ import asyncpg
 import httpx
 
 
-logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger("shortclipr.watcher")
 
 
