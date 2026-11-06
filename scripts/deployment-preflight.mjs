@@ -82,6 +82,15 @@ for (const required of [
 }
 const combinedProbes = combinedWorkers.match(/--startup-probe=httpGet\.path=\/health,httpGet\.port=8080,initialDelaySeconds=0,timeoutSeconds=5,periodSeconds=10,failureThreshold=\d+/g) ?? [];
 check(combinedProbes.length === 3, 'backend/cloudbuild-workers-all.yaml must keep one API and two FFmpeg startup probes');
+const logLevelDeployments = [
+  'backend/cloudbuild-api.yaml',
+  'backend/cloudbuild-api-worker.yaml',
+  'backend/cloudbuild-ffmpeg-worker.yaml',
+];
+for (const file of logLevelDeployments) {
+  check((await read(file)).includes('--update-env-vars=LOG_LEVEL=info'), `${file} must normalize LOG_LEVEL for Uvicorn`);
+}
+check((combinedWorkers.match(/--update-env-vars=LOG_LEVEL=info/g) ?? []).length === 3, 'backend/cloudbuild-workers-all.yaml must normalize LOG_LEVEL for all worker services');
 
 const apiDocker = await read('backend/Dockerfile');
 const planningDocker = await read('backend/Dockerfile.api-worker');
@@ -90,6 +99,8 @@ check(apiDocker.includes('SERVICE_ROLE=api'), 'Public API image does not set its
 check(planningDocker.includes('SERVICE_ROLE=api-worker'), 'Planning-worker image does not set its service role');
 check(renderDocker.includes('SERVICE_ROLE=ffmpeg-worker'), 'Render-worker image does not set its service role');
 check(renderDocker.includes('ffmpeg chromium nodejs npm'), 'Render-worker image is missing required media runtime packages');
+const startScript = await read('backend/start.sh');
+check(startScript.includes("tr '[:upper:]' '[:lower:]'"), 'Backend entrypoint must normalize LOG_LEVEL for Uvicorn');
 const watcherDocker = await read('backend/watcher/Dockerfile');
 check(watcherDocker.includes('EXPOSE 8080'), 'Watcher image does not expose Cloud Run port 8080');
 
