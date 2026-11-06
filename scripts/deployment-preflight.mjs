@@ -67,6 +67,22 @@ for (const [file, service] of deployments) {
   }
 }
 
+const combinedWorkers = (await read('backend/cloudbuild-workers-all.yaml')).replace(/\r\n/g, '\n');
+for (const required of [
+  'backend/Dockerfile.api-worker',
+  'backend/Dockerfile.ffmpeg-worker',
+  'shortclipr-api-worker-${_API_REGION}',
+  'shortclipr-ffmpeg-worker-$${region}',
+  '_FFMPEG_REGION_1: us-central1',
+  '_FFMPEG_REGION_2: europe-west1',
+  '--memory=4Gi',
+  '--concurrency=1',
+]) {
+  check(combinedWorkers.includes(required), `backend/cloudbuild-workers-all.yaml is missing ${required}`);
+}
+const combinedProbes = combinedWorkers.match(/--startup-probe=httpGet\.path=\/ready,httpGet\.port=8080,initialDelaySeconds=0,timeoutSeconds=5,periodSeconds=10,failureThreshold=\d+/g) ?? [];
+check(combinedProbes.length === 3, 'backend/cloudbuild-workers-all.yaml must keep one API and two FFmpeg startup probes');
+
 const apiDocker = await read('backend/Dockerfile');
 const planningDocker = await read('backend/Dockerfile.api-worker');
 const renderDocker = await read('backend/Dockerfile.ffmpeg-worker');
