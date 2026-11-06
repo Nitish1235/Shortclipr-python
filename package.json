@@ -9,7 +9,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
-    "check:deploy": "node scripts/deployment-preflight.mjs"
+    "check:seo": "node scripts/seo-audit.mjs",
+    "check:deploy": "node scripts/seo-audit.mjs && node scripts/deployment-preflight.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",

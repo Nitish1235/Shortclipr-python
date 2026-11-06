@@ -11,6 +11,21 @@ steps:
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     waitFor: [push]
     entrypoint: gcloud
-    args: [run, deploy, shortclipr-watcher, --image=us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-watcher:$COMMIT_SHA, --region=$_REGION, --platform=managed, --no-allow-unauthenticated, --memory=512Mi, --cpu=1, --no-cpu-throttling, --min-instances=1, --max-instances=1, --concurrency=1, --port=8080, --startup-probe=httpGet.path=/health,httpGet.port=8080,initialDelaySeconds=0,timeoutSeconds=5,periodSeconds=10,failureThreshold=6]
+    args:
+      - run
+      - deploy
+      - shortclipr-watcher
+      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-watcher:$COMMIT_SHA
+      - --region=$_REGION
+      - --platform=managed
+      - --no-allow-unauthenticated
+      - --memory=512Mi
+      - --cpu=1
+      - --no-cpu-throttling
+      - --min-instances=1
+      - --max-instances=1
+      - --concurrency=1
+      - --port=8080
+      - --startup-probe=httpGet.path=/health,httpGet.port=8080,initialDelaySeconds=0,timeoutSeconds=5,periodSeconds=10,failureThreshold=6
 images: [us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-watcher:$COMMIT_SHA, us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-watcher:latest]
 options: {logging: CLOUD_LOGGING_ONLY}

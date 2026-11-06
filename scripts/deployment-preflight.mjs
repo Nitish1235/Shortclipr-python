@@ -57,8 +57,14 @@ const deployments = [
 ];
 for (const [file, service] of deployments) {
   const source = await read(file);
-  check(source.includes(`run, deploy, ${service}`), `${file} does not retain ${service}`);
-  check(source.includes('--startup-probe='), `${file} is missing a startup probe`);
+  const normalized = source.replace(/\r\n/g, '\n');
+  check(normalized.includes(`      - run\n      - deploy\n      - ${service}`), `${file} does not retain ${service} as a deploy argument`);
+  const probeArguments = normalized.split('\n').map(line => line.trim()).filter(line => line.startsWith('- --startup-probe='));
+  check(probeArguments.length === 1, `${file} must pass exactly one startup-probe argument`);
+  const probe = probeArguments[0] ?? '';
+  for (const field of ['httpGet.path=/', 'httpGet.port=8080', 'initialDelaySeconds=', 'timeoutSeconds=', 'periodSeconds=', 'failureThreshold=']) {
+    check(probe.includes(field), `${file} startup probe is missing ${field}`);
+  }
 }
 
 const apiDocker = await read('backend/Dockerfile');

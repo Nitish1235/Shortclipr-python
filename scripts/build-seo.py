@@ -7,9 +7,9 @@ from seo_expansion import new_pages, new_guides, details, guide_extras, links, g
 ROOT = Path(__file__).resolve().parents[1] / 'public'
 DOMAIN = 'https://shortclipr.com'
 PUBLISHED_DATE = '2026-11-04'
-MODIFIED_DATE = '2026-11-05'
+MODIFIED_DATE = '2026-11-06'
 DISPLAY_PUBLISHED = 'November 4, 2026'
-DISPLAY_MODIFIED = 'November 5, 2026'
+DISPLAY_MODIFIED = 'November 6, 2026'
 
 # These pages describe creative possibilities while the product is in development.
 pages = [
@@ -163,9 +163,9 @@ def breadcrumb_html(path, title):
 
 def layout(path,title,description,body,image=None,is_article=False):
     canonical = DOMAIN + link(path)
-    image_meta = f'<meta property="og:image" content="{DOMAIN}/seo-assets/{e(image[0])}">' if image else ''
+    image_meta = f'<meta property="og:image" content="{DOMAIN}/seo-assets/{e(image[0])}"><meta property="og:image:alt" content="{e(image[1])}"><meta name="twitter:image" content="{DOMAIN}/seo-assets/{e(image[0])}">' if image else ''
     schema = structured_data(path,title,description,image,is_article)
-    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(title)} | ShortClipr</title><meta name="description" content="{e(description)}"><meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1"><link rel="canonical" href="{canonical}"><meta property="og:type" content="{'article' if is_article else 'website'}"><meta property="og:title" content="{e(title)} | ShortClipr"><meta property="og:description" content="{e(description)}"><meta property="og:url" content="{canonical}">{image_meta}<meta name="twitter:card" content="summary_large_image"><meta name="theme-color" content="#171914"><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/seo.css"><script type="application/ld+json">{schema}</script></head><body><header class="nav"><a class="brand" href="/story-machine/"><img src="/logo.svg" alt="">ShortClipr<span>.</span></a><nav aria-label="Main navigation"><a href="/video-ideas/">Video ideas</a><a href="/guides/">Guides</a><a href="/about/">About</a></nav><a class="nav-cta" href="/studio/create">Explore the studio ↗</a></header>{breadcrumb_html(path,title)}<main>{body}</main><footer><div><a class="brand" href="/story-machine/">ShortClipr<span>.</span></a><p>Little films. Big ideas.</p></div><div><a href="/video-ideas/">Video ideas</a><a href="/guides/">Creator guides</a><a href="/about/">About</a><a href="/editorial-policy/">Editorial policy</a></div><small>ShortClipr is in development. Creative formats and availability may change.</small></footer></body></html>'''
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(title)} | ShortClipr</title><meta name="description" content="{e(description)}"><meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1"><link rel="canonical" href="{canonical}"><meta property="og:type" content="{'article' if is_article else 'website'}"><meta property="og:site_name" content="ShortClipr"><meta property="og:title" content="{e(title)} | ShortClipr"><meta property="og:description" content="{e(description)}"><meta property="og:url" content="{canonical}">{image_meta}<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="{e(title)} | ShortClipr"><meta name="twitter:description" content="{e(description)}"><meta name="theme-color" content="#171914"><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/seo.css"><script type="application/ld+json">{schema}</script></head><body><header class="nav"><a class="brand" href="/story-machine/"><img src="/logo.svg" alt="">ShortClipr<span>.</span></a><nav aria-label="Main navigation"><a href="/video-ideas/">Video ideas</a><a href="/guides/">Guides</a><a href="/about/">About</a></nav><a class="nav-cta" href="/studio/create">Explore the studio ↗</a></header>{breadcrumb_html(path,title)}<main>{body}</main><footer><div><a class="brand" href="/story-machine/">ShortClipr<span>.</span></a><p>Little films. Big ideas.</p></div><div><a href="/video-ideas/">Video ideas</a><a href="/guides/">Creator guides</a><a href="/about/">About</a><a href="/editorial-policy/">Editorial policy</a></div><small>ShortClipr is in development. Creative formats and availability may change.</small></footer></body></html>'''
 
 def save(path,title,description,body,image=None,is_article=False):
     folder=ROOT/path; folder.mkdir(parents=True,exist_ok=True)
@@ -225,6 +225,6 @@ policy_body='''<section class="trust-hero"><p class="eyebrow">SHORTCLIPR EDITORI
 save('editorial-policy','ShortClipr editorial policy','How ShortClipr writes, reviews, labels and updates its creator guides and product information.',policy_body)
 
 paths=[p[0] for p in pages]+['guides','video-ideas','about','editorial-policy']+['guides/'+g[0] for g in guides]
-(ROOT/'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+''.join(f'  <url><loc>{DOMAIN}{link(path)}</loc></url>\n' for path in ['story-machine']+paths)+'</urlset>\n',encoding='utf-8')
-(ROOT/'robots.txt').write_text('User-agent: OAI-SearchBot\nAllow: /\nDisallow: /studio\nDisallow: /admin\nDisallow: /login\n\nUser-agent: GPTBot\nDisallow: /\n\nUser-agent: *\nDisallow: /studio\nDisallow: /admin\nDisallow: /login\n\nSitemap: https://shortclipr.com/sitemap.xml\n',encoding='utf-8')
+(ROOT/'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+''.join(f'  <url><loc>{DOMAIN}{link(path)}</loc><lastmod>{MODIFIED_DATE}</lastmod></url>\n' for path in ['story-machine']+paths)+'</urlset>\n',encoding='utf-8')
+(ROOT/'robots.txt').write_text('User-agent: OAI-SearchBot\nAllow: /\n\nUser-agent: GPTBot\nDisallow: /\n\nUser-agent: *\nAllow: /\n\nSitemap: https://shortclipr.com/sitemap.xml\n',encoding='utf-8')
 print(f'Built {len(paths)} public pages and sitemap.')

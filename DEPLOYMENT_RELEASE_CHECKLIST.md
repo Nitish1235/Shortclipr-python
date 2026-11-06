@@ -144,7 +144,19 @@ After deployment, check in this order:
    cap and confirm its next job remains queued rather than being discarded.
 6. In Admin, upload both named landing placements and one reel clip; confirm
    the Story Machine landing page renders all three through signed URLs.
-7. Confirm `robots.txt`, sitemap, canonical URLs, and public SEO pages render.
+7. Run `npm run check:seo`; it must report the same number of indexable pages
+   and sitemap URLs with no broken internal links.
+8. Confirm `/robots.txt` and `/sitemap.xml` return HTTP 200 from the public
+   frontend hostname, and confirm `/` permanently redirects to
+   `/story-machine/`.
+9. Confirm an unknown public URL returns the branded page with HTTP 404, while
+   `/landing-demo/` and `/clip-types/` permanently redirect to their canonical
+   replacements.
+10. After the first production release, add the `shortclipr.com` domain
+    property in Google Search Console, submit
+    `https://shortclipr.com/sitemap.xml`, and inspect the landing page plus one
+    product page and one guide. This is an external post-deploy action; no API
+    key or application environment variable is required.
 
 The Cloud Build files now use explicit HTTP startup probes. Cloud Run startup
 probes only consider 2xx/3xx responses healthy, so a failed readiness endpoint
