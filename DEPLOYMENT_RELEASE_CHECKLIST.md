@@ -21,6 +21,7 @@ sequence:
 10. `backend/migrations/0010_worker_region_state.sql`
 11. `backend/migrations/0011_landing_thumbnail_slots.sql` — six image-only landing thumbnail placements.
 12. `backend/migrations/0012_editorial_landing_media.sql` — editorial collection media placements.
+13. `backend/migrations/0013_billing_plan_constraint.sql` — aligns checkout plans with Starter, Creator, and Studio.
 
 Then import the retained users with `backend/migrations/users_import_template.sql`.
 Never migrate retired feature tables or old jobs.

@@ -24,7 +24,7 @@ const expectedMigrations = [
   '0004_billing_checkout_sessions.sql', '0005_project_email_notifications.sql',
   '0006_landing_media_slots.sql', '0007_pricing_entitlements.sql', '0008_free_plan_15_seconds.sql',
   '0009_media_placement_map.sql', '0010_worker_region_state.sql', '0011_landing_thumbnail_slots.sql',
-  '0012_editorial_landing_media.sql'
+  '0012_editorial_landing_media.sql', '0013_billing_plan_constraint.sql'
 ];
 check(JSON.stringify(migrationFiles) === JSON.stringify(expectedMigrations), 'Migration sequence is incomplete or out of order');
 

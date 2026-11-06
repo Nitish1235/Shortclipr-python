@@ -1,4 +1,5 @@
 import re
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 import asyncpg
@@ -69,6 +70,8 @@ async def create_project(payload: CreateProjectRequest, user: CurrentUser = Depe
             account = await connection.fetchrow("SELECT * FROM credit_accounts WHERE user_id=$1 FOR UPDATE", user.id)
             if not account:
                 raise HTTPException(status_code=409, detail="Credit account is not initialized")
+            if user.plan != "free" and user.subscription_status == "active" and account["cycle_ends_at"] <= datetime.now(timezone.utc):
+                raise HTTPException(status_code=402, detail="Your plan cycle has ended; renewal confirmation is pending")
             available = account["total_credits"] - account["spent_credits"] - account["reserved_credits"]
             if credits > available:
                 raise HTTPException(status_code=402, detail="Not enough render time for this production")
@@ -119,5 +122,7 @@ async def credit_balance(user: CurrentUser = Depends(current_user), settings: Se
     row = await pool.fetchrow("SELECT * FROM credit_accounts WHERE user_id=$1", user.id)
     if not row:
         raise HTTPException(status_code=404, detail="Credit account not found")
+    if user.plan != "free" and row["cycle_ends_at"] <= datetime.now(timezone.utc):
+        return {"total": 0, "used": 0, "remaining": 0, "cycle_ends_at": row["cycle_ends_at"]}
     used = row["spent_credits"] + row["reserved_credits"]
     return {"total":row["total_credits"],"used":used,"remaining":max(0,row["total_credits"]-used),"cycle_ends_at":row["cycle_ends_at"]}
