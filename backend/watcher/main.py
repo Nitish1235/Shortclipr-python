@@ -284,19 +284,37 @@ class Dispatcher:
     async def run(self) -> None:
         wake = asyncio.Event()
         async with self.pool.acquire() as listener:
-            await listener.add_listener("shortclipr_jobs", lambda *_: wake.set())
+            def on_job_notification(*_args: object) -> None:
+                wake.set()
+
+            await listener.add_listener("shortclipr_jobs", on_job_notification)
             self.wake = wake
-            async with httpx.AsyncClient() as client:
-                while True:
-                    wake.clear()
-                    await self.reconcile()
-                    launched = await self.fill_available_slots(client)
-                    if wake.is_set():
-                        continue
-                    try:
-                        await asyncio.wait_for(wake.wait(), timeout=1 if launched else 10)
-                    except asyncio.TimeoutError:
-                        pass
+            try:
+                async with httpx.AsyncClient() as client:
+                    while True:
+                        wake.clear()
+                        try:
+                            await self.reconcile()
+                            launched = await self.fill_available_slots(client)
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception:
+                            # A malformed row, transient database disconnect,
+                            # or provider failure must not terminate the
+                            # always-on dispatcher. The next pass reconciles
+                            # leases and retries safely.
+                            logger.exception("Watcher loop failed; retrying dispatch")
+                            launched = False
+                            await asyncio.sleep(5)
+                            continue
+                        if wake.is_set():
+                            continue
+                        try:
+                            await asyncio.wait_for(wake.wait(), timeout=1 if launched else 10)
+                        except asyncio.TimeoutError:
+                            pass
+            finally:
+                await listener.remove_listener("shortclipr_jobs", on_job_notification)
 
 
 async def health_server() -> None:
