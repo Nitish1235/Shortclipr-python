@@ -9,7 +9,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from itertools import cycle
 from uuid import UUID, uuid4
 
@@ -132,7 +132,10 @@ class Dispatcher:
 
     async def claim(self, job_class: str, target: WorkerTarget) -> asyncpg.Record | None:
         token = uuid4()
-        lease_interval = "28 minutes" if job_class == "render" else "6 minutes"
+        # asyncpg binds PostgreSQL intervals as timedeltas, not interval
+        # strings. Keeping this typed prevents the watcher from crashing when
+        # it claims the first API or render job after a deployment.
+        lease_interval = timedelta(minutes=28 if job_class == "render" else 6)
         async with self.pool.acquire() as connection:
             async with connection.transaction():
                 row = await connection.fetchrow(
