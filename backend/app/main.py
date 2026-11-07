@@ -68,11 +68,24 @@ async def health():
 
 @app.get("/ready", tags=["health"])
 async def ready():
-    """Readiness requires both an initialized pool and a live database query."""
+    """Readiness requires a live database connection AND that the schema is applied.
+
+    Cloud Run uses this probe before routing traffic.  Failing here on a
+    wrong-database URL prevents the worker from accepting jobs it cannot serve.
+    """
     if not app.state.db:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database is not ready")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database pool is not initialised")
     try:
-        await app.state.db.fetchval("SELECT 1")
+        # Verify schema exists: SELECT 1 passes even on an empty database, but
+        # querying pg_class is cheap and fails fast when migrations haven't run.
+        table_exists = await app.state.db.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM pg_class WHERE relname='projects' AND relkind='r')"
+        )
     except Exception:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database is not ready") from None
-    return {"status":"ready","service":f"shortclipr-{settings.SERVICE_ROLE}"}
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database query failed") from None
+    if not table_exists:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database schema is missing — run migrations or check SUPABASE_DB_URL",
+        )
+    return {"status": "ready", "service": f"shortclipr-{settings.SERVICE_ROLE}"}
