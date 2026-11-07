@@ -92,7 +92,7 @@ class Dispatcher:
 
     async def record_rejection(self, job_class: str, target: WorkerTarget, error: str) -> None:
         await self.pool.execute(
-            """UPDATE worker_region_state SET blocked_until=now()+($4::text||' seconds')::interval,
+            """UPDATE worker_region_state SET blocked_until=now()+($4 * interval '1 second'),
                last_error=$3,last_rejection_at=now(),updated_at=now()
                WHERE job_class=$1 AND region=$2""",
             job_class, target.region, error[:1000], self.cooldown_seconds,
@@ -199,7 +199,7 @@ class Dispatcher:
                     return
                 if job["attempts"] < job["max_attempts"]:
                     await connection.execute(
-                        """UPDATE job_attempts SET status='ready',due_at=now()+($3::text||' seconds')::interval,
+                        """UPDATE job_attempts SET status='ready',due_at=now()+($3 * interval '1 second'),
                            lease_token=NULL,lease_expires_at=NULL,last_error=$4 WHERE id=$1 AND lease_token=$2""",
                         job_id, lease_token, retry_seconds, error[:1000],
                     )
