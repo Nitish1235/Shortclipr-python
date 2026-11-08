@@ -350,8 +350,39 @@ async def run_render(
             extra={"duration_ms": total_ms, "error": message},
             exc_info=True,
         )
-        await fail_project(pool, project_id, "render_failed", message)
-        await finish_attempt(pool, attempt_id, lease_token, "failed", message)
+        # Only permanently fail the project once all watcher retries are
+        # exhausted (attempts >= max_attempts). For earlier failures, mark
+        # the job_attempt as failed so the watcher can schedule the next
+        # attempt without immediately burning the user's credits.
+        attempt_row = (
+            await pool.fetchrow("SELECT attempts, max_attempts FROM job_attempts WHERE id=$1", attempt_id)
+            if attempt_id else None
+        )
+        is_final = not attempt_row or attempt_row["attempts"] >= attempt_row["max_attempts"]
+        if is_final:
+            await fail_project(pool, project_id, "render_failed", message)
+            await finish_attempt(pool, attempt_id, lease_token, "failed", message)
+        else:
+            # Non-final failure — requeue with exponential back-off so the
+            # watcher can dispatch it again without user intervention.
+            retry_delay = min(300, 30 * (attempt_row["attempts"] if attempt_row else 1))
+            logger.warning(
+                "render.will_retry",
+                extra={
+                    "attempt": attempt_row["attempts"] if attempt_row else "?",
+                    "max_attempts": attempt_row["max_attempts"] if attempt_row else "?",
+                    "retry_in_s": retry_delay,
+                    "error": message[:200],
+                },
+            )
+            if attempt_id:
+                await pool.execute(
+                    """UPDATE job_attempts
+                       SET status='ready', due_at=now()+($3 * interval '1 second'),
+                           lease_token=NULL, lease_expires_at=NULL, last_error=$4
+                       WHERE id=$1 AND lease_token=$2""",
+                    attempt_id, lease_token, retry_delay, message[:1000],
+                )
     finally:
         if output_path:
             output_path.unlink(missing_ok=True)
