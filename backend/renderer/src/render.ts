@@ -21,7 +21,7 @@ const rendered = await renderVideo({
     projectSettings:{size:{x:width,y:height}},
     logProgress:true,
     ffmpeg:{ffmpegPath:process.env.FFMPEG_PATH ?? 'ffmpeg',ffmpegLogLevel:'error'},
-    puppeteer:{args:['--no-sandbox','--disable-dev-shm-usage'],...(executablePath?{executablePath}:{})}
+    puppeteer:{args:['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'],...(executablePath?{executablePath}:{})}
   }
 })
 console.log(JSON.stringify({output:rendered,projectId:plan.projectId}))

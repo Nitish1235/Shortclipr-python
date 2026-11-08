@@ -61,6 +61,7 @@ async def lifespan(app: FastAPI):
     else:
         app.state.emailer=ProjectReadyEmailer(settings, app.state.storage)
         app.state.renderer=RevideoRenderer()
+        await app.state.renderer.preflight()
     yield
     if app.state.db:
         await app.state.db.close()

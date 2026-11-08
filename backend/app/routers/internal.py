@@ -14,7 +14,7 @@ from ..dependencies import internal_request
 from ..models.schemas import InternalRunRequest
 from ..services.openai_planner import OpenAIPlanner
 from ..services.quality import validate_final
-from ..services.renderer import RevideoRenderer
+from ..services.renderer import NonRetryableRenderError, RevideoRenderer
 from ..services.scene_compiler import SceneCompiler
 from ..services.storage import ObjectStorage
 from ..services.email import ProjectReadyEmailer
@@ -361,7 +361,11 @@ async def run_render(
             await pool.fetchrow("SELECT attempts, max_attempts FROM job_attempts WHERE id=$1", attempt_id)
             if attempt_id else None
         )
-        is_final = not attempt_row or attempt_row["attempts"] >= attempt_row["max_attempts"]
+        is_final = (
+            isinstance(error, NonRetryableRenderError)
+            or not attempt_row
+            or attempt_row["attempts"] >= attempt_row["max_attempts"]
+        )
         if is_final:
             await fail_project(pool, project_id, "render_failed", message)
             await finish_attempt(pool, attempt_id, lease_token, "failed", message)
