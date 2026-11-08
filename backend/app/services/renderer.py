@@ -56,16 +56,6 @@ class RevideoRenderer:
             "import('@revideo/renderer').then(() => process.exit(0))",
             label="Revideo",
         )
-        await self._check_command(
-            self.chromium_path,
-            "--headless",
-            "--no-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-            "--dump-dom",
-            "about:blank",
-            label="Chromium headless launch",
-        )
         logger.info("renderer.preflight.ok", extra={"renderer_root": str(self.renderer_root), **versions})
         return versions
 
