@@ -33,15 +33,15 @@ def landing_media_kind(slot: str, content_type: str) -> str:
 
 async def showcase_payload(row: asyncpg.Record, storage: ObjectStorage) -> dict:
     value = dict(row)
-    value["video_url"] = await storage.signed_url(row["video_object"], minutes=30) or row["video_url"]
+    value["video_url"] = row["video_url"] or ""
     if row["poster_object"]:
-        value["poster_url"] = await storage.signed_url(row["poster_object"], minutes=30) or row["poster_url"]
+        value["poster_url"] = row["poster_url"] or ""
     return value
 
 
 async def landing_media_payload(row: asyncpg.Record, storage: ObjectStorage) -> dict:
     value = dict(row)
-    value["media_url"] = await storage.signed_url(row["media_object"], minutes=30) or row["media_url"]
+    value["media_url"] = row["media_url"] or ""
     return value
 
 
@@ -94,7 +94,7 @@ async def upload_landing_media(
         raise HTTPException(status_code=413, detail="Landing media exceeds the configured size limit")
     suffix = Path(media.filename or "").suffix.lower() or (".mp4" if media_kind == "video" else ".jpg")
     storage = ObjectStorage(settings)
-    object_name = await storage.upload_bytes_private(data, content_type, f"landing-media/{slot}", suffix)
+    object_name, media_url = await storage.upload_public(data, content_type, f"landing-media/{slot}", suffix)
     old_object = None
     try:
         async with pool.acquire() as connection:
@@ -104,13 +104,13 @@ async def upload_landing_media(
                 row = await connection.fetchrow(
                     """
                     INSERT INTO landing_media_slots(slot,title,caption,media_kind,media_object,media_url,created_by)
-                    VALUES($1,$2,$3,$4,$5,'',$6)
+                    VALUES($1,$2,$3,$4,$5,$6,$7)
                     ON CONFLICT(slot) DO UPDATE SET title=EXCLUDED.title,caption=EXCLUDED.caption,
-                    media_kind=EXCLUDED.media_kind,media_object=EXCLUDED.media_object,media_url='',
+                    media_kind=EXCLUDED.media_kind,media_object=EXCLUDED.media_object,media_url=EXCLUDED.media_url,
                     created_by=EXCLUDED.created_by,updated_at=now()
                     RETURNING *
                     """,
-                    slot, title.strip() or "ShortClipr feature", caption.strip(), media_kind, object_name, user.id,
+                    slot, title.strip() or "ShortClipr feature", caption.strip(), media_kind, object_name, media_url, user.id,
                 )
     except Exception:
         await storage.delete(object_name)
@@ -148,9 +148,8 @@ async def admin_jobs(request: Request, _: CurrentUser = Depends(admin_user), poo
     result=[]
     for row in rows:
         value=dict(row)
-        value["output_url"]=await storage.signed_url(row["output_object"])
-        if row["poster_object"]:
-            value["poster_url"]=await storage.signed_url(row["poster_object"])
+        value["output_url"] = None
+        value["poster_url"] = None
         result.append(value)
     return result
 

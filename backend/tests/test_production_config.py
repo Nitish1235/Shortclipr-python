@@ -11,7 +11,6 @@ def production_settings(**overrides):
         "OPENAI_API_KEY": "sk-test",
         "UNREALSPEECH_API_KEY": "unreal-test",
         "GCS_BUCKET_NAME": "shortclipr-private",
-        "GCS_SIGNING_SERVICE_ACCOUNT": "shortclipr-signing@example.iam.gserviceaccount.com",
         "DODO_PAYMENTS_API_KEY": "dodo-test",
         "DODO_PAYMENTS_WEBHOOK_SECRET": "whsec-test",
         "DODO_API_BASE": "https://live.dodopayments.com",
@@ -64,7 +63,6 @@ def test_render_worker_requires_render_secrets_not_payment_or_model_secrets():
         APP_ENV="production", SERVICE_ROLE="ffmpeg-worker", FRONTEND_URL="https://shortclipr.com",
         SUPABASE_DB_URL="postgresql://user:password@host:5432/database",
         GCS_BUCKET_NAME="shortclipr-private",
-        GCS_SIGNING_SERVICE_ACCOUNT="shortclipr-signing@example.iam.gserviceaccount.com",
         RESEND_API_KEY="re_test", RESEND_FROM_EMAIL="ShortClipr <films@shortclipr.com>",
         INTERNAL_TASK_SECRET="i" * 32,
     )

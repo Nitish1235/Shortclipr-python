@@ -35,7 +35,6 @@ class Settings(BaseSettings):
 
     GCS_BUCKET_NAME: str = ""
     GCS_PUBLIC_BASE_URL: str = "https://storage.googleapis.com"
-    GCS_SIGNING_SERVICE_ACCOUNT: str = ""
 
     DODO_PAYMENTS_API_KEY: str = ""
     DODO_PAYMENTS_WEBHOOK_SECRET: str = ""
@@ -94,7 +93,6 @@ class Settings(BaseSettings):
                 "JWT_SECRET": self.JWT_SECRET,
                 "UNREALSPEECH_API_KEY": self.UNREALSPEECH_API_KEY,
                 "GCS_BUCKET_NAME": self.GCS_BUCKET_NAME,
-                "GCS_SIGNING_SERVICE_ACCOUNT": self.GCS_SIGNING_SERVICE_ACCOUNT,
                 "DODO_PAYMENTS_API_KEY": self.DODO_PAYMENTS_API_KEY,
                 "DODO_PAYMENTS_WEBHOOK_SECRET": self.DODO_PAYMENTS_WEBHOOK_SECRET,
                 "DODO_PRODUCT_STARTER": self.DODO_PRODUCT_STARTER,
@@ -111,7 +109,6 @@ class Settings(BaseSettings):
             "ffmpeg-worker": {
                 "SUPABASE_DB_URL": self.SUPABASE_DB_URL,
                 "GCS_BUCKET_NAME": self.GCS_BUCKET_NAME,
-                "GCS_SIGNING_SERVICE_ACCOUNT": self.GCS_SIGNING_SERVICE_ACCOUNT,
                 "RESEND_API_KEY": self.RESEND_API_KEY,
                 "RESEND_FROM_EMAIL": self.RESEND_FROM_EMAIL,
                 "INTERNAL_TASK_SECRET": self.INTERNAL_TASK_SECRET,

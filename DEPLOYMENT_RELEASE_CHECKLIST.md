@@ -48,7 +48,7 @@ The complete role-specific secret map is:
 ```text
 shortclipr-api
   SUPABASE_DB_URL, FRONTEND_URL, GOOGLE_CLIENT_ID, JWT_SECRET,
-  UNREALSPEECH_API_KEY, GCS_BUCKET_NAME, GCS_SIGNING_SERVICE_ACCOUNT,
+  UNREALSPEECH_API_KEY, GCS_BUCKET_NAME,
   DODO_PAYMENTS_API_KEY, DODO_PAYMENTS_WEBHOOK_SECRET,
   DODO_PRODUCT_STARTER, DODO_PRODUCT_CREATOR, DODO_PRODUCT_STUDIO
 
@@ -58,7 +58,7 @@ shortclipr-api-worker-{region}
 
 shortclipr-ffmpeg-worker-{region}
   SUPABASE_DB_URL, FRONTEND_URL, GCS_BUCKET_NAME,
-  GCS_SIGNING_SERVICE_ACCOUNT, RESEND_API_KEY, RESEND_FROM_EMAIL,
+  RESEND_API_KEY, RESEND_FROM_EMAIL,
   INTERNAL_TASK_SECRET
 ```
 
@@ -74,12 +74,12 @@ configured before its first deployment.
 ## 3. Configure permissions
 
 - API and render-worker service accounts: Storage Object Admin for the private
-  GCS bucket and Service Account Token Creator on `GCS_SIGNING_SERVICE_ACCOUNT`.
+  GCS bucket. Private project media is streamed through authenticated API routes.
 - All services receiving secrets: Secret Manager Secret Accessor.
 - Cloud Build identity: Artifact Registry write access and permission to update
   the retained Cloud Run services.
-- Confirm the GCS bucket is not publicly readable. Videos, landing media, and
-  finished downloads use time-limited signed URLs.
+- Confirm the GCS bucket is not publicly readable. Private project videos use
+  authenticated API streaming; deliberately public showcase media uses public URLs.
 
 ## 4. Configure providers
 
@@ -138,13 +138,13 @@ After deployment, check in this order:
    Confirm the checkout return page changes from “securely confirming” to
    “payment confirmed” and that replaying the same webhook does not grant twice.
 4. Create one 15-second test film. Verify planner dispatch, render, FFmpeg QC,
-   private GCS upload, signed playback/download, credit settlement, and Resend
+    private GCS upload, authenticated playback/download, credit settlement, and Resend
    ready-email.
 5. In Admin, confirm the Render Floor lists every configured worker region,
    capacity, active assignment and safely queued job. Fill one region to its
    cap and confirm its next job remains queued rather than being discarded.
 6. In Admin, upload both named landing placements and one reel clip; confirm
-   the Story Machine landing page renders all three through signed URLs.
+    the Story Machine landing page renders all three through their configured public media URLs.
 7. Run `npm run check:seo`; it must report the same number of indexable pages
    and sitemap URLs with no broken internal links.
 8. Confirm `/robots.txt` and `/sitemap.xml` return HTTP 200 from the public

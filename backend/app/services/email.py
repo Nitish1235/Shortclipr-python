@@ -58,9 +58,9 @@ class ProjectReadyEmailer:
                 )
 
             studio_url = f"{self.settings.FRONTEND_URL.rstrip('/')}/studio/projects/{project_id}"
-            # A short-lived direct MP4 link is convenient on mobile. The Studio
-            # URL remains the durable route and asks the user to sign in.
-            download_url = await self.storage.signed_download_url(project["output_object"], filename=project["title"], minutes=10080)
+            # Keep the object private. The Studio route authenticates the owner
+            # and streams the file through the API without a signed GCS URL.
+            download_url = None
             payload = {
                 "from": self.settings.RESEND_FROM_EMAIL,
                 "to": [owner["email"]],
@@ -125,7 +125,7 @@ class ProjectReadyEmailer:
       <tr><td style="padding:22px 28px;border-bottom:1px solid #d6d4ca"><span style="font-size:17px;font-weight:800;letter-spacing:-.06em">SHORTCLIPR</span><span style="float:right;font-size:10px;letter-spacing:.12em;color:#6a6c63">PRODUCTION DESK</span></td></tr>
       <tr><td style="padding:44px 28px 24px"><div style="font-size:10px;letter-spacing:.16em;color:#73756c;margin-bottom:14px">FINAL EXPORT / READY</div><h1 style="margin:0;font-family:Georgia,serif;font-weight:400;font-size:40px;line-height:1.02;letter-spacing:-.045em">Your film is<br><i>ready to screen.</i></h1><p style="font-size:16px;line-height:1.6;margin:22px 0 0;color:#45473f">Hi {name}, the studio has completed the final cut. Your clip passed rendering and quality checks.</p></td></tr>
       <tr><td style="padding:0 28px 28px"><div style="background:#24271d;color:#f5f4eb;padding:25px 24px"><div style="font-size:10px;letter-spacing:.15em;color:#bdff32;margin-bottom:38px">YOUR FINISHED CLIP</div><div style="font-family:Georgia,serif;font-size:28px;line-height:1.1;margin-bottom:20px">{title}</div><div style="font-size:11px;letter-spacing:.08em;color:#c4c6bb">{kind.upper()} &nbsp; / &nbsp; {duration} &nbsp; / &nbsp; {ratio}</div></div></td></tr>
-      <tr><td style="padding:2px 28px 44px"><a href="{safe_studio_url}" style="display:inline-block;margin:0 10px 10px 0;padding:14px 18px;background:#bdff32;color:#20231b;text-decoration:none;font:700 12px Arial,sans-serif;letter-spacing:.08em">OPEN IN STUDIO ↗</a>{download_button}<p style="font-size:12px;line-height:1.5;color:#71736a;margin:20px 0 0">The direct download is secure and available for 7 days. Your film remains in your Studio archive.</p></td></tr>
+      <tr><td style="padding:2px 28px 44px"><a href="{safe_studio_url}" style="display:inline-block;margin:0 10px 10px 0;padding:14px 18px;background:#bdff32;color:#20231b;text-decoration:none;font:700 12px Arial,sans-serif;letter-spacing:.08em">OPEN IN STUDIO ↗</a>{download_button}<p style="font-size:12px;line-height:1.5;color:#71736a;margin:20px 0 0">Your film remains private in your Studio archive. Open the project to watch or download it.</p></td></tr>
       <tr><td style="padding:20px 28px;background:#e5e3d8;color:#74766d;font-size:11px;line-height:1.5">Made with ShortClipr · This is an automated production update.</td></tr>
     </table>
   </td></tr></table>

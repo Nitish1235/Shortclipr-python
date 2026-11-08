@@ -40,6 +40,16 @@ class ApiClient {
     const result=await this.request<{downloadUrl:string}>(`/v1/projects/${id}/download`)
     return result.downloadUrl
   }
+  async projectMedia(id:string,download=false): Promise<string> {
+    if(demoMode)return demoStore.project(id)?.outputUrl ?? ''
+    const response=await fetch(`${configuredBase}/v1/projects/${id}/media${download?'?download=1':''}`,{headers:this.token?{Authorization:`Bearer ${this.token}`}:{}})
+    if(!response.ok){
+      const payload=await response.json().catch(()=>({detail:response.statusText}))
+      if(response.status===401){this.token=null;localStorage.removeItem('shortclipr.accessToken');dispatchEvent(new CustomEvent('shortclipr:unauthorized'))}
+      throw new Error(payload.detail??'Could not load the final video')
+    }
+    return URL.createObjectURL(await response.blob())
+  }
   async createProject(input:CreateProjectInput): Promise<Project> { return demoMode ? demoStore.createProject(input) : this.request('/v1/projects',{method:'POST',body:JSON.stringify(input)}) }
   async cancelProject(id:string):Promise<void>{
     if(demoMode){demoStore.saveProjects(demoStore.projects().map(project=>project.id===id?{...project,status:'cancelled',progress:0}:project));return}

@@ -37,8 +37,8 @@ Each service uses Cloud Run port `8080`. Cloud Run service accounts need
 `Secret Manager Secret Accessor`; services that touch GCS also need the
 appropriate Storage role (historically `Storage Object Admin`). The API and
 render-worker identities also need `Service Account Token Creator` on the
-`GCS_SIGNING_SERVICE_ACCOUNT` identity so private final videos can receive
-V4 signed download URLs without storing a JSON private key.
+  private-bucket object access. Private final videos are streamed through
+  authenticated API routes without signed URLs or JSON private keys.
 
 ## Frontend build-time environment
 
@@ -70,7 +70,7 @@ set.
 | Supabase/Postgres | `SUPABASE_DB_URL` |
 | Google login/JWT | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `JWT_SECRET`, `JWT_EXPIRY_DAYS` |
 | Dodo | `DODO_PAYMENTS_API_KEY`, `DODO_PAYMENTS_WEBHOOK_SECRET`, `DODO_API_BASE`, `DODO_ALLOW_UNSIGNED_WEBHOOKS`, `DODO_PRODUCT_STARTER`, `DODO_PRODUCT_CREATOR`, `DODO_PRODUCT_STUDIO`, and their render-time allowances |
-| GCS | `GCS_BUCKET_NAME`, `GCS_PUBLIC_BASE_URL`, `GCS_SIGNING_SERVICE_ACCOUNT` |
+| GCS | `GCS_BUCKET_NAME`, `GCS_PUBLIC_BASE_URL` |
 | TikTok events | `TIKTOK_PIXEL_ID`, `TIKTOK_ACCESS_TOKEN`, `TIKTOK_TEST_EVENT_CODE` |
 | Meta events | `META_PIXEL_ID`, `META_CONVERSIONS_API_TOKEN`, `META_TEST_EVENT_CODE` |
 | OpenAI scene system | `OPENAI_API_KEY`, `OPENAI_LUNA_MODEL`, `OPENAI_TERRA_MODEL`, `OPENAI_REASONING_EFFORT_LUNA`, `OPENAI_REASONING_EFFORT_TERRA` |
@@ -186,7 +186,8 @@ brand art. Admin controls the media-led surfaces: `landing_visible` showcase cli
 feed the multi-film landing reel, while the `landing_media_slots` table holds
 one direct-uploaded `landing_hero_background`, `screening_feature`, and
 `screening_side` asset. These placements accept browser-safe MP4/WebM or JPG/PNG/WebP files, are kept private
-in GCS, and are delivered through short-lived signed URLs by `/v1/landing-media`.
+in GCS. Private project media is delivered through authenticated API streaming;
+public showcase/landing media uses its configured public media URL.
 Admin uploads and restores the default artwork through `/admin` only.
 
 ## Rebuild order

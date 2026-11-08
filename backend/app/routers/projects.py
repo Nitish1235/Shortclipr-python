@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import StreamingResponse
 
 from ..core.config import Settings, get_settings
 from ..core.log import get_logger
@@ -20,9 +21,9 @@ router = APIRouter(prefix="/v1", tags=["projects"])
 async def project_payload(row: asyncpg.Record, storage: ObjectStorage) -> dict:
     value = dict(row)
     if row["output_object"]:
-        value["output_url"] = await storage.signed_url(row["output_object"])
+        value["output_url"] = f"/v1/projects/{row['id']}/media"
     if row["poster_object"]:
-        value["poster_url"] = await storage.signed_url(row["poster_object"])
+        value["poster_url"] = f"/v1/projects/{row['id']}/poster"
     return value
 
 
@@ -48,16 +49,32 @@ async def get_project(project_id: UUID, request: Request, user: CurrentUser = De
 
 @router.get("/projects/{project_id}/download", response_model=ProjectDownloadResponse)
 async def download_project(project_id: UUID, request: Request, user: CurrentUser = Depends(current_user), pool: asyncpg.Pool = Depends(get_pool)):
-    """Issue an attachment URL so phone browsers download instead of only previewing the film."""
+    """Return the authenticated media route used by the frontend download action."""
     row = await pool.fetchrow("SELECT title,output_object FROM projects WHERE id=$1 AND user_id=$2", project_id, user.id)
     if not row:
         raise HTTPException(status_code=404, detail="Project not found")
     if not row["output_object"]:
         raise HTTPException(status_code=409, detail="The final video is not ready yet")
-    url = await request.app.state.storage.signed_download_url(row["output_object"], row["title"])
-    if not url:
-        raise HTTPException(status_code=503, detail="A download link could not be prepared")
-    return {"download_url": url}
+    return {"download_url": f"/v1/projects/{project_id}/media?download=1"}
+
+
+@router.get("/projects/{project_id}/media")
+async def project_media(project_id: UUID, request: Request, download: int = 0, user: CurrentUser = Depends(current_user), pool: asyncpg.Pool = Depends(get_pool)):
+    row = await pool.fetchrow("SELECT output_object,title FROM projects WHERE id=$1 AND user_id=$2", project_id, user.id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not row["output_object"]:
+        raise HTTPException(status_code=409, detail="The final video is not ready yet")
+    content_type, size = await request.app.state.storage.private_object_info(row["output_object"])
+    headers = {}
+    if download:
+        filename = "".join(char if char.isalnum() or char in " -_." else "_" for char in row["title"]).strip() or "shortclipr-film"
+        if not filename.lower().endswith(".mp4"):
+            filename += ".mp4"
+        headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    if size is not None:
+        headers["Content-Length"] = str(size)
+    return StreamingResponse(request.app.state.storage.stream_private(row["output_object"]), media_type=content_type, headers=headers)
 
 
 @router.post("/projects", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)

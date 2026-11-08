@@ -223,6 +223,7 @@ async def run_render(
         job_class="render",
     )
     output_path: Path | None = None
+    audio_path: Path | None = None
     completed_project: dict | None = None
     try:
         project = await pool.fetchrow("SELECT * FROM projects WHERE id=$1", project_id)
@@ -258,10 +259,12 @@ async def run_render(
             "palette": {"background": "#171914", "foreground": "#f2f0e7", "accent": "#bdff32", "secondary": "#c6b7ec"},
         }
 
-        # ── Sign audio URL for renderer ───────────────────────────────────
+        # ── Download narration locally for renderer ───────────────────────
         if project["audio_object"]:
-            async with timed(logger, "render.sign_audio") as ctx:
-                plan["audioPath"] = await storage.signed_url(project["audio_object"], minutes=60)
+            async with timed(logger, "render.download_audio") as ctx:
+                audio_path = Path(tempfile.mkdtemp(prefix="shortclipr-audio-")) / "narration.mp3"
+                await storage.download_private(project["audio_object"], audio_path)
+                plan["audioPath"] = str(audio_path)
                 ctx["audio_object"] = project["audio_object"]
 
         # ── Run the Revideo renderer subprocess ───────────────────────────
@@ -388,6 +391,12 @@ async def run_render(
             output_path.unlink(missing_ok=True)
             try:
                 output_path.parent.rmdir()
+            except OSError:
+                pass
+        if audio_path:
+            audio_path.unlink(missing_ok=True)
+            try:
+                audio_path.parent.rmdir()
             except OSError:
                 pass
 

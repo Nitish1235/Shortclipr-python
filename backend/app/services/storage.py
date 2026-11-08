@@ -1,11 +1,8 @@
 import asyncio
-from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
 
 from google.cloud import storage
-from google.auth import default as google_auth_default
-from google.auth.transport.requests import Request as GoogleRequest
 
 from ..core.config import Settings
 
@@ -14,7 +11,6 @@ class ObjectStorage:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.client = storage.Client() if settings.GCS_BUCKET_NAME else None
-        self.credentials = google_auth_default()[0] if self.client else None
 
     async def upload_public(self, data: bytes, content_type: str, prefix: str, filename: str) -> tuple[str, str]:
         if not self.client or not self.settings.GCS_BUCKET_NAME:
@@ -74,43 +70,37 @@ class ObjectStorage:
         await asyncio.to_thread(upload)
         return object_name
 
-    async def signed_url(self, object_name: str | None, minutes: int = 15) -> str | None:
-        if not object_name or not self.client or not self.settings.GCS_BUCKET_NAME:
-            return None
+    async def private_object_info(self, object_name: str) -> tuple[str, int | None]:
+        if not self.client or not self.settings.GCS_BUCKET_NAME:
+            raise RuntimeError("GCS_BUCKET_NAME is not configured")
 
-        def sign() -> str:
+        def load() -> tuple[str, int | None]:
             blob = self.client.bucket(self.settings.GCS_BUCKET_NAME).blob(object_name)
-            # Cloud Run's attached service account has no downloadable private key.
-            # Passing an access token + service account delegates V4 signing to IAM SignBlob.
-            if self.credentials:
-                self.credentials.refresh(GoogleRequest())
-                service_account = self.settings.GCS_SIGNING_SERVICE_ACCOUNT or getattr(self.credentials, "service_account_email", "")
-                if service_account and self.credentials.token:
-                    return blob.generate_signed_url(
-                        version="v4", expiration=timedelta(minutes=minutes), method="GET",
-                        service_account_email=service_account, access_token=self.credentials.token,
-                    )
-            return blob.generate_signed_url(version="v4", expiration=timedelta(minutes=minutes), method="GET")
+            blob.reload()
+            return blob.content_type or "application/octet-stream", blob.size
 
-        return await asyncio.to_thread(sign)
+        return await asyncio.to_thread(load)
 
-    async def signed_download_url(self, object_name: str | None, filename: str, minutes: int = 10080) -> str | None:
-        """Create a time-limited attachment link suitable for a delivery email."""
-        if not object_name or not self.client or not self.settings.GCS_BUCKET_NAME:
-            return None
+    async def download_private(self, object_name: str, destination: Path) -> None:
+        if not self.client or not self.settings.GCS_BUCKET_NAME:
+            raise RuntimeError("GCS_BUCKET_NAME is not configured")
 
-        safe_name = "".join(char if char.isalnum() or char in " -_." else "_" for char in filename).strip() or "shortclipr-film"
-        if not safe_name.lower().endswith(".mp4"):
-            safe_name += ".mp4"
+        def download() -> None:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            self.client.bucket(self.settings.GCS_BUCKET_NAME).blob(object_name).download_to_filename(str(destination))
 
-        def sign() -> str:
-            blob = self.client.bucket(self.settings.GCS_BUCKET_NAME).blob(object_name)
-            params = {"response-content-disposition": f'attachment; filename="{safe_name}"'}
-            if self.credentials:
-                self.credentials.refresh(GoogleRequest())
-                service_account = self.settings.GCS_SIGNING_SERVICE_ACCOUNT or getattr(self.credentials, "service_account_email", "")
-                if service_account and self.credentials.token:
-                    return blob.generate_signed_url(version="v4", expiration=timedelta(minutes=minutes), method="GET", query_parameters=params, service_account_email=service_account, access_token=self.credentials.token)
-            return blob.generate_signed_url(version="v4", expiration=timedelta(minutes=minutes), method="GET", query_parameters=params)
+        await asyncio.to_thread(download)
 
-        return await asyncio.to_thread(sign)
+    async def stream_private(self, object_name: str):
+        if not self.client or not self.settings.GCS_BUCKET_NAME:
+            raise RuntimeError("GCS_BUCKET_NAME is not configured")
+        blob = self.client.bucket(self.settings.GCS_BUCKET_NAME).blob(object_name)
+        reader = await asyncio.to_thread(blob.open, "rb")
+        try:
+            while True:
+                chunk = await asyncio.to_thread(reader.read, 1024 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            await asyncio.to_thread(reader.close)
