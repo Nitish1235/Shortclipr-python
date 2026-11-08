@@ -23,41 +23,24 @@ class RevideoRenderer:
         self.chromium_path = os.getenv("PUPPETEER_EXECUTABLE_PATH", shutil.which("chromium") or "chromium")
         self.tsx_path = self.renderer_root / "node_modules" / "tsx" / "dist" / "cli.mjs"
 
-    async def _check_command(self, *args: str, label: str) -> str:
-        try:
-            process = await asyncio.create_subprocess_exec(
-                *args,
-                cwd=self.renderer_root,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=20)
-        except (OSError, asyncio.TimeoutError) as error:
-            raise RuntimeError(f"Renderer preflight could not run {label}: {error}") from error
-        if process.returncode:
-            detail = (stderr or stdout).decode(errors="replace")[-1200:]
-            raise RuntimeError(f"Renderer preflight failed for {label}: {detail}")
-        return stdout.decode(errors="replace").strip()
-
     async def preflight(self) -> dict[str, str]:
-        """Validate the immutable render runtime once when the worker starts."""
+        """Validate packaged renderer files without blocking Cloud Run startup."""
         if not self.renderer_root.is_dir():
             raise RuntimeError(f"Renderer root does not exist: {self.renderer_root}")
         if not self.tsx_path.is_file():
             raise RuntimeError(f"Renderer TypeScript runner is missing: {self.tsx_path}")
-        versions = {
-            "node": await self._check_command(self.node_path, "--version", label="Node.js"),
-            "ffmpeg": await self._check_command(self.ffmpeg_path, "-version", label="FFmpeg"),
-            "chromium": await self._check_command(self.chromium_path, "--version", label="Chromium"),
-        }
-        await self._check_command(
-            self.node_path,
-            "-e",
-            "import('@revideo/renderer').then(() => process.exit(0))",
-            label="Revideo",
+        revideo_path = self.renderer_root / "node_modules" / "@revideo" / "renderer"
+        if not revideo_path.is_dir():
+            raise RuntimeError(f"Revideo package is missing: {revideo_path}")
+        required_binaries = {"node": self.node_path, "ffmpeg": self.ffmpeg_path, "chromium": self.chromium_path}
+        missing = [label for label, path in required_binaries.items() if Path(path).is_absolute() and not Path(path).is_file()]
+        if missing:
+            raise RuntimeError(f"Renderer binaries are missing: {', '.join(missing)}")
+        logger.info(
+            "renderer.preflight.ok",
+            extra={"renderer_root": str(self.renderer_root), "revideo_path": str(revideo_path), **required_binaries},
         )
-        logger.info("renderer.preflight.ok", extra={"renderer_root": str(self.renderer_root), **versions})
-        return versions
+        return required_binaries
 
     def validate_plan(self, plan: dict[str, Any]) -> None:
         allowed_ratios = {"9:16", "1:1", "16:9"}
