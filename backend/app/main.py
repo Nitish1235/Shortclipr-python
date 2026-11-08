@@ -1,10 +1,13 @@
 import logging
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from .core.config import get_settings
+from .core.log import configure_logging, get_logger
 from .db import create_pool
 from .routers import admin_workers, auth, billing, catalog, internal, projects, showcase
 from .services.openai_planner import OpenAIPlanner
@@ -15,10 +18,30 @@ from .services.email import ProjectReadyEmailer
 from .services.voices import UnrealSpeech, VoiceCatalogue
 
 
-settings=get_settings()
-# Uvicorn's CLI accepts lower-case levels while Python logging expects names in
-# upper-case. Accept either spelling from the shared Cloud Run environment.
-logging.basicConfig(level=settings.LOG_LEVEL.upper(),format="%(asctime)s %(levelname)s %(name)s %(message)s")
+settings = get_settings()
+configure_logging(settings.LOG_LEVEL)
+logger = get_logger("shortclipr.api")
+
+
+class _RequestLogMiddleware(BaseHTTPMiddleware):
+    """Log every HTTP request with method, path, status code, and wall time."""
+
+    async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+        t0 = time.monotonic()
+        response: Response = await call_next(request)
+        duration_ms = round((time.monotonic() - t0) * 1000)
+        # Skip noisy health probes to keep logs clean.
+        if request.url.path not in {"/health", "/ready"}:
+            logger.info(
+                "http.request",
+                extra={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status": response.status_code,
+                    "duration_ms": duration_ms,
+                },
+            )
+        return response
 
 
 @asynccontextmanager
@@ -43,8 +66,9 @@ async def lifespan(app: FastAPI):
         await app.state.db.close()
 
 
-app=FastAPI(title="ShortClipr API",version="0.1.0",lifespan=lifespan,docs_url="/docs" if settings.APP_ENV!="production" else None)
-app.add_middleware(CORSMiddleware,allow_origins=settings.cors_origins,allow_credentials=True,allow_methods=["*"] ,allow_headers=["*"])
+app = FastAPI(title="ShortClipr API", version="0.1.0", lifespan=lifespan, docs_url="/docs" if settings.APP_ENV != "production" else None)
+app.add_middleware(_RequestLogMiddleware)
+app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 if settings.SERVICE_ROLE == "api":
     app.include_router(auth.router)
     app.include_router(projects.router)

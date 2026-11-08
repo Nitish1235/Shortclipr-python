@@ -6,13 +6,14 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from ..core.config import Settings, get_settings
+from ..core.log import get_logger
 from ..db import get_pool
 from ..dependencies import CurrentUser, current_user
 from ..models.schemas import CreateProjectRequest, CreditBalanceResponse, ProjectDownloadResponse, ProjectResponse
 from ..services.credits import estimate_credits
 from ..services.storage import ObjectStorage
 
-
+logger = get_logger("shortclipr.projects")
 router = APIRouter(prefix="/v1", tags=["projects"])
 
 
@@ -89,6 +90,17 @@ async def create_project(payload: CreateProjectRequest, user: CurrentUser = Depe
             await connection.execute("INSERT INTO job_attempts(id,project_id,job_class,status) VALUES($1,$2,'api','ready')", attempt_id, project_id)
             await connection.execute("INSERT INTO project_events(project_id,event_type,stage,progress) VALUES($1,'queued','api',2)", project_id)
             await connection.execute("SELECT pg_notify('shortclipr_jobs',$1)", str(attempt_id))
+    logger.info(
+        "project.queued",
+        extra={
+            "project_id": str(project_id),
+            "attempt_id": str(attempt_id),
+            "credits_reserved": credits,
+            "clip_type": payload.clip_type,
+            "duration_s": payload.duration_seconds,
+            "aspect_ratio": payload.aspect_ratio,
+        },
+    )
     return dict(row)
 
 

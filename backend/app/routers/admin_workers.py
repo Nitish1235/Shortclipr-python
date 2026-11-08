@@ -132,3 +132,75 @@ async def requeue_project(
             await connection.execute("SELECT pg_notify('shortclipr_jobs',$1)", str(updated))
 
     return {"requeued": True, "projectId": str(project_id)}
+
+
+@router.get("/projects/{project_id}/events")
+async def project_events(
+    project_id: UUID,
+    _: CurrentUser = Depends(admin_user),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Return the full pipeline event timeline for a project.
+
+    Use this to diagnose stuck or failed jobs without opening the DB console.
+    Events are ordered chronologically.
+    """
+    project = await pool.fetchrow(
+        "SELECT id, status, progress, error_code, error_message, created_at, updated_at FROM projects WHERE id=$1",
+        project_id,
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    events = await pool.fetch(
+        """SELECT id, event_type, stage, progress, payload, created_at
+           FROM project_events WHERE project_id=$1 ORDER BY created_at""",
+        project_id,
+    )
+
+    attempts = await pool.fetch(
+        """SELECT id, job_class, status, attempts, max_attempts,
+                  worker_region, last_error, due_at, lease_expires_at, created_at, updated_at
+           FROM job_attempts WHERE project_id=$1 ORDER BY job_class, created_at""",
+        project_id,
+    )
+
+    return {
+        "projectId": str(project_id),
+        "project": {
+            "status": project["status"],
+            "progress": project["progress"],
+            "errorCode": project["error_code"],
+            "errorMessage": project["error_message"],
+            "createdAt": project["created_at"],
+            "updatedAt": project["updated_at"],
+        },
+        "events": [
+            {
+                "id": str(e["id"]),
+                "eventType": e["event_type"],
+                "stage": e["stage"],
+                "progress": e["progress"],
+                "payload": e["payload"],
+                "createdAt": e["created_at"],
+            }
+            for e in events
+        ],
+        "attempts": [
+            {
+                "id": str(a["id"]),
+                "jobClass": a["job_class"],
+                "status": a["status"],
+                "attempts": a["attempts"],
+                "maxAttempts": a["max_attempts"],
+                "workerRegion": a["worker_region"],
+                "lastError": a["last_error"],
+                "dueAt": a["due_at"],
+                "leaseExpiresAt": a["lease_expires_at"],
+                "createdAt": a["created_at"],
+                "updatedAt": a["updated_at"],
+            }
+            for a in attempts
+        ],
+    }
+
