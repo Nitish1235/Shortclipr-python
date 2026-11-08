@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="2250" viewBox="0 0 1800 2250">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#10150f"/><stop offset="1" stop-color="#1c241a"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000" flood-opacity=".28"/></filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 Z" fill="#bdff32"/></marker>
+    <marker id="arrowMuted" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 Z" fill="#9aa58e"/></marker>
+    <style>
+      .title{font:900 50px Arial,sans-serif;letter-spacing:-2px;fill:#f4f1e8}.subtitle{font:400 20px Arial,sans-serif;fill:#b8c2ad}.section{font:900 18px Arial,sans-serif;letter-spacing:3px;fill:#bdff32}.label{font:900 22px Arial,sans-serif;fill:#f4f1e8}.body{font:400 17px Arial,sans-serif;fill:#d5dccd}.small{font:400 15px Arial,sans-serif;fill:#b8c2ad}.tiny{font:700 13px Arial,sans-serif;letter-spacing:1px;fill:#7e8d77}.db{font:900 17px Arial,sans-serif;fill:#171b13}.dbsmall{font:400 14px Arial,sans-serif;fill:#31392b}.num{font:900 24px Arial,sans-serif;fill:#171b13}.card{filter:url(#shadow)}
+    </style>
+  </defs>
+
+  <rect width="1800" height="2250" fill="url(#bg)"/>
+  <text x="90" y="95" class="section">SHORTCLIPR / APPLICATION-LEVEL PIPELINE</text>
+  <text x="90" y="160" class="title">What happens after a video topic enters?</text>
+  <text x="90" y="198" class="subtitle">One production moves through the API, PostgreSQL durable queue, planner worker, render worker, GCS, and frontend polling.</text>
+
+  <!-- swimlanes -->
+  <rect x="70" y="250" width="1660" height="440" rx="24" fill="#182219" stroke="#354433"/>
+  <rect x="70" y="720" width="1660" height="660" rx="24" fill="#171e28" stroke="#354433"/>
+  <rect x="70" y="1410" width="1660" height="620" rx="24" fill="#211c2b" stroke="#4d3e5c"/>
+  <text x="105" y="295" class="section">1 / REQUEST &amp; QUEUE</text>
+  <text x="105" y="765" class="section">2 / PLANNING &amp; NARRATION</text>
+  <text x="105" y="1455" class="section">3 / RENDER, QUALITY &amp; DELIVERY</text>
+
+  <!-- top row -->
+  <g class="card">
+    <rect x="110" y="340" width="280" height="230" rx="18" fill="#bdff32"/>
+    <circle cx="150" cy="380" r="23" fill="#171b13"/><text x="142" y="388" class="num">1</text>
+    <text x="185" y="386" class="label" fill="#171b13">User / Frontend</text>
+    <text x="140" y="430" class="db">Topic + options</text><text x="140" y="458" class="dbsmall">brief, clip type, duration,</text><text x="140" y="480" class="dbsmall">voice, style, aspect ratio</text>
+    <text x="140" y="528" class="tiny">POST /v1/projects</text>
+  </g>
+  <g class="card">
+    <rect x="475" y="340" width="320" height="230" rx="18" fill="#f4f1e8"/>
+    <circle cx="515" cy="380" r="23" fill="#bdff32"/><text x="507" y="388" class="num">2</text>
+    <text x="550" y="386" class="label" fill="#171b13">API service</text>
+    <text x="505" y="430" class="db">Auth + entitlement check</text><text x="505" y="458" class="dbsmall">valid plan, credits, duration</text><text x="505" y="480" class="dbsmall">and clip type</text>
+    <text x="505" y="528" class="tiny">routers/projects.py</text>
+  </g>
+  <g class="card">
+    <rect x="880" y="340" width="350" height="230" rx="18" fill="#c6b7ec"/>
+    <circle cx="920" cy="380" r="23" fill="#171b13"/><text x="912" y="388" class="num">3</text>
+    <text x="955" y="386" class="label" fill="#171b13">PostgreSQL transaction</text>
+    <text x="910" y="430" class="db">Writes projects</text><text x="910" y="458" class="dbsmall">reserves credits + ledger entry</text><text x="910" y="480" class="dbsmall">creates API job_attempt</text>
+    <text x="910" y="528" class="tiny">pg_notify(shortclipr_jobs)</text>
+  </g>
+  <g class="card">
+    <rect x="1315" y="340" width="350" height="230" rx="18" fill="#f4f1e8"/>
+    <circle cx="1355" cy="380" r="23" fill="#bdff32"/><text x="1347" y="388" class="num">4</text>
+    <text x="1390" y="386" class="label" fill="#171b13">Watcher service</text>
+    <text x="1345" y="430" class="db">Durable queue dispatcher</text><text x="1345" y="458" class="dbsmall">claims ready job with lease</text><text x="1345" y="480" class="dbsmall">and picks worker region</text>
+    <text x="1345" y="528" class="tiny">LISTEN + polling + SKIP LOCKED</text>
+  </g>
+  <path d="M390 455 H465" stroke="#bdff32" stroke-width="5" marker-end="url(#arrow)"/><path d="M795 455 H870" stroke="#bdff32" stroke-width="5" marker-end="url(#arrow)"/><path d="M1230 455 H1305" stroke="#bdff32" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <!-- planning row -->
+  <g class="card">
+    <rect x="110" y="825" width="360" height="245" rx="18" fill="#f4f1e8"/>
+    <circle cx="150" cy="865" r="23" fill="#bdff32"/><text x="142" y="873" class="num">5</text>
+    <text x="185" y="871" class="label" fill="#171b13">API worker</text>
+    <text x="140" y="915" class="db">/internal/api-stage/run</text><text x="140" y="945" class="dbsmall">loads project from PostgreSQL</text><text x="140" y="970" class="dbsmall">sets status: planning</text><text x="140" y="1010" class="tiny">internal secret required</text>
+  </g>
+  <g class="card">
+    <rect x="535" y="825" width="360" height="245" rx="18" fill="#c6b7ec"/>
+    <circle cx="575" cy="865" r="23" fill="#171b13"/><text x="567" y="873" class="num">6</text>
+    <text x="610" y="871" class="label" fill="#171b13">OpenAI planner</text>
+    <text x="565" y="915" class="db">Creates frame-based scene plan</text><text x="565" y="945" class="dbsmall">title + narration + scenes</text><text x="565" y="970" class="dbsmall">re-times scenes to duration</text><text x="565" y="1010" class="tiny">Luna / Terra model routing</text>
+  </g>
+  <g class="card">
+    <rect x="960" y="825" width="310" height="245" rx="18" fill="#f4f1e8"/>
+    <circle cx="1000" cy="865" r="23" fill="#bdff32"/><text x="992" y="873" class="num">7</text>
+    <text x="1035" y="871" class="label" fill="#171b13">Scene compiler</text>
+    <text x="990" y="915" class="db">OpenAI → safe JSON</text><text x="990" y="945" class="dbsmall">visual family, copy, motion,</text><text x="990" y="970" class="dbsmall">density, palette</text><text x="990" y="1010" class="tiny">no executable code/assets</text>
+  </g>
+  <g class="card">
+    <rect x="1335" y="825" width="330" height="245" rx="18" fill="#bdff32"/>
+    <circle cx="1375" cy="865" r="23" fill="#171b13"/><text x="1367" y="873" class="num">8</text>
+    <text x="1410" y="871" class="label" fill="#171b13">UnrealSpeech</text>
+    <text x="1365" y="915" class="db">Narration generation</text><text x="1365" y="945" class="dbsmall">MP3 + word timestamps</text><text x="1365" y="970" class="dbsmall">using selected voice</text><text x="1365" y="1010" class="tiny">parallel with scene compile</text>
+  </g>
+  <path d="M1490 570 V670 H290 V815" stroke="#9aa58e" stroke-width="4" fill="none" marker-end="url(#arrowMuted)"/><path d="M470 947 H525" stroke="#bdff32" stroke-width="5" marker-end="url(#arrow)"/><path d="M895 947 H950" stroke="#bdff32" stroke-width="5" marker-end="url(#arrow)"/><path d="M1270 947 H1325" stroke="#bdff32" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <!-- planning storage -->
+  <g class="card"><rect x="295" y="1135" width="355" height="155" rx="18" fill="#c6b7ec"/><text x="335" y="1180" class="label" fill="#171b13">Private GCS</text><text x="335" y="1215" class="dbsmall">audio.mp3 + timestamps.json</text><text x="335" y="1245" class="dbsmall">projects/{user}/{project}/audio</text></g>
+  <g class="card"><rect x="760" y="1135" width="430" height="155" rx="18" fill="#f4f1e8"/><text x="800" y="1180" class="label" fill="#171b13">PostgreSQL update</text><text x="800" y="1215" class="dbsmall">scene_plans rows + narration_script</text><text x="800" y="1245" class="dbsmall">project → rendering / progress 38</text></g>
+  <g class="card"><rect x="1300" y="1135" width="365" height="155" rx="18" fill="#bdff32"/><text x="1340" y="1180" class="label" fill="#171b13">New durable job</text><text x="1340" y="1215" class="dbsmall">job_attempts: job_class=render</text><text x="1340" y="1245" class="dbsmall">notify watcher again</text></g>
+  <path d="M1510 1070 V1125" stroke="#bdff32" stroke-width="5" marker-end="url(#arrow)"/><path d="M895 1070 V1125" stroke="#bdff32" stroke-width="5" marker-end="url(#arrow)"/><path d="M650 1210 H750" stroke="#9aa58e" stroke-width="4" marker-end="url(#arrowMuted)"/><path d="M1190 1210 H1290" stroke="#bdff32" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <!-- render row -->
+  <g class="card"><rect x="110" y="1515" width="360" height="250" rx="18" fill="#f4f1e8"/><circle cx="150" cy="1555" r="23" fill="#bdff32"/><text x="142" y="1563" class="num">9</text><text x="185" y="1561" class="label" fill="#171b13">Watcher → render worker</text><text x="140" y="1605" class="db">/internal/ffmpeg-stage/run</text><text x="140" y="1635" class="dbsmall">lease: 28 minutes</text><text x="140" y="1665" class="dbsmall">one render per worker</text><text x="140" y="1705" class="tiny">Cloud Run + internal secret</text></g>
+  <g class="card"><rect x="535" y="1515" width="360" height="250" rx="18" fill="#c6b7ec"/><circle cx="575" cy="1555" r="23" fill="#171b13"/><text x="567" y="1563" class="num">10</text><text x="610" y="1561" class="label" fill="#171b13">Revideo renderer</text><text x="565" y="1605" class="db">Fixed scene grammar</text><text x="565" y="1635" class="dbsmall">loads scene_plans + signed audio URL</text><text x="565" y="1665" class="dbsmall">Chromium renders frames</text><text x="565" y="1705" class="tiny">FFmpeg muxes MP4 + audio</text></g>
+  <g class="card"><rect x="960" y="1515" width="310" height="250" rx="18" fill="#f4f1e8"/><circle cx="1000" cy="1555" r="23" fill="#bdff32"/><text x="992" y="1563" class="num">11</text><text x="1035" y="1561" class="label" fill="#171b13">Quality gate</text><text x="990" y="1605" class="db">ffprobe + ffmpeg decode</text><text x="990" y="1635" class="dbsmall">H.264, audio, dimensions</text><text x="990" y="1665" class="dbsmall">duration + corruption check</text><text x="990" y="1705" class="tiny">rejects invalid final output</text></g>
+  <g class="card"><rect x="1335" y="1515" width="330" height="250" rx="18" fill="#bdff32"/><circle cx="1375" cy="1555" r="23" fill="#171b13"/><text x="1367" y="1563" class="num">12</text><text x="1410" y="1561" class="label" fill="#171b13">Private GCS final</text><text x="1365" y="1605" class="db">uploads final.mp4</text><text x="1365" y="1635" class="dbsmall">settles credits + event</text><text x="1365" y="1665" class="dbsmall">project → complete / 100</text><text x="1365" y="1705" class="tiny">signed playback/download URL</text></g>
+  <path d="M470 1640 H525" stroke="#bdff32" stroke-width="5" marker-end="url(#arrow)"/><path d="M895 1640 H950" stroke="#bdff32" stroke-width="5" marker-end="url(#arrow)"/><path d="M1270 1640 H1325" stroke="#bdff32" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <!-- final delivery -->
+  <g class="card"><rect x="330" y="1830" width="470" height="130" rx="18" fill="#f4f1e8"/><text x="375" y="1875" class="label" fill="#171b13">Frontend polling</text><text x="375" y="1915" class="dbsmall">GET /v1/projects every 8 seconds</text><text x="375" y="1942" class="dbsmall">while queued / planning / rendering</text></g>
+  <g class="card"><rect x="930" y="1830" width="540" height="130" rx="18" fill="#c6b7ec"/><text x="975" y="1875" class="label" fill="#171b13">User sees the completed film</text><text x="975" y="1915" class="dbsmall">signed output URL → video player + download</text><text x="975" y="1942" class="dbsmall">ready email is sent by the render worker</text></g>
+  <path d="M1500 1765 V1795 H565 V1820" stroke="#9aa58e" stroke-width="4" fill="none" marker-end="url(#arrowMuted)"/><path d="M800 1895 H920" stroke="#bdff32" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <!-- failure/retry rail -->
+  <rect x="110" y="2070" width="1555" height="105" rx="16" fill="#10150f" stroke="#6d7e61" stroke-dasharray="8 8"/>
+  <text x="145" y="2110" class="section">FAILURE / RETRY SAFETY</text>
+  <text x="145" y="2145" class="body">Worker error → watcher retries up to 3 attempts → exhausted jobs mark the project failed and release reserved credits.</text>
+  <text x="145" y="2170" class="body">Cancellation or failure is idempotent through credit_ledger keys; expired leases are reconciled by the watcher.</text>
+
+  <!-- legend -->
+  <text x="90" y="2225" class="tiny">DATABASE: PostgreSQL / STORAGE: private Google Cloud Storage / COMPUTE: Cloud Run API + API worker + FFmpeg worker + singleton watcher</text>
+</svg>
