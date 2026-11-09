@@ -53,7 +53,7 @@ These are small fixes, but they matter because the project already has an automa
 
 ### Crawl and indexing
 
-- `robots.txt` allows ordinary crawlers, allows OAI-SearchBot, blocks GPTBot, and declares the sitemap.
+- `robots.txt` allows ordinary crawlers, GPTBot, ClaudeBot, Google-Extended, and OAI-SearchBot, and declares the sitemap.
 - The sitemap should contain only intended canonical, indexable pages.
 - Verify deployed HTTP status codes and headers with URL Inspection or an external crawl; repository inspection alone cannot prove production behavior.
 

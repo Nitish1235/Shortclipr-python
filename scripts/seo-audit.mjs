@@ -134,7 +134,9 @@ for (const route of pageRoutes) check(sitemapRoutes.has(route), `sitemap.xml: mi
 const robots = await readFile(join(root, 'public', 'robots.txt'), 'utf8');
 check(robots.includes('User-agent: *'), 'robots.txt: missing default crawler group');
 check(/User-agent: \*\r?\nAllow: \//.test(robots), 'robots.txt: default crawlers are not allowed to read noindex directives');
-check(/User-agent: GPTBot\r?\nDisallow: \//.test(robots), 'robots.txt: GPTBot training crawl is not blocked');
+check(/User-agent: GPTBot\r?\nAllow: \//.test(robots), 'robots.txt: GPTBot is not allowed to crawl public pages');
+check(/User-agent: ClaudeBot\r?\nAllow: \//.test(robots), 'robots.txt: ClaudeBot is not allowed to crawl public pages');
+check(/User-agent: Google-Extended\r?\nAllow: \//.test(robots), 'robots.txt: Google-Extended is not allowed to crawl public pages');
 check(robots.includes(`Sitemap: ${domain}/sitemap.xml`), 'robots.txt: missing absolute sitemap declaration');
 
 for (const [file, label] of [

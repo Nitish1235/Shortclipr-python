@@ -46,7 +46,9 @@ for (const route of ['/about/', '/editorial-policy/', '/faceless-tiktok-video-ma
 }
 const robots = await read('public/robots.txt');
 check(/User-agent: OAI-SearchBot\r?\nAllow: \//.test(robots), 'OAI-SearchBot is not explicitly allowed');
-check(/User-agent: GPTBot\r?\nDisallow: \//.test(robots), 'GPTBot training crawl is not blocked');
+check(/User-agent: GPTBot\r?\nAllow: \//.test(robots), 'GPTBot is not allowed to crawl public pages');
+check(/User-agent: ClaudeBot\r?\nAllow: \//.test(robots), 'ClaudeBot is not allowed to crawl public pages');
+check(/User-agent: Google-Extended\r?\nAllow: \//.test(robots), 'Google-Extended is not allowed to crawl public pages');
 const guidePage = await read('public/guides/how-to-make-animated-explainer-video/index.html');
 check(guidePage.includes('"@type":"Article"'), 'Generated guides are missing Article structured data');
 check(guidePage.includes('ShortClipr Editorial Team'), 'Generated guides are missing visible authorship');

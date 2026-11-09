@@ -213,5 +213,5 @@ save('editorial-policy','ShortClipr editorial policy','How ShortClipr writes, re
 
 paths=[p[0] for p in pages]+['guides','video-ideas','about','contact','editorial-policy']+['guides/'+g[0] for g in guides]
 (ROOT/'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+''.join(f'  <url><loc>{DOMAIN}{link(path)}</loc><lastmod>{MODIFIED_DATE}</lastmod></url>\n' for path in ['story-machine']+paths)+'</urlset>\n',encoding='utf-8')
-(ROOT/'robots.txt').write_text('User-agent: OAI-SearchBot\nAllow: /\n\nUser-agent: GPTBot\nDisallow: /\n\nUser-agent: *\nAllow: /\n\nSitemap: https://shortclipr.com/sitemap.xml\n',encoding='utf-8')
+(ROOT/'robots.txt').write_text('User-agent: OAI-SearchBot\nAllow: /\n\nUser-agent: GPTBot\nAllow: /\n\nUser-agent: ClaudeBot\nAllow: /\n\nUser-agent: anthropic-ai\nAllow: /\n\nUser-agent: Google-Extended\nAllow: /\n\nUser-agent: *\nAllow: /\n\nSitemap: https://shortclipr.com/sitemap.xml\n',encoding='utf-8')
 print(f'Built {len(paths)} public pages and sitemap.')

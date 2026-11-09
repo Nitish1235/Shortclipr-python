@@ -2,7 +2,17 @@ User-agent: OAI-SearchBot
 Allow: /
 
 User-agent: GPTBot
-Disallow: /
+Allow: /
+
+# Keep AI search and retrieval crawlers aligned with the public Google crawl policy.
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
 
 User-agent: *
 Allow: /
