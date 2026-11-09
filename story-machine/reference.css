@@ -57,7 +57,7 @@ body{background:var(--paper)}
 .example-track{display:flex;width:100%;gap:1.35cqw;animation:reference-reel-loop 55s linear infinite}
 .example-group{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1.35cqw;flex:0 0 100%;min-width:0}
 .example-clip{position:relative;display:block;aspect-ratio:9/16;overflow:hidden;border-radius:.7cqw;background:#29332f;color:white;text-align:left}
-.example-poster{position:absolute;inset:0;background-image:url('assets/editorial-reel.png');background-size:600% 100%;background-position:var(--poster-position) center}
+.example-poster{position:absolute;inset:0;background-image:var(--fallback-poster,url('assets/editorial-reel.png'));background-size:cover;background-position:center}
 .example-poster img{display:block;width:100%;height:100%;object-fit:cover}
 .example-clip::after{position:absolute;inset:0;content:'';background:linear-gradient(transparent 42%,#0006 65%,#000c)}
 .example-clip strong{position:absolute;left:1.2cqw;bottom:4.1cqw;z-index:1;font:700 2.05cqw/1.03 'DM Sans',sans-serif;letter-spacing:-.04em}

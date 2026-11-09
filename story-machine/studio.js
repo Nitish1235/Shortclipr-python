@@ -1,19 +1,19 @@
 (() => {
   const collections = {
     learn: [
-      {slot:'collection_learn_1',label:'EXPLAINER',title:'Make the unseen visible',description:'Turn a difficult idea into a clear visual story.',position:'0% 0%',href:'/animated-explainer-video-maker/'},
-      {slot:'collection_learn_2',label:'HISTORY',title:'Open a window in time',description:'Give a moment from the past shape and momentum.',position:'50% 0%',href:'/guides/how-to-make-history-shorts/'},
-      {slot:'collection_learn_3',label:'GEOGRAPHY',title:'Follow the land',description:'Make a place, map or journey easy to feel.',position:'100% 0%',href:'/video-ideas/'}
+      {slot:'collection_learn_1',label:'EXPLAINER',title:'Make the unseen visible',description:'Turn a difficult idea into a clear visual story.',fallbackImage:'/clip-types/animated-explainer.jpg',href:'/animated-explainer-video-maker/'},
+      {slot:'collection_learn_2',label:'HISTORY',title:'Open a window in time',description:'Give a moment from the past shape and momentum.',fallbackImage:'/clip-types/historical-story.jpg',href:'/guides/how-to-make-history-shorts/'},
+      {slot:'collection_learn_3',label:'GEOGRAPHY',title:'Follow the land',description:'Make a place, map or journey easy to feel.',fallbackImage:'/clip-types/maps-geography.jpg',href:'/video-ideas/'}
     ],
     story: [
-      {slot:'collection_story_1',label:'MINI STORY',title:'Tell it in a minute',description:'A complete beginning, turn and ending.',position:'0% 50%',href:'/animated-story-video-maker/'},
-      {slot:'collection_story_2',label:'MYSTERY',title:'Follow one clue',description:'A small question with a strong pull.',position:'50% 50%',href:'/guides/animated-mystery-story-ideas/'},
-      {slot:'collection_story_3',label:'HORROR SHORT',title:'Let the quiet work',description:'Build tension through atmosphere and reveal.',position:'100% 50%',href:'/video-ideas/'}
+      {slot:'collection_story_1',label:'MINI STORY',title:'Tell it in a minute',description:'A complete beginning, turn and ending.',fallbackImage:'/clip-types/mini-story-fable.jpg',href:'/animated-story-video-maker/'},
+      {slot:'collection_story_2',label:'MYSTERY',title:'Follow one clue',description:'A small question with a strong pull.',fallbackImage:'/clip-types/mystery-suspense.jpg',href:'/guides/animated-mystery-story-ideas/'},
+      {slot:'collection_story_3',label:'HORROR SHORT',title:'Let the quiet work',description:'Build tension through atmosphere and reveal.',fallbackImage:'/clip-types/horror-short.jpg',href:'/video-ideas/'}
     ],
     engage: [
-      {slot:'collection_engage_1',label:'VISUAL QUIZ',title:'Make them look twice',description:'Set a question that invites a second glance.',position:'0% 100%',href:'/video-quiz-maker/'},
-      {slot:'collection_engage_2',label:'WHAT-IF',title:'Change one rule',description:'Explore an unlikely idea visually.',position:'50% 100%',href:'/video-ideas/'},
-      {slot:'collection_engage_3',label:'TRANSFORMATION',title:'Show the shift',description:'Turn a before and after into a story.',position:'100% 100%',href:'/video-ideas/'}
+      {slot:'collection_engage_1',label:'VISUAL QUIZ',title:'Make them look twice',description:'Set a question that invites a second glance.',fallbackImage:'/clip-types/quiz-visual-puzzle.jpg',href:'/video-quiz-maker/'},
+      {slot:'collection_engage_2',label:'WHAT-IF',title:'Change one rule',description:'Explore an unlikely idea visually.',fallbackImage:'/clip-types/what-if-simulation.jpg',href:'/video-ideas/'},
+      {slot:'collection_engage_3',label:'TRANSFORMATION',title:'Show the shift',description:'Turn a before and after into a story.',fallbackImage:'/clip-types/architecture-transformation.jpg',href:'/video-ideas/'}
     ]
   };
   let landingMedia = [];
@@ -23,7 +23,7 @@
       const article = document.createElement('article');
       article.className = 'collection-item';
       const visual = document.createElement('a'); visual.className = 'collection-visual'; visual.href = item.href; visual.setAttribute('aria-label',`Explore ${item.label.toLowerCase()} shorts`);
-      visual.style.setProperty('--poster-position',item.position);
+      visual.style.backgroundImage = `url("${item.fallbackImage}")`;
       const asset = landingMedia.find(media => media.slot === item.slot && media.mediaKind === 'image');
       if (asset?.mediaUrl) { const image = document.createElement('img'); image.src = asset.mediaUrl; image.alt = asset.title; image.loading = 'lazy'; image.addEventListener('error',() => image.remove(),{once:true}); visual.append(image); }
       const label = document.createElement('small'); label.textContent = item.label;
