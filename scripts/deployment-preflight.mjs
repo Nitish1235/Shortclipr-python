@@ -36,6 +36,8 @@ const nginx = await read('nginx.conf');
 check(nginx.includes('location = /health'), 'Frontend health endpoint is missing');
 check(nginx.includes('server_name www.shortclipr.com;'), 'Frontend must redirect the www hostname to the canonical hostname');
 check(nginx.includes('return 301 https://shortclipr.com$request_uri;'), 'Frontend www redirect must target the canonical hostname');
+check(nginx.includes('listen 8080 default_server;'), 'Frontend canonical server must be the default server');
+check(nginx.includes('server_name shortclipr.com _;'), 'Frontend canonical server must accept the apex hostname');
 check(nginx.includes('location ^~ /youtube-shorts/ { return 410; }'), 'Frontend must return 410 for retired YouTube-clipping routes');
 
 const viteConfig = await read('vite.config.ts');
