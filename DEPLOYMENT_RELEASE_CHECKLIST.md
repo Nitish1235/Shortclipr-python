@@ -147,9 +147,11 @@ After deployment, check in this order:
     the Story Machine landing page renders all three through their configured public media URLs.
 7. Run `npm run check:seo`; it must report the same number of indexable pages
    and sitemap URLs with no broken internal links.
-8. Confirm `/robots.txt` and `/sitemap.xml` return HTTP 200 from the public
-   frontend hostname, and confirm `/` permanently redirects to
-   `/story-machine/`.
+8. Run `npm run check:live-seo` against the public hostname. It verifies that
+   `/` redirects to `/story-machine/`, the deployed landing page contains the
+   current animated-video positioning, `/youtube-shorts/` returns 410, and
+   `robots.txt` plus `sitemap.xml` are current. Confirm the same result for
+   `www.shortclipr.com`: it must permanently redirect to `shortclipr.com`.
 9. Confirm an unknown public URL returns the branded page with HTTP 404, while
    `/landing-demo/` and `/clip-types/` permanently redirect to their canonical
    replacements.

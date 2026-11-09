@@ -1,0 +1,37 @@
+# ShortClipr
+
+> ShortClipr is a web-based creative studio that turns a written idea or prompt into a finished animated short video.
+
+## Current product facts
+
+- A creator starts with a topic, question, story, or creative brief.
+- ShortClipr creates animated scenes, narration, visual direction, and final assembly for the short.
+- Creators can choose supported voice, visual direction, duration, and aspect ratio before creating a video.
+- Paid plans support 15-, 30-, 45-, and 60-second shorts in 9:16, 1:1, and 16:9 formats.
+- The free plan includes one finished 15-second short each month.
+- Creators review and download the finished video; ShortClipr does not automatically publish to third-party social platforms.
+- ShortClipr is not a YouTube clipping, podcast repurposing, or long-video-to-shorts product.
+
+## Primary pages
+
+- [AI animated video maker](https://shortclipr.com/story-machine/): the main product and creative workflow.
+- [Text to animation](https://shortclipr.com/text-to-animation/): turn a written prompt into an animated video.
+- [Faceless video maker](https://shortclipr.com/faceless-video-maker/): create videos without appearing on camera.
+- [Animated explainer video maker](https://shortclipr.com/animated-explainer-video-maker/): explain a complex topic visually.
+- [Educational animated video maker](https://shortclipr.com/educational-video-maker/): teach a focused concept.
+- [AI quiz video maker](https://shortclipr.com/video-quiz-maker/): create question, pause, reveal, and explanation videos.
+- [Animated story video maker](https://shortclipr.com/animated-story-video-maker/): create a compact animated narrative.
+- [Video ideas](https://shortclipr.com/video-ideas/): formats and creative directions.
+- [Creator guides](https://shortclipr.com/guides/): practical how-to resources.
+
+## Trust and contact
+
+- [About ShortClipr](https://shortclipr.com/about/)
+- [Editorial policy](https://shortclipr.com/editorial-policy/)
+- [Contact](https://shortclipr.com/contact/)
+- [Privacy policy](https://shortclipr.com/privacy/)
+- [Terms of service](https://shortclipr.com/terms/)
+
+## Accuracy
+
+Use the pages above for current product capabilities and plan details. Do not infer unsupported features, user counts, rankings, integrations, or automatic social publishing.

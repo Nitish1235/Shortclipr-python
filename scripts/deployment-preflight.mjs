@@ -11,7 +11,7 @@ const envExample = await read('.env.example');
 const requiredEnv = [
   'SUPABASE_DB_URL', 'FRONTEND_URL', 'GOOGLE_CLIENT_ID', 'JWT_SECRET',
   'OPENAI_API_KEY', 'UNREALSPEECH_API_KEY', 'GCS_BUCKET_NAME',
-  'GCS_SIGNING_SERVICE_ACCOUNT', 'DODO_PAYMENTS_API_KEY',
+  'DODO_PAYMENTS_API_KEY',
   'DODO_PAYMENTS_WEBHOOK_SECRET', 'DODO_PRODUCT_STARTER', 'DODO_PRODUCT_CREATOR', 'DODO_PRODUCT_STUDIO',
   'RESEND_API_KEY', 'RESEND_FROM_EMAIL', 'INTERNAL_TASK_SECRET',
   'MAX_LANDING_MEDIA_BYTES', 'API_WORKER_URLS', 'FFMPEG_WORKER_URLS'
@@ -34,6 +34,9 @@ for (const asset of ['product.css', 'hero-background.css', 'live-reel.css', 'ref
 }
 const nginx = await read('nginx.conf');
 check(nginx.includes('location = /health'), 'Frontend health endpoint is missing');
+check(nginx.includes('server_name www.shortclipr.com;'), 'Frontend must redirect the www hostname to the canonical hostname');
+check(nginx.includes('return 301 https://shortclipr.com$request_uri;'), 'Frontend www redirect must target the canonical hostname');
+check(nginx.includes('location ^~ /youtube-shorts/ { return 410; }'), 'Frontend must return 410 for retired YouTube-clipping routes');
 
 const viteConfig = await read('vite.config.ts');
 check(viteConfig.includes('sourcemap: false'), 'Production source maps must remain disabled');

@@ -56,3 +56,7 @@ No production Search Console data, live HTTP crawl, backlink data, search volume
 3. Validate the deployed route/status-code matrix and Search Console indexing.
 
 The repository’s server configuration already returns `410 Gone` for `/youtube-shorts`, `/brainrot/`, and other retired clipping-era route groups. A live production check is still required to confirm the deployed server is using this configuration.
+
+## Live search discovery — 2026-11-10
+
+Public search results still expose the retired YouTube-clipping product at the root domain, `/youtube-shorts/`, and related legacy tool paths. This is a deployment/canonical-host issue, not a reason to add more content. The repository now includes `npm run check:live-seo`, which must pass after every frontend release before requesting Google recrawls. It verifies the live homepage, canonical redirect, robots, sitemap, and the 410 response for retired clipping routes.
