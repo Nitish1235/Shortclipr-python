@@ -25,6 +25,9 @@ Also implemented the first two SEO batches:
 - Repositioned `/animated-story-video-maker/` around prompt-driven short storytelling.
 - Differentiated the YouTube, TikTok, Reels, and faceless-AI platform pages by audience/job rather than simply swapping platform names.
 - Added a consistent, truthful free-credit CTA to all 37 public indexable pages: one finished 15-second short each month, linked to the creation desk.
+- Removed outdated “in development” and “availability may change” copy from public pages and replaced it with current product language.
+- Updated the video-ideas disclaimer to describe the library and its illustrative examples accurately.
+- Strengthened the homepage’s visible desktop and mobile navigation with direct, descriptive links to Text to animation, Faceless videos, Video ideas, and Guides to improve important-page discovery.
 
 ## Repository inspected
 
@@ -51,3 +54,5 @@ No production Search Console data, live HTTP crawl, backlink data, search volume
 1. Add or verify real generated-video demonstrations on the homepage and product pages.
 2. Use Search Console query overlap and backlink data to decide whether the duplicate TikTok/YouTube routes should eventually merge.
 3. Validate the deployed route/status-code matrix and Search Console indexing.
+
+The repository’s server configuration already returns `410 Gone` for `/youtube-shorts`, `/brainrot/`, and other retired clipping-era route groups. A live production check is still required to confirm the deployed server is using this configuration.
