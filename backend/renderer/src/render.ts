@@ -13,7 +13,9 @@ const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
 await mkdir(dirname(resolve(outputPath)),{recursive:true})
 
 const rendered = await renderVideo({
-  projectFile: resolve('src/project.ts'),
+  // Revideo injects this path into a Vite import. Normalize Windows
+  // backslashes so the generated module specifier remains valid locally.
+  projectFile: resolve('src/project.ts').replaceAll('\\', '/'),
   variables:{plan},
   settings:{
     outFile:resolve(outputPath) as `${string}.mp4`,
