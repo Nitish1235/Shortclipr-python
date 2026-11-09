@@ -266,6 +266,7 @@ async def run_render(
                 await storage.download_private(project["audio_object"], audio_path)
                 plan["audioPath"] = str(audio_path)
                 ctx["audio_object"] = project["audio_object"]
+        await pool.execute("UPDATE projects SET progress=52 WHERE id=$1 AND status='rendering'", project_id)
 
         # ── Run the Revideo renderer subprocess ───────────────────────────
         output_path = Path(tempfile.mkdtemp(prefix="shortclipr-render-")) / f"{project_id}.mp4"
@@ -273,11 +274,13 @@ async def run_render(
             await renderer.render(plan, output_path)
             if output_path.exists():
                 ctx["output_size_mb"] = round(output_path.stat().st_size / 1_048_576, 2)
+        await pool.execute("UPDATE projects SET progress=82 WHERE id=$1 AND status='rendering'", project_id)
 
         # ── Quality validation ────────────────────────────────────────────
         async with timed(logger, "render.quality") as ctx:
             quality = await validate_final(output_path, project["aspect_ratio"], project["duration_seconds"])
             ctx.update(quality)
+        await pool.execute("UPDATE projects SET progress=90 WHERE id=$1 AND status='rendering'", project_id)
 
         # ── Upload final MP4 to GCS ───────────────────────────────────────
         async with timed(logger, "render.upload") as ctx:
@@ -287,6 +290,7 @@ async def run_render(
             )
             ctx["output_object"] = output_object
             ctx["size_mb"] = round(output_path.stat().st_size / 1_048_576, 2) if output_path.exists() else None
+        await pool.execute("UPDATE projects SET progress=96 WHERE id=$1 AND status='rendering'", project_id)
 
         # ── Settle credits (idempotent) ───────────────────────────────────
         discard_output = False

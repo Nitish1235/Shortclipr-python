@@ -80,7 +80,23 @@ class RevideoRenderer:
                 stderr=asyncio.subprocess.PIPE,
                 env={**os.environ, "DISABLE_TELEMETRY": "true"},
             )
-            stdout, stderr = await process.communicate()
+            timeout_seconds = max(60, int(os.getenv("RENDER_TIMEOUT_SECONDS", "1200")))
+            try:
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)
+            except asyncio.TimeoutError as error:
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
+                stdout, stderr = await process.communicate()
+                detail = (stderr.decode(errors="replace").strip() or stdout.decode(errors="replace").strip())[-1500:]
+                logger.error(
+                    "renderer.subprocess.timeout",
+                    extra={"timeout_seconds": timeout_seconds, "detail": detail},
+                )
+                raise RuntimeError(
+                    f"Revideo timed out after {timeout_seconds}s" + (f": {detail}" if detail else "")
+                ) from error
             duration_ms = round((time.monotonic() - t0) * 1000)
             if process.returncode:
                 stderr_tail = stderr.decode(errors="replace")[-4000:]
