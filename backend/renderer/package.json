@@ -10,7 +10,8 @@
   "dependencies": {
     "@revideo/2d": "0.11.0",
     "@revideo/core": "0.11.0",
-    "@revideo/renderer": "0.11.0"
+    "@revideo/renderer": "0.11.0",
+    "@revideo/vite-plugin": "0.11.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
