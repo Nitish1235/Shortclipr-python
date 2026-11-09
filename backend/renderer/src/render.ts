@@ -31,7 +31,15 @@ const rendered = await renderVideo({
     logProgress:true,
     ffmpeg:{ffmpegPath:process.env.FFMPEG_PATH ?? 'ffmpeg',ffmpegLogLevel:'error'},
     puppeteer:{args:['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'],...(executablePath?{executablePath}:{})},
-    ...(audioFilePath?{viteConfig:{server:{fs:{allow:[resolve('.'),dirname(audioFilePath)]}}}}:{})
+    viteConfig:{
+      // Revideo keeps its active scene in module-level state. Vite's first
+      // dependency optimization reload can replace those modules while the
+      // renderer is already executing the scene, producing "The scene is not
+      // available in the current context". Keep the Revideo runtime in the
+      // normal source graph so it is not swapped out during render startup.
+      optimizeDeps:{exclude:['@revideo/2d','@revideo/core','@revideo/renderer','@revideo/ui','@revideo/vite-plugin']},
+      ...(audioFilePath?{server:{fs:{allow:[resolve('.'),dirname(audioFilePath)]}}}: {})
+    }
   }
 })
 console.log(JSON.stringify({output:rendered,projectId:plan.projectId}))
