@@ -394,6 +394,19 @@ async def run_render(
                        WHERE id=$1 AND lease_token=$2""",
                     attempt_id, lease_token, retry_delay, message[:1000],
                 )
+            # Keep the durable project state aligned with the retry queue.
+            # Otherwise the UI remains at the last render milestone (usually
+            # 48%) while the job is waiting for its next attempt.
+            await pool.execute(
+                "UPDATE projects SET status='queued',progress=45 WHERE id=$1 AND status='rendering'",
+                project_id,
+            )
+            await pool.execute(
+                """INSERT INTO project_events(project_id,event_type,stage,progress,payload)
+                   VALUES($1,'retrying','render',45,$2::jsonb)""",
+                project_id,
+                json.dumps({"attempt": attempt_row["attempts"], "max_attempts": attempt_row["max_attempts"], "retry_in_s": retry_delay}),
+            )
     finally:
         if output_path:
             output_path.unlink(missing_ok=True)

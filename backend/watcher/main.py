@@ -285,6 +285,20 @@ class Dispatcher:
                            lease_token=NULL,lease_expires_at=NULL,last_error=$4 WHERE id=$1 AND lease_token=$2""",
                         job_id, lease_token, retry_seconds, error[:1000],
                     )
+                    if job["job_class"] == "render":
+                        # A delivery failure/reconnect timeout can happen
+                        # outside the renderer process. Reset the project
+                        # state too, otherwise the UI can stay at 45/48% until
+                        # the next attempt completes.
+                        await connection.execute(
+                            "UPDATE projects SET status='queued',progress=45 WHERE id=$1 AND status='rendering'",
+                            job["project_id"],
+                        )
+                        await connection.execute(
+                            """INSERT INTO project_events(project_id,event_type,stage,progress,payload)
+                               VALUES($1,'retrying','render',45,jsonb_build_object('retry_in_s',$2,'error',$3))""",
+                            job["project_id"], retry_seconds, error[:1000],
+                        )
                     logger.warning(
                         "watcher.retry",
                         extra={
