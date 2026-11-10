@@ -11,7 +11,7 @@ export interface ScenePlan {
   transition_out: string
   assigned_model?: string
   animation?: {
-    visual_family: 'typography' | 'diagram' | 'orbit' | 'bars' | 'timeline' | 'particles' | 'split' | 'counter'
+    visual_family: 'typography' | 'diagram' | 'orbit' | 'bars' | 'timeline' | 'particles' | 'split' | 'counter' | 'bridge' | 'wave' | 'map' | 'mechanism'
     headline: string
     caption: string
     primary_value: string
