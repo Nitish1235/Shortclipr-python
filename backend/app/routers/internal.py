@@ -13,7 +13,7 @@ from ..db import get_pool
 from ..dependencies import internal_request
 from ..models.schemas import InternalRunRequest
 from ..services.openai_planner import OpenAIPlanner
-from ..services.quality import validate_final
+from ..services.quality import mux_narration, validate_audio_input, validate_final
 from ..services.renderer import NonRetryableRenderError, RevideoRenderer
 from ..services.scene_compiler import SceneCompiler
 from ..services.storage import ObjectStorage
@@ -264,17 +264,37 @@ async def run_render(
             async with timed(logger, "render.download_audio") as ctx:
                 audio_path = Path(tempfile.mkdtemp(prefix="shortclipr-audio-")) / "narration.mp3"
                 await storage.download_private(project["audio_object"], audio_path)
-                plan["audioPath"] = str(audio_path)
                 ctx["audio_object"] = project["audio_object"]
+                ctx["size_bytes"] = audio_path.stat().st_size if audio_path.exists() else 0
+            async with timed(logger, "render.validate_audio") as ctx:
+                ctx.update(await validate_audio_input(audio_path))
+        else:
+            raise RuntimeError("Narration audio is not available for this render")
         await pool.execute("UPDATE projects SET progress=52 WHERE id=$1 AND status='rendering'", project_id)
 
         # ── Run the Revideo renderer subprocess ───────────────────────────
         output_path = Path(tempfile.mkdtemp(prefix="shortclipr-render-")) / f"{project_id}.mp4"
+
+        async def update_visual_progress(render_progress: int) -> None:
+            # Reserve 55–80 for the visual renderer; 82 means the subprocess
+            # has fully completed and the mux stage is next.
+            mapped = min(80, 55 + round(render_progress * 0.25))
+            await pool.execute(
+                "UPDATE projects SET progress=GREATEST(progress,$2) WHERE id=$1 AND status='rendering'",
+                project_id, mapped,
+            )
+
+        await pool.execute("UPDATE projects SET progress=55 WHERE id=$1 AND status='rendering'", project_id)
         async with timed(logger, "render.subprocess") as ctx:
-            await renderer.render(plan, output_path)
+            await renderer.render(plan, output_path, progress_callback=update_visual_progress)
             if output_path.exists():
                 ctx["output_size_mb"] = round(output_path.stat().st_size / 1_048_576, 2)
         await pool.execute("UPDATE projects SET progress=82 WHERE id=$1 AND status='rendering'", project_id)
+
+        # ── Mux narration after visuals ──────────────────────────────────
+        async with timed(logger, "render.mux_audio") as ctx:
+            ctx.update(await mux_narration(output_path, audio_path, project["duration_seconds"]))
+        await pool.execute("UPDATE projects SET progress=86 WHERE id=$1 AND status='rendering'", project_id)
 
         # ── Quality validation ────────────────────────────────────────────
         async with timed(logger, "render.quality") as ctx:

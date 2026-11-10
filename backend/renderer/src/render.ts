@@ -10,13 +10,6 @@ const plan = JSON.parse(await readFile(resolve(planPath),'utf8')) as RenderPlan
 const dimensions:Record<RenderPlan['aspectRatio'],[number,number]> = {'9:16':[1080,1920],'1:1':[1080,1080],'16:9':[1920,1080]}
 const [width, height] = dimensions[plan.aspectRatio]
 const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
-const audioFilePath = plan.audioPath ? resolve(plan.audioPath).replaceAll('\\','/') : undefined
-if (audioFilePath) {
-  // The scene runs in Chromium, so a host filesystem path would be treated as
-  // an HTTP URL and never become playable. Vite exposes allowed filesystem
-  // assets through /@fs/.
-  plan.audioPath = `/@fs/${audioFilePath.replace(/^\/+/, '')}`
-}
 await mkdir(dirname(resolve(outputPath)),{recursive:true})
 
 const rendered = await renderVideo({
@@ -38,7 +31,6 @@ const rendered = await renderVideo({
       // available in the current context". Keep the Revideo runtime in the
       // normal source graph so it is not swapped out during render startup.
       optimizeDeps:{exclude:['@revideo/2d','@revideo/core','@revideo/renderer','@revideo/ui','@revideo/vite-plugin']},
-      ...(audioFilePath?{server:{fs:{allow:[resolve('.'),dirname(audioFilePath)]}}}: {})
     }
   }
 })

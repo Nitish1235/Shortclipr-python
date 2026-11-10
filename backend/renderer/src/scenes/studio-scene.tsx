@@ -1,4 +1,4 @@
-import {Audio, Circle, Layout, Line, Rect, Txt, makeScene2D} from '@revideo/2d'
+import {Circle, Layout, Line, Rect, Txt, makeScene2D} from '@revideo/2d'
 import {all, createRef, easeInOutCubic, useScene, waitFor} from '@revideo/core'
 import type {RenderPlan, ScenePlan} from '../contracts'
 
@@ -33,7 +33,6 @@ export default makeScene2D('shortclipr-studio-scene',function* (view) {
   const frameSize=wide?{width:1920,height:1080}:square?{width:1080,height:1080}:{width:1080,height:1920}
   const focalBase={x:wide?430:0,y:wide?0:square?-170:-120}
   const copyBase={x:wide?-430:0,y:wide?0:square?350:560}
-  if(plan.audioPath)view.add(<Audio src={plan.audioPath} play={true}/>)
   const stage=createRef<Layout>()
   view.add(<Layout ref={stage} width={'100%'} height={'100%'}/>)
 

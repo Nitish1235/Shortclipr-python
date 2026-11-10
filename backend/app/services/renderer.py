@@ -6,7 +6,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 logger = logging.getLogger("shortclipr.renderer")
 
@@ -59,13 +59,50 @@ class RevideoRenderer:
                     raise NonRetryableRenderError(f"Scene {index} animation field {field} is invalid")
             if not isinstance(animation.get("density"), (int, float)) or animation["density"] < 1:
                 raise NonRetryableRenderError(f"Scene {index} has invalid animation density")
-        audio_path = plan.get("audioPath")
-        if audio_path:
-            audio = Path(audio_path)
-            if not audio.is_file() or audio.stat().st_size == 0:
-                raise NonRetryableRenderError("Narration audio is missing or empty")
 
-    async def render(self, plan: dict[str, Any], output_path: Path) -> Path:
+    async def _consume_output(
+        self,
+        stream: asyncio.StreamReader,
+        stream_name: str,
+        progress_callback: Callable[[int], Awaitable[None]] | None = None,
+    ) -> bytes:
+        chunks: list[bytes] = []
+        last_progress = -1
+        async for raw_line in stream:
+            chunks.append(raw_line)
+            line = raw_line.decode(errors="replace").strip()
+            if not line:
+                continue
+            # Revideo prints progress on stdout. Keep the worker log useful
+            # without emitting every frame update.
+            progress = None
+            marker = "Render progress, worker"
+            if marker in line and ":" in line and line.rstrip().endswith("%"):
+                try:
+                    progress = int(line.rsplit(":", 1)[1].strip().rstrip("%"))
+                except ValueError:
+                    progress = None
+            if progress is not None and progress < last_progress + 5 and progress != 100:
+                continue
+            if progress is not None:
+                last_progress = progress
+                if progress_callback is not None and stream_name == "stdout":
+                    try:
+                        await progress_callback(progress)
+                    except Exception:
+                        logger.exception("renderer.progress_callback.failed")
+            logger.info(
+                "renderer.subprocess.output",
+                extra={"stream": stream_name, "line": line[-500:], "progress": progress},
+            )
+        return b"".join(chunks)
+
+    async def render(
+        self,
+        plan: dict[str, Any],
+        output_path: Path,
+        progress_callback: Callable[[int], Awaitable[None]] | None = None,
+    ) -> Path:
         self.validate_plan(plan)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile("w", suffix=".json", encoding="utf-8", delete=False) as handle:
@@ -80,15 +117,26 @@ class RevideoRenderer:
                 stderr=asyncio.subprocess.PIPE,
                 env={**os.environ, "DISABLE_TELEMETRY": "true"},
             )
-            timeout_seconds = max(60, int(os.getenv("RENDER_TIMEOUT_SECONDS", "1200")))
+            timeout_seconds = max(60, int(os.getenv("RENDER_TIMEOUT_SECONDS", "900")))
+            logger.info(
+                "renderer.subprocess.start",
+                extra={"pid": process.pid, "timeout_seconds": timeout_seconds, "output": str(output_path)},
+            )
+            stdout_task = asyncio.create_task(self._consume_output(process.stdout, "stdout", progress_callback))
+            stderr_task = asyncio.create_task(self._consume_output(process.stderr, "stderr"))
             try:
-                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)
+                await asyncio.wait_for(
+                    asyncio.gather(process.wait(), stdout_task, stderr_task),
+                    timeout=timeout_seconds,
+                )
+                stdout, stderr = stdout_task.result(), stderr_task.result()
             except asyncio.TimeoutError as error:
                 try:
                     process.kill()
                 except ProcessLookupError:
                     pass
-                stdout, stderr = await process.communicate()
+                await process.wait()
+                stdout, stderr = await asyncio.gather(stdout_task, stderr_task)
                 detail = (stderr.decode(errors="replace").strip() or stdout.decode(errors="replace").strip())[-1500:]
                 logger.error(
                     "renderer.subprocess.timeout",
