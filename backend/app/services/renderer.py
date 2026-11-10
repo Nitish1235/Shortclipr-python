@@ -12,7 +12,7 @@ logger = logging.getLogger("shortclipr.renderer")
 
 SUPPORTED_VISUAL_FAMILIES = {
     "typography", "diagram", "orbit", "bars", "timeline", "particles",
-    "split", "counter", "bridge", "wave", "map", "mechanism",
+    "split", "counter", "bridge", "wave", "map", "mechanism", "flow", "code", "comparison", "puzzle",
 }
 
 
@@ -57,9 +57,18 @@ class RemotionRenderer:
             raise NonRetryableRenderError("Render plan contains no scenes")
         if not isinstance(plan.get("durationSeconds"), (int, float)) or plan["durationSeconds"] <= 0:
             raise NonRetryableRenderError("Render plan has an invalid duration")
+        fps = int(plan.get("fps", 0))
+        total_frames = int(round(float(plan["durationSeconds"]) * fps))
+        if fps <= 0 or total_frames <= 0:
+            raise NonRetryableRenderError("Render plan has an invalid FPS or frame count")
+        expected_start = 0
         for index, scene in enumerate(plan["scenes"]):
             if not isinstance(scene, dict) or not isinstance(scene.get("animation"), dict):
                 raise NonRetryableRenderError(f"Scene {index} has no renderable animation program")
+            start_frame, end_frame = scene.get("start_frame"), scene.get("end_frame")
+            if scene.get("index") != index or not isinstance(start_frame, int) or not isinstance(end_frame, int) or start_frame != expected_start or end_frame <= start_frame or end_frame > total_frames:
+                raise NonRetryableRenderError(f"Scene {index} has a non-contiguous frame range")
+            expected_start = end_frame
             animation = scene["animation"]
             visual_family = animation.get("visual_family")
             if visual_family not in SUPPORTED_VISUAL_FAMILIES:
@@ -73,6 +82,17 @@ class RemotionRenderer:
                 raise NonRetryableRenderError(f"Scene {index} has fewer than two concrete visual objects")
             if not isinstance(animation.get("events"), list) or not animation["events"]:
                 raise NonRetryableRenderError(f"Scene {index} has no visual events")
+            actions = animation.get("actions")
+            if not isinstance(actions, list) or not actions:
+                raise NonRetryableRenderError(f"Scene {index} has no executable animation actions")
+            duration = end_frame - start_frame
+            for action in actions:
+                if not isinstance(action, dict) or not isinstance(action.get("type"), str):
+                    raise NonRetryableRenderError(f"Scene {index} contains an invalid animation action")
+                if not all(isinstance(action.get(field), int) for field in ("start", "end")) or not 0 <= action["start"] < action["end"] <= duration:
+                    raise NonRetryableRenderError(f"Scene {index} contains an out-of-range animation action")
+        if expected_start != total_frames:
+            raise NonRetryableRenderError(f"Scene timeline ends at frame {expected_start}, expected {total_frames}")
             if not isinstance(animation.get("density"), (int, float)) or animation["density"] < 1:
                 raise NonRetryableRenderError(f"Scene {index} has invalid animation density")
 

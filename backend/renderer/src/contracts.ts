@@ -13,12 +13,13 @@ export interface ScenePlan {
   transition_out: string
   assigned_model?: string
   animation?: {
-    visual_family: 'typography' | 'diagram' | 'orbit' | 'bars' | 'timeline' | 'particles' | 'split' | 'counter' | 'bridge' | 'wave' | 'map' | 'mechanism'
+    visual_family: 'typography' | 'diagram' | 'orbit' | 'bars' | 'timeline' | 'particles' | 'split' | 'counter' | 'bridge' | 'wave' | 'map' | 'mechanism' | 'flow' | 'code' | 'comparison' | 'puzzle'
     headline: string
     caption: string
     primary_value: string
     objects: string[]
     events: string[]
+    actions: Array<{type: 'reveal' | 'move' | 'flow' | 'connect' | 'transform' | 'compare' | 'assemble' | 'trace' | 'pulse'; target: string; from: string; to: string; start: number; end: number}>
     motion: 'sweep' | 'rise' | 'pulse' | 'trace' | 'cascade' | 'parallax'
     density: number
     emphasis: 'quiet' | 'balanced' | 'bold'

@@ -33,6 +33,7 @@ const plan: RenderPlan = {
       primary_value: 'Suspended bridge structure',
       objects: ['river', 'bridge deck', 'support towers', 'suspension cable', 'load markers'],
       events: ['load markers flow from deck through towers into foundations'],
+      actions: [{type: 'flow', target: 'load markers', from: 'bridge deck', to: 'support towers', start: 24, end: 180}],
       motion: 'trace',
       density: 8,
       emphasis: 'balanced',
