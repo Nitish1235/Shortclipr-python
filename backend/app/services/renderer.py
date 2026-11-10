@@ -49,6 +49,46 @@ class RemotionRenderer:
         )
         return required_binaries
 
+    def normalize_action_ranges(self, plan: dict[str, Any]) -> int:
+        """Convert legacy/global action frames to safe scene-local ranges.
+
+        Scene action frames are local to each scene. Older compiler responses
+        occasionally used the scene's absolute project frames instead. Clamp
+        those values before validation so a render cannot fail before Remotion
+        starts, while preserving every action as a visible, bounded motion.
+        """
+        corrections = 0
+        for scene in plan.get("scenes", []):
+            if not isinstance(scene, dict) or not isinstance(scene.get("animation"), dict):
+                continue
+            start_frame = scene.get("start_frame")
+            end_frame = scene.get("end_frame")
+            actions = scene["animation"].get("actions")
+            if not isinstance(start_frame, int) or not isinstance(end_frame, int) or not isinstance(actions, list):
+                continue
+            duration = max(1, end_frame - start_frame)
+            for action in actions:
+                if not isinstance(action, dict):
+                    continue
+                start, end = action.get("start"), action.get("end")
+                if not isinstance(start, int) or not isinstance(end, int):
+                    continue
+                original = (start, end)
+                if start_frame <= start < end <= end_frame:
+                    start -= start_frame
+                    end -= start_frame
+                start = max(0, min(duration - 1, start))
+                end = max(start + 1, min(duration, end))
+                if (start, end) != original:
+                    action["start"], action["end"] = start, end
+                    corrections += 1
+        if corrections:
+            logger.warning(
+                "renderer.plan.action_ranges_normalized",
+                extra={"corrections": corrections},
+            )
+        return corrections
+
     def validate_plan(self, plan: dict[str, Any]) -> None:
         allowed_ratios = {"9:16", "1:1", "16:9"}
         if plan.get("aspectRatio") not in allowed_ratios:
@@ -141,6 +181,7 @@ class RemotionRenderer:
         output_path: Path,
         progress_callback: Callable[[int], Awaitable[None]] | None = None,
     ) -> Path:
+        self.normalize_action_ranges(plan)
         self.validate_plan(plan)
         logger.info(
             "renderer.plan.accepted",
