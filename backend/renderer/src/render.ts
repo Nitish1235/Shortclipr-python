@@ -1,7 +1,7 @@
-import {mkdir, readFile} from 'node:fs/promises'
+import {mkdir, readFile, unlink} from 'node:fs/promises'
 import {dirname, resolve} from 'node:path'
 import {bundle} from '@remotion/bundler'
-import {renderMedia, selectComposition} from '@remotion/renderer'
+import {renderMedia, renderStill, selectComposition} from '@remotion/renderer'
 import type {RenderPlan} from './contracts'
 
 const [, , planPath, outputPath] = process.argv
@@ -27,6 +27,33 @@ const inputProps = {plan}
 const composition = await selectComposition({serveUrl, id: 'ShortClipr', inputProps})
 const renderComposition = {...composition, width, height, fps: plan.fps, durationInFrames: Math.round(plan.durationSeconds * plan.fps)}
 console.log(JSON.stringify({event: 'remotion.render.start', frames: renderComposition.durationInFrames, fps: renderComposition.fps, width, height, crf, concurrency}))
+
+const preflightEnabled = process.env.REMOTION_PREFLIGHT !== 'false'
+if (preflightEnabled) {
+  const requestedFrames = Math.max(1, Number(process.env.REMOTION_PREFLIGHT_FRAMES ?? 6))
+  const sceneFrames = plan.scenes.flatMap(scene => [scene.start_frame, Math.floor((scene.start_frame + scene.end_frame - 1) / 2), scene.end_frame - 1])
+  const preflightFrames = [...new Set(sceneFrames)].filter(frame => frame >= 0 && frame < renderComposition.durationInFrames).slice(0, requestedFrames)
+  const preflightPaths: string[] = []
+  console.log(JSON.stringify({event: 'remotion.preflight.start', frames: preflightFrames}))
+  try {
+    for (const frame of preflightFrames) {
+      const stillPath = `${outputLocation}.preflight-${frame}.png`
+      await renderStill({
+        composition: renderComposition,
+        serveUrl,
+        frame,
+        inputProps,
+        output: stillPath,
+        browserExecutable: process.env.PUPPETEER_EXECUTABLE_PATH,
+      })
+      preflightPaths.push(stillPath)
+      console.log(JSON.stringify({event: 'remotion.preflight.frame', frame, output: stillPath}))
+    }
+    console.log(JSON.stringify({event: 'remotion.preflight.done', frame_count: preflightPaths.length}))
+  } finally {
+    await Promise.all(preflightPaths.map(path => unlink(path).catch(() => undefined)))
+  }
+}
 
 await renderMedia({
   codec: 'h264',

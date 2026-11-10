@@ -91,10 +91,10 @@ class RemotionRenderer:
                     raise NonRetryableRenderError(f"Scene {index} contains an invalid animation action")
                 if not all(isinstance(action.get(field), int) for field in ("start", "end")) or not 0 <= action["start"] < action["end"] <= duration:
                     raise NonRetryableRenderError(f"Scene {index} contains an out-of-range animation action")
-        if expected_start != total_frames:
-            raise NonRetryableRenderError(f"Scene timeline ends at frame {expected_start}, expected {total_frames}")
             if not isinstance(animation.get("density"), (int, float)) or animation["density"] < 1:
                 raise NonRetryableRenderError(f"Scene {index} has invalid animation density")
+        if expected_start != total_frames:
+            raise NonRetryableRenderError(f"Scene timeline ends at frame {expected_start}, expected {total_frames}")
 
     async def _consume_output(
         self,
