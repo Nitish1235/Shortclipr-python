@@ -7,6 +7,8 @@ export interface ScenePlan {
   complexity: 'light' | 'medium' | 'heavy'
   operations: string[]
   layers: string[]
+  objects: string[]
+  events: string[]
   camera: string
   transition_out: string
   assigned_model?: string
@@ -15,6 +17,8 @@ export interface ScenePlan {
     headline: string
     caption: string
     primary_value: string
+    objects: string[]
+    events: string[]
     motion: 'sweep' | 'rise' | 'pulse' | 'trace' | 'cascade' | 'parallax'
     density: number
     emphasis: 'quiet' | 'balanced' | 'bold'

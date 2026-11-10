@@ -10,6 +10,11 @@ from typing import Any, Awaitable, Callable
 
 logger = logging.getLogger("shortclipr.renderer")
 
+SUPPORTED_VISUAL_FAMILIES = {
+    "typography", "diagram", "orbit", "bars", "timeline", "particles",
+    "split", "counter", "bridge", "wave", "map", "mechanism",
+}
+
 
 class NonRetryableRenderError(RuntimeError):
     """A render input or worker configuration cannot succeed on retry."""
@@ -56,9 +61,18 @@ class RemotionRenderer:
             if not isinstance(scene, dict) or not isinstance(scene.get("animation"), dict):
                 raise NonRetryableRenderError(f"Scene {index} has no renderable animation program")
             animation = scene["animation"]
+            visual_family = animation.get("visual_family")
+            if visual_family not in SUPPORTED_VISUAL_FAMILIES:
+                raise NonRetryableRenderError(
+                    f"Scene {index} requests unsupported visual family: {visual_family!r}"
+                )
             for field in ("headline", "caption", "primary_value", "visual_family", "motion", "background"):
                 if not isinstance(animation.get(field), str):
                     raise NonRetryableRenderError(f"Scene {index} animation field {field} is invalid")
+            if not isinstance(animation.get("objects"), list) or len(animation["objects"]) < 2:
+                raise NonRetryableRenderError(f"Scene {index} has fewer than two concrete visual objects")
+            if not isinstance(animation.get("events"), list) or not animation["events"]:
+                raise NonRetryableRenderError(f"Scene {index} has no visual events")
             if not isinstance(animation.get("density"), (int, float)) or animation["density"] < 1:
                 raise NonRetryableRenderError(f"Scene {index} has invalid animation density")
 
@@ -108,6 +122,18 @@ class RemotionRenderer:
         progress_callback: Callable[[int], Awaitable[None]] | None = None,
     ) -> Path:
         self.validate_plan(plan)
+        logger.info(
+            "renderer.plan.accepted",
+            extra={
+                "project_id": plan.get("projectId"),
+                "scene_count": len(plan["scenes"]),
+                "visual_families": [scene["animation"]["visual_family"] for scene in plan["scenes"]],
+                "scene_ranges": [
+                    {"index": scene.get("index"), "start": scene.get("start_frame"), "end": scene.get("end_frame")}
+                    for scene in plan["scenes"]
+                ],
+            },
+        )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile("w", suffix=".json", encoding="utf-8", delete=False) as handle:
             json.dump(plan, handle)

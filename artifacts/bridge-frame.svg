@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920" role="img" aria-labelledby="title desc">
+  <title id="title">ShortClipr bridge animation frame</title>
+  <desc id="desc">A code-generated frame showing a suspended bridge, support towers, a curved cable, river and highlighted load path.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#171914"/>
+      <stop offset="1" stop-color="#0d100d"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#c6b7ec" stop-opacity=".14"/>
+      <stop offset=".5" stop-color="#c6b7ec" stop-opacity=".42"/>
+      <stop offset="1" stop-color="#c6b7ec" stop-opacity=".14"/>
+    </linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="18" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="1080" height="1920" fill="url(#sky)"/>
+  <rect x="58" y="78" width="964" height="1764" rx="42" fill="none" stroke="#f2f0e7" stroke-opacity=".18" stroke-width="3"/>
+  <path d="M90 1370 Q540 1260 990 1370 L930 1660 Q540 1740 150 1660Z" fill="url(#water)"/>
+  <path d="M115 1395 Q540 1310 965 1395" fill="none" stroke="#c6b7ec" stroke-opacity=".65" stroke-width="10"/>
+  <path d="M160 1230 H920" stroke="#f2f0e7" stroke-width="24"/>
+  <path d="M160 1260 H920" stroke="#bdff32" stroke-width="12" filter="url(#glow)"/>
+  <path d="M230 1230 V730 M850 1230 V730" stroke="#f2f0e7" stroke-width="26"/>
+  <path d="M230 735 Q540 1210 850 735" fill="none" stroke="#f2f0e7" stroke-width="14"/>
+  <path d="M230 735 Q540 1210 850 735" fill="none" stroke="#bdff32" stroke-width="6" stroke-dasharray="18 16"/>
+  <g stroke="#f2f0e7" stroke-width="8" opacity=".7">
+    <path d="M320 860 V1230"/><path d="M410 960 V1230"/><path d="M500 1030 V1230"/>
+    <path d="M580 1030 V1230"/><path d="M670 960 V1230"/><path d="M760 860 V1230"/>
+  </g>
+  <g fill="#bdff32" filter="url(#glow)">
+    <circle cx="330" cy="1260" r="18"/><circle cx="470" cy="1260" r="18"/><circle cx="610" cy="1260" r="18"/><circle cx="750" cy="1260" r="18"/>
+  </g>
+  <g fill="#f2f0e7" opacity=".7">
+    <circle cx="180" cy="1410" r="8"/><circle cx="280" cy="1450" r="6"/><circle cx="800" cy="1435" r="7"/><circle cx="900" cy="1400" r="5"/>
+  </g>
+</svg>
