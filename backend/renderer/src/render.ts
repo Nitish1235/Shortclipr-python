@@ -36,7 +36,7 @@ if (preflightEnabled) {
   const preflightPaths: string[] = []
   console.log(JSON.stringify({event: 'remotion.preflight.start', frames: preflightFrames}))
   try {
-    for (const frame of preflightFrames) {
+    for (const [index, frame] of preflightFrames.entries()) {
       const stillPath = `${outputLocation}.preflight-${frame}.png`
       await renderStill({
         composition: renderComposition,
@@ -48,6 +48,7 @@ if (preflightEnabled) {
       })
       preflightPaths.push(stillPath)
       console.log(JSON.stringify({event: 'remotion.preflight.frame', frame, output: stillPath}))
+      console.log(JSON.stringify({event: 'remotion.render.progress', overallProgress: ((index + 1) / preflightFrames.length) * 0.2, phase: 'preflight'}))
     }
     console.log(JSON.stringify({event: 'remotion.preflight.done', frame_count: preflightPaths.length}))
   } finally {
