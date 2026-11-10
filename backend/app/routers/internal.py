@@ -14,7 +14,7 @@ from ..dependencies import internal_request
 from ..models.schemas import InternalRunRequest
 from ..services.openai_planner import OpenAIPlanner
 from ..services.quality import mux_narration, validate_audio_input, validate_final
-from ..services.renderer import NonRetryableRenderError, RevideoRenderer
+from ..services.renderer import NonRetryableRenderError, RemotionRenderer
 from ..services.scene_compiler import SceneCompiler
 from ..services.storage import ObjectStorage
 from ..services.email import ProjectReadyEmailer
@@ -212,7 +212,7 @@ async def run_render(
     attempt_id: UUID | None,
     lease_token: UUID | None,
     pool: asyncpg.Pool,
-    renderer: RevideoRenderer,
+    renderer: RemotionRenderer,
     storage: ObjectStorage,
     emailer: ProjectReadyEmailer,
 ):
@@ -272,7 +272,7 @@ async def run_render(
             raise RuntimeError("Narration audio is not available for this render")
         await pool.execute("UPDATE projects SET progress=52 WHERE id=$1 AND status='rendering'", project_id)
 
-        # ── Run the Revideo renderer subprocess ───────────────────────────
+        # ── Run the Remotion renderer subprocess ─────────────────────────
         output_path = Path(tempfile.mkdtemp(prefix="shortclipr-render-")) / f"{project_id}.mp4"
 
         async def update_visual_progress(render_progress: int) -> None:
@@ -468,4 +468,4 @@ async def render_stage(payload: InternalRunRequest, request: Request, pool: asyn
         payload.project_id, payload.attempt_id, payload.lease_token,
         pool, request.app.state.renderer, request.app.state.storage, request.app.state.emailer,
     )
-    return {"completed": True, "projectId": str(payload.project_id), "renderer": "revideo"}
+    return {"completed": True, "projectId": str(payload.project_id), "renderer": "remotion"}

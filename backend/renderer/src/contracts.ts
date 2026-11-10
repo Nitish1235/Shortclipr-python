@@ -29,7 +29,6 @@ export interface RenderPlan {
   aspectRatio: '9:16' | '1:1' | '16:9'
   fps: number
   durationSeconds: number
-  audioPath?: string
   scenes: ScenePlan[]
   palette?: { background:string; foreground:string; accent:string; secondary:string }
 }

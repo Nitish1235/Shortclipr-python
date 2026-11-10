@@ -51,7 +51,7 @@ class OpenAIPlanner:
             model=assignment.model,
             reasoning={"effort": assignment.effort},
             input=[
-                {"role": "system", "content": "You are the planning stage of ShortClipr. Produce an exact frame-based plan for a final-only animated short. Write a complete narration that ends naturally and targets 2.1 to 2.35 spoken words per requested second. Favor reusable declarative SVG/Canvas/Revideo operations. Never promise unsupported assets or capabilities."},
+                {"role": "system", "content": "You are the planning stage of ShortClipr. Produce an exact frame-based plan for a final-only animated short. Write a complete narration that ends naturally and targets 2.1 to 2.35 spoken words per requested second. Favor reusable declarative SVG/Canvas/React operations. Never promise unsupported assets or capabilities."},
                 {"role": "user", "content": json.dumps(project, default=str)},
             ],
             text={"format": {"type": "json_schema", "name": "shortclipr_scene_plan", "strict": True, "schema": PLAN_SCHEMA}},

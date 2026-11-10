@@ -88,6 +88,14 @@ async def validate_final(path: Path, aspect_ratio: str, duration_seconds: int) -
     duration = float(metadata.get("format", {}).get("duration", 0))
     if abs(duration - duration_seconds) > 1.5:
         raise QualityError(f"Unexpected duration {duration:.2f}s")
+    rate = str(video.get("r_frame_rate", "0/1"))
+    try:
+        numerator, denominator = rate.split("/", 1)
+        fps = float(numerator) / float(denominator)
+    except (ValueError, ZeroDivisionError):
+        fps = 0
+    if abs(fps - 30) > 0.1:
+        raise QualityError(f"Unexpected frame rate {fps:.3f}; expected 30 FPS")
     # A full decode catches truncated/corrupt files that metadata alone accepts.
     await run(ffmpeg, "-v", "error", "-i", str(path), "-f", "null", "-")
-    return {"duration": duration, "width": width, "height": height, "video_codec": video["codec_name"], "audio_codec": audio.get("codec_name")}
+    return {"duration": duration, "width": width, "height": height, "fps": fps, "video_codec": video["codec_name"], "audio_codec": audio.get("codec_name")}

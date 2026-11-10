@@ -11,7 +11,7 @@ from .core.log import configure_logging, get_logger
 from .db import create_pool
 from .routers import admin_workers, auth, billing, catalog, internal, projects, showcase
 from .services.openai_planner import OpenAIPlanner
-from .services.renderer import RevideoRenderer
+from .services.renderer import RemotionRenderer
 from .services.scene_compiler import SceneCompiler
 from .services.storage import ObjectStorage
 from .services.email import ProjectReadyEmailer
@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI):
         app.state.speech=UnrealSpeech(settings)
     else:
         app.state.emailer=ProjectReadyEmailer(settings, app.state.storage)
-        app.state.renderer=RevideoRenderer()
+        app.state.renderer=RemotionRenderer()
         if settings.APP_ENV.lower() == "production":
             await app.state.renderer.preflight()
     yield

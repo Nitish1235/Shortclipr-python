@@ -28,6 +28,8 @@ ENV PORT=8080 \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     FFMPEG_PATH=/usr/bin/ffmpeg \
     FFPROBE_PATH=/usr/bin/ffprobe \
+    REMOTION_CONCURRENCY=2 \
+    REMOTION_CRF=18 \
     DISABLE_TELEMETRY=true
 EXPOSE 8080
 CMD ["/app/start.sh"]

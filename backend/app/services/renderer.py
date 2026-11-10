@@ -15,7 +15,7 @@ class NonRetryableRenderError(RuntimeError):
     """A render input or worker configuration cannot succeed on retry."""
 
 
-class RevideoRenderer:
+class RemotionRenderer:
     def __init__(self, renderer_root: str = "/app/renderer"):
         self.renderer_root = Path(os.getenv("RENDERER_ROOT", renderer_root))
         self.node_path = os.getenv("NODE_BINARY", shutil.which("node") or "node")
@@ -29,16 +29,18 @@ class RevideoRenderer:
             raise RuntimeError(f"Renderer root does not exist: {self.renderer_root}")
         if not self.tsx_path.is_file():
             raise RuntimeError(f"Renderer TypeScript runner is missing: {self.tsx_path}")
-        revideo_path = self.renderer_root / "node_modules" / "@revideo" / "renderer"
-        if not revideo_path.is_dir():
-            raise RuntimeError(f"Revideo package is missing: {revideo_path}")
+        remotion_path = self.renderer_root / "node_modules" / "@remotion" / "renderer"
+        bundler_path = self.renderer_root / "node_modules" / "@remotion" / "bundler"
+        core_path = self.renderer_root / "node_modules" / "remotion"
+        if not remotion_path.is_dir() or not bundler_path.is_dir() or not core_path.is_dir():
+            raise RuntimeError(f"Remotion packages are missing: {core_path}, {remotion_path}, {bundler_path}")
         required_binaries = {"node": self.node_path, "ffmpeg": self.ffmpeg_path, "chromium": self.chromium_path}
         missing = [label for label, path in required_binaries.items() if Path(path).is_absolute() and not Path(path).is_file()]
         if missing:
             raise RuntimeError(f"Renderer binaries are missing: {', '.join(missing)}")
         logger.info(
             "renderer.preflight.ok",
-            extra={"renderer_root": str(self.renderer_root), "revideo_path": str(revideo_path), **required_binaries},
+            extra={"renderer_root": str(self.renderer_root), "remotion_path": str(remotion_path), **required_binaries},
         )
         return required_binaries
 
@@ -73,14 +75,16 @@ class RevideoRenderer:
             line = raw_line.decode(errors="replace").strip()
             if not line:
                 continue
-            # Revideo prints progress on stdout. Keep the worker log useful
-            # without emitting every frame update.
+            # Remotion prints structured progress on stdout. Keep the worker
+            # log useful without emitting every frame update.
             progress = None
-            marker = "Render progress, worker"
-            if marker in line and ":" in line and line.rstrip().endswith("%"):
+            if '"event":"remotion.render.progress"' in line:
                 try:
-                    progress = int(line.rsplit(":", 1)[1].strip().rstrip("%"))
-                except ValueError:
+                    payload = json.loads(line)
+                    raw_progress = payload.get("overallProgress", payload.get("progress"))
+                    if isinstance(raw_progress, (int, float)):
+                        progress = round(raw_progress * 100) if raw_progress <= 1 else round(raw_progress)
+                except (TypeError, ValueError, json.JSONDecodeError):
                     progress = None
             if progress is not None and progress < last_progress + 5 and progress != 100:
                 continue
@@ -143,7 +147,7 @@ class RevideoRenderer:
                     extra={"timeout_seconds": timeout_seconds, "detail": detail},
                 )
                 raise RuntimeError(
-                    f"Revideo timed out after {timeout_seconds}s" + (f": {detail}" if detail else "")
+                    f"Remotion timed out after {timeout_seconds}s" + (f": {detail}" if detail else "")
                 ) from error
             duration_ms = round((time.monotonic() - t0) * 1000)
             if process.returncode:
@@ -159,7 +163,7 @@ class RevideoRenderer:
                         "stdout_tail": stdout_tail,
                     },
                 )
-                raise RuntimeError(f"Revideo failed (exit {process.returncode}): {detail[-1500:]}")
+                raise RuntimeError(f"Remotion failed (exit {process.returncode}): {detail[-1500:]}")
             size_mb = round(output_path.stat().st_size / 1_048_576, 2) if output_path.exists() else None
             logger.info(
                 "renderer.subprocess.done",

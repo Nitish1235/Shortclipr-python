@@ -1,37 +1,48 @@
 import {mkdir, readFile} from 'node:fs/promises'
 import {dirname, resolve} from 'node:path'
-import {renderVideo} from '@revideo/renderer'
+import {bundle} from '@remotion/bundler'
+import {renderMedia, selectComposition} from '@remotion/renderer'
 import type {RenderPlan} from './contracts'
 
 const [, , planPath, outputPath] = process.argv
 if (!planPath || !outputPath) throw new Error('Usage: npm run render -- <plan.json> <output.mp4>')
 
-const plan = JSON.parse(await readFile(resolve(planPath),'utf8')) as RenderPlan
-const dimensions:Record<RenderPlan['aspectRatio'],[number,number]> = {'9:16':[1080,1920],'1:1':[1080,1080],'16:9':[1920,1080]}
+const plan = JSON.parse(await readFile(resolve(planPath), 'utf8')) as RenderPlan
+const dimensions: Record<RenderPlan['aspectRatio'], [number, number]> = {'9:16': [1080, 1920], '1:1': [1080, 1080], '16:9': [1920, 1080]}
 const [width, height] = dimensions[plan.aspectRatio]
-const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
-await mkdir(dirname(resolve(outputPath)),{recursive:true})
+const outputLocation = resolve(outputPath)
+const concurrency = Number(process.env.REMOTION_CONCURRENCY ?? 2)
+const crf = Number(process.env.REMOTION_CRF ?? 18)
 
-const rendered = await renderVideo({
-  // Revideo's supported project-file form is relative to the renderer root.
-  // An absolute path gets joined to that root a second time by Revideo 0.11.
-  projectFile: './src/project.ts',
-  variables:{plan},
-  settings:{
-    outFile:resolve(outputPath) as `${string}.mp4`,
-    workers:Number(process.env.RENDER_WORKERS ?? 1),
-    projectSettings:{size:{x:width,y:height}},
-    logProgress:true,
-    ffmpeg:{ffmpegPath:process.env.FFMPEG_PATH ?? 'ffmpeg',ffmpegLogLevel:'error'},
-    puppeteer:{args:['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'],...(executablePath?{executablePath}:{})},
-    viteConfig:{
-      // Revideo keeps its active scene in module-level state. Vite's first
-      // dependency optimization reload can replace those modules while the
-      // renderer is already executing the scene, producing "The scene is not
-      // available in the current context". Keep the Revideo runtime in the
-      // normal source graph so it is not swapped out during render startup.
-      optimizeDeps:{exclude:['@revideo/2d','@revideo/core','@revideo/renderer','@revideo/ui','@revideo/vite-plugin']},
-    }
-  }
+await mkdir(dirname(outputLocation), {recursive: true})
+console.log(JSON.stringify({event: 'remotion.bundle.start'}))
+const serveUrl = await bundle({
+  entryPoint: resolve('./src/index.ts'),
+  onProgress: progress => console.log(JSON.stringify({event: 'remotion.bundle.progress', progress})),
+  webpackOverride: config => config,
 })
-console.log(JSON.stringify({output:rendered,projectId:plan.projectId}))
+console.log(JSON.stringify({event: 'remotion.bundle.done'}))
+
+const inputProps = {plan}
+const composition = await selectComposition({serveUrl, id: 'ShortClipr', inputProps})
+const renderComposition = {...composition, width, height, fps: plan.fps, durationInFrames: Math.round(plan.durationSeconds * plan.fps)}
+console.log(JSON.stringify({event: 'remotion.render.start', frames: renderComposition.durationInFrames, fps: renderComposition.fps, width, height, crf, concurrency}))
+
+await renderMedia({
+  codec: 'h264',
+  crf,
+  composition: renderComposition,
+  serveUrl,
+  outputLocation,
+  inputProps,
+  browserExecutable: process.env.PUPPETEER_EXECUTABLE_PATH,
+  muted: true,
+  concurrency,
+  pixelFormat: 'yuv420p',
+  chromiumOptions: {
+    enableMultiProcessOnLinux: true,
+  },
+  onProgress: progress => console.log(JSON.stringify({event: 'remotion.render.progress', ...progress})),
+})
+
+console.log(JSON.stringify({event: 'remotion.render.done', output: outputLocation, projectId: plan.projectId}))
