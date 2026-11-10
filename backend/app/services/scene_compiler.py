@@ -44,8 +44,9 @@ class SceneCompiler:
                         "Choose bridge for structures and support, diagram for processes, wave for motion or "
                         "signals, map for places or routes, mechanism for systems, orbit for cycles, bars for "
                         "comparisons, timeline for history, particles for abstract ideas, and typography only "
-                        "when the concept is genuinely typographic. Use short on-screen copy as a supporting "
-                        "layer. Do not return JavaScript, URLs, or unsupported external assets."
+                        "when the concept is genuinely typographic. Do not use subtitles, captions, headlines, "
+                        "labels, or animated text in the rendered clip; the visual itself must carry the idea. "
+                        "Keep text fields only for internal planning. Do not return JavaScript, URLs, or unsupported external assets."
                     ),
                 },
                 {"role": "user", "content": json.dumps({"project": project, "scene": scene}, default=str)},
