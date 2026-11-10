@@ -11,7 +11,7 @@ const plan = JSON.parse(await readFile(resolve(planPath), 'utf8')) as RenderPlan
 const dimensions: Record<RenderPlan['aspectRatio'], [number, number]> = {'9:16': [1080, 1920], '1:1': [1080, 1080], '16:9': [1920, 1080]}
 const [width, height] = dimensions[plan.aspectRatio]
 const outputLocation = resolve(outputPath)
-const concurrency = Number(process.env.REMOTION_CONCURRENCY ?? 2)
+const concurrency = Number(process.env.REMOTION_CONCURRENCY ?? 5)
 const crf = Number(process.env.REMOTION_CRF ?? 18)
 
 await mkdir(dirname(outputLocation), {recursive: true})
