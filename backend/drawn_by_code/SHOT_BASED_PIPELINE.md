@@ -1,0 +1,48 @@
+# ShortClipr shot-based Drawn-by-Code pipeline
+
+## Purpose
+
+ShortClipr compiles a complete film from a shared visual bible and independent shot
+drawing functions. The renderer still receives one deterministic JavaScript program,
+because the Drawn-by-Code engine exposes one `Motion.scene({...})` contract per film.
+
+## Generation stages
+
+1. The story planner creates narration, a contiguous 30 FPS shot plan, and a visual bible.
+2. The compiler validates the visual bible and shot ranges.
+3. DeepSeek creates one shared drawing library for recurring characters, props and
+   environments.
+4. DeepSeek compiles each shot independently. Calls are bounded by
+   `DEEPSEEK_MAX_PARALLEL_SHOTS`.
+5. The compiler assembles the shared library and shot functions into one film program.
+6. The existing Drawn-by-Code renderer validates JavaScript syntax and renders the film.
+7. The existing narration mux, final validation, GCS upload, credits and delivery remain
+   owned by the existing pipeline.
+
+## Shot timing
+
+Planner frame boundaries are integers. Start frames are inclusive and end frames are
+exclusive. The compiler converts frame ranges to seconds at 30 FPS and creates a dispatch
+function that invokes exactly one shot at a given film time.
+
+## Visual continuity
+
+Recurring entities are defined in the visual bible with stable IDs. The shared drawing
+library is generated once and reused by all shot functions. A shot references entity IDs
+from the bible; it should not redefine their appearance.
+
+## Code execution constraints
+
+Generated fragments may use Canvas 2D drawing operations and deterministic math only.
+The compiler rejects common network, filesystem, Node, DOM, timer, dynamic-code and
+nondeterministic APIs. The render page also applies a restrictive Content Security Policy.
+These checks are defense in depth and are not a formal JavaScript sandbox; production
+isolation still depends on the worker/container boundary.
+
+## Scope and limitations
+
+- Strictly 2D Canvas. No WebGL, Three.js, meshes or 3D engines.
+- No generated narration subtitles; narration remains a separate audio track.
+- One shared drawing library plus one function per shot is assembled into one renderer
+  program; the database continues to store one film program in the existing scene-plan row.
+- Automated tests and example-video rendering are intentionally not part of this change.

@@ -138,6 +138,8 @@ async def run_planning(
             ctx["render_programs"] = 1
             ctx["animation_model"] = compiler.model
             ctx["animation_source_chars"] = len(compiled_film["scene_js"])
+            ctx["compiled_shot_count"] = compiled_film.get("shot_count", len(plan["scenes"]))
+            ctx["visual_style"] = compiled_film.get("style", "unknown")
             ctx["audio_bytes"] = len(audio)
             ctx["timestamps_bytes"] = len(timestamps)
 
@@ -177,7 +179,7 @@ async def run_planning(
                 )
                 await connection.execute(
                     "INSERT INTO project_events(project_id,event_type,stage,progress,payload) VALUES($1,'planned','api',38,$2::jsonb)",
-                    project_id, json.dumps({"scene_count": len(compiled_scenes), "models": sorted({scene["assigned_model"] for scene in compiled_scenes})}),
+                    project_id, json.dumps({"scene_count": len(plan["scenes"]), "render_program_count": len(compiled_scenes), "shot_count": compiled_film.get("shot_count", len(plan["scenes"])), "visual_style": compiled_film.get("style", "unknown"), "models": sorted({scene["assigned_model"] for scene in compiled_scenes})}),
                 )
                 await connection.execute("SELECT pg_notify('shortclipr_jobs',$1)", str(render_attempt))
 

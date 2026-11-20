@@ -1,93 +1,217 @@
-"""DeepSeek full-film Canvas 2D animation code generator."""
+"""Shot-by-shot DeepSeek compiler for deterministic Drawn-by-Code films."""
 from __future__ import annotations
-import json, re
+
+import asyncio
+import json
+import re
 from typing import Any
+
 from openai import AsyncOpenAI
+
 from ..core.config import Settings
+from .animation_contracts import (
+    ASPECT_LOGICAL,
+    MAX_FILM_SOURCE,
+    MAX_SHARED_SOURCE,
+    MAX_SHOT_SOURCE,
+    validate_generated_fragment,
+    validate_scene_plan,
+    validate_visual_bible,
+)
+
 
 class DeepSeekAnimationCompiler:
+    """Compiles a visual bible into shared drawing helpers and independent shot functions."""
+
     def __init__(self, settings: Settings):
         self.model = settings.DEEPSEEK_ANIMATION_MODEL
         self.reasoning_effort = settings.DEEPSEEK_REASONING_EFFORT
         self.max_output_tokens = settings.DEEPSEEK_MAX_OUTPUT_TOKENS
-        self.client = AsyncOpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com",
-            timeout=900.0, max_retries=2) if settings.DEEPSEEK_API_KEY else None
+        self.max_parallel_shots = max(1, min(4, settings.DEEPSEEK_MAX_PARALLEL_SHOTS))
+        self.client = (
+            AsyncOpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com",
+                        timeout=900.0, max_retries=2)
+            if settings.DEEPSEEK_API_KEY else None
+        )
 
-    async def compile(self, project: dict[str, Any], plan: dict[str, Any]) -> dict[str, str]:
-        if self.client is None: raise RuntimeError("DEEPSEEK_API_KEY is not configured")
-        duration=int(project["duration_seconds"]); aspect=str(project["aspect_ratio"])
-        logical={"9:16":[900,1600],"1:1":[1000,1000],"16:9":[1600,900]}.get(aspect)
-        if logical is None: raise ValueError(f"Unsupported aspect ratio: {aspect}")
-        prompt = f"""
-You are ShortClipr's principal 2D animation director and creative-coding artist.
-Create a COMPLETE, production-quality illustrated short film as executable JavaScript
-for the supplied Drawn-by-Code Canvas 2D animation engine. It must look like a carefully
-art-directed animated short, not generic motion graphics, a slideshow or placeholder shapes.
-
-Return one JSON object: {{"style":"paper-cutout|risograph|comic|70s-poster|blueprint|line","scene_js":"complete JavaScript"}}.
-The source must call Motion.scene({{...}}) exactly once and set fps:30, duration:{duration},
-logical:{json.dumps(logical)}, shots:[...], draw(g,t,env){{...}}. Shots are [start,end,name]
-ranges covering 0..{duration} with no gaps or overlaps.
-
-ENGINE
-- Motion and Ease are globals from engine/core.js. Available helpers include Motion.rng,
-Motion.noise1, Motion.cam, Motion.shake, Motion.layer, Motion.drawLayer, Motion.quad,
-Ease.seg, Ease.lerp, Ease.inOut, Ease.out, Ease.back, Ease.pop.
-- Use CanvasRenderingContext2D, standard JS Math and deterministic pure functions.
-- Redraw the complete frame from t each time. Never rely on previous frames.
-- No imports, exports, JSX, TypeScript, DOM, network, file access, Node APIs, timers, eval,
-Function, dynamic loading, Math.random, Date, external assets, WebGL, Three.js, meshes,
-3D engines or photorealistic video techniques.
-- Use one complete self-contained scene file. No Markdown fences.
-
-ART DIRECTION AND CRAFT
-- Choose one coherent style: paper cutout, risograph, hand-drawn comic, 70s poster,
-blueprint or expressive line art. Use deliberate palette, material texture, shadows,
-highlights, handmade irregularity and layered illustration.
-- Draw recognisable topic-specific subjects with detail. People need heads, hair, faces,
-clothing, limbs and readable poses; buildings need structure, windows and roofs; vehicles
-need wheels and windows; landscapes need terrain; animals, machines and artefacts need
-distinctive features. Do not substitute generic geometry for actual subjects.
-- Define reusable drawing functions for recurring characters/objects. Keep identity,
-clothing, proportions, colours, markings and screen direction consistent across shots.
-- Use foreground, midground and background; perspective, parallax, lighting and camera
-moves when appropriate. Compose shots differently and use motivated transitions.
-- Animate meaningful actions: walk cycles, gestures, turning, operating, building, opening,
-flowing, colliding, assembling, transforming, reacting and follow-through. Use anticipation,
-easing, secondary motion and camera tracking.
-- First second: strong visual hook. Middle: evolving visual cause/effect. End: resolved,
-memorable composition. Avoid floating cards, random particles, generic circles/bars/graphs
-unless topic genuinely requires them. Text supports illustration, not replaces it.
-- Match visuals to supplied facts and narration. Do not invent historical or factual detail.
-- Keep code performant; precompute static geometry outside draw where possible.
-- Do not render narration transcripts or subtitles. Narration is muxed separately.
-PROJECT:
-__PROJECT__
-STORY PLAN:
-__PLAN__
-Create 5–9 visually distinct shots across the duration. Return strict JSON only.
-""".strip().replace("__PROJECT__",json.dumps(project,ensure_ascii=False,default=str)).replace("__PLAN__",json.dumps(plan,ensure_ascii=False,default=str))
-        response=await self.client.chat.completions.create(model=self.model,
-            messages=[{"role":"system","content":prompt},{"role":"user","content":"Generate the complete runnable animation program now. Follow every constraint."}],
-            response_format={"type":"json_object"},max_tokens=self.max_output_tokens,
+    async def _json_completion(self, system_prompt: str, user_prompt: str, token_limit: int) -> dict[str, Any]:
+        if self.client is None:
+            raise RuntimeError("DEEPSEEK_API_KEY is not configured")
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+            max_tokens=token_limit,
             reasoning_effort=self.reasoning_effort,
-            extra_body={"thinking":{"type":"enabled"}})
-        raw=response.choices[0].message.content
-        if not raw: raise RuntimeError("DeepSeek returned an empty animation program")
-        try: result=json.loads(raw)
-        except json.JSONDecodeError as exc: raise RuntimeError("DeepSeek returned invalid JSON") from exc
-        source=result.get("scene_js")
-        if not isinstance(source,str): raise RuntimeError("DeepSeek response is missing scene_js")
-        self.validate_source(source,duration,logical)
-        return {"scene_js":source,"style":str(result.get("style","paper-cutout")),"model":self.model}
+            extra_body={"thinking": {"type": "enabled"}},
+        )
+        raw = response.choices[0].message.content
+        if not raw:
+            raise RuntimeError("DeepSeek returned an empty animation response")
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("DeepSeek returned invalid animation JSON") from exc
+        if not isinstance(value, dict):
+            raise RuntimeError("DeepSeek animation response must be a JSON object")
+        return value
+
+    async def compile(self, project: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
+        if self.client is None:
+            raise RuntimeError("DEEPSEEK_API_KEY is not configured")
+        duration = int(project["duration_seconds"])
+        total_frames = duration * 30
+        aspect = str(project["aspect_ratio"])
+        logical = ASPECT_LOGICAL.get(aspect)
+        if logical is None:
+            raise ValueError(f"Unsupported aspect ratio: {aspect}")
+
+        visual_bible = validate_visual_bible(plan.get("visual_bible"))
+        scenes = validate_scene_plan(plan.get("scenes"), total_frames)
+        style_id = visual_bible["style_id"]
+
+        shared_prompt = f"""
+You are ShortClipr's senior 2D character and illustration systems artist.
+Create a reusable JavaScript drawing library for a {style_id} Canvas 2D film.
+Return JSON only: {{"shared_js":"JavaScript source"}}.
+The source is evaluated in the same script as the film and may define ordinary named
+functions and constants. It must not call Motion.scene. Use only the supplied Canvas
+2D context in functions; no DOM, browser globals, imports, exports, network, filesystem,
+Node APIs, timers, eval, Function, Date, performance, Math.random, WebGL or 3D.
+Create reusable helpers for every recurring character, prop and environment in the visual
+bible. Character functions must preserve silhouette, proportions, face, clothing, colours
+and distinctive marks across all shots. Prefer named functions such as drawExplorer(g, x,
+y, scale, pose, expression). Include common palette, shape, texture and shadow helpers.
+Keep the code deterministic and self-contained. Do not use external assets.
+Visual bible:
+{json.dumps(visual_bible, ensure_ascii=False)}
+""".strip()
+        shared_result = await self._json_completion(
+            shared_prompt,
+            "Generate the shared drawing library. Return only the required JSON object.",
+            min(self.max_output_tokens, 12000),
+        )
+        shared_js = validate_generated_fragment(
+            shared_result.get("shared_js"), "Shared drawing library", MAX_SHARED_SOURCE
+        )
+
+        semaphore = asyncio.Semaphore(self.max_parallel_shots)
+
+        async def compile_one(scene: dict[str, Any]) -> dict[str, Any]:
+            start_s = scene["start_frame"] / 30
+            end_s = scene["end_frame"] / 30
+            shot_prompt = f"""
+You are ShortClipr's 2D animation shot director and Canvas artist.
+Generate only the drawing body for one shot. Return JSON only:
+{{"draw_body":"JavaScript statements"}}.
+The body is inserted inside:
+function drawShot_{scene["index"]}(g, t, env, absoluteTime) {{ ... }}
+Here t is local shot time starting at zero; absoluteTime is film time in seconds.
+The shared drawing library is already defined before this function. Reuse its named
+functions for recurring characters and props; do not redraw their defining features.
+Use only CanvasRenderingContext2D methods on g, local variables, standard Math and
+the shared helper functions. Redraw the full shot deterministically from t. No state
+accumulation, random numbers, DOM/browser globals, imports, exports, network, file access,
+Node APIs, timers, eval, Function, Date, performance, WebGL, Three.js or 3D.
+Keep all drawing within the logical canvas {logical[0]}x{logical[1]}.
+Make this a real animated action with anticipation, easing, follow-through and secondary
+motion. Compose foreground/midground/background where useful. Avoid generic placeholder
+geometry. Do not render narration or subtitles.
+STYLE: {style_id}
+VISUAL BIBLE:
+{json.dumps(visual_bible, ensure_ascii=False)}
+SHOT:
+{json.dumps(scene, ensure_ascii=False)}
+SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s.
+""".strip()
+            async with semaphore:
+                result = await self._json_completion(
+                    shot_prompt,
+                    "Write this shot's complete drawing body now. Return strict JSON only.",
+                    min(self.max_output_tokens, 10000),
+                )
+            body = validate_generated_fragment(
+                result.get("draw_body"), f"Shot {scene['index'] + 1}", MAX_SHOT_SOURCE
+            )
+            return {
+                "index": scene["index"],
+                "start_frame": scene["start_frame"],
+                "end_frame": scene["end_frame"],
+                "name": str(scene.get("purpose", f"Shot {scene['index'] + 1}"))[:80],
+                "draw_body": body,
+            }
+
+        compiled = await asyncio.gather(*(compile_one(scene) for scene in scenes))
+        source = self._assemble_film(shared_js, compiled, duration, logical, style_id)
+        if len(source) > MAX_FILM_SOURCE:
+            raise ValueError("Assembled animation program exceeds the maximum source size")
+        self.validate_source(source, duration, logical)
+        return {
+            "scene_js": source,
+            "style": style_id,
+            "model": self.model,
+            "shot_count": len(compiled),
+            "shared_source_chars": len(shared_js),
+            "shot_source_chars": sum(len(x["draw_body"]) for x in compiled),
+        }
 
     @staticmethod
-    def validate_source(source:str,duration:int,logical:list[int])->None:
-        if not 300<=len(source)<=500000: raise ValueError("Generated animation source length is outside allowed bounds")
-        if len(re.findall(r"\bMotion\s*\.\s*scene\s*\(",source))!=1: raise ValueError("Source must contain exactly one Motion.scene declaration")
-        if not re.search(r"\bfps\s*:\s*30\b",source): raise ValueError("Animation source must declare fps: 30")
-        if not re.search(rf"\bduration\s*:\s*{duration}(?:\.0+)?\b",source): raise ValueError(f"Animation source must declare duration: {duration}")
-        compact=re.sub(r"\s+","",source)
-        if f"logical:{json.dumps(logical,separators=(',',':'))}" not in compact: raise ValueError("Animation canvas does not match project aspect ratio")
-        blocked=[r"\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|Worker|SharedWorker)\s*\(",r"\b(?:eval|Function)\s*\(",r"\b(?:process|require|globalThis|localStorage|sessionStorage|navigator|location)\b",r"\b(?:Date|performance)\s*\.",r"\bMath\s*\.\s*random\s*\(",r"\bimport\s*(?:\(|[('""{*])"]
-        if any(re.search(p,source) for p in blocked): raise ValueError("Animation source contains a disallowed runtime capability")
+    def _assemble_film(
+        shared_js: str,
+        shots: list[dict[str, Any]],
+        duration: int,
+        logical: list[int],
+        style_id: str,
+    ) -> str:
+        functions = []
+        ranges = []
+        dispatch = []
+        for shot in shots:
+            index = shot["index"]
+            start = shot["start_frame"] / 30
+            end = shot["end_frame"] / 30
+            functions.append(
+                f"function drawShot_{index}(g,t,env,absoluteTime) {{\n"
+                f"{shot['draw_body']}\n}}"
+            )
+            name = re.sub(r"[^a-zA-Z0-9 _-]", "", shot["name"]).replace("'", "")[:60]
+            ranges.append(f"[{start:.6f},{end:.6f},'{name}']")
+            dispatch.append(
+                f"if (t >= {start:.6f} && t < {end:.6f}) "
+                f"return drawShot_{index}(g, t - {start:.6f}, env, t);"
+            )
+        function_source = "\n".join(functions)
+        dispatch_source = " ".join(dispatch)
+        return (
+            "// ShortClipr shot-based Drawn-by-Code film. Generated code is untrusted input.\n"
+            f"// Visual style: {style_id}\n"
+            f"{shared_js}\n"
+            f"{function_source}\n"
+            "Motion.scene({\n"
+            "  fps: 30,\n"
+            f"  duration: {duration},\n"
+            f"  logical: {json.dumps(logical)},\n"
+            f"  shots: [{','.join(ranges)}],\n"
+            "  draw(g, t, env) {\n"
+            f"    {dispatch_source}\n"
+            "  }\n"
+            "});\n"
+        )
+
+    @staticmethod
+    def validate_source(source: str, duration: int, logical: list[int]) -> None:
+        if not 300 <= len(source) <= MAX_FILM_SOURCE:
+            raise ValueError("Generated animation source length is outside allowed bounds")
+        if len(re.findall(r"\bMotion\s*\.\s*scene\s*\(", source)) != 1:
+            raise ValueError("Source must contain exactly one Motion.scene declaration")
+        if not re.search(r"\bfps\s*:\s*30\b", source):
+            raise ValueError("Animation source must declare fps: 30")
+        if not re.search(rf"\bduration\s*:\s*{duration}(?:\.0+)?\b", source):
+            raise ValueError(f"Animation source must declare duration: {duration}")
+        compact = re.sub(r"\s+", "", source)
+        if f"logical:{json.dumps(logical, separators=(',', ':'))}" not in compact:
+            raise ValueError("Animation canvas does not match project aspect ratio")
+        validate_generated_fragment(source, "Assembled animation", MAX_FILM_SOURCE)
