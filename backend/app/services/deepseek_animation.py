@@ -152,6 +152,9 @@ SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s
             }
 
         compiled = await asyncio.gather(*(compile_one(scene) for scene in scenes))
+        compiled, review_summary = await self._review_and_repair_shots(
+            compiled, scenes, visual_bible, style_id, logical
+        )
         source = self._assemble_film(shared_js, compiled, duration, logical, style_id)
         if len(source) > MAX_FILM_SOURCE:
             raise ValueError("Assembled animation program exceeds the maximum source size")
@@ -163,6 +166,99 @@ SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s
             "shot_count": len(compiled),
             "shared_source_chars": len(shared_js),
             "shot_source_chars": sum(len(x["draw_body"]) for x in compiled),
+            "quality_review": review_summary,
+        }
+
+
+    async def _review_and_repair_shots(
+        self,
+        shots: list[dict[str, Any]],
+        scenes: list[dict[str, Any]],
+        visual_bible: dict[str, Any],
+        style_id: str,
+        logical: list[int],
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Review shot source and repair only shots with actionable defects.
+
+        This is source-level review, not rendered-frame or visual QA.
+        """
+        semaphore = asyncio.Semaphore(self.max_parallel_shots)
+        scene_by_index = {scene["index"]: scene for scene in scenes}
+
+        async def review_one(shot: dict[str, Any]) -> dict[str, Any]:
+            scene = scene_by_index[shot["index"]]
+            body = shot["draw_body"]
+            prompt = f"""
+You are a strict source-code reviewer for a generated 2D Canvas animation shot.
+Review the supplied JavaScript drawing body against the shot brief and visual bible.
+You cannot see rendered frames. Do not claim to assess visual appearance; assess only
+source-level correctness and likely drawing defects.
+
+Check for: missing or ineffective visible action; missing background or composition;
+broken/imbalanced Canvas save/restore state; use of undeclared character/prop helper IDs;
+inconsistent use of the shared character drawing functions; unsupported APIs; use of
+browser/Node/network/time/random APIs; obvious unbounded loops; drawing outside the
+logical canvas {logical[0]}x{logical[1]}; failure to use deterministic time t; and
+style helper misuse. Do not demand a background if the shot intentionally continues a
+continuous environment and the code clearly paints that environment.
+
+Return strict JSON:
+{{"status":"pass"|"repair","issues":["short actionable defect"],"repaired_draw_body":"complete replacement body or empty string"}}
+Use status=pass and an empty repaired_draw_body when no material defect is found.
+Use status=repair only for concrete defects that can be fixed without changing the story,
+character identity, shot purpose, or style. Preserve all useful animation detail.
+Do not add external assets, imports, DOM, WebGL or 3D.
+STYLE: {style_id}
+VISUAL BIBLE:
+{json.dumps(visual_bible, ensure_ascii=False)}
+SHOT BRIEF:
+{json.dumps(scene, ensure_ascii=False)}
+CURRENT DRAW BODY:
+{body}
+""".strip()
+            async with semaphore:
+                try:
+                    result = await self._json_completion(
+                        "You are a conservative JavaScript animation code reviewer. Return strict JSON only.",
+                        prompt,
+                        min(self.max_output_tokens, 10000),
+                    )
+                    status = result.get("status")
+                    issues = result.get("issues", [])
+                    if not isinstance(issues, list):
+                        issues = []
+                    issues = [str(x)[:240] for x in issues[:8]]
+                    if status != "repair":
+                        return {**shot, "review_status": "passed", "review_issues": issues}
+                    repaired = validate_generated_fragment(
+                        result.get("repaired_draw_body"),
+                        f"Repaired shot {shot['index'] + 1}",
+                        MAX_SHOT_SOURCE,
+                    )
+                    return {
+                        **shot, "draw_body": repaired, "review_status": "repaired",
+                        "review_issues": issues,
+                    }
+                except Exception as exc:
+                    return {
+                        **shot, "review_status": "skipped",
+                        "review_issues": [f"Review unavailable: {type(exc).__name__}"],
+                    }
+
+        reviewed = await asyncio.gather(*(review_one(shot) for shot in shots))
+        counts = {
+            "passed": sum(x["review_status"] == "passed" for x in reviewed),
+            "repaired": sum(x["review_status"] == "repaired" for x in reviewed),
+            "skipped": sum(x["review_status"] == "skipped" for x in reviewed),
+        }
+        return reviewed, {
+            "mode": "source_only",
+            "shots_reviewed": len(reviewed) - counts["skipped"],
+            **counts,
+            "issues": [
+                {"shot": x["index"] + 1, "status": x["review_status"], "items": x["review_issues"]}
+                for x in reviewed if x["review_issues"]
+            ],
         }
 
     @staticmethod

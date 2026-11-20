@@ -70,3 +70,20 @@ transition. The renderer continues to receive one `Motion.scene` program.
 
 The planner's frame allocator reserves at least one frame for every remaining shot,
 preventing rounding from collapsing a late shot to a zero-frame interval.
+
+## Source-level shot review and repair
+
+After shot compilation, the pipeline sends each shot's drawing body to a bounded,
+source-only reviewer. The reviewer checks the code against its shot brief, visual bible,
+Canvas state handling, deterministic-time requirements and the 2D runtime contract.
+Only a shot marked for repair receives a replacement drawing body. Replacements pass the
+same generated-fragment guardrails as first-pass output.
+
+The review is advisory when the review provider fails: the previously validated shot is
+retained and the review status is recorded as skipped. The pipeline records counts and
+actionable issue summaries in compiler metadata.
+
+This stage does not inspect rendered pixels, composition screenshots or motion. It is not
+visual QA. The renderer's existing Node syntax check remains the executable JavaScript
+preflight; actual visual review still requires rendered frames and an explicit human or
+vision-model inspection workflow.
