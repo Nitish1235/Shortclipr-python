@@ -27,6 +27,10 @@ class DrawnByCodeRenderer:
         if aspect not in self.widths: raise NonRetryableRenderError(f"Unsupported aspect ratio: {aspect}")
         work=Path(tempfile.mkdtemp(prefix="shortclipr-dbc-")); scene_dir=work/"film"; scene_dir.mkdir()
         scene_file=scene_dir/"scene.js"; scene_file.write_text(source,encoding="utf-8")
+        syntax=await asyncio.create_subprocess_exec(self.node,"--check",str(scene_file),stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
+        _,syntax_error=await syntax.communicate()
+        if syntax.returncode!=0:
+            raise NonRetryableRenderError("Generated animation JavaScript is invalid: "+syntax_error.decode(errors="replace")[-1200:])
         (scene_dir/"drawn-by-code.json").write_text(json.dumps({"version":1,"generator":"shortclipr"}),encoding="utf-8")
         output_path.parent.mkdir(parents=True,exist_ok=True)
         env=os.environ.copy(); env.update({"CHROME_PATH":self.chrome,"FFMPEG_PATH":self.ffmpeg,"NODE_ENV":"production"})
