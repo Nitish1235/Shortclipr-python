@@ -10,7 +10,7 @@ from .core.config import get_settings
 from .core.log import configure_logging, get_logger
 from .db import create_pool
 from .routers import admin_workers, auth, billing, catalog, internal, projects, showcase
-from .services.openai_planner import OpenAIPlanner
+from .services.deepseek_planner import DeepSeekStoryPlanner
 from .services.drawn_by_code_renderer import DrawnByCodeRenderer
 from .services.deepseek_animation import DeepSeekAnimationCompiler
 from .services.storage import ObjectStorage
@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
     if settings.SERVICE_ROLE == "api":
         app.state.voices=VoiceCatalogue(settings)
     elif settings.SERVICE_ROLE == "api-worker":
-        app.state.planner=OpenAIPlanner(settings)
+        app.state.planner=DeepSeekStoryPlanner(settings)
         app.state.scene_compiler=DeepSeekAnimationCompiler(settings)
         app.state.speech=UnrealSpeech(settings)
     else:
