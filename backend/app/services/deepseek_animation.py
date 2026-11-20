@@ -28,6 +28,7 @@ class DeepSeekAnimationCompiler:
         self.reasoning_effort = settings.DEEPSEEK_REASONING_EFFORT
         self.max_output_tokens = settings.DEEPSEEK_MAX_OUTPUT_TOKENS
         self.max_parallel_shots = max(1, min(4, settings.DEEPSEEK_MAX_PARALLEL_SHOTS))
+        self.enable_shot_review = settings.DEEPSEEK_ENABLE_SHOT_REVIEW
         self.client = (
             AsyncOpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com",
                         timeout=900.0, max_retries=2)
@@ -182,6 +183,11 @@ SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s
 
         This is source-level review, not rendered-frame or visual QA.
         """
+        if not self.enable_shot_review:
+            return shots, {
+                "mode": "disabled", "shots_reviewed": 0, "passed": 0,
+                "repaired": 0, "skipped": len(shots), "issues": [],
+            }
         semaphore = asyncio.Semaphore(self.max_parallel_shots)
         scene_by_index = {scene["index"]: scene for scene in scenes}
 

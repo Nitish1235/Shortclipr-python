@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     DEEPSEEK_PLAN_MAX_OUTPUT_TOKENS: int = 16384
     DEEPSEEK_MAX_OUTPUT_TOKENS: int = 65536
     DEEPSEEK_MAX_PARALLEL_SHOTS: int = 3
+    DEEPSEEK_ENABLE_SHOT_REVIEW: bool = True
     OPENAI_LUNA_MODEL: str = "gpt-6-luna"
     OPENAI_TERRA_MODEL: str = "gpt-6.1-terra"
     OPENAI_REASONING_EFFORT_LUNA: str = "low"
