@@ -12,7 +12,7 @@ from ..core.log import bind, get_logger, timed
 from ..db import get_pool
 from ..dependencies import internal_request
 from ..models.schemas import InternalRunRequest
-from ..services.openai_planner import OpenAIPlanner
+from ..services.deepseek_planner import DeepSeekStoryPlanner
 from ..services.quality import mux_narration, validate_audio_input, validate_final
 from ..services.drawn_by_code_renderer import DrawnByCodeRenderer, NonRetryableRenderError
 from ..services.deepseek_animation import DeepSeekAnimationCompiler
@@ -84,7 +84,7 @@ async def run_planning(
     attempt_id: UUID | None,
     lease_token: UUID | None,
     pool: asyncpg.Pool,
-    planner: OpenAIPlanner,
+    planner: DeepSeekStoryPlanner,
     compiler: DeepSeekAnimationCompiler,
     speech: UnrealSpeech,
     storage: ObjectStorage,
@@ -114,15 +114,15 @@ async def run_planning(
 
         await pool.execute("UPDATE projects SET status='planning',progress=12 WHERE id=$1", project_id)
 
-        # ── OpenAI planning ───────────────────────────────────────────────
-        async with timed(logger, "planning.openai") as ctx:
+        # ── DeepSeek story + narration + scene planning ───────────────────
+        async with timed(logger, "planning.deepseek_story") as ctx:
             plan = await planner.plan(dict(project))
             ctx["scene_count"] = len(plan["scenes"])
             ctx["narration_chars"] = len(plan.get("narration", ""))
             ctx["title"] = plan.get("title", "")[:60]
 
-        # ── Full-film animation code generation (DeepSeek) + speech ────────
-        async with timed(logger, "planning.deepseek_animation") as ctx:
+        # ── DeepSeek full-film animation code generation + speech ──────────
+        async with timed(logger, "planning.deepseek_animation_and_tts") as ctx:
             compiled_film, narration_assets = await asyncio.gather(
                 compiler.compile(dict(project), plan),
                 speech.synthesize(plan["narration"], project["voice_id"]),
