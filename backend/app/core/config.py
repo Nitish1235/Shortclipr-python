@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     JWT_EXPIRY_DAYS: int = 7
 
     OPENAI_API_KEY: str = ""
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_ANIMATION_MODEL: str = "deepseek-flash"
+    DEEPSEEK_REASONING_EFFORT: str = "max"
+    DEEPSEEK_MAX_OUTPUT_TOKENS: int = 65536
     OPENAI_LUNA_MODEL: str = "gpt-6-luna"
     OPENAI_TERRA_MODEL: str = "gpt-6.1-terra"
     OPENAI_REASONING_EFFORT_LUNA: str = "low"
@@ -102,6 +106,7 @@ class Settings(BaseSettings):
             "api-worker": {
                 "SUPABASE_DB_URL": self.SUPABASE_DB_URL,
                 "OPENAI_API_KEY": self.OPENAI_API_KEY,
+                "DEEPSEEK_API_KEY": self.DEEPSEEK_API_KEY,
                 "UNREALSPEECH_API_KEY": self.UNREALSPEECH_API_KEY,
                 "GCS_BUCKET_NAME": self.GCS_BUCKET_NAME,
                 "INTERNAL_TASK_SECRET": self.INTERNAL_TASK_SECRET,
