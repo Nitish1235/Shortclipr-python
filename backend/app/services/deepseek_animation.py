@@ -70,7 +70,8 @@ Create 5–9 visually distinct shots across the duration. Return strict JSON onl
         response=await self.client.chat.completions.create(model=self.model,
             messages=[{"role":"system","content":prompt},{"role":"user","content":"Generate the complete runnable animation program now. Follow every constraint."}],
             response_format={"type":"json_object"},max_tokens=self.max_output_tokens,
-            extra_body={"thinking":{"type":"enabled"},"reasoning_effort":self.reasoning_effort})
+            reasoning_effort=self.reasoning_effort,
+            extra_body={"thinking":{"type":"enabled"}})
         raw=response.choices[0].message.content
         if not raw: raise RuntimeError("DeepSeek returned an empty animation program")
         try: result=json.loads(raw)
