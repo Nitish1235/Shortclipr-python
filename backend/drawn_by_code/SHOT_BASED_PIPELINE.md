@@ -46,3 +46,27 @@ isolation still depends on the worker/container boundary.
 - One shared drawing library plus one function per shot is assembled into one renderer
   program; the database continues to store one film program in the existing scene-plan row.
 - Automated tests and example-video rendering are intentionally not part of this change.
+
+## Reusable 2D style runtime
+
+The renderer loads the trusted `styles/shortclipr.js` helper through the engine's
+`Motion.scene({ uses: [...] })` mechanism. It provides eight fixed visual palettes:
+paper-cutout, risograph, comic, 70s-poster, engraving, blueprint, line and pixel-art.
+The shared drawing library may use the palette, paper background, paper shadow, halftone,
+pixel snapping and camera helpers. Style effects are Canvas 2D operations; they do not
+load external assets or create a 3D scene.
+
+Camera movement is expressed as deterministic 2D transforms. The generated shot should
+save the context, apply the helper with time-derived center/zoom/rotation values, draw its
+layers, and restore the context. The helper does not retain mutable camera state.
+
+## Shot transitions
+
+Each planner shot may declare `transition_out`. The compiler supports `cut`, `wipe`,
+`iris`, `paper` and `fade`; unknown values fall back to a cut. Non-cut transitions
+render the next shot's opening frame to a cached offscreen Canvas 2D layer and reveal it
+over the outgoing shot during the final 0.42 seconds. The final shot has no outgoing
+transition. The renderer continues to receive one `Motion.scene` program.
+
+The planner's frame allocator reserves at least one frame for every remaining shot,
+preventing rounding from collapsing a late shot to a zero-frame interval.
