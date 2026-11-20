@@ -451,7 +451,7 @@ async def run_render(
 
 @api_router.post("/api-stage/run", status_code=status.HTTP_202_ACCEPTED)
 async def api_stage(payload: InternalRunRequest, request: Request, pool: asyncpg.Pool = Depends(get_pool)):
-    planner: OpenAIPlanner = request.app.state.planner
+    planner: DeepSeekStoryPlanner = request.app.state.planner
     await run_planning(
         payload.project_id, payload.attempt_id, payload.lease_token, pool, planner,
         request.app.state.scene_compiler, request.app.state.speech, request.app.state.storage,
