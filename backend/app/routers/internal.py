@@ -12,10 +12,10 @@ from ..core.log import bind, get_logger, timed
 from ..db import get_pool
 from ..dependencies import internal_request
 from ..models.schemas import InternalRunRequest
-from ..services.openai_planner import OpenAIPlanner
+from ..services.deepseek_planner import DeepSeekStoryPlanner
 from ..services.quality import mux_narration, validate_audio_input, validate_final
-from ..services.renderer import NonRetryableRenderError, RemotionRenderer
-from ..services.scene_compiler import SceneCompiler
+from ..services.drawn_by_code_renderer import DrawnByCodeRenderer, NonRetryableRenderError
+from ..services.deepseek_animation import DeepSeekAnimationCompiler
 from ..services.storage import ObjectStorage
 from ..services.email import ProjectReadyEmailer
 from ..services.voices import UnrealSpeech
@@ -84,8 +84,8 @@ async def run_planning(
     attempt_id: UUID | None,
     lease_token: UUID | None,
     pool: asyncpg.Pool,
-    planner: OpenAIPlanner,
-    compiler: SceneCompiler,
+    planner: DeepSeekStoryPlanner,
+    compiler: DeepSeekAnimationCompiler,
     speech: UnrealSpeech,
     storage: ObjectStorage,
 ):
@@ -114,28 +114,30 @@ async def run_planning(
 
         await pool.execute("UPDATE projects SET status='planning',progress=12 WHERE id=$1", project_id)
 
-        # ── OpenAI planning ───────────────────────────────────────────────
-        async with timed(logger, "planning.openai") as ctx:
+        # ── DeepSeek story + narration + scene planning ───────────────────
+        async with timed(logger, "planning.deepseek_story") as ctx:
             plan = await planner.plan(dict(project))
             ctx["scene_count"] = len(plan["scenes"])
             ctx["narration_chars"] = len(plan.get("narration", ""))
             ctx["title"] = plan.get("title", "")[:60]
 
-        # ── Scene compilation + speech synthesis (parallel) ───────────────
-        limiter = asyncio.Semaphore(4)
-
-        async def compile_one(scene: dict) -> dict:
-            async with limiter:
-                return await compiler.compile(dict(project), scene)
-
-        async with timed(logger, "planning.parallel") as ctx:
-            compiled_scenes, narration_assets = await asyncio.gather(
-                asyncio.gather(*(compile_one(scene) for scene in plan["scenes"])),
+        # ── DeepSeek full-film animation code generation + speech ──────────
+        async with timed(logger, "planning.deepseek_animation_and_tts") as ctx:
+            compiled_film, narration_assets = await asyncio.gather(
+                compiler.compile(dict(project), plan),
                 speech.synthesize(plan["narration"], project["voice_id"]),
             )
             audio, timestamps = narration_assets
-            ctx["scene_count"] = len(compiled_scenes)
-            ctx["models"] = sorted({scene.get("assigned_model", "?") for scene in compiled_scenes})
+            total_frames = int(project["duration_seconds"]) * 30
+            compiled_scenes = [{
+                "index": 0, "start_frame": 0, "end_frame": total_frames,
+                "complexity": "heavy", "assigned_model": compiler.model,
+                "scene_js": compiled_film["scene_js"], "style": compiled_film["style"],
+            }]
+            ctx["scene_count"] = len(plan["scenes"])
+            ctx["render_programs"] = 1
+            ctx["animation_model"] = compiler.model
+            ctx["animation_source_chars"] = len(compiled_film["scene_js"])
             ctx["audio_bytes"] = len(audio)
             ctx["timestamps_bytes"] = len(timestamps)
 
@@ -212,7 +214,7 @@ async def run_render(
     attempt_id: UUID | None,
     lease_token: UUID | None,
     pool: asyncpg.Pool,
-    renderer: RemotionRenderer,
+    renderer: DrawnByCodeRenderer,
     storage: ObjectStorage,
     emailer: ProjectReadyEmailer,
 ):
@@ -248,15 +250,16 @@ async def run_render(
 
         await pool.execute("UPDATE projects SET status='rendering',progress=48 WHERE id=$1", project_id)
 
+        program = decode_json_object(scenes[0]["program"])
+        scene_js = program.get("scene_js")
+        if not isinstance(scene_js, str) or not scene_js:
+            raise NonRetryableRenderError("Persisted Drawn-by-Code animation program is missing scene_js")
         plan = {
-            "projectId": str(project_id),
-            "title": project["title"],
+            "projectId": str(project_id), "title": project["title"],
             "narration": project["narration_script"] or "",
-            "aspectRatio": project["aspect_ratio"],
-            "fps": 30,
+            "aspectRatio": project["aspect_ratio"], "fps": 30,
             "durationSeconds": project["duration_seconds"],
-            "scenes": [decode_json_object(row["program"]) for row in scenes],
-            "palette": {"background": "#171914", "foreground": "#f2f0e7", "accent": "#bdff32", "secondary": "#c6b7ec"},
+            "scene_js": scene_js, "style": program.get("style", "paper-cutout"),
         }
 
         # ── Download narration locally for renderer ───────────────────────
@@ -448,7 +451,7 @@ async def run_render(
 
 @api_router.post("/api-stage/run", status_code=status.HTTP_202_ACCEPTED)
 async def api_stage(payload: InternalRunRequest, request: Request, pool: asyncpg.Pool = Depends(get_pool)):
-    planner: OpenAIPlanner = request.app.state.planner
+    planner: DeepSeekStoryPlanner = request.app.state.planner
     await run_planning(
         payload.project_id, payload.attempt_id, payload.lease_token, pool, planner,
         request.app.state.scene_compiler, request.app.state.speech, request.app.state.storage,
@@ -468,4 +471,4 @@ async def render_stage(payload: InternalRunRequest, request: Request, pool: asyn
         payload.project_id, payload.attempt_id, payload.lease_token,
         pool, request.app.state.renderer, request.app.state.storage, request.app.state.emailer,
     )
-    return {"completed": True, "projectId": str(payload.project_id), "renderer": "remotion"}
+    return {"completed": True, "projectId": str(payload.project_id), "renderer": "drawn-by-code"}

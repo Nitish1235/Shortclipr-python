@@ -4,32 +4,28 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 FROM node:22-bookworm-slim AS renderer-builder
-WORKDIR /renderer
-ENV PUPPETEER_SKIP_DOWNLOAD=true
-COPY renderer/package.json renderer/package-lock.json ./
-RUN npm ci --no-audit --no-fund
-COPY renderer/ ./
-RUN npm run build
+WORKDIR /drawn-by-code
+COPY drawn_by_code/package.json ./package.json
+RUN npm install --omit=dev --no-audit --no-fund
 
 FROM python:3.12-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg chromium nodejs npm nscd fontconfig fonts-liberation fonts-noto-core fonts-noto-extra ca-certificates \
+    ffmpeg chromium nodejs fontconfig fonts-liberation fonts-noto-core fonts-noto-extra ca-certificates \
     && fc-cache -fv \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=python-builder /install /usr/local
-COPY --from=renderer-builder /renderer /app/renderer
+COPY --from=renderer-builder /drawn-by-code/node_modules /app/drawn_by_code/node_modules
+COPY drawn_by_code/ /app/drawn_by_code/
 COPY app/ /app/app/
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 ENV PORT=8080 \
     SERVICE_ROLE=ffmpeg-worker \
-    RENDERER_ROOT=/app/renderer \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+    DRAWN_BY_CODE_ROOT=/app/drawn_by_code \
+    CHROME_PATH=/usr/bin/chromium \
     FFMPEG_PATH=/usr/bin/ffmpeg \
     FFPROBE_PATH=/usr/bin/ffprobe \
-    REMOTION_CONCURRENCY=5 \
-    REMOTION_CRF=18 \
     DISABLE_TELEMETRY=true
 EXPOSE 8080
 CMD ["/app/start.sh"]
