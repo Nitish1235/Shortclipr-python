@@ -81,11 +81,17 @@ The source is evaluated in the same script as the film and may define ordinary n
 functions and constants. It must not call Motion.scene. Use only the supplied Canvas
 2D context in functions; no DOM, browser globals, imports, exports, network, filesystem,
 Node APIs, timers, eval, Function, Date, performance, Math.random, WebGL or 3D.
-Create reusable helpers for every recurring character, prop and environment in the visual
-bible. Character functions must preserve silhouette, proportions, face, clothing, colours
-and distinctive marks across all shots. Prefer named functions such as drawExplorer(g, x,
-y, scale, pose, expression). Include common palette, shape, texture and shadow helpers.
-Keep the code deterministic and self-contained. Do not use external assets.
+A trusted runtime script ShortcliprStyles is loaded before this library. Use
+ShortcliprStyles.palette(styleId), ShortcliprStyles.paperBackground(g, styleId, env),
+ShortcliprStyles.paperShadow(g, x, y, blur, color), ShortcliprStyles.halftone(g, x, y, w, h, spacing, color),
+ShortcliprStyles.camera(g, env, {cx, cy, zoom, rotation}), and
+ShortcliprStyles.pixelSnap(value, pixelSize) where appropriate. Use a small number of
+texture details, not full-canvas particle loops. Create reusable helpers for every recurring
+character, prop and environment in the visual bible. Character functions must preserve
+silhouette, proportions, face, clothing, colours and distinctive marks across all shots.
+Prefer named functions such as drawExplorer(g, x, y, scale, pose, expression). Include
+common palette, shape, texture and shadow helpers. Keep code deterministic and self-contained.
+Do not use external assets. Do not redefine ShortcliprStyles.
 Visual bible:
 {json.dumps(visual_bible, ensure_ascii=False)}
 """.strip()
@@ -142,6 +148,7 @@ SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s
                 "end_frame": scene["end_frame"],
                 "name": str(scene.get("purpose", f"Shot {scene['index'] + 1}"))[:80],
                 "draw_body": body,
+                "transition_out": str(scene.get("transition_out", "cut")).lower(),
             }
 
         compiled = await asyncio.gather(*(compile_one(scene) for scene in scenes))
@@ -159,47 +166,30 @@ SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s
         }
 
     @staticmethod
-    def _assemble_film(
-        shared_js: str,
-        shots: list[dict[str, Any]],
-        duration: int,
-        logical: list[int],
-        style_id: str,
-    ) -> str:
-        functions = []
-        ranges = []
-        dispatch = []
+    def _assemble_film(shared_js: str, shots: list[dict[str, Any]], duration: int,
+                       logical: list[int], style_id: str) -> str:
+        functions, ranges, dispatch = [], [], []
         for shot in shots:
             index = shot["index"]
-            start = shot["start_frame"] / 30
-            end = shot["end_frame"] / 30
-            functions.append(
-                f"function drawShot_{index}(g,t,env,absoluteTime) {{\n"
-                f"{shot['draw_body']}\n}}"
-            )
+            start, end = shot["start_frame"] / 30, shot["end_frame"] / 30
+            functions.append(f"function drawShot_{index}(g,t,env,absoluteTime) {{\\n{shot['draw_body']}\\n}}")
             name = re.sub(r"[^a-zA-Z0-9 _-]", "", shot["name"]).replace("'", "")[:60]
             ranges.append(f"[{start:.6f},{end:.6f},'{name}']")
-            dispatch.append(
-                f"if (t >= {start:.6f} && t < {end:.6f}) "
-                f"return drawShot_{index}(g, t - {start:.6f}, env, t);"
-            )
-        function_source = "\n".join(functions)
-        dispatch_source = " ".join(dispatch)
-        return (
-            "// ShortClipr shot-based Drawn-by-Code film. Generated code is untrusted input.\n"
-            f"// Visual style: {style_id}\n"
-            f"{shared_js}\n"
-            f"{function_source}\n"
-            "Motion.scene({\n"
-            "  fps: 30,\n"
-            f"  duration: {duration},\n"
-            f"  logical: {json.dumps(logical)},\n"
-            f"  shots: [{','.join(ranges)}],\n"
-            "  draw(g, t, env) {\n"
-            f"    {dispatch_source}\n"
-            "  }\n"
-            "});\n"
-        )
+            transition = shot.get("transition_out", "cut")
+            if transition not in {"cut", "wipe", "iris", "paper", "fade"}: transition = "cut"
+            block = f"if (t >= {start:.6f} && t < {end:.6f}) {{ const local=t-{start:.6f}; drawShot_{index}(g,local,env,t); "
+            if index < len(shots)-1 and transition != "cut":
+                ts=max(0.0,end-start-0.42); nxt=shots[index+1]["index"]
+                block += (f"if(local>{ts:.6f}){{const p=Ease.seg(local,{ts:.6f},{end-start:.6f});"
+                          f"const next=Motion.layer(env,'transition-{index}',(ng)=>drawShot_{nxt}(ng,0,env,{end:.6f}));"
+                          f"ShortcliprStyles.transition(g,env,next,p,'{transition}');}}")
+            dispatch.append(block+"return; }")
+        return ("// ShortClipr shot-based Drawn-by-Code film. Generated code is untrusted input.\\n"
+                f"// Visual style: {style_id}\\n{shared_js}\\n{'\\n'.join(functions)}\\n"
+                "Motion.scene({\\n  uses: ['styles/shortclipr.js'],\\n  fps: 30,\\n"
+                f"  duration: {duration},\\n  logical: {json.dumps(logical)},\\n"
+                f"  shots: [{','.join(ranges)}],\\n  draw(g,t,env) {{ {' '.join(dispatch)} }}\\n"
+                "});\\n")
 
     @staticmethod
     def validate_source(source: str, duration: int, logical: list[int]) -> None:

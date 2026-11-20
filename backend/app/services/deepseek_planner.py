@@ -103,8 +103,9 @@ Do not request subtitles; narration is muxed separately. Return JSON only.
         cursor = 0
         for index, (scene, weight) in enumerate(zip(scenes, weights, strict=True)):
             cumulative += weight
-            end = total_frames if index == len(scenes)-1 else round(total_frames*cumulative/total_weight)
-            end = max(cursor+1, min(total_frames, end))
+            remaining = len(scenes) - index - 1
+            end = total_frames if remaining == 0 else round(total_frames*cumulative/total_weight)
+            end = max(cursor + 1, min(total_frames - remaining, end))
             scene.update({"index":index,"start_frame":cursor,"end_frame":end})
             scene.setdefault("purpose",f"Shot {index+1}")
             scene.setdefault("visual_description",scene["purpose"])
