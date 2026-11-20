@@ -82,9 +82,9 @@ functions and constants. It must not call Motion.scene. Use only the supplied Ca
 2D context in functions; no DOM, browser globals, imports, exports, network, filesystem,
 Node APIs, timers, eval, Function, Date, performance, Math.random, WebGL or 3D.
 A trusted runtime script ShortcliprStyles is loaded before this library. Use
-ShortcliprStyles.palette("{style_id}"), ShortcliprStyles.paperBackground(g, styleId, env),
+ShortcliprStyles.palette("{style_id}"), ShortcliprStyles.paperBackground(g, "{style_id}", env),
 ShortcliprStyles.paperShadow(g, x, y, blur, color), ShortcliprStyles.halftone(g, x, y, w, h, spacing, color),
-ShortcliprStyles.camera(g, env, {cx, cy, zoom, rotation}) inside g.save()/g.restore(), and
+ShortcliprStyles.camera(g, env, {{cx, cy, zoom, rotation}}) inside g.save()/g.restore(), and
 ShortcliprStyles.pixelSnap(value, pixelSize) where appropriate. Use restrained texture
 details rather than full-canvas particle loops. Create reusable helpers for every recurring
 character, prop and environment in the visual bible. Character functions must preserve
