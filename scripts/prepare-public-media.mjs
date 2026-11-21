@@ -78,9 +78,10 @@ for (const page of pages) {
     return annotate(tag, register(value, relativePage, parentTag === 'video' ? 'video' : 'image', 'source'));
   });
 
-  html = html.replace(/<([a-z][a-z0-9:-]*)\b[^>]*\bstyle=["']([^"']*background(?:-image)?\s*:[^"']*url\([^)]*\)[^"']*)["'][^>]*>/gi, tag => {
-    const style = tag.match(/\bstyle=["']([^"']+)["']/i)?.[1] || '';
-    const url = style.match(/url\(\s*(['"]?)(.*?)\1\s*\)/i)?.[2];
+  html = html.replace(/<([a-z][a-z0-9:-]*)\b[^>]*>/gi, tag => {
+    const style = tag.match(/\bstyle=(["'])(.*?)\1/i)?.[2] || '';
+    if (!/background(?:-image)?\s*:/i.test(style)) return tag;
+    const url = style.match(/url\(\s*(["']?)(.*?)\1\s*\)/i)?.[2];
     return url ? annotate(tag, register(url, relativePage, 'image', 'background')) : tag;
   });
 
