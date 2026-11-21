@@ -63,7 +63,7 @@ export interface ShowcaseClip {
 
 export type LandingThumbnailSlot = `landing_thumbnail_${1 | 2 | 3 | 4 | 5 | 6}`
 export type LandingCollectionSlot = `collection_${'learn' | 'story' | 'engage'}_${1 | 2 | 3}`
-export type LandingMediaSlot = 'landing_hero_background' | 'landing_hero_machine' | 'screening_feature' | 'screening_side' | LandingThumbnailSlot | LandingCollectionSlot
+export type LandingMediaSlot = 'landing_hero_background' | 'landing_hero_machine' | 'landing_hero_clip' | 'screening_feature | 'screening_side' | LandingThumbnailSlot | LandingCollectionSlot
 export interface LandingMedia {
   id: string
   slot: LandingMediaSlot
