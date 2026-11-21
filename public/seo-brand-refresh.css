@@ -71,3 +71,5 @@ footer .free-credit-note a { color: var(--sc-lime); }
   .cards { grid-template-columns: 1fr; }
   .card { min-height: 175px; }
 }
+
+.hero-image video,.guide-image video{display:block;width:100%;height:auto;aspect-ratio:466/473;object-fit:cover}
