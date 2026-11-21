@@ -10,6 +10,7 @@
 @import './worker-fleet-admin.css';
 @import './landing-thumbnails-admin.css';
 @import './admin-console.css';
+@import './studio-editorial-theme.css';
 
 /* Creation-library art: every tile previews the visual language of its format. */
 .type-card{position:relative;isolation:isolate;overflow:hidden;background:#171a16;color:#f4f2e9;transition:border-color .2s ease,box-shadow .2s ease,transform .2s ease}
