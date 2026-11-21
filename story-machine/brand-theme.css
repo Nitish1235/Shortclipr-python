@@ -10,6 +10,20 @@
   --sc-ink:#101A31;
   --sc-muted:#D7E2F8;
   --sc-line:rgba(255,255,255,.2);
+  /* Map the existing page tokens to the new palette so legacy sections inherit it. */
+  --paper:var(--sc-blue);
+  --ink:var(--sc-ivory);
+  --lime:var(--sc-coral);
+  --line:rgba(255,255,255,.22);
+  --muted:#D7E2F8;
+  --pro-ink:var(--sc-ivory);
+  --pro-muted:#D7E2F8;
+  --pro-line:rgba(255,255,255,.2);
+  --pro-lime:var(--sc-coral);
+  --pro-lime-deep:#FF7771;
+  --pro-green-text:#FFAAA2;
+  --pro-surface:var(--sc-blue-deep);
+  --pro-paper:var(--sc-ivory);
 }
 html{background:var(--sc-blue);scroll-behavior:smooth}
 body{background:var(--sc-blue);color:var(--sc-ivory)}
