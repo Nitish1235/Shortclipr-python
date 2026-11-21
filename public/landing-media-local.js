@@ -41,7 +41,9 @@ export async function saveLocalMedia(form) {
   if (file.size > 50 * 1024 * 1024) throw new Error('Choose a file smaller than 50 MB.');
   const images = ['image/jpeg','image/png','image/webp'];
   const imageOnly = slot.startsWith('landing_thumbnail_') || slot.startsWith('collection_') || slot === 'landing_hero_machine';
-  const allowed = imageOnly ? images : [...images,'video/mp4','video/webm','video/quicktime'];
+  const videoOnly = slot === 'landing_hero_clip';
+  const videos = ['video/mp4','video/webm','video/quicktime'];
+  const allowed = videoOnly ? videos : imageOnly ? images : [...images,...videos];
   if (!allowed.includes(file.type)) throw new Error('This file format is not supported for this placement.');
   const row = {id:crypto.randomUUID(), slot, title:String(form.get('title') || 'ShortClipr image'), caption:String(form.get('caption') || ''), mediaKind:file.type.startsWith('video/')?'video':'image', createdAt:new Date().toISOString(), file};
   await transaction('readwrite', store => store.put(row));
