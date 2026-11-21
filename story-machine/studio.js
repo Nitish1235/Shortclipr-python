@@ -48,28 +48,52 @@
   const apiBase = configuredApiBase.includes('__SHORTCLIPR_API_URL__') ? '' : configuredApiBase.replace(/\/$/, '');
   const localMediaPreview = !apiBase && ['127.0.0.1','localhost','[::1]'].includes(location.hostname);
   function reelCard(clip) {
-    const item = document.createElement('a'); item.className = 'live-reel-card';
-    item.href = clip.videoUrl; item.target = '_blank'; item.rel = 'noopener'; item.setAttribute('aria-label', `Play ${clip.title}`);
-    const visual = document.createElement('div'); visual.className = 'live-reel-visual';
+    const item = document.createElement('article');
+    item.className = 'live-reel-card';
+    item.dataset.clipId = clip.id;
+    const visual = document.createElement('div');
+    visual.className = 'live-reel-visual';
     const video = document.createElement('video');
-    video.src = clip.videoUrl; video.muted = true; video.loop = true; video.playsInline = true; video.preload = 'metadata';
+    video.src = clip.videoUrl;
+    video.controls = true;
+    video.playsInline = true;
+    video.preload = 'metadata';
+    video.setAttribute('aria-label', `Play ${clip.title}`);
     if (clip.posterUrl) video.poster = clip.posterUrl;
-    visual.append(video); const play = document.createElement('span'); play.textContent = 'PLAY FILM ↗'; visual.append(play); item.append(visual);
-    const caption = document.createElement('div'); const title = document.createElement('b'); title.textContent = clip.title;
-    const detail = document.createElement('small'); detail.textContent = `${clip.department.toUpperCase()} / ${clip.aspectRatio}`;
-    caption.append(title, detail); item.append(caption);
-    item.addEventListener('mouseenter', () => video.play().catch(() => {}));
-    item.addEventListener('mouseleave', () => { video.pause(); video.currentTime = 0; });
+    visual.append(video);
+    const play = document.createElement('button');
+    play.type = 'button';
+    play.className = 'clip-play-button';
+    play.textContent = '▶';
+    play.setAttribute('aria-label', `Play ${clip.title}`);
+    play.addEventListener('click', async () => {
+      if (video.paused) {
+        try { await video.play(); } catch { play.textContent = 'Tap video controls to play'; }
+      } else {
+        video.pause();
+      }
+    });
+    video.addEventListener('play', () => { play.textContent = 'Ⅱ'; play.setAttribute('aria-label', `Pause ${clip.title}`); item.classList.add('is-playing'); });
+    video.addEventListener('pause', () => { play.textContent = '▶'; play.setAttribute('aria-label', `Play ${clip.title}`); item.classList.remove('is-playing'); });
+    video.addEventListener('ended', () => { video.currentTime = 0; });
+    visual.append(play);
+    const caption = document.createElement('div');
+    caption.className = 'live-reel-caption';
+    const title = document.createElement('b');
+    title.textContent = clip.title;
+    const detail = document.createElement('small');
+    const departmentLabels = {learn:'LEARN & EXPLAIN',story:'STORY & SPECTACLE',engage:'ENGAGE & TRANSFORM'};
+    detail.textContent = `${departmentLabels[clip.department] || String(clip.department).toUpperCase()} / 9:16 SHORT`;
+    caption.append(title, detail);
+    item.append(visual, caption);
     return item;
   }
   fetch(`${apiBase}/v1/landing-reel`).then(response => response.ok ? response.json() : []).then(clips => {
-    if (!Array.isArray(clips) || !clips.length) return;
+    if (!Array.isArray(clips)) return;
+    const verticalClips = clips.filter(clip => clip.aspectRatio === '9:16' && clip.videoUrl);
+    if (!verticalClips.length) return;
     document.querySelector('#curated-reel').hidden = false;
-    const first = document.createDocumentFragment(), second = document.createDocumentFragment();
-    const loopClips = Array.from({length:Math.max(6,clips.length)}, (_,index) => clips[index % clips.length]);
-    loopClips.forEach(clip => first.append(reelCard(clip)));
-    loopClips.forEach(clip => { const copy = reelCard(clip); copy.setAttribute('aria-hidden', 'true'); copy.tabIndex = -1; second.append(copy); });
-    track.append(first, second);
+    track.replaceChildren(...verticalClips.map(reelCard));
   }).catch(() => {});
   const landingSlots = [...document.querySelectorAll('[data-landing-slot]')];
   const landingBackgrounds = [...document.querySelectorAll('[data-landing-background]')];

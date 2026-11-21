@@ -1,0 +1,192 @@
+/* ShortClipr cobalt + coral visual system.
+   Grain is deliberately section-specific: texture for selected moments, smooth surfaces for breathing room. */
+:root{
+  --sc-blue:#114CC1;
+  --sc-blue-deep:#0B2F7D;
+  --sc-blue-night:#071B49;
+  --sc-coral:#FE5E5C;
+  --sc-coral-light:#FF8980;
+  --sc-ivory:#FFF8F1;
+  --sc-ink:#101A31;
+  --sc-muted:#D7E2F8;
+  --sc-line:rgba(255,255,255,.2);
+  /* Map the existing page tokens to the new palette so legacy sections inherit it. */
+  --paper:var(--sc-blue);
+  --ink:var(--sc-ivory);
+  --lime:var(--sc-coral);
+  --line:rgba(255,255,255,.22);
+  --muted:#D7E2F8;
+  --pro-ink:var(--sc-ivory);
+  --pro-muted:#D7E2F8;
+  --pro-line:rgba(255,255,255,.2);
+  --pro-lime:var(--sc-coral);
+  --pro-lime-deep:#FF7771;
+  --pro-green-text:#FFAAA2;
+  --pro-surface:var(--sc-blue-deep);
+  --pro-paper:var(--sc-ivory);
+}
+html{background:var(--sc-blue);scroll-behavior:smooth}
+body{background:var(--sc-blue);color:var(--sc-ivory)}
+a{color:inherit}
+.reference-opening,.reference-workflow,.faceless-promise,.reference-reel,.types-section,.pricing-section,.homepage-answer,.faq-section,.closing-section,.seo-directory{position:relative;isolation:isolate}
+.reference-opening::after,.reference-workflow::after,.faceless-promise::after,.reference-reel::after,.types-section::after,.homepage-answer::after,.closing-section::after{
+  content:"";position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.18;mix-blend-mode:soft-light;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.72'/%3E%3C/svg%3E");
+  background-size:180px 180px;
+}
+.reference-opening>* , .reference-workflow>* , .faceless-promise>* , .reference-reel>* , .types-section>* , .homepage-answer>* , .closing-section>*{position:relative;z-index:1}
+
+/* Opening: cobalt with a controlled paper-grain finish. */
+.reference-opening{background:var(--sc-blue);color:var(--sc-ivory)}
+.reference-opening .nav{border-bottom:1px solid var(--sc-line)}
+.reference-opening .brand,.reference-opening .nav nav a,.reference-opening .login-link{color:var(--sc-ivory)}
+.reference-opening .brand span{color:var(--sc-coral)}
+.reference-opening .nav nav a:hover,.reference-opening .login-link:hover{color:var(--sc-coral-light)}
+.reference-opening .button,.reference-opening .button-small{background:var(--sc-coral);color:#241523;border:1px solid rgba(15,18,36,.3)}
+.reference-opening .button:hover{background:#ff7771}
+.reference-opening .overline{color:#ffaaa2}
+.reference-opening .hero h1,.reference-opening .hero h1>span{color:var(--sc-ivory)}
+.reference-opening .hero-note{color:#ffd1ca}
+.reference-opening .hero-description{color:#edf2ff}
+.reference-opening .plain-link{color:var(--sc-ivory)}
+.reference-opening .plain-link span{border-color:#d7e2f8;color:var(--sc-ivory)}
+.reference-opening .note-arrow{stroke:var(--sc-coral)}
+.reference-opening .idea-arrow{stroke:#ff8d85}
+.reference-opening .machine-note,.reference-opening .out-note{color:#fff0e8}
+.reference-opening .machine-leaders,.reference-opening .out-note svg{stroke:#ffaaa2}
+.reference-opening .reference-reel{background:transparent}
+
+/* Workflow: coral texture, then a smooth cobalt step strip. */
+.reference-workflow{padding-bottom:34px;color:#241523}
+.reference-workflow h2{color:#fff4ed}
+.reference-workflow ol{background:var(--sc-blue-deep);color:var(--sc-ivory);border:1px solid rgba(255,255,255,.2)}
+.reference-workflow li b{color:#ff9a91}
+.reference-workflow li p{color:#f8e9e6}
+.reference-workflow li>span{color:#ff9a91}
+
+/* Supporting promise block: smooth deep blue for contrast. */
+.faceless-promise{background:var(--sc-blue-deep);color:var(--sc-ivory);border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:clamp(34px,5vw,70px);margin-top:44px;margin-bottom:44px}
+.faceless-promise-copy h2 span{background:var(--sc-coral);color:#25192a}
+.faceless-promise-copy>p:not(.product-eyebrow){color:#dce7ff}
+.faceless-promise .product-eyebrow{color:#ffaaa2}
+.faceless-proof{background:var(--sc-coral);color:#25192a}
+.faceless-proof>div{border-color:rgba(36,21,35,.2)}
+.faceless-proof b{color:#1d2c5a}
+.faceless-proof span{color:#493448}
+
+/* See it / real clip gallery: coral field with 9:16 playable works. */
+.reference-reel{background:var(--sc-coral);color:#25192a;padding:36px 0 48px}
+.reference-reel .example-clip{border:1px solid rgba(28,22,39,.28);border-radius:5px}
+.reference-reel .example-clip::after{background:linear-gradient(transparent 38%,#101329a8 72%,#101329e8)}
+.reference-reel .example-clip small{color:#fff}
+.reference-reel .reel-footer{color:#402a39}
+.reference-reel .reel-footer button{color:#25192a;border-bottom:1px solid rgba(37,25,42,.35)}
+.curated-reel{padding:clamp(34px,5vw,70px) 0 0}
+.curated-reel-heading{display:grid;grid-template-columns:1fr minmax(220px,390px);gap:10px 35px;align-items:end;margin-bottom:28px}
+.curated-reel-heading .overline{grid-column:1/-1;color:#512b45;margin:0;font-size:10px;letter-spacing:.18em}
+.curated-reel-heading h2{font:700 clamp(38px,5vw,66px)/.95 'DM Sans',sans-serif;letter-spacing:-.055em;color:#241523;margin:0}
+.curated-reel-heading>p:last-child{font:14px/1.6 'DM Sans',sans-serif;color:#492d3b;margin:0;max-width:360px}
+.reference-reel .live-reel-window{overflow:visible;border-radius:0}
+.reference-reel .live-reel-track{display:grid;width:100%;grid-template-columns:repeat(5,minmax(0,1fr));gap:clamp(12px,1.7vw,24px);padding:0;animation:none}
+.reference-reel .live-reel-card{width:auto;min-width:0;border-radius:7px;overflow:hidden;background:var(--sc-blue-deep);border:1px solid rgba(32,20,39,.24);position:relative;display:flex;flex-direction:column}
+.reference-reel .live-reel-visual{height:auto;aspect-ratio:9/16;position:relative;background:#0b1e4a}
+.reference-reel .live-reel-visual video{display:block;width:100%;height:100%;object-fit:cover;background:#081a43}
+.reference-reel .live-reel-card>div:last-child,.reference-reel .live-reel-caption{position:static;padding:14px 13px 16px;background:var(--sc-blue-deep);color:#fff;display:grid;gap:7px;min-height:86px}
+.reference-reel .live-reel-card b{font:600 15px/1.2 'DM Sans',sans-serif;text-transform:none;color:#fff;overflow-wrap:anywhere}
+.reference-reel .live-reel-card small{display:block;margin:0;text-align:left;font:700 9px/1.3 'DM Sans',sans-serif;letter-spacing:.1em;color:#ffaaa2}
+.clip-play-button{position:absolute;z-index:2;left:50%;top:50%;transform:translate(-50%,-50%);width:54px;height:54px;border-radius:50%;border:1px solid rgba(255,255,255,.8);background:rgba(254,94,92,.94);color:#21152c;font-size:19px;display:grid;place-items:center;cursor:pointer;box-shadow:0 8px 28px #071b4966;transition:opacity .2s,transform .2s}
+.live-reel-card.is-playing .clip-play-button{opacity:0;pointer-events:none}
+.live-reel-card:hover .clip-play-button,.live-reel-card:focus-within .clip-play-button{opacity:1;pointer-events:auto}
+.clip-play-button:hover{transform:translate(-50%,-50%) scale(1.06)}
+.curated-reel .live-reel-card:focus-within{outline:3px solid #fff1e8;outline-offset:3px}
+
+/* Product explanation: smooth cobalt, coral accents and dark ink panels. */
+.product-page{background:var(--sc-blue);color:var(--sc-ivory);padding-bottom:0}
+.product-page h2,.product-page h3,.seo-directory h2{color:var(--sc-ivory)}
+.product-eyebrow{color:#ffaaa2}
+.product-intro{padding-top:clamp(65px,8vw,108px);padding-bottom:clamp(60px,7vw,90px)}
+.product-intro-copy>p:last-child,.section-heading>p,.product-page .faq-list p{color:#d9e5ff}
+.product-intro-copy h2 span{background:var(--sc-coral);color:#241523}
+.product-workspace{background:#092b72;border-color:rgba(255,255,255,.2);box-shadow:0 25px 80px #071b4933}
+.workspace-head{border-color:rgba(255,255,255,.16)}
+.workspace-brand,.workspace-setup,.workspace-result{color:#fff}
+.workspace-mark{background:var(--sc-coral);color:#241523}
+.workspace-example,.field-label{color:#ffb0a8}
+.idea-field{background:#0b367f;border-color:#6385d4;color:#fff}
+.workspace-setup>p,.workspace-direction small{color:#d6e3ff}
+.workspace-divider{background:rgba(255,255,255,.2)}
+.workspace-options>span{background:#0d3a8a;border-color:#547bd0;color:#ffb1a9}
+.workspace-options b{color:#fff}
+.workspace-result{background:#071b49}
+.result-top{color:#ffb1a9}
+.result-bottom span{color:#d0dcf7}
+.types-section{background:var(--sc-coral);color:#251523;padding:clamp(65px,8vw,100px) 0}
+.types-section .product-eyebrow{color:#542d43}
+.types-section .section-heading h2{color:#241523}
+.types-section .section-heading>p{color:#492d3b}
+.collection-tabs button{background:transparent;border-color:#763e54;color:#3a2435}
+.collection-tabs button[aria-pressed=true]{background:var(--sc-blue);border-color:var(--sc-blue);color:#fff}
+.collection-tabs button:hover{border-color:var(--sc-blue)}
+.collection-visual{border-radius:5px;border:1px solid rgba(34,20,35,.3)}
+.collection-item small{color:#4a2940}
+.collection-item h3{color:#241523}
+.collection-item p{color:#4c3443}
+.types-section .text-link{color:#241523;border-color:#241523}
+
+/* Pricing and FAQ deliberately stay smooth: texture needs quiet intervals. */
+.pricing-section{background:var(--sc-blue-deep);color:#fff;padding:clamp(70px,8vw,110px) 0}
+.pricing-section .section-heading h2{color:#fff}
+.pricing-section .section-heading>p{color:#d4e0fb}
+.pricing-section .price-card{background:#0c347f;color:#fff;border-color:rgba(255,255,255,.2);border-radius:10px;box-shadow:none}
+.pricing-section .price-card .plan-name,.pricing-section .price-card .plan-price strong,.pricing-section .price-card .plan-allowance b{color:#fff}
+.pricing-section .price-card>p,.pricing-section .price-card li,.pricing-section .plan-price span,.pricing-section .plan-allowance span{color:#d7e2fa}
+.pricing-section .plan-allowance{border-color:rgba(255,255,255,.2)}
+.pricing-section .price-card li:before{color:#ff8f87}
+.pricing-section .price-card a{border-color:#ff8f87;color:#fff}
+.pricing-section .price-featured{background:#fe625f;border-color:#fe625f}
+.pricing-section .price-featured .plan-name,.pricing-section .price-featured .plan-price strong,.pricing-section .price-featured .plan-allowance b,.pricing-section .price-featured>p,.pricing-section .price-featured li,.pricing-section .price-featured .plan-price span,.pricing-section .price-featured .plan-allowance span{color:#241523}
+.pricing-section .price-featured .plan-allowance{border-color:#9c454e}
+.pricing-section .price-featured a{background:#0b2f7d;border-color:#0b2f7d;color:#fff}
+.pricing-section .pricing-note{color:#d7e2fa}
+.homepage-answer{background:var(--sc-coral);color:#251523;padding:clamp(55px,7vw,88px) 0;border-color:rgba(36,21,35,.25)}
+.homepage-answer h2,.homepage-answer>div:last-child{color:#241523}
+.homepage-answer h2 span{color:#114cc1}
+.homepage-answer-links a{color:#241523}
+.faq-section{background:var(--sc-blue);color:#fff;border-color:rgba(255,255,255,.22)}
+.faq-section .section-heading h2,.faq-list summary{color:#fff}
+.faq-section .section-heading>p,.faq-list p{color:#d5e1fb}
+.faq-list details,.faq-list details:first-child{border-color:rgba(255,255,255,.24)}
+.faq-list summary span{color:#ff9b92}
+.closing-section{background:var(--sc-coral);color:#251523;border-radius:8px;margin-bottom:35px}
+.closing-copy .product-eyebrow{color:#542d43}
+.closing-copy h2,.closing-copy>p:not(.product-eyebrow){color:#241523}
+.closing-copy h2 span{color:#114cc1}
+.closing-copy a{background:var(--sc-blue);color:#fff}
+.seo-directory{background:#071b49;color:#fff;border-color:rgba(255,255,255,.15)}
+.seo-directory .footer-brand .brand,.seo-directory nav h2{color:#fff}
+.seo-directory .footer-brand .brand span{color:var(--sc-coral)}
+.seo-directory .footer-brand p,.seo-directory nav a,.seo-directory .footer-bottom{color:#c8d7f7}
+.seo-directory nav a:hover,.seo-directory .footer-brand>a:last-child{color:#ffaaa2}
+.seo-directory .footer-bottom{border-color:rgba(255,255,255,.18)}
+.seo-directory .footer-bottom .free-credit-note{color:#ffaaa2;white-space:normal}
+
+/* Admin-managed reel cards are intentionally 9:16; no hover autoplay. */
+@media(max-width:1000px){.reference-reel .live-reel-track{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:760px){
+  .reference-workflow ol{background:var(--sc-blue-deep)}
+  .faceless-promise{width:calc(100% - 36px);padding:28px 22px}
+  .curated-reel-heading{grid-template-columns:1fr;gap:12px}
+  .reference-reel .live-reel-track{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .reference-reel .live-reel-card>div:last-child{padding:11px;min-height:78px}
+  .reference-reel .live-reel-card b{font-size:14px}
+  .clip-play-button{width:46px;height:46px}
+  .product-page .section-heading{gap:20px}
+  .closing-section{width:calc(100% - 30px)}
+}
+@media(max-width:420px){.reference-reel .live-reel-track{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.reference-reel .live-reel-card b{font-size:13px}}
+
+/* The illustrative strip stays still; the live 9:16 gallery below is the playable section. */
+.reference-reel .example-track{display:block;width:100%;animation:none}
+.reference-reel .example-group[aria-hidden="true"]{display:none}
+.reference-reel .example-group{grid-template-columns:repeat(6,minmax(0,1fr))}
+@media(max-width:700px){.reference-reel .example-group{grid-template-columns:repeat(3,minmax(0,1fr));flex-basis:auto}}
