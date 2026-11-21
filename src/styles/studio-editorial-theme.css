@@ -182,3 +182,39 @@
  .studio-shell .credits-page .render-balance{box-shadow:4px 4px 0 var(--sc-cobalt)}
 }
 @media(prefers-reduced-motion:reduce){.studio-shell button,.studio-shell a{transition:none}}
+
+/* Owner console shares the editorial language while keeping its separate access shell. */
+.admin-console{background:var(--sc-ink);color:var(--sc-paper);font-family:'DM Sans',sans-serif}
+.admin-console-sidebar{background:#111317;border-color:#34363b}
+.admin-console-brand span{color:var(--sc-yellow)}
+.admin-console-overline{color:#a4a7ad}
+.admin-console-nav a{border-radius:0;color:#d0d1d1}
+.admin-console-nav a:hover,.admin-console-nav a.active{background:#252a34;border-color:var(--sc-yellow);color:white}
+.admin-console-nav a span{color:var(--sc-yellow)}
+.admin-console-sidebar-foot a,.admin-console-sidebar-foot button{border-color:#4b505a}
+.admin-console-sidebar-foot button:hover,.admin-console-sidebar-foot a:hover{background:var(--sc-yellow);color:var(--sc-ink)}
+.admin-console-topbar{background:#191c22;border-color:#3b3e45}
+.admin-console-topbar small{color:#a9adb4}
+.admin-console-topbar-actions a,.admin-console-topbar-actions button{border-color:var(--sc-yellow);color:var(--sc-yellow);border-radius:0}
+.admin-console-topbar-actions a:hover,.admin-console-topbar-actions button:hover{background:var(--sc-yellow);color:var(--sc-ink)}
+.admin-console .page-intro h1 em,.admin-console .admin-landing-status h2 em{color:var(--sc-yellow)}
+.admin-console .kicker{color:var(--sc-yellow)}
+.admin-console .admin-landing-status,.admin-console .studio-placement-map,.admin-console .landing-media-admin,.admin-console .admin-grid,.admin-console .admin-jobs,.admin-console .worker-fleet-admin,.admin-console .voice-library-admin,.admin-console .site-media-library{background:#20242b;border:1px solid #454a54;border-radius:0}
+.admin-console .landing-placement-card,.admin-console .placement-route,.admin-console .upload-panel,.admin-console .media-library,.admin-console .admin-job,.admin-console .worker-region-card,.admin-console .voice-admin-grid article,.admin-console .site-media-card{background:#171a20;color:var(--sc-paper);border:1px solid #454a54;border-radius:0}
+.admin-console .placement-preview,.admin-console .placement-fallback,.admin-console .editorial-slot-preview{background:#293d83;color:white}
+.admin-console .admin-console-content .lime-button,.admin-console .admin-job-actions .job-primary{background:var(--sc-yellow);color:var(--sc-ink);border-color:var(--sc-yellow);border-radius:0;box-shadow:4px 4px 0 var(--sc-red)}
+.admin-console .admin-media-item,.admin-console .admin-job{border-color:#454a54}
+.admin-console .admin-media-item h3,.admin-console .admin-job h3,.admin-console .placement-heading>b,.admin-console .upload-panel h2,.admin-console .section-heading h2,.admin-console .admin-jobs-heading h2{color:var(--sc-paper)}
+.admin-console .placement-heading p,.admin-console .placement-heading small,.admin-console .admin-job small,.admin-console .admin-job p{color:#aeb2b8}
+.admin-console .placement-editor input,.admin-console .placement-editor textarea,.admin-console .placement-editor select,.admin-console .upload-panel input,.admin-console .upload-panel textarea,.admin-console .upload-panel select,.admin-console .site-media-editor input{background:#22262d;color:var(--sc-paper);border:1px solid #505660;border-radius:0}
+.admin-console .placement-editor summary,.admin-console .placement-location a,.admin-console .admin-media-actions button,.admin-console .admin-job-actions button,.admin-console .site-media-editor summary{color:var(--sc-yellow)}
+.admin-console .admin-stamp{border-color:var(--sc-red);color:var(--sc-red)}
+.admin-console .worker-fleet-summary article{background:#171a20;border-color:#454a54}
+.admin-console .worker-fleet-summary b,.admin-console .worker-region-card strong{color:var(--sc-yellow)}
+.admin-console .site-media-search{background:#171a20;border-color:#505660;color:var(--sc-yellow)}
+.admin-console .site-media-pages code{background:#293d83;color:white}
+.admin-console .site-media-card-copy>p{color:var(--sc-yellow)}
+.admin-console .site-media-preview{background:#293d83}
+.admin-console :is(a,button,input,textarea,select):focus-visible{outline:2px solid var(--sc-yellow);outline-offset:3px}
+.admin-console .error-banner{background:#51241f;color:#ffe2d8;border-color:var(--sc-red)}
+@media(max-width:900px){.admin-console-sidebar{border-bottom:1px solid #34363b}.admin-console-nav{gap:5px}}
