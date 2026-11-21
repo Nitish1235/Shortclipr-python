@@ -5,14 +5,14 @@ The public page is `/story-machine/`. Its media controls are available only to t
 | Page area | Admin placement | Slot | Recommended media |
 | --- | --- | --- | --- |
 | Hero atmosphere | Hero atmosphere | `landing_hero_background` | Wide image or quiet loop; keep headline legible |
-| Hero illustration | Story Machine artwork | `landing_hero_machine` | Transparent PNG or WebP |
+| Hero featured clip | Featured vertical video | `landing_hero_clip` | Real 9:16 video; MP4, MOV or WebM only |
 | Moving thumbnail strip | Thumbnail 1 through 6 | `landing_thumbnail_1` through `landing_thumbnail_6` | Six portrait images, 9:16 |
 | Product workspace, visual direction | Visual direction swatch | `screening_side` | Square image or quiet loop |
 | Product workspace, finished output | Finished short example | `screening_feature` | 9:16 finished video, or a poster image |
 | Clip type tabs | Nine named Learn, Story and Engage images | `collection_{learn,story,engage}_{1,2,3}` | 4:3 images |
 | Selected films below the thumbnail strip | Clip library → Landing reel | `showcase_clips.landing_visible` | Finished video with optional poster |
 
-The legacy `screening_side` and `screening_feature` slot names are retained so existing uploads keep working. Their visible destinations are now the visual direction swatch and finished output in the product workspace. The six thumbnails remain individually ordered. A missing upload uses the built-in visual. Removing an upload restores that visual without touching other placements.
+The legacy `landing_hero_machine` slot is retained for existing records but is no longer rendered in the hero or offered as an admin placement. The hero now uses the dedicated `landing_hero_clip` video-only slot. The legacy `screening_side` and `screening_feature` slot names are retained so existing uploads keep working. Their visible destinations are now the visual direction swatch and finished output in the product workspace. The six thumbnails remain individually ordered. A missing upload uses the built-in visual. Removing an upload restores that visual without touching other placements.
 
 The curated video reel uses the existing `showcase_clips` controls. Admin can upload a finished clip or assign a completed user job, then mark it **Landing reel**. Uploaded clip posters and the clip type images have separate roles; a static image does not pretend to be a playable video.
 
