@@ -13,11 +13,11 @@ async function walk(dir) {
   }
 }
 
-function normalizeSource(value) {
+function normalizeSource(value, page) {
   if (!value) return '';
   const source = value.trim().replace(/^['"]|['"]$/g, '');
-  if (!source || /^(data:|blob:|https?:|mailto:|tel:|#|\/logo\.svg|\/favicon)/i.test(source)) return '';
-  return source;
+  if (!source || /^(data:|blob:|https?:|\/\/|mailto:|tel:|#|\/logo\.svg|\/favicon)/i.test(source)) return '';
+  try { return new URL(source, 'https://shortclipr.invalid' + page).pathname; } catch { return ''; }
 }
 
 function slotFor(source, role = 'media') {
@@ -27,7 +27,7 @@ function slotFor(source, role = 'media') {
 }
 
 function register(source, page, mediaKind, role = 'media') {
-  const normalized = normalizeSource(source);
+  const normalized = normalizeSource(source, page);
   if (!normalized) return null;
   const slot = slotFor(normalized, role);
   const item = assets.get(slot) ?? {
