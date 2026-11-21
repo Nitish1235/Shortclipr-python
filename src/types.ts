@@ -74,6 +74,16 @@ export interface LandingMedia {
   createdAt: string
 }
 
+export interface LandingMediaRevision {
+  id: string
+  slot: string
+  title: string
+  caption: string
+  mediaKind: 'image' | 'video'
+  mediaUrl: string
+  createdAt: string
+}
+
 export interface AdminJob extends Project {
   ownerEmail: string
   ownerName: string
