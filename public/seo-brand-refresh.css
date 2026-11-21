@@ -1,4 +1,4 @@
-/* ShortClipr public editorial system — shared by product pages, guides and articles. */
+/* ShortClipr public brand system — shared by public product pages, guides and articles. */
 :root {
   --sc-purple: #6417d7;
   --sc-purple-deep: #3d087f;
@@ -8,10 +8,13 @@
   --sc-ink: #17131e;
   --sc-muted: #625a6c;
   --sc-line: #d9cde8;
+  --sc-brand-primary: var(--sc-purple);
+  --sc-brand-accent: var(--sc-lime);
 }
 body { background: var(--sc-paper); color: var(--sc-ink); }
 .nav { background: var(--sc-purple); color: white; border: 0; min-height: 76px; }
 .nav .brand { color: white; font-family: 'Barlow Condensed', sans-serif; font-weight: 900; letter-spacing: -.04em; }
+.nav .brand img { width: 30px; height: 30px; object-fit: contain; }
 .nav .brand span { color: var(--sc-lime); }
 .nav nav a { color: white; }
 .nav nav a:hover { color: var(--sc-lime); }
@@ -64,6 +67,9 @@ footer .brand, footer a { color: white; }
 footer .brand span { color: var(--sc-lime); }
 footer small { color: #e5d9f2; }
 footer .free-credit-note a { color: var(--sc-lime); }
+/* Normalize legacy green/red accent declarations without touching editorial copy. */
+.nav a:focus-visible, .button:focus-visible, .nav-cta:focus-visible, a:focus-visible { outline: 3px solid var(--sc-lime); outline-offset: 3px; }
+::selection { background: var(--sc-lime); color: var(--sc-ink); }
 @media (max-width: 760px) {
   .nav { padding: 16px 6%; flex-wrap: wrap; }
   .nav nav { width: 100%; order: 3; overflow-x: auto; padding: 8px 0; }
@@ -71,5 +77,4 @@ footer .free-credit-note a { color: var(--sc-lime); }
   .cards { grid-template-columns: 1fr; }
   .card { min-height: 175px; }
 }
-
 .hero-image video,.guide-image video{display:block;width:100%;height:auto;aspect-ratio:466/473;object-fit:cover}
