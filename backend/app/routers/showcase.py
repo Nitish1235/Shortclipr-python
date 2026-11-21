@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Resp
 from ..core.config import Settings, get_settings
 from ..db import get_pool
 from ..dependencies import CurrentUser, admin_user
-from ..models.schemas import AdminProjectResponse, AssignProjectToShowcaseRequest, LandingMediaResponse, ShowcaseResponse, ShowcaseUpdate
+from ..models.schemas import AdminProjectResponse, AssignProjectToShowcaseRequest, LandingMediaResponse, LandingMediaRevisionResponse, ShowcaseResponse, ShowcaseUpdate
 from ..services.storage import ObjectStorage
 
 
@@ -31,8 +31,8 @@ def landing_media_kind(slot: str, content_type: str) -> str:
         raise HTTPException(status_code=422, detail="Unknown public media placement")
     if content_type in {"image/jpeg", "image/png", "image/webp"}:
         return "image"
-    if slot in LANDING_IMAGE_SLOTS:
-        raise HTTPException(status_code=422, detail="This landing placement accepts JPG, PNG or WebP images only")
+    if slot in LANDING_IMAGE_SLOTS or slot.startswith(("asset_poster_", "asset_background_", "asset_srcset_")):
+        raise HTTPException(status_code=422, detail="This public placement accepts JPG, PNG or WebP images only")
     if content_type in {"video/mp4", "video/webm", "video/quicktime"}:
         return "video"
     raise HTTPException(status_code=422, detail="Use MP4, MOV, or WebM video, or JPG, PNG, or WebP image")
@@ -106,8 +106,17 @@ async def upload_landing_media(
     try:
         async with pool.acquire() as connection:
             async with connection.transaction():
-                previous = await connection.fetchrow("SELECT media_object FROM landing_media_slots WHERE slot=$1 FOR UPDATE", slot)
+                previous = await connection.fetchrow("SELECT * FROM landing_media_slots WHERE slot=$1 FOR UPDATE", slot)
                 old_object = previous["media_object"] if previous else None
+                if previous:
+                    await connection.execute(
+                        """
+                        INSERT INTO landing_media_revisions(slot,title,caption,media_kind,media_object,media_url,created_by)
+                        VALUES($1,$2,$3,$4,$5,$6,$7)
+                        """,
+                        previous["slot"], previous["title"], previous["caption"], previous["media_kind"],
+                        previous["media_object"], previous["media_url"], previous["created_by"],
+                    )
                 row = await connection.fetchrow(
                     """
                     INSERT INTO landing_media_slots(slot,title,caption,media_kind,media_object,media_url,created_by)
@@ -122,13 +131,7 @@ async def upload_landing_media(
     except Exception:
         await storage.delete(object_name)
         raise
-    if old_object and old_object != object_name:
-        try:
-            await storage.delete(old_object)
-        except Exception:
-            # The replacement is already live. A stale object is safer than
-            # deleting the newly committed landing placement during cleanup.
-            pass
+    # Previous objects remain available to the revision history for restore.
     return await landing_media_payload(row, storage)
 
 
@@ -136,11 +139,78 @@ async def upload_landing_media(
 async def delete_landing_media(slot: str, _: CurrentUser = Depends(admin_user), pool: asyncpg.Pool = Depends(get_pool), settings: Settings = Depends(get_settings)):
     if not is_public_media_slot(slot):
         raise HTTPException(status_code=404, detail="Public media placement not found")
-    row = await pool.fetchrow("DELETE FROM landing_media_slots WHERE slot=$1 RETURNING media_object", slot)
-    if not row:
-        raise HTTPException(status_code=404, detail="Landing placement is already empty")
-    await ObjectStorage(settings).delete(row["media_object"])
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            row = await connection.fetchrow("SELECT * FROM landing_media_slots WHERE slot=$1 FOR UPDATE", slot)
+            if not row:
+                raise HTTPException(status_code=404, detail="Landing placement is already empty")
+            await connection.execute(
+                """
+                INSERT INTO landing_media_revisions(slot,title,caption,media_kind,media_object,media_url,created_by)
+                VALUES($1,$2,$3,$4,$5,$6,$7)
+                """,
+                row["slot"], row["title"], row["caption"], row["media_kind"],
+                row["media_object"], row["media_url"], row["created_by"],
+            )
+            await connection.execute("DELETE FROM landing_media_slots WHERE slot=$1", slot)
+    # Keep the object: it is now recoverable from revision history.
     return Response(status_code=204)
+
+
+@admin_router.get("/landing-media/{slot}/history", response_model=list[LandingMediaRevisionResponse])
+async def landing_media_history(slot: str, _: CurrentUser = Depends(admin_user), pool: asyncpg.Pool = Depends(get_pool)):
+    if not is_public_media_slot(slot):
+        raise HTTPException(status_code=404, detail="Public media placement not found")
+    rows = await pool.fetch(
+        """
+        SELECT id,slot,title,caption,media_kind,media_url,created_at
+        FROM landing_media_revisions WHERE slot=$1 ORDER BY created_at DESC LIMIT 30
+        """,
+        slot,
+    )
+    return [dict(row) for row in rows]
+
+
+@admin_router.post("/landing-media/{slot}/restore/{revision_id}", response_model=LandingMediaResponse)
+async def restore_landing_media_revision(
+    slot: str, revision_id: UUID, request: Request,
+    user: CurrentUser = Depends(admin_user), pool: asyncpg.Pool = Depends(get_pool),
+):
+    if not is_public_media_slot(slot):
+        raise HTTPException(status_code=404, detail="Public media placement not found")
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            revision = await connection.fetchrow(
+                "SELECT * FROM landing_media_revisions WHERE id=$1 AND slot=$2 FOR UPDATE",
+                revision_id, slot,
+            )
+            if not revision:
+                raise HTTPException(status_code=404, detail="Media revision not found")
+            current = await connection.fetchrow("SELECT * FROM landing_media_slots WHERE slot=$1 FOR UPDATE", slot)
+            if current:
+                await connection.execute(
+                    """
+                    INSERT INTO landing_media_revisions(slot,title,caption,media_kind,media_object,media_url,created_by)
+                    VALUES($1,$2,$3,$4,$5,$6,$7)
+                    """,
+                    current["slot"], current["title"], current["caption"], current["media_kind"],
+                    current["media_object"], current["media_url"], current["created_by"],
+                )
+            row = await connection.fetchrow(
+                """
+                INSERT INTO landing_media_slots(slot,title,caption,media_kind,media_object,media_url,created_by)
+                VALUES($1,$2,$3,$4,$5,$6,$7)
+                ON CONFLICT(slot) DO UPDATE SET title=EXCLUDED.title,caption=EXCLUDED.caption,
+                media_kind=EXCLUDED.media_kind,media_object=EXCLUDED.media_object,media_url=EXCLUDED.media_url,
+                created_by=EXCLUDED.created_by,updated_at=now()
+                RETURNING *
+                """,
+                slot, revision["title"], revision["caption"], revision["media_kind"],
+                revision["media_object"], revision["media_url"], user.id,
+            )
+            await connection.execute("DELETE FROM landing_media_revisions WHERE id=$1", revision_id)
+    storage = request.app.state.storage
+    return await landing_media_payload(row, storage)
 
 
 @admin_router.get("/jobs", response_model=list[AdminProjectResponse])

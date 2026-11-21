@@ -318,6 +318,10 @@ function PublicSiteMediaAdmin(){
   const [error,setError]=useState('')
   const [success,setSuccess]=useState('')
   const [filter,setFilter]=useState('')
+  const [pageFilter,setPageFilter]=useState('')
+  const [historySlot,setHistorySlot]=useState<string>()
+  const [history,setHistory]=useState<LandingMediaRevision[]>([])
+  const [historyBusy,setHistoryBusy]=useState(false)
   const load=useCallback(async()=>{
     const [manifestResponse,nextAssets]=await Promise.all([fetch('/site-media-manifest.json'),api.landingMedia(true)])
     if(!manifestResponse.ok)throw new Error('The public media manifest is not available in this build')
@@ -338,23 +342,39 @@ function PublicSiteMediaAdmin(){
     catch(reason){setError(reason instanceof Error?reason.message:'Could not restore default artwork')}
     finally{setBusySlot(undefined)}
   }
-  const visible=manifest.filter(item=>`${item.title} ${item.slot} ${item.pages.join(' ')}`.toLowerCase().includes(filter.toLowerCase()))
+  const pages=[...new Set(manifest.flatMap(item=>item.pages))].sort()
+  const visible=manifest.filter(item=>`${item.title} ${item.slot} ${item.pages.join(' ')}`.toLowerCase().includes(filter.toLowerCase())&&(!pageFilter||item.pages.includes(pageFilter)))
+  const showHistory=async(slot:string)=>{
+    setHistorySlot(slot);setHistoryBusy(true);setError('')
+    try{setHistory(await api.landingMediaHistory(slot))}
+    catch(reason){setError(reason instanceof Error?reason.message:'Could not load replacement history')}
+    finally{setHistoryBusy(false)}
+  }
+  const restoreRevision=async(revision:LandingMediaRevision)=>{
+    if(!historySlot||!confirm(`Restore "${revision.title}" for this placement? The current upload will be saved in history.`))return
+    setBusySlot(historySlot);setError('');setSuccess('')
+    try{await api.restoreLandingMediaRevision(historySlot,revision.id);await load();await showHistory(historySlot);setSuccess('Previous asset restored. The replaced upload remains in history.')}
+    catch(reason){setError(reason instanceof Error?reason.message:'Could not restore this revision')}
+    finally{setBusySlot(undefined)}
+  }
   return <section id="admin-page-assets" className="site-media-library">
-    <div className="site-media-library-head"><div><p className="kicker">PUBLIC WEBSITE / GLOBAL MEDIA</p><h2>ONE UPLOAD.<br/><em>EVERY PLACEMENT.</em></h2><p>Replace artwork used by the landing page, product pages, guides and articles. Shared source artwork updates every page that references it.</p></div><label className="site-media-search">⌕ <input value={filter} onChange={event=>setFilter(event.target.value)} placeholder="Find a page asset or image"/></label></div>
+    <div className="site-media-library-head"><div><p className="kicker">PUBLIC WEBSITE / GLOBAL MEDIA</p><h2>ONE UPLOAD.<br/><em>EVERY PLACEMENT.</em></h2><p>Replace artwork used by the landing page, product pages, guides and articles. Shared source artwork updates every page that references it.</p></div><div className="site-media-filters"><label className="site-media-search">⌕ <input value={filter} onChange={event=>setFilter(event.target.value)} placeholder="Find a page asset or image"/></label><label className="site-media-page-filter">PAGE <select value={pageFilter} onChange={event=>setPageFilter(event.target.value)}><option value="">All public pages</option>{pages.map(page=><option key={page} value={page}>{page}</option>)}</select></label></div></div>
     {error&&<div className="error-banner" role="alert">{error}</div>}{success&&<p className="placement-success" role="status">{success}</p>}
     <div className="site-media-grid">{visible.map(item=>{
       const asset=assets.find(value=>value.slot===item.slot)
       return <article className="site-media-card" key={item.slot}>
         <div className="site-media-preview">{asset?.mediaKind==='video'?<video src={asset.mediaUrl} muted controls preload="metadata"/>:<img src={asset?.mediaUrl||item.defaultUrl} alt={asset?.title||item.title}/>}<span>{asset?'CUSTOM UPLOAD':'BUILT-IN DEFAULT'}</span></div>
-        <div className="site-media-card-copy"><p>{item.slot}</p><h3>{item.title}</h3><small>{item.pages.length} page{item.pages.length===1?'':'s'} · {item.mediaKind} default</small><div className="site-media-pages">{item.pages.slice(0,3).map(page=><code key={page}>{page}</code>)}{item.pages.length>3&&<code>+{item.pages.length-3} more</code>}</div></div>
+        <div className="site-media-card-copy"><p>{item.slot}</p><h3>{item.title}</h3><small>{item.pages.length} page{item.pages.length===1?'':'s'} · {item.role} · {item.mediaKind} default</small><div className="site-media-pages">{item.pages.slice(0,3).map(page=><a href={page} target="_blank" rel="noreferrer" key={page}>{page}</a>)}{item.pages.length>3&&<code>+{item.pages.length-3} more</code>}</div>{item.pages[0]&&<a className="site-media-view-page" href={item.pages[0]} target="_blank" rel="noreferrer">Preview public page ↗</a>}</div>
         <details className="site-media-editor"><summary>{asset?'Replace asset':'Upload replacement'} ↗</summary><form onSubmit={event=>save(event,item.slot)}>
           <input type="hidden" name="slot" value={item.slot}/>
           <label>Asset title<input name="title" required maxLength={100} defaultValue={asset?.title||item.title}/></label>
           <label>Admin note<input name="caption" maxLength={220} defaultValue={asset?.caption||''} placeholder="Optional note"/></label>
-          <label className="site-media-file">Choose image or video<input type="file" name="media" required accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"/></label>
+          <label className="site-media-file">Choose image or video<input type="file" name="media" required accept={["poster","background","srcset"].includes(item.role)?"image/jpeg,image/png,image/webp": "image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"}/></label>
           <button className="lime-button" disabled={Boolean(busySlot)}>{busySlot===item.slot?'Uploading…':'Upload & replace'} ↗</button>
           {asset&&<button className="site-media-restore" type="button" disabled={Boolean(busySlot)} onClick={()=>restore(item.slot)}>Restore built-in artwork</button>}
         </form></details>
+        <button className="site-media-history-toggle" type="button" onClick={()=>void showHistory(item.slot)}>Replacement history ↺</button>
+        {historySlot===item.slot&&<div className="site-media-history">{historyBusy?<p>Loading history…</p>:history.length?<>{history.map(revision=><article key={revision.id}><div>{revision.mediaKind==='video'?<video src={revision.mediaUrl} muted controls preload="metadata"/>:<img src={revision.mediaUrl} alt={revision.title}/>}</div><section><b>{revision.title}</b><small>{new Date(revision.createdAt).toLocaleString()}</small><button type="button" disabled={Boolean(busySlot)} onClick={()=>void restoreRevision(revision)}>Restore this version</button></section></article>)}</>:<p>No previous uploads for this placement yet.</p>}</div>}
       </article>
     })}</div>
     {!manifest.length&&<p className="site-media-empty">No replaceable public image slots were found. Run the frontend build to generate the manifest.</p>}

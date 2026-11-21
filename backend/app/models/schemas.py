@@ -148,6 +148,16 @@ class LandingMediaResponse(ApiModel):
     created_at: datetime
 
 
+class LandingMediaRevisionResponse(ApiModel):
+    id: UUID
+    slot: str
+    title: str
+    caption: str
+    media_kind: Literal["image", "video"]
+    media_url: str
+    created_at: datetime
+
+
 class AdminProjectResponse(ProjectResponse):
     owner_email: EmailStr
     owner_name: str
