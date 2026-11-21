@@ -351,7 +351,7 @@ function PublicSiteMediaAdmin(){
           <input type="hidden" name="slot" value={item.slot}/>
           <label>Asset title<input name="title" required maxLength={100} defaultValue={asset?.title||item.title}/></label>
           <label>Admin note<input name="caption" maxLength={220} defaultValue={asset?.caption||''} placeholder="Optional note"/></label>
-          <label className="site-media-file">Choose image or video<input type="file" name="media" required accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"/></label>
+          <label className="site-media-file">Choose image or video<input type="file" name="media" required accept={["poster","background","srcset"].includes(item.role)?"image/jpeg,image/png,image/webp": "image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"}/></label>
           <button className="lime-button" disabled={Boolean(busySlot)}>{busySlot===item.slot?'Uploading…':'Upload & replace'} ↗</button>
           {asset&&<button className="site-media-restore" type="button" disabled={Boolean(busySlot)} onClick={()=>restore(item.slot)}>Restore built-in artwork</button>}
         </form></details>
