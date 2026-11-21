@@ -11,6 +11,10 @@
       if (asset.mediaKind === 'video') {
         const video = document.createElement('video');
         video.className = element.className;
+        video.style.display = 'block';
+        video.style.width = '100%';
+        video.style.height = 'auto';
+        video.style.objectFit = 'cover';
         video.dataset.mediaSlot = asset.slot;
         video.autoplay = true;
         video.muted = true;
