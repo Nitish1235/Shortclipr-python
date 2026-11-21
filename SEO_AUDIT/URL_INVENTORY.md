@@ -88,3 +88,13 @@ The server returns 410 for retired YouTube-clipping, brainrot, comparison, capti
 | `/guides/50-ai-animation-prompts/` | Prompt resource | new |
 
 All eight are linked from `/guides/` and included in `public/sitemap.xml`. Existing guide URLs and published editorial copy are preserved.
+
+
+## Cannibalization review — 21 November 2026
+
+A title/meta/H1 review identified provisional overlap clusters, not confirmed search cannibalization:
+- `/faceless-youtube-shorts/` vs `/animated-youtube-shorts-maker/`
+- `/animated-tiktok-video-maker/` vs `/faceless-tiktok-video-maker/`
+- `/guides/how-to-make-faceless-youtube-shorts/` vs `/guides/how-to-make-faceless-ai-shorts/`
+
+Retain these URLs for now because their stated jobs can be differentiated. The two faceless-Shorts guides deserve the closest body-copy comparison. No redirects, canonical changes, deletions, or merges should be made until Search Console query overlap and backlinks are reviewed. See `KEYWORD_MAPPING.md` for the full cluster assessment and safe next actions.
