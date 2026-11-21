@@ -86,7 +86,7 @@ class ApiClient {
     if(demoMode)return (await localMediaStore()).saveLocalMedia(form)
     return this.request('/v1/admin/showcase/landing-media',{method:'POST',body:form})
   }
-  async deleteLandingMedia(slot:LandingMedia['slot']):Promise<void>{if(demoMode){await (await localMediaStore()).deleteLocalMedia(slot);return}await this.request(`/v1/admin/showcase/landing-media/${slot}`,{method:'DELETE'})}
+  async deleteLandingMedia(slot:string):Promise<void>{if(demoMode){await (await localMediaStore()).deleteLocalMedia(slot);return}await this.request(`/v1/admin/showcase/landing-media/${slot}`,{method:'DELETE'})}
   async landingMediaHistory(slot:string):Promise<LandingMediaRevision[]>{if(demoMode)return [];return this.request(`/v1/admin/showcase/landing-media/${encodeURIComponent(slot)}/history`)}
   async restoreLandingMediaRevision(slot:string,revisionId:string):Promise<LandingMedia>{if(demoMode)throw new Error('Revision restore is available in the connected admin environment');return this.request(`/v1/admin/showcase/landing-media/${encodeURIComponent(slot)}/restore/${revisionId}`,{method:'POST'})}
   async adminJobs():Promise<AdminJob[]>{

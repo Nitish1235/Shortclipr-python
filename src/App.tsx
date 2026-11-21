@@ -3,7 +3,7 @@ import { api, apiConfigured, demoMode } from './lib/api'
 import { clipTypes, departmentCopy, estimateCredits } from './data/catalog'
 import { allPlans, formatRenderTime, paidPlans, type PaidPlanId } from './data/plans'
 import { track, trackPage } from './lib/tracking'
-import type { AdminJob, AspectRatio, CreateProjectInput, CreditBalance, Department, LandingMedia, LandingMediaSlot, Project, ShowcaseClip, User, Voice, WorkerFleetStatus } from './types'
+import type { AdminJob, AspectRatio, CreateProjectInput, CreditBalance, Department, LandingMedia, LandingMediaRevision, LandingMediaSlot, Project, ShowcaseClip, User, Voice, WorkerFleetStatus } from './types'
 
 declare global {
   interface Window {
@@ -310,7 +310,7 @@ function LandingMediaAdmin({thumbnails=false}:{thumbnails?:boolean}){
 }
 
 
-type PublicMediaManifestItem={slot:string;title:string;defaultUrl:string;mediaKind:'image'|'video';pages:string[]}
+type PublicMediaManifestItem={slot:string;title:string;defaultUrl:string;mediaKind:'image'|'video';role:string;pages:string[]}
 function PublicSiteMediaAdmin(){
   const [manifest,setManifest]=useState<PublicMediaManifestItem[]>([])
   const [assets,setAssets]=useState<LandingMedia[]>([])
