@@ -74,3 +74,21 @@
 .admin-console .site-media-empty{padding:22px;background:#19082e;color:#cbb6e4}
 @media(max-width:1100px){.admin-console .site-media-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-console .site-media-library-head{display:block}.admin-console .site-media-search{margin-top:18px}}
 @media(max-width:640px){.admin-console .site-media-grid{grid-template-columns:1fr}}
+
+.admin-console .site-media-filters{display:grid;gap:10px;min-width:min(340px,100%)}
+.admin-console .site-media-page-filter{display:grid;grid-template-columns:54px minmax(0,1fr);align-items:center;gap:8px;color:#e6ff00;font:900 10px ui-monospace,monospace}
+.admin-console .site-media-page-filter select{min-width:0;width:100%;padding:10px;background:#160629;color:white;border:1px solid #76539a}
+.admin-console .site-media-pages a{font:9px ui-monospace,monospace;background:#321451;color:#e8ddf5;padding:4px 6px;overflow-wrap:anywhere;text-decoration:none}
+.admin-console .site-media-pages a:hover,.admin-console .site-media-view-page:hover{color:#e6ff00;text-decoration:underline}
+.admin-console .site-media-view-page{display:inline-block;margin-top:10px;color:#e6ff00;font-size:10px;font-weight:900;text-decoration:none}
+.admin-console .site-media-history-toggle{border:1px solid #76539a;background:#321451;color:#e6ff00;padding:9px;font-size:10px;font-weight:900;cursor:pointer}
+.admin-console .site-media-history{display:grid;gap:8px;padding-top:10px}
+.admin-console .site-media-history>p{color:#cbb6e4;font-size:11px}
+.admin-console .site-media-history article{display:grid;grid-template-columns:84px minmax(0,1fr);gap:10px;align-items:center;padding:8px;background:#12051f;border:1px solid #76539a}
+.admin-console .site-media-history article>div{aspect-ratio:1;overflow:hidden;background:#3d1b61}
+.admin-console .site-media-history img,.admin-console .site-media-history video{width:100%;height:100%;object-fit:cover}
+.admin-console .site-media-history section{display:grid;gap:5px;min-width:0}
+.admin-console .site-media-history b{color:white;font-size:11px;overflow-wrap:anywhere}
+.admin-console .site-media-history small{color:#cbb6e4;font-size:9px}
+.admin-console .site-media-history button{justify-self:start;border:1px solid #e6ff00;background:transparent;color:#e6ff00;padding:6px 8px;font-size:9px;cursor:pointer}
+@media(max-width:1100px){.admin-console .site-media-filters{margin-top:18px}}
