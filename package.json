@@ -11,7 +11,8 @@
     "test": "vitest run",
     "check:seo": "node scripts/seo-audit.mjs",
     "check:deploy": "node scripts/seo-audit.mjs && node scripts/deployment-preflight.mjs",
-    "check:live-seo": "node scripts/live-seo-check.mjs"
+    "check:live-seo": "node scripts/live-seo-check.mjs",
+    "predev": "node scripts/prepare-public-media.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",
