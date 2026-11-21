@@ -98,8 +98,6 @@
   const landingSlots = [...document.querySelectorAll('[data-landing-slot]')];
   const landingBackgrounds = [...document.querySelectorAll('[data-landing-background]')];
   const originalLandingSlots = new Map(landingSlots.map(element => [element.dataset.landingSlot,element.innerHTML]));
-  const machineImage = document.querySelector('.reference-machine');
-  const machineDefault = machineImage.src;
   function renderLandingBackground(asset, element) {
     element.classList.add('has-admin-background');
     element.style.setProperty('--admin-background-image', asset.mediaKind === 'image' ? `url("${asset.mediaUrl}")` : 'none');
@@ -114,7 +112,7 @@
     const media = document.createElement(asset.mediaKind === 'video' ? 'video' : 'img');
     media.src = asset.mediaUrl;
     if (asset.mediaKind === 'image') { media.alt = asset.title; media.loading = 'lazy'; }
-    else { media.controls = asset.slot === 'screening_feature'; media.muted = asset.slot === 'screening_side'; media.autoplay = asset.slot === 'screening_side'; media.loop = asset.slot === 'screening_side'; media.playsInline = true; media.preload = 'metadata'; media.setAttribute('aria-label',asset.title); }
+    else { media.controls = asset.slot === 'screening_feature' || asset.slot === 'landing_hero_clip'; media.muted = asset.slot === 'screening_side'; media.autoplay = asset.slot === 'screening_side'; media.loop = asset.slot === 'screening_side'; media.playsInline = true; media.preload = 'metadata'; media.setAttribute('aria-label',asset.title); }
     const visual = document.createElement('div'); visual.className = 'landing-media-visual'; visual.append(media);
     element.replaceChildren(visual);
     element.classList.add('has-admin-media');
@@ -146,9 +144,6 @@
     landingMedia = media;
     render(document.querySelector('[data-category][aria-pressed=true]')?.dataset.category || 'learn');
     renderThumbnails(media);
-    const heroArt = media.find(asset => asset.slot === 'landing_hero_machine' && asset.mediaKind === 'image' && asset.mediaUrl);
-    machineImage.src = heroArt?.mediaUrl || machineDefault;
-    machineImage.alt = heroArt?.title || 'A lime-green illustrated story machine carrying four portrait video concepts on its conveyor belt.';
     landingSlots.forEach(element => {
       element.innerHTML = originalLandingSlots.get(element.dataset.landingSlot);
       element.classList.remove('has-admin-media');
