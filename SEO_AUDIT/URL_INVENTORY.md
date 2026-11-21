@@ -88,3 +88,13 @@ The server returns 410 for retired YouTube-clipping, brainrot, comparison, capti
 | `/guides/50-ai-animation-prompts/` | Prompt resource | new |
 
 All eight are linked from `/guides/` and included in `public/sitemap.xml`. Existing guide URLs and published editorial copy are preserved.
+
+
+## Faceless Shorts guide overlap review — 21 November 2026
+
+| URL | Current assessment | Next action |
+|---|---|---|
+| `/guides/how-to-make-faceless-youtube-shorts/` | Moderate qualitative overlap with the AI Shorts guide; intended YouTube-specific workflow | Retain URL; differentiate around series planning, Shorts format, phone-first review, and YouTube publishing checks |
+| `/guides/how-to-make-faceless-ai-shorts/` | Moderate qualitative overlap with the YouTube guide; intended AI production workflow | Retain URL; differentiate around creative briefs, generation, quality review, corrections, and human editorial control |
+
+No page copy, canonical, redirect, or sitemap change is included. See `SEO_AUDIT/FACELESS_SHORTS_GUIDE_OVERLAP_REVIEW.md`. Search Console and backlink evidence is required before considering consolidation.
