@@ -1,0 +1,73 @@
+/* ShortClipr public editorial system — shared by product pages, guides and articles. */
+:root {
+  --sc-purple: #6417d7;
+  --sc-purple-deep: #3d087f;
+  --sc-purple-soft: #eee4ff;
+  --sc-lime: #e6ff00;
+  --sc-paper: #fffdf7;
+  --sc-ink: #17131e;
+  --sc-muted: #625a6c;
+  --sc-line: #d9cde8;
+}
+body { background: var(--sc-paper); color: var(--sc-ink); }
+.nav { background: var(--sc-purple); color: white; border: 0; min-height: 76px; }
+.nav .brand { color: white; font-family: 'Barlow Condensed', sans-serif; font-weight: 900; letter-spacing: -.04em; }
+.nav .brand span { color: var(--sc-lime); }
+.nav nav a { color: white; }
+.nav nav a:hover { color: var(--sc-lime); }
+.nav-cta, .button { background: var(--sc-lime); color: #17131e; border: 2px solid #17131e; box-shadow: 4px 4px 0 #17131e; border-radius: 3px; }
+.nav-cta:hover, .button:hover { background: white; transform: translate(2px,2px); box-shadow: 2px 2px 0 #17131e; }
+h1, h2, h3 { font-family: 'Barlow Condensed', Impact, sans-serif; text-transform: uppercase; letter-spacing: -.035em; }
+h1 { font-size: clamp(58px, 8vw, 112px); line-height: .88; }
+h2 { font-size: clamp(42px, 5.4vw, 76px); line-height: .9; }
+h1 em, h2 em, h1 span, h2 span { color: var(--sc-purple); }
+.eyebrow, .section-label { color: var(--sc-purple); font-weight: 900; letter-spacing: .16em; }
+.breadcrumbs { background: #24152f; color: #e7d7ff; border-bottom: 4px solid var(--sc-lime); }
+.breadcrumbs a { color: white; }
+.breadcrumbs span[aria-current=page] { color: var(--sc-lime); }
+.hero, .article-hero, .trust-hero { background: var(--sc-purple); color: white; position: relative; overflow: hidden; }
+.hero .lead, .article-hero .lead, .trust-hero .lead { color: #f0e7ff; }
+.hero .eyebrow, .article-hero .eyebrow, .trust-hero .eyebrow { color: var(--sc-lime); }
+.hero h1 em, .article-hero h1 span, .trust-hero h1 em { color: var(--sc-lime); }
+.hero-image, .guide-image { border: 5px solid white; box-shadow: 9px 9px 0 var(--sc-lime); transform: rotate(1.2deg); }
+.hero-image img, .guide-image img { display: block; }
+.listing { background: var(--sc-paper); }
+.listing .lead { color: var(--sc-muted); }
+.cards { gap: 18px; }
+.card { background: white; border: 2px solid var(--sc-ink); box-shadow: 5px 5px 0 var(--sc-purple); border-radius: 2px; min-height: 240px; transition: transform .18s, box-shadow .18s; }
+.card:nth-child(3n+2) { background: var(--sc-purple-soft); }
+.card:nth-child(3n) { background: #f7f3e9; }
+.card:hover { transform: translate(-3px,-3px); box-shadow: 8px 8px 0 var(--sc-purple); outline: 0; }
+.card span { color: var(--sc-purple); }
+.card h3 { font-size: 32px; line-height: .95; }
+.article-layout { background: var(--sc-paper); }
+.article-layout aside { border-left: 3px solid var(--sc-purple); padding-left: 18px; }
+.article-layout aside span { color: var(--sc-purple); }
+.article-copy h2 { color: var(--sc-purple-deep); }
+.article-answer, .answer-box { background: var(--sc-purple); color: white; border: 0; box-shadow: 8px 8px 0 var(--sc-lime); }
+.article-answer .eyebrow, .answer-box .eyebrow { color: var(--sc-lime); }
+.article-answer h2, .answer-box h2 { color: white; }
+.article-answer p:last-child, .answer-box p:last-child { color: #f5edff; }
+.answer-faq { background: #24152f; border-top: 5px solid var(--sc-lime); }
+.answer-faq details { border-color: #71578e; }
+.answer-faq details p { color: #e5d9f2; }
+.answer-faq summary span { color: var(--sc-lime); }
+.trust-grid article { border: 2px solid var(--sc-ink); box-shadow: 5px 5px 0 var(--sc-purple); }
+.trust-grid article:nth-child(2) { background: var(--sc-purple-soft); }
+.trust-grid article:nth-child(3) { background: #f5f0e5; }
+.article-cta { background: var(--sc-lime); color: var(--sc-ink); border: 2px solid var(--sc-ink); box-shadow: 7px 7px 0 var(--sc-purple); }
+.article-cta .eyebrow { color: var(--sc-purple-deep); }
+.article-cta h2 { color: var(--sc-ink); }
+.article-cta .button { background: var(--sc-purple); color: white; box-shadow: 4px 4px 0 var(--sc-ink); }
+footer { background: var(--sc-purple-deep); color: white; border-top: 6px solid var(--sc-lime); }
+footer .brand, footer a { color: white; }
+footer .brand span { color: var(--sc-lime); }
+footer small { color: #e5d9f2; }
+footer .free-credit-note a { color: var(--sc-lime); }
+@media (max-width: 760px) {
+  .nav { padding: 16px 6%; flex-wrap: wrap; }
+  .nav nav { width: 100%; order: 3; overflow-x: auto; padding: 8px 0; }
+  .nav-cta { margin-left: auto; }
+  .cards { grid-template-columns: 1fr; }
+  .card { min-height: 175px; }
+}
