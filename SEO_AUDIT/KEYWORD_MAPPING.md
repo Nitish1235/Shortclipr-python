@@ -71,3 +71,26 @@ Create a new URL only when it has a distinct search job, unique evidence, and en
 | `/guides/50-ai-animation-prompts/` | AI animation prompts | prompt resource |
 
 These are distinct informational intents. Keep existing commercial pages as destinations for tool/maker intent. Review Search Console query overlap before splitting or merging further pages. Do not add a generic “best AI animated video generators” ranking page until each tool's current scope, pricing, and evidence can be verified and disclosed.
+
+
+## Cannibalization review — 21 November 2026
+
+Reviewed current page titles, meta descriptions, and H1s for platform-specific commercial pages and their closest guides. This is a qualitative on-page review only; no Search Console query, impression, click, backlink, or ranking data was available.
+
+### Findings and action
+
+| Page cluster | Observed overlap | Recommendation |
+|---|---|---|
+| `/faceless-youtube-shorts/` and `/animated-youtube-shorts-maker/` | Both target YouTube Shorts creation, but one is explicitly faceless/no-camera and the other animated visual storytelling. | Retain both provisionally. Keep the faceless page focused on creator absence and the animated page focused on visual format. Check Search Console overlap before merging. |
+| `/animated-tiktok-video-maker/` and `/faceless-tiktok-video-maker/` | Both target TikTok video creation; one leads with animation, the other with not appearing on camera. | Retain provisionally. Keep animation-led storytelling distinct from camera-free formats. |
+| `/faceless-ai-shorts-generator/` and `/faceless-youtube-shorts/` | Both include faceless Shorts, but one is platform-neutral/product-led while the other is YouTube-specific. | Keep the generator as broad commercial destination; preserve YouTube-specific workflow guidance on the platform page. |
+| `/guides/how-to-make-faceless-youtube-shorts/` and `/guides/how-to-make-faceless-ai-shorts/` | Both are informational how-to pages about faceless Shorts; titles and descriptions are close. | Highest-priority editorial review. Keep the YouTube guide platform-specific; keep the AI guide about the AI-assisted workflow, human review, and limitations. Check full body overlap before considering consolidation. |
+| `/guides/faceless-tiktok-video-ideas/` and `/guides/how-to-make-animated-tiktok-videos/` | Same platform, but one is an ideas list and the other is a production workflow. | Retain as separate intents; keep the ideas page idea-led and the how-to page step-by-step. |
+
+### Safe next actions
+
+1. Do not delete, redirect, canonicalize, or merge these URLs without Search Console and backlink review.
+2. Add contextual links between related guides and product pages only where they help readers choose the next step.
+3. In Search Console, compare queries and landing pages over the same 3–6 month window. Look for the same query repeatedly alternating between URLs, not merely shared words in titles.
+4. Before any merge, inspect external backlinks and existing traffic; preserve the stronger URL and redirect only when the content truly serves the same intent.
+5. Avoid publishing additional platform-name variants until this review is backed by first-party search data.
