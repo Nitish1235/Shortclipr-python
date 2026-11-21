@@ -1,7 +1,7 @@
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const root = path.resolve('public');
+const root = path.resolve(process.argv[2] || 'dist');
 const assets = new Map();
 const pages = [];
 
@@ -9,7 +9,7 @@ async function walk(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const absolute = path.join(dir, entry.name);
     if (entry.isDirectory()) await walk(absolute);
-    else if (entry.isFile() && entry.name.endsWith('.html')) pages.push(absolute);
+    else if (entry.isFile() && entry.name.endsWith('.html') && !(dir === root && entry.name === 'index.html')) pages.push(absolute);
   }
 }
 
