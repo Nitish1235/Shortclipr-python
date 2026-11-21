@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 from uuid import UUID
 
 import asyncpg
@@ -19,9 +20,15 @@ LANDING_IMAGE_SLOTS = LANDING_THUMBNAIL_SLOTS | LANDING_COLLECTION_SLOTS | {"lan
 LANDING_MEDIA_SLOTS = frozenset({"landing_hero_background", "screening_feature", "screening_side"}) | LANDING_IMAGE_SLOTS
 
 
+def is_public_media_slot(slot: str) -> bool:
+    return slot in LANDING_MEDIA_SLOTS or (
+        slot.startswith("asset_") and re.fullmatch(r"[a-z][a-z0-9_-]{1,95}", slot) is not None
+    )
+
+
 def landing_media_kind(slot: str, content_type: str) -> str:
-    if slot not in LANDING_MEDIA_SLOTS:
-        raise HTTPException(status_code=422, detail="Unknown landing placement")
+    if not is_public_media_slot(slot):
+        raise HTTPException(status_code=422, detail="Unknown public media placement")
     if content_type in {"image/jpeg", "image/png", "image/webp"}:
         return "image"
     if slot in LANDING_IMAGE_SLOTS:
@@ -127,8 +134,8 @@ async def upload_landing_media(
 
 @admin_router.delete("/landing-media/{slot}", status_code=204)
 async def delete_landing_media(slot: str, _: CurrentUser = Depends(admin_user), pool: asyncpg.Pool = Depends(get_pool), settings: Settings = Depends(get_settings)):
-    if slot not in LANDING_MEDIA_SLOTS:
-        raise HTTPException(status_code=404, detail="Landing placement not found")
+    if not is_public_media_slot(slot):
+        raise HTTPException(status_code=404, detail="Public media placement not found")
     row = await pool.fetchrow("DELETE FROM landing_media_slots WHERE slot=$1 RETURNING media_object", slot)
     if not row:
         raise HTTPException(status_code=404, detail="Landing placement is already empty")

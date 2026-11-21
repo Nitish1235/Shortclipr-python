@@ -140,15 +140,7 @@ class ShowcaseUpdate(ApiModel):
 
 class LandingMediaResponse(ApiModel):
     id: UUID
-    slot: Literal[
-        "landing_hero_background", "screening_feature", "screening_side",
-        "landing_thumbnail_1", "landing_thumbnail_2", "landing_thumbnail_3",
-        "landing_thumbnail_4", "landing_thumbnail_5", "landing_thumbnail_6",
-        "landing_hero_machine",
-        "collection_learn_1", "collection_learn_2", "collection_learn_3",
-        "collection_story_1", "collection_story_2", "collection_story_3",
-        "collection_engage_1", "collection_engage_2", "collection_engage_3",
-    ]
+    slot: str
     title: str
     caption: str
     media_kind: Literal["image", "video"]

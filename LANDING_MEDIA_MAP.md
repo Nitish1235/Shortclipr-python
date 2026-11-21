@@ -25,3 +25,14 @@ Migration `0012_editorial_landing_media.sql` adds the new hero illustration and 
 `story-machine/assets/clip-type-contact-sheet.png` was created with the built-in image generation tool. The prompt was:
 
 > Create a rigorously aligned 3 × 3 grid of nine equal, self-contained 4:3 visual scenes for a premium animated-short creation landing page. Row 1: atmospheric planet explainer, ancient stone observatory at dawn, aerial winding river and terrain. Row 2: paper boat crossing a flooded city street, red thread winding through a dark museum, empty stairwell with an impossible shadow. Row 3: geometric missing-shape puzzle, gravity-defying floating ocean above a city, building split between old industrial facade and green architecture. Make these highly polished frame stills from sophisticated motion graphics, with cinematic 3D, layered paper and diagrammatic detail, clear silhouettes, varied camera angles and intentional lighting. Use warm bone, deep ink and slate blue with small acid-lime highlights. No people, characters, text, logos, UI or watermark. No gutters or borders.
+
+
+## Public-site collage refresh and shared content assets
+
+The public marketing identity is being unified around the purple collage system: torn-paper white panels, black condensed display type, acid-lime accents, hand-drawn annotations, and vertical video examples. The main Story Machine page receives its own final stylesheet; public SEO/product pages, guides, editorial pages and policy pages receive the shared final stylesheet during the frontend build. The creator dashboard styles are not part of this public theme.
+
+The frontend build runs `scripts/prepare-public-media.mjs`. It scans static public HTML for images in `/seo-assets/` and `/clip-types/`, assigns stable `asset_*` slot IDs, writes `/site-media-manifest.json`, adds the media replacement hook, and injects the configured API base. A single uploaded replacement for a shared source image updates every public page using that source. The same manifest and upload interface accepts video files; when a video is assigned to an image placement, the public media hook swaps the image element for a muted, looping, inline video element.
+
+The owner console at `/admin` is now rendered in a separate shell and does not reuse the creator dashboard navigation or layout. Its Public page assets section reads the generated manifest and uses the existing authenticated landing-media API and GCS storage. Existing landing hero, six thumbnail, collection, curated video, completed-job, worker-fleet, and voice-preview controls remain available in the owner console.
+
+Migration `0013_public_media_asset_slots.sql` relaxes the slot constraint to allow validated `asset_*` keys while preserving the existing landing slots. Apply migrations through the normal release process before enabling the new upload slots in production.

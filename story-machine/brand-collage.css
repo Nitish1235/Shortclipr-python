@@ -1,0 +1,93 @@
+/* ShortClipr purple collage identity — applied to the entire public landing page. */
+:root{--paper:#fffdf8;--ink:#17131d;--lime:#e6ff00;--purple:#6418d8;--purple-deep:#35066f;--purple-mid:#7b2be5;--purple-pale:#f0e7ff;--line:#d9c9ef}
+html{background:var(--purple-deep)}
+body{background:var(--purple);color:white;background-image:radial-gradient(circle at 12% 22%,#ffffff16 0 1px,transparent 1.7px),radial-gradient(circle at 82% 71%,#16003b35 0 1px,transparent 2px),linear-gradient(135deg,#7b28eb,#4b0db3 56%,#6314d5);background-size:19px 19px,27px 27px,100% 100%;font-family:'DM Sans',sans-serif}
+.reference-opening{background:transparent;color:white;position:relative}
+.reference-opening:before{content:"";position:absolute;inset:0 0 3.5%;pointer-events:none;opacity:.18;background-image:repeating-linear-gradient(127deg,transparent 0 28px,#fff 29px,transparent 31px),radial-gradient(ellipse at 15% 15%,#fff5,transparent 45%)}
+.reference-opening .nav{color:white;border:0}
+.reference-opening .brand{color:white;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:30px;letter-spacing:-.06em;background:#fff;color:#17131d;padding:7px 13px;transform:rotate(-2deg);box-shadow:4px 4px 0 var(--purple-deep)}
+.reference-opening .brand span{color:var(--purple)}
+.reference-opening .nav nav a,.reference-opening .login-link{color:white;font-weight:700}
+.reference-opening .nav nav a:hover,.reference-opening .login-link:hover{color:var(--lime)}
+.reference-opening .button,.reference-opening .button-small{background:var(--lime);color:#17131d;border:2px solid #17131d;border-radius:999px;box-shadow:4px 4px 0 #26034f;font-weight:900}
+.reference-opening .hero{height:60cqw;padding-top:3.3cqw}
+.reference-opening .overline{color:var(--lime)}
+.reference-opening .hero h1{font-family:'Anton',Impact,sans-serif;font-size:10.5cqw;line-height:.9;letter-spacing:-.035em;color:#17131d}
+.reference-opening .hero h1>span{width:max-content;max-width:100%;background:#fff;padding:.06em .13em .11em;box-shadow:7px 7px 0 #30075b;transform:rotate(-1.5deg);margin:0 0 .12em}
+.reference-opening .hero h1>span:nth-child(2){transform:rotate(1deg);margin-left:1.4cqw}
+.reference-opening .hero h1 .headline-last{font-size:7.3cqw;line-height:1.1;background:var(--lime);margin-left:3cqw;transform:rotate(-1deg)}
+.reference-opening .hero-note-wrap{padding-top:1.4cqw}
+.reference-opening .hero-note{color:var(--lime);font-size:1.6cqw}
+.reference-opening .hero-description{color:white;font-size:1.3cqw;max-width:35cqw}
+.reference-opening .plain-link{color:white}
+.reference-opening .plain-link span{border-color:white}
+.reference-opening .machine-wrap{left:43cqw;top:3.6cqw;width:47cqw;filter:drop-shadow(10px 13px 0 #26034f)}
+.reference-opening .machine-note,.reference-opening .out-note{color:white}
+.reference-opening .machine-note span{color:var(--lime)}
+.reference-opening .idea-arrow{stroke:var(--lime)}
+.reference-workflow{color:white;padding-top:1.8cqw}
+.reference-workflow h2{color:var(--lime)}
+.reference-workflow ol{background:#fff;color:#17131d;border:3px solid #17131d;box-shadow:7px 7px 0 #2e075f;clip-path:polygon(1% 0,99% 1%,100% 90%,98% 100%,0 97%)}
+.reference-workflow li b{display:inline-grid;place-items:center;width:2.5em;height:2.5em;border-radius:50%;background:var(--lime);border:2px solid #17131d}
+.reference-workflow li p{font-weight:700}
+.reference-opening .reference-reel{color:white}
+.reference-reel .example-clip{border:3px solid white;border-radius:14px;box-shadow:5px 6px 0 #28045b}
+.reference-reel .reel-footer{color:#e8d8ff}
+.reference-reel .live-reel-card{border:3px solid white;box-shadow:4px 5px 0 #28045b}
+.faceless-promise{background:#fff;color:#17131d;padding:70px 5%;margin-top:28px;border:3px solid #17131d;box-shadow:8px 8px 0 #2d075d;clip-path:polygon(1% 0,99% 1%,100% 98%,0 100%)}
+.faceless-promise .product-eyebrow{color:var(--purple)}
+.faceless-promise h2{font-family:'Anton',Impact,sans-serif;font-size:clamp(46px,6vw,82px);text-transform:uppercase;line-height:.91;color:#17131d}
+.faceless-promise h2 span{color:var(--purple)}
+.faceless-promise-copy>p:not(.product-eyebrow){color:#51475d}
+.faceless-proof>div{border:2px solid #17131d;background:var(--purple-pale);padding:20px;box-shadow:4px 4px 0 var(--purple)}
+.faceless-proof b{background:var(--lime);color:#17131d;border:1px solid #17131d}
+.product-page{background:transparent;color:white}
+.product-intro,.types-section,.pricing-section,.faq-section{background:transparent;color:white}
+.product-intro h2,.types-section h2,.pricing-section h2,.faq-section h2{color:white}
+.product-intro .product-eyebrow,.types-section .product-eyebrow,.pricing-section .product-eyebrow,.faq-section .product-eyebrow{color:var(--lime)}
+.product-workspace{background:#fff;color:#17131d;border:3px solid #17131d;box-shadow:9px 9px 0 #2b0758;border-radius:5px}
+.workspace-head{background:#fff;border-bottom:2px solid #17131d}
+.workspace-brand{color:#17131d}
+.workspace-mark{background:var(--lime);color:#17131d}
+.workspace-body{background:#f4effb}
+.workspace-setup,.workspace-result{background:#fff;border:1px solid #d7c8e8}
+.workspace-direction{background:var(--purple-pale)}
+.direction-swatch{border:2px solid #17131d}
+.workspace-options button,.collection-tabs button{border:1px solid #17131d;background:#fff;color:#17131d}
+.workspace-options button.active,.collection-tabs button[aria-selected=true]{background:var(--lime);color:#17131d;border-color:#17131d}
+.types-section{padding-block:80px}
+.section-heading h2{font-family:'Anton',Impact,sans-serif}
+.collection-tabs{display:flex;gap:10px;flex-wrap:wrap}
+.collection-tabs button{border-radius:999px;padding:12px 18px;font-weight:800}
+.collection-grid{gap:16px}
+.collection-grid article{background:#fff;color:#17131d;border:2px solid #17131d;box-shadow:5px 5px 0 #2b0758}
+.collection-grid article:nth-child(3n+2){background:#f2e8ff}
+.collection-grid article:nth-child(3n){background:#f7f2e7}
+.collection-grid h3{font-family:'Barlow Condensed',sans-serif;font-size:30px}
+.price-card{background:#fff;color:#17131d;border:2px solid #17131d;box-shadow:6px 6px 0 #2b0758}
+.price-card.price-featured{background:var(--lime);box-shadow:7px 7px 0 #17131d}
+.price-card .plan-name{font-family:'Barlow Condensed',sans-serif;text-transform:uppercase;font-size:23px}
+.price-card .button{background:#17131d;color:white;border-color:#17131d;box-shadow:4px 4px 0 var(--purple)}
+.homepage-answer{background:#fff;color:#17131d;border:3px solid #17131d;box-shadow:7px 7px 0 #2b0758}
+.homepage-answer h2{color:var(--purple)}
+.faq-section{background:#2b0758;padding-block:80px}
+.faq-list details{border-color:#8d63bc}
+.faq-list summary,.faq-list details p{color:white}
+.faq-list summary span{color:var(--lime)}
+.closing-section{background:var(--lime);color:#17131d;border-block:3px solid #17131d}
+.closing-section h2{color:#17131d}
+.closing-section .button{background:#17131d;color:white;border-color:#17131d;box-shadow:5px 5px 0 white}
+.footer{color:white;border-top:1px solid #ffffff55}
+.footer a:hover{color:var(--lime)}
+@media(max-width:700px){
+ .reference-opening .hero{height:auto;padding:35px 0 24px}
+ .reference-opening .hero-copy{width:100%}
+ .reference-opening .hero h1{font-size:clamp(64px,15vw,104px)}
+ .reference-opening .hero h1 .headline-last{font-size:clamp(44px,10vw,70px)}
+ .reference-opening .hero-description{font-size:14px;max-width:100%}
+ .reference-opening .machine-wrap{position:relative;left:auto;top:auto;width:100%;margin:20px auto 0}
+ .reference-opening .machine-note,.reference-opening .out-note,.reference-opening .idea-arrow,.reference-opening .machine-leaders{display:none}
+ .reference-workflow ol{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+ .faceless-promise{clip-path:none;padding:36px 22px}
+ .collection-tabs{overflow-x:auto;flex-wrap:nowrap}
+}
