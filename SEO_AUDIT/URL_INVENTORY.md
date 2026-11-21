@@ -72,3 +72,19 @@ Status meanings: `keep` means retain and optimize; `merge` means consolidate onl
 ## Legacy routes
 
 The server returns 410 for retired YouTube-clipping, brainrot, comparison, caption-style, gameplay, and changelog route groups. Preserve those removals unless Search Console, backlinks, or a genuinely relevant replacement justify a change.
+
+
+## New guide inventory — 21 November 2026
+
+| URL | Primary job | Status |
+|---|---|---|
+| `/guides/how-to-create-animated-stories-with-ai/` | Story creation workflow | new |
+| `/guides/keep-same-character-across-scenes/` | Character continuity guidance | new |
+| `/guides/how-to-write-ai-animation-prompts/` | Prompt writing method | new |
+| `/guides/how-to-start-faceless-youtube-channel/` | Channel planning | new |
+| `/guides/how-to-make-educational-youtube-shorts/` | Educational short workflow | new |
+| `/guides/build-repeatable-faceless-video-series/` | Repeatable series workflow | new |
+| `/guides/ai-animation-vs-traditional-animation/` | Workflow comparison | new |
+| `/guides/50-ai-animation-prompts/` | Prompt resource | new |
+
+All eight are linked from `/guides/` and included in `public/sitemap.xml`. Existing guide URLs and published editorial copy are preserved.

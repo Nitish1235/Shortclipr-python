@@ -62,3 +62,10 @@ Improve `/video-ideas/` with search/filtering, useful descriptions, prompt examp
 - Never invent testimonials, metrics, rankings, integrations, or product capabilities.
 - Show dates only when content was materially reviewed.
 - Prefer one excellent page over multiple near-duplicates.
+
+
+## Implemented content batch — 21 November 2026
+
+Added eight static guide pages covering AI animated stories, character continuity, prompt writing, faceless YouTube channel planning, educational Shorts, repeatable series, AI versus traditional animation, and 50 prompt examples. Updated the guide hub, sitemap, and editorial styling. The guide hub includes a newly generated ShortClipr-themed illustration. New pages use answer-first introductions, task-focused sections, review checklists, contextual internal links, Article/Breadcrumb/WebPage JSON-LD, canonical URLs, social metadata, and visible FAQs.
+
+This page batch does not substitute for Search Console validation. Keyword demand, ranking difficulty, CTR, and conversions remain unmeasured until first-party data is reviewed.

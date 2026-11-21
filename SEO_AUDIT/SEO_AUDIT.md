@@ -114,3 +114,8 @@ Track by URL and intent:
 ## Scope boundary
 
 This audit is repository-based. It does not claim access to Google Search Console, live crawl data, rankings, search volume, backlinks, Core Web Vitals, or production response codes.
+
+
+## Content expansion update — 21 November 2026
+
+Eight new informational guides have been added and linked from the guide hub and sitemap. They focus on story structure, character continuity, prompt craft, faceless channel planning, educational Shorts, repeatable series, workflow selection, and prompt examples. The next research-dependent opportunity is a transparent competitor comparison covering Faceless.video, Faceless.so, and other relevant tools. Do not publish a “best generator” list or direct-versus pages until current features, prices, terms, and limitations have been verified against primary sources. Existing product facts and editorial copy remain unchanged.
