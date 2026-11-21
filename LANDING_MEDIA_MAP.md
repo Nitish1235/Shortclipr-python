@@ -45,3 +45,10 @@ The shared public media manifest now scans every public static HTML page generat
 Each placement receives a stable role-aware `asset_*` slot. Repeated use of the same source image shares one upload slot across pages. Poster, responsive-image and background slots accept images only; image and video content slots can be replaced with either image or video. The public runtime updates the relevant image, video, picture source, video poster or inline background when an admin replacement exists. Built-in assets remain the fallback when no upload exists or the media API is unavailable.
 
 The owner console lists every discovered placement, its role, default media type, pages using it, current preview and upload/restore actions. The static app entry page is intentionally excluded from the scanner so the logged-in creator application is not rewritten. The separate Story Machine page retains its existing dedicated hero, thumbnail, clip-type and showcase media controls.
+
+
+## Media replacement history and page previews
+
+Public asset placements can now be filtered by exact public page or searched by title, slot and page path. Each placement links directly to the public page in a new tab. The owner console also exposes up to 30 prior revisions per slot, including their preview, title and replacement timestamp. Restoring a prior revision makes it live again and preserves the displaced current upload as another revision.
+
+Migration `0014_landing_media_revisions.sql` creates the revision history table. Existing uploads are not backfilled: history starts recording when a replacement or removal happens after this migration is applied. Old media objects are retained while referenced by history so an administrator can restore them. Apply the migration through the normal release process before using history or deploying the updated API.
