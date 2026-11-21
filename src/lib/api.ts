@@ -1,5 +1,5 @@
 import { demoStore } from './demo-store'
-import type { AdminJob, BillingCheckoutStatus, CreateProjectInput, CreditBalance, LandingMedia, Project, ShowcaseClip, User, Voice, VoiceLibraryGeneration, WorkerFleetStatus } from '../types'
+import type { AdminJob, BillingCheckoutStatus, CreateProjectInput, CreditBalance, LandingMedia, LandingMediaRevision, Project, ShowcaseClip, User, Voice, VoiceLibraryGeneration, WorkerFleetStatus } from '../types'
 
 const configuredBase = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 export const apiConfigured = Boolean(configuredBase)
@@ -87,6 +87,8 @@ class ApiClient {
     return this.request('/v1/admin/showcase/landing-media',{method:'POST',body:form})
   }
   async deleteLandingMedia(slot:LandingMedia['slot']):Promise<void>{if(demoMode){await (await localMediaStore()).deleteLocalMedia(slot);return}await this.request(`/v1/admin/showcase/landing-media/${slot}`,{method:'DELETE'})}
+  async landingMediaHistory(slot:string):Promise<LandingMediaRevision[]>{if(demoMode)return [];return this.request(`/v1/admin/showcase/landing-media/${encodeURIComponent(slot)}/history`)}
+  async restoreLandingMediaRevision(slot:string,revisionId:string):Promise<LandingMedia>{if(demoMode)throw new Error('Revision restore is available in the connected admin environment');return this.request(`/v1/admin/showcase/landing-media/${encodeURIComponent(slot)}/restore/${revisionId}`,{method:'POST'})}
   async adminJobs():Promise<AdminJob[]>{
     if(demoMode)return demoStore.adminJobs()
     return this.request('/v1/admin/showcase/jobs')
