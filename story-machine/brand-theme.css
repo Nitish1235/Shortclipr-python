@@ -170,3 +170,9 @@ a{color:inherit}
   .closing-section{width:calc(100% - 30px)}
 }
 @media(max-width:420px){.reference-reel .live-reel-track{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.reference-reel .live-reel-card b{font-size:13px}}
+
+/* The illustrative strip stays still; the live 9:16 gallery below is the playable section. */
+.reference-reel .example-track{display:block;width:100%;animation:none}
+.reference-reel .example-group[aria-hidden="true"]{display:none}
+.reference-reel .example-group{grid-template-columns:repeat(6,minmax(0,1fr))}
+@media(max-width:700px){.reference-reel .example-group{grid-template-columns:repeat(3,minmax(0,1fr));flex-basis:auto}}
