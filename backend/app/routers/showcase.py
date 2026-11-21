@@ -131,13 +131,7 @@ async def upload_landing_media(
     except Exception:
         await storage.delete(object_name)
         raise
-    if old_object and old_object != object_name:
-        try:
-            await storage.delete(old_object)
-        except Exception:
-            # The replacement is already live. A stale object is safer than
-            # deleting the newly committed landing placement during cleanup.
-            pass
+    # Previous objects remain available to the revision history for restore.
     return await landing_media_payload(row, storage)
 
 
