@@ -63,7 +63,7 @@ for (const page of pages) {
       const srcset = tag.match(/\bsrcset=["']([^"']+)["']/i)?.[1];
       if (srcset) {
         const first = srcset.split(',')[0].trim().split(/\s+/)[0];
-        updated = annotate(updated, register(first, relativePage, 'image', 'srcset'));
+        updated = annotate(updated, register(first, relativePage, 'image', 'srcset'), 'data-media-srcset-slot');
       }
     }
     return updated;
