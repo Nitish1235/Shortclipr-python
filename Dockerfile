@@ -29,7 +29,6 @@ RUN npm ci --no-audit --no-fund
 COPY index.html tsconfig*.json vite.config.ts ./
 COPY public/ public/
 COPY scripts/ scripts/
-RUN node scripts/prepare-public-media.mjs
 COPY src/ src/
 COPY story-machine/studio-app.css story-machine/studio-app.css
 RUN npm run build
