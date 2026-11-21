@@ -92,3 +92,42 @@
 .admin-console .site-media-history small{color:#cbb6e4;font-size:9px}
 .admin-console .site-media-history button{justify-self:start;border:1px solid #e6ff00;background:transparent;color:#e6ff00;padding:6px 8px;font-size:9px;cursor:pointer}
 @media(max-width:1100px){.admin-console .site-media-filters{margin-top:18px}}
+
+
+/* Cobalt + coral owner-console palette, aligned with the public landing theme. */
+.admin-console{background:#0d2e78;color:#fff}
+.admin-console-sidebar{background:#09265f;border-color:#4775d1}
+.admin-console-brand span{color:#ff7770}
+.admin-console-overline{color:#ffaaa2}
+.admin-console-nav a{color:#edf3ff}
+.admin-console-nav a:hover,.admin-console-nav a.active{background:#164fc1;border-color:#ff7770;color:#fff}
+.admin-console-nav a span{color:#ff8b80}
+.admin-console-sidebar-foot a,.admin-console-sidebar-foot button{border-color:#6487d2;color:#fff}
+.admin-console-sidebar-foot button:hover,.admin-console-sidebar-foot a:hover{background:#fe625f;color:#101b36}
+.admin-console-topbar{background:#0b2869;border-color:#4775d1}
+.admin-console-topbar small{color:#d0ddfb}
+.admin-console-topbar-actions a,.admin-console-topbar-actions button{border-color:#ff7770;color:#ffaaa2}
+.admin-console .admin-landing-status,.admin-console .studio-placement-map,.admin-console .landing-media-admin,.admin-console .admin-grid,.admin-console .admin-jobs,.admin-console .worker-fleet-admin,.admin-console .voice-library-admin{background:#1244a8;border-color:#6688d2;color:#fff}
+.admin-console .landing-placement-card,.admin-console .placement-route,.admin-console .upload-panel,.admin-console .media-library,.admin-console .admin-job,.admin-console .worker-region-card,.admin-console .voice-admin-grid article{background:#0b2b70;color:#fff;border-color:#688bd3}
+.admin-console .placement-heading p,.admin-console .placement-heading small,.admin-console .admin-job small,.admin-console .admin-job p{color:#d2def7}
+.admin-console .placement-preview,.admin-console .placement-fallback,.admin-console .editorial-slot-preview{background:#174fb9;color:#fff}
+.admin-console .placement-editor summary,.admin-console .placement-location a,.admin-console .admin-media-actions button,.admin-console .admin-job-actions button{color:#ff8a80}
+.admin-console .placement-editor input,.admin-console .placement-editor textarea,.admin-console .placement-editor select,.admin-console .upload-panel input,.admin-console .upload-panel textarea,.admin-console .upload-panel select{background:#071f53;color:#fff;border-color:#6688d2}
+.admin-console .lime-button,.admin-console .admin-job-actions .job-primary{background:#ff6d66;color:#101b36;border-color:#ff6d66}
+.admin-console .admin-stamp{border-color:#ff8b80;color:#ffaaa2}
+.admin-console .site-media-library{background:#1244a8;border-color:#6688d2;color:#fff}
+.admin-console .site-media-library-head h2{color:#fff}
+.admin-console .site-media-library-head h2 em{color:#ff8b80}
+.admin-console .site-media-search{background:#09265f;border-color:#6688d2;color:#ffaaa2}
+.admin-console .site-media-card{background:#0b2b70;border-color:#6688d2}
+.admin-console .site-media-card-copy>p,.admin-console .site-media-editor summary{color:#ffaaa2}
+.admin-console .site-media-card-copy h3{color:#fff}
+.admin-console .site-media-card-copy>small,.admin-console .site-media-library-head p:not(.kicker){color:#d2def7}
+.admin-console .site-media-pages code{background:#174fb9;color:#fff}
+.admin-console .site-media-history article{background:#071f53;border-color:#6688d2}
+.admin-console .site-media-history b{color:#fff}
+.admin-console .site-media-history small{color:#d2def7}
+.admin-console .site-media-history button{border-color:#ff8b80;color:#ffaaa2}
+.admin-console .admin-empty{background:#0b2b70;color:#d2def7}
+.admin-console .placement-location>span{background:#dce8ff;color:#12316d}
+.admin-console .placement-location>span.is-uploaded{background:#ffd9d5;color:#8b2522}
