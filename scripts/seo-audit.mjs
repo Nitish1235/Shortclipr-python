@@ -34,7 +34,7 @@ function titleOf(html) {
 
 function routeFor(file) {
   const normalized = relative(root, dirname(file)).split(sep).join('/');
-  if (normalized === 'story-machine') return '/story-machine/';
+  if (normalized === 'story-machine') return '/animation-maker/';
   return `/${normalized.replace(/^public\//, '')}/`;
 }
 
