@@ -29,10 +29,13 @@ const expectedMigrations = [
 check(JSON.stringify(migrationFiles) === JSON.stringify(expectedMigrations), 'Migration sequence is incomplete or out of order');
 
 const frontendDocker = await read('Dockerfile');
+check(frontendDocker.includes('/usr/share/nginx/html/animation-maker/'), 'Frontend container must publish the landing page at /animation-maker/');
 for (const asset of ['product.css', 'hero-background.css', 'live-reel.css', 'reference.css', 'reference.js', 'story-machine/assets/']) {
   check(frontendDocker.includes(asset), `Frontend container does not copy ${asset}`);
 }
 const nginx = await read('nginx.conf');
+check(nginx.includes('location = / { return 301 /animation-maker/; }'), 'Root must redirect to /animation-maker/');
+check(nginx.includes('location = /story-machine/ { return 301 /animation-maker/; }'), 'Legacy landing route must redirect to /animation-maker/');
 check(nginx.includes('location = /health'), 'Frontend health endpoint is missing');
 check(nginx.includes('server_name www.shortclipr.com;'), 'Frontend must redirect the www hostname to the canonical hostname');
 check(nginx.includes('return 301 https://shortclipr.com$request_uri;'), 'Frontend www redirect must target the canonical hostname');

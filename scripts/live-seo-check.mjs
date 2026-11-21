@@ -8,14 +8,17 @@ const request = path => fetch(`${origin}${path}`, {redirect: 'manual'});
 
 const root = await request('/');
 check(root.status === 301, `/: expected 301, received ${root.status}`);
-check(root.headers.get('location') === '/story-machine/', `/: expected Location /story-machine/, received ${root.headers.get('location')}`);
+check(root.headers.get('location') === '/animation-maker/', `/: expected Location /animation-maker/, received ${root.headers.get('location')}`);
 
-const landing = await request('/story-machine/');
+const legacyLanding = await request('/story-machine/');
+check(legacyLanding.status === 301 && legacyLanding.headers.get('location') === '/animation-maker/', `/animation-maker/: expected redirect to /animation-maker/, received ${legacyLanding.status} ${legacyLanding.headers.get('location')}`);
+
+const landing = await request('/animation-maker/');
 const landingHtml = await landing.text();
-check(landing.status === 200, `/story-machine/: expected 200, received ${landing.status}`);
-check(landingHtml.includes('AI Animated Video Maker – Create Shorts From Text | ShortClipr'), '/story-machine/: current animated-video title is not deployed');
-check(landingHtml.includes('Turn Your Ideas Into Animated Shorts'), '/story-machine/: current hero message is not deployed');
-check(landingHtml.includes('https://shortclipr.com/story-machine/'), '/story-machine/: canonical URL is missing');
+check(landing.status === 200, `/animation-maker/: expected 200, received ${landing.status}`);
+check(landingHtml.includes('AI Animated Video Maker – Create Shorts From Text | ShortClipr'), '/animation-maker/: current animated-video title is not deployed');
+check(landingHtml.includes('Turn Your Ideas Into Animated Shorts'), '/animation-maker/: current hero message is not deployed');
+check(landingHtml.includes('https://shortclipr.com/animation-maker/'), '/animation-maker/: canonical URL is missing');
 
 const legacy = await request('/youtube-shorts/');
 check(legacy.status === 410, `/youtube-shorts/: expected 410, received ${legacy.status}`);
@@ -29,7 +32,7 @@ check(/User-agent: OAI-SearchBot\r?\nAllow: \//.test(robotsText), '/robots.txt: 
 const sitemap = await request('/sitemap.xml');
 const sitemapText = await sitemap.text();
 check(sitemap.status === 200, `/sitemap.xml: expected 200, received ${sitemap.status}`);
-check(sitemapText.includes(`${canonicalOrigin}/story-machine/`), '/sitemap.xml: canonical landing page is missing');
+check(sitemapText.includes(`${canonicalOrigin}/animation-maker/`), '/sitemap.xml: canonical landing page is missing');
 check(!sitemapText.includes('/youtube-shorts'), '/sitemap.xml: retired clipping URLs must not be listed');
 
 if (failures.length) {
