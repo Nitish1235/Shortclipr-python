@@ -82,7 +82,8 @@
     const title = document.createElement('b');
     title.textContent = clip.title;
     const detail = document.createElement('small');
-    detail.textContent = `${departmentName(clip.department).toUpperCase()} / 9:16 SHORT`;
+    const departmentLabels = {learn:'LEARN & EXPLAIN',story:'STORY & SPECTACLE',engage:'ENGAGE & TRANSFORM'};
+    detail.textContent = `${departmentLabels[clip.department] || String(clip.department).toUpperCase()} / 9:16 SHORT`;
     caption.append(title, detail);
     item.append(visual, caption);
     return item;
