@@ -31,8 +31,8 @@ def landing_media_kind(slot: str, content_type: str) -> str:
         raise HTTPException(status_code=422, detail="Unknown public media placement")
     if content_type in {"image/jpeg", "image/png", "image/webp"}:
         return "image"
-    if slot in LANDING_IMAGE_SLOTS:
-        raise HTTPException(status_code=422, detail="This landing placement accepts JPG, PNG or WebP images only")
+    if slot in LANDING_IMAGE_SLOTS or slot.startswith(("asset_poster_", "asset_background_", "asset_srcset_")):
+        raise HTTPException(status_code=422, detail="This public placement accepts JPG, PNG or WebP images only")
     if content_type in {"video/mp4", "video/webm", "video/quicktime"}:
         return "video"
     raise HTTPException(status_code=422, detail="Use MP4, MOV, or WebM video, or JPG, PNG, or WebP image")
