@@ -28,6 +28,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY index.html tsconfig*.json vite.config.ts ./
 COPY public/ public/
+COPY scripts/ scripts/
+RUN node scripts/prepare-public-media.mjs
 COPY src/ src/
 COPY story-machine/studio-app.css story-machine/studio-app.css
 RUN npm run build
@@ -36,9 +38,9 @@ FROM nginx:1.27-alpine
 ARG VITE_API_URL
 RUN rm -rf /usr/share/nginx/html/*
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY story-machine/index.html story-machine/style.css story-machine/product.css story-machine/live-reel.css story-machine/hero-background.css story-machine/machine.js story-machine/studio.js /usr/share/nginx/html/story-machine/
+COPY story-machine/index.html story-machine/style.css story-machine/product.css story-machine/live-reel.css story-machine/hero-background.css story-machine/brand-collage.css story-machine/machine.js story-machine/studio.js /usr/share/nginx/html/story-machine/
 COPY story-machine/reference.css story-machine/reference.js /usr/share/nginx/html/story-machine/
-RUN sed -i "s|__SHORTCLIPR_API_URL__|${VITE_API_URL}|g" /usr/share/nginx/html/story-machine/index.html
+RUN find /usr/share/nginx/html -type f -name "*.html" -exec sed -i "s|__SHORTCLIPR_API_URL__|${VITE_API_URL}|g" {} +
 COPY story-machine/assets/ /usr/share/nginx/html/story-machine/assets/
 COPY public/logo.svg public/favicon.svg /usr/share/nginx/html/public/
 COPY nginx.conf /etc/nginx/conf.d/default.conf
