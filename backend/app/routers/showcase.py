@@ -17,7 +17,7 @@ admin_router = APIRouter(prefix="/v1/admin/showcase", tags=["admin-showcase"])
 LANDING_THUMBNAIL_SLOTS = frozenset(f"landing_thumbnail_{index}" for index in range(1, 7))
 LANDING_COLLECTION_SLOTS = frozenset(f"collection_{category}_{index}" for category in ("learn", "story", "engage") for index in range(1, 4))
 LANDING_IMAGE_SLOTS = LANDING_THUMBNAIL_SLOTS | LANDING_COLLECTION_SLOTS | {"landing_hero_machine"}
-LANDING_MEDIA_SLOTS = frozenset({"landing_hero_background", "screening_feature", "screening_side"}) | LANDING_IMAGE_SLOTS
+LANDING_MEDIA_SLOTS = frozenset({"landing_hero_background", "landing_hero_clip", "screening_feature", "screening_side"}) | LANDING_IMAGE_SLOTS
 
 
 def is_public_media_slot(slot: str) -> bool:
@@ -29,6 +29,10 @@ def is_public_media_slot(slot: str) -> bool:
 def landing_media_kind(slot: str, content_type: str) -> str:
     if not is_public_media_slot(slot):
         raise HTTPException(status_code=422, detail="Unknown public media placement")
+    if slot == "landing_hero_clip":
+        if content_type in {"video/mp4", "video/webm", "video/quicktime"}:
+            return "video"
+        raise HTTPException(status_code=422, detail="The hero placement accepts MP4, MOV, or WebM video only")
     if content_type in {"image/jpeg", "image/png", "image/webp"}:
         return "image"
     if slot in LANDING_IMAGE_SLOTS or slot.startswith(("asset_poster_", "asset_background_", "asset_srcset_")):
