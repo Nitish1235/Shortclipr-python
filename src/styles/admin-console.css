@@ -131,3 +131,5 @@
 .admin-console .admin-empty{background:#0b2b70;color:#d2def7}
 .admin-console .placement-location>span{background:#dce8ff;color:#12316d}
 .admin-console .placement-location>span.is-uploaded{background:#ffd9d5;color:#8b2522}
+
+.admin-console .admin-media-thumb video{display:block;width:100%;height:100%;object-fit:cover;background:#071f53}
