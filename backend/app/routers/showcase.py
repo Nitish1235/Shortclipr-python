@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Resp
 from ..core.config import Settings, get_settings
 from ..db import get_pool
 from ..dependencies import CurrentUser, admin_user
-from ..models.schemas import AdminProjectResponse, AssignProjectToShowcaseRequest, LandingMediaResponse, ShowcaseResponse, ShowcaseUpdate
+from ..models.schemas import AdminProjectResponse, AssignProjectToShowcaseRequest, LandingMediaResponse, LandingMediaRevisionResponse, ShowcaseResponse, ShowcaseUpdate
 from ..services.storage import ObjectStorage
 
 
@@ -163,7 +163,7 @@ async def delete_landing_media(slot: str, _: CurrentUser = Depends(admin_user), 
     return Response(status_code=204)
 
 
-@admin_router.get("/landing-media/{slot}/history")
+@admin_router.get("/landing-media/{slot}/history", response_model=list[LandingMediaRevisionResponse])
 async def landing_media_history(slot: str, _: CurrentUser = Depends(admin_user), pool: asyncpg.Pool = Depends(get_pool)):
     if not is_public_media_slot(slot):
         raise HTTPException(status_code=404, detail="Public media placement not found")
