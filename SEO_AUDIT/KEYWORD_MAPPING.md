@@ -55,3 +55,19 @@ Create a new URL only when it has a distinct search job, unique evidence, and en
 - Link from guides to the relevant product page, not every product page.
 - Use unique examples, prompts, FAQs, and output demonstrations per page.
 - Review Search Console query overlap before merging or splitting pages.
+
+
+## New guide URLs added — 21 November 2026
+
+| URL | Primary query intent | Role |
+|---|---|---|
+| `/guides/how-to-create-animated-stories-with-ai/` | create animated stories with AI | story workflow |
+| `/guides/keep-same-character-across-scenes/` | keep same character across animated scenes | character continuity |
+| `/guides/how-to-write-ai-animation-prompts/` | write prompts for animated videos | prompt education |
+| `/guides/how-to-start-faceless-youtube-channel/` | start faceless YouTube channel | channel planning |
+| `/guides/how-to-make-educational-youtube-shorts/` | educational YouTube Shorts | learning workflow |
+| `/guides/build-repeatable-faceless-video-series/` | repeatable faceless video series | creator workflow |
+| `/guides/ai-animation-vs-traditional-animation/` | AI vs traditional animation | decision support |
+| `/guides/50-ai-animation-prompts/` | AI animation prompts | prompt resource |
+
+These are distinct informational intents. Keep existing commercial pages as destinations for tool/maker intent. Review Search Console query overlap before splitting or merging further pages. Do not add a generic “best AI animated video generators” ranking page until each tool's current scope, pricing, and evidence can be verified and disclosed.

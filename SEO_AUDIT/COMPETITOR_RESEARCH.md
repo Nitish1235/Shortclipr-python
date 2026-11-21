@@ -30,3 +30,12 @@ This positioning is credible only if the site shows actual outputs and accuratel
 - Record only verifiable features and clearly label date checked.
 - Review current search results for each target query and identify the dominant page intent.
 - Do not copy competitor wording or manufacture comparison advantages.
+
+
+## Live review update — 21 November 2026
+
+This is a live page review, not a measured ranking or keyword-volume study. Faceless.so's public blog lists 89 articles across niche, use-case, music, and social-growth topics. Its tutorials are organized as a learning library covering getting started, creation formats, and power features. Its public product positioning emphasizes repeatable formats, prompt-led workflows, editing, channel setup, and social publishing; these are competitor claims and must not be assumed to exist in ShortClipr. Faceless.video is a relevant direct competitor, but no feature/pricing comparison should be published until its live product and pricing are verified. Broader animation-generator comparison pages mix complete-video generators, short-clip generators, and template-based products; separate these categories rather than ranking unlike tools together.
+
+Sources reviewed 21 Nov 2026: https://www.faceless.so/blog ; https://www.faceless.so/tutorials ; https://www.faceless.so/ ; https://faceless.video/ ; https://zapier.com/blog/best-ai-video-generator/ .
+
+Build ShortClipr depth around prompt-led animated shorts, short narrative structure, visual explainers, recurring-character continuity guidance, prompt craft, and creator education. Only describe features documented in the current product scope or verified in the live application.
