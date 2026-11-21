@@ -25,7 +25,7 @@ function publicSource(value) {
 await walk(root);
 for (const page of pages) {
   let html = await readFile(page, 'utf8');
-  html = html.replace(/<html\\b(?![^>]*data-api-base)/i, '<html data-api-base="__SHORTCLIPR_API_URL__"');
+  html = html.replace(/<html\b(?![^>]*data-api-base)/i, '<html data-api-base="__SHORTCLIPR_API_URL__"');
   const relativePage = '/' + path.relative(root, page).replaceAll(path.sep, '/').replace(/\/index\.html$/, '/');
   html = html.replace(/<img\b[^>]*>/gi, tag => {
     const src = tag.match(/\bsrc=["']([^"']+)["']/i)?.[1];
