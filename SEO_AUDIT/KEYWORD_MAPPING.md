@@ -71,3 +71,11 @@ Create a new URL only when it has a distinct search job, unique evidence, and en
 | `/guides/50-ai-animation-prompts/` | AI animation prompts | prompt resource |
 
 These are distinct informational intents. Keep existing commercial pages as destinations for tool/maker intent. Review Search Console query overlap before splitting or merging further pages. Do not add a generic “best AI animated video generators” ranking page until each tool's current scope, pricing, and evidence can be verified and disclosed.
+
+
+## Faceless Shorts guide distinction — 21 November 2026
+
+- `/guides/how-to-make-faceless-youtube-shorts/` owns the platform-specific YouTube Shorts workflow for creators who do not appear on camera.
+- `/guides/how-to-make-faceless-ai-shorts/` owns the AI-assisted production workflow, from creative brief through generation review and human editorial control.
+- Both pages currently share introductory language and overlapping general advice. See `SEO_AUDIT/FACELESS_SHORTS_GUIDE_OVERLAP_REVIEW.md` for the qualitative assessment and recommended differentiation.
+- Keep both URLs provisionally. Do not consolidate without Search Console query/page data and backlink review.
