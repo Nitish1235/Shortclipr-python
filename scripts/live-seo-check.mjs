@@ -11,7 +11,7 @@ check(root.status === 301, `/: expected 301, received ${root.status}`);
 check(root.headers.get('location') === '/animation-maker/', `/: expected Location /animation-maker/, received ${root.headers.get('location')}`);
 
 const legacyLanding = await request('/story-machine/');
-check(legacyLanding.status === 301 && legacyLanding.headers.get('location') === '/animation-maker/', `/animation-maker/: expected redirect to /animation-maker/, received ${legacyLanding.status} ${legacyLanding.headers.get('location')}`);
+check(legacyLanding.status === 301 && legacyLanding.headers.get('location') === '/animation-maker/', `/story-machine/: expected redirect to /animation-maker/, received ${legacyLanding.status} ${legacyLanding.headers.get('location')}`);
 
 const landing = await request('/animation-maker/');
 const landingHtml = await landing.text();
