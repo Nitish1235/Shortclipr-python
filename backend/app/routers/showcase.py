@@ -179,8 +179,8 @@ async def landing_media_history(slot: str, _: CurrentUser = Depends(admin_user),
 
 @admin_router.post("/landing-media/{slot}/restore/{revision_id}", response_model=LandingMediaResponse)
 async def restore_landing_media_revision(
-    slot: str, revision_id: UUID, user: CurrentUser = Depends(admin_user),
-    pool: asyncpg.Pool = Depends(get_pool), request: Request = None,
+    slot: str, revision_id: UUID, request: Request,
+    user: CurrentUser = Depends(admin_user), pool: asyncpg.Pool = Depends(get_pool),
 ):
     if not is_public_media_slot(slot):
         raise HTTPException(status_code=404, detail="Public media placement not found")
