@@ -346,7 +346,7 @@ function PublicSiteMediaAdmin(){
       const asset=assets.find(value=>value.slot===item.slot)
       return <article className="site-media-card" key={item.slot}>
         <div className="site-media-preview">{asset?.mediaKind==='video'?<video src={asset.mediaUrl} muted controls preload="metadata"/>:<img src={asset?.mediaUrl||item.defaultUrl} alt={asset?.title||item.title}/>}<span>{asset?'CUSTOM UPLOAD':'BUILT-IN DEFAULT'}</span></div>
-        <div className="site-media-card-copy"><p>{item.slot}</p><h3>{item.title}</h3><small>{item.pages.length} page{item.pages.length===1?'':'s'} · {item.mediaKind} default</small><div className="site-media-pages">{item.pages.slice(0,3).map(page=><code key={page}>{page}</code>)}{item.pages.length>3&&<code>+{item.pages.length-3} more</code>}</div></div>
+        <div className="site-media-card-copy"><p>{item.slot}</p><h3>{item.title}</h3><small>{item.pages.length} page{item.pages.length===1?'':'s'} · {item.role} · {item.mediaKind} default</small><div className="site-media-pages">{item.pages.slice(0,3).map(page=><code key={page}>{page}</code>)}{item.pages.length>3&&<code>+{item.pages.length-3} more</code>}</div></div>
         <details className="site-media-editor"><summary>{asset?'Replace asset':'Upload replacement'} ↗</summary><form onSubmit={event=>save(event,item.slot)}>
           <input type="hidden" name="slot" value={item.slot}/>
           <label>Asset title<input name="title" required maxLength={100} defaultValue={asset?.title||item.title}/></label>
