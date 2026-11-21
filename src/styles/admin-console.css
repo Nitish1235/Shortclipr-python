@@ -1,0 +1,47 @@
+/* Separate owner console. Deliberately unrelated to the creator dashboard. */
+.admin-console { min-height:100vh; background:#210b3f; color:#fff; display:grid; grid-template-columns:260px minmax(0,1fr); font-family:Inter,'DM Sans',sans-serif; }
+.admin-console * { box-sizing:border-box; }
+.admin-console-sidebar { position:sticky; top:0; height:100vh; padding:28px 20px; background:#160629; border-right:1px solid #7144a4; display:flex; flex-direction:column; gap:28px; }
+.admin-console-brand { display:flex; align-items:center; gap:10px; color:white; font-weight:900; font-size:22px; letter-spacing:-.06em; text-decoration:none; }
+.admin-console-brand img { width:30px;height:30px; }
+.admin-console-brand span { color:#e6ff00; }
+.admin-console-overline { color:#b99bd7; font:800 10px/1.4 ui-monospace,monospace; letter-spacing:.16em; text-transform:uppercase; }
+.admin-console-nav { display:grid; gap:7px; }
+.admin-console-nav a { color:#e9dcf7; text-decoration:none; padding:13px 14px; border:1px solid transparent; display:flex; align-items:center; justify-content:space-between; font-size:12px; font-weight:800; }
+.admin-console-nav a:hover,.admin-console-nav a.active { background:#6c21d4; border-color:#e6ff00; color:white; }
+.admin-console-nav a span { color:#e6ff00; }
+.admin-console-sidebar-foot { margin-top:auto; display:grid; gap:10px; }
+.admin-console-sidebar-foot a,.admin-console-sidebar-foot button { min-height:44px; padding:12px; background:transparent; color:white; border:1px solid #76539a; text-align:left; font-weight:700; text-decoration:none; cursor:pointer; }
+.admin-console-sidebar-foot button:hover,.admin-console-sidebar-foot a:hover { background:#e6ff00; color:#210b3f; }
+.admin-console-main { min-width:0; }
+.admin-console-topbar { min-height:76px; padding:16px clamp(20px,4vw,56px); display:flex; justify-content:space-between; align-items:center; gap:18px; background:#2e0c58; border-bottom:1px solid #7144a4; }
+.admin-console-topbar strong { display:block; font-size:12px; letter-spacing:.12em; }
+.admin-console-topbar small { display:block; color:#cbb6e4; margin-top:5px; font-size:11px; }
+.admin-console-topbar-actions { display:flex; gap:10px; align-items:center; }
+.admin-console-topbar-actions a,.admin-console-topbar-actions button { border:1px solid #e6ff00; color:#e6ff00; background:transparent; padding:11px 14px; text-decoration:none; font-weight:800; font-size:11px; cursor:pointer; }
+.admin-console-content { padding:0 clamp(16px,3vw,44px) 70px; max-width:1600px; margin:auto; }
+.admin-console .studio-page { padding:0; color:white; }
+.admin-console .page-intro { padding:50px 0 34px; border-bottom:1px solid #76539a; }
+.admin-console .page-intro h1,.admin-console .admin-page h2 { color:white; }
+.admin-console .kicker { color:#e6ff00; }
+.admin-console .admin-landing-status,.admin-console .studio-placement-map,.admin-console .landing-media-admin,.admin-console .admin-grid,.admin-console .admin-jobs,.admin-console .worker-fleet-admin,.admin-console .voice-library-admin { background:#2b104d; border:1px solid #76539a; margin:20px 0; padding:clamp(18px,3vw,32px); color:white; }
+.admin-console .landing-media-intro h2,.admin-console .admin-landing-status h2,.admin-console .worker-fleet-head h2,.admin-console .voice-library-admin h2 { color:white; }
+.admin-console .landing-media-intro h2 em,.admin-console .admin-landing-status h2 em { color:#e6ff00; }
+.admin-console .landing-placement-card,.admin-console .placement-route,.admin-console .upload-panel,.admin-console .media-library,.admin-console .admin-job,.admin-console .worker-region-card,.admin-console .voice-admin-grid article { background:#19082e; color:white; border:1px solid #76539a; }
+.admin-console .placement-heading>b,.admin-console .upload-panel h2,.admin-console .section-heading h2,.admin-console .admin-jobs-heading h2 { color:white; }
+.admin-console .placement-heading p,.admin-console .placement-heading small,.admin-console .admin-job small,.admin-console .admin-job p { color:#cbb6e4; }
+.admin-console .placement-preview,.admin-console .placement-fallback,.admin-console .editorial-slot-preview { background:#3d1b61; color:white; }
+.admin-console .placement-editor summary,.admin-console .placement-location a,.admin-console .admin-media-actions button,.admin-console .admin-job-actions button { color:#e6ff00; }
+.admin-console .placement-editor form,.admin-console .placement-editor label { color:white; }
+.admin-console .placement-editor input,.admin-console .placement-editor textarea,.admin-console .placement-editor select,.admin-console .upload-panel input,.admin-console .upload-panel textarea,.admin-console .upload-panel select { background:#12051f; color:white; border:1px solid #76539a; }
+.admin-console .admin-media-item,.admin-console .admin-job { border-color:#76539a; }
+.admin-console .admin-media-item h3,.admin-console .admin-job h3 { color:white; }
+.admin-console .lime-button,.admin-console .admin-job-actions .job-primary { background:#e6ff00; color:#210b3f; border:2px solid #e6ff00; font-weight:900; }
+.admin-console .admin-stamp { border-color:#e6ff00; color:#e6ff00; }
+.admin-console .worker-fleet-summary article { background:#19082e; border:1px solid #76539a; }
+.admin-console .worker-fleet-summary b,.admin-console .worker-region-card strong { color:#e6ff00; }
+.admin-console .voice-admin-grid audio { width:100%; }
+.admin-console .error-banner { background:#5a1731; color:white; border:1px solid #ff9ab4; }
+.admin-console .admin-empty { background:#19082e; color:#cbb6e4; }
+@media(max-width:900px) { .admin-console { grid-template-columns:1fr; } .admin-console-sidebar { position:relative; height:auto; padding:18px; } .admin-console-nav { grid-template-columns:repeat(2,minmax(0,1fr)); } .admin-console-sidebar-foot { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:560px) { .admin-console-topbar { align-items:flex-start; flex-direction:column; } .admin-console-nav { grid-template-columns:1fr 1fr; } .admin-console-content { padding-inline:12px; } .admin-console .landing-placement-grid { grid-template-columns:1fr; } }
