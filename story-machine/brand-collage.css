@@ -1,5 +1,5 @@
-/* ShortClipr purple collage identity — applied to the entire public landing page. */
-:root{--paper:#fffdf8;--ink:#17131d;--lime:#e6ff00;--purple:#6418d8;--purple-deep:#35066f;--purple-mid:#7b2be5;--purple-pale:#f0e7ff;--line:#d9c9ef}
+/* ShortClipr purple-and-lime brand identity — applied to the public landing page. */
+:root{--paper:#fffdf8;--ink:#17131d;--lime:#e6ff00;--purple:#6417d7;--purple-deep:#3d087f;--purple-mid:#7b2be5;--purple-pale:#eee4ff;--line:#d9c9ef}
 html{background:var(--purple-deep)}
 body{background:var(--purple);color:white;background-image:radial-gradient(circle at 12% 22%,#ffffff16 0 1px,transparent 1.7px),radial-gradient(circle at 82% 71%,#16003b35 0 1px,transparent 2px),linear-gradient(135deg,#7b28eb,#4b0db3 56%,#6314d5);background-size:19px 19px,27px 27px,100% 100%;font-family:'DM Sans',sans-serif}
 .reference-opening{background:transparent;color:white;position:relative}
@@ -70,7 +70,7 @@ body{background:var(--purple);color:white;background-image:radial-gradient(circl
 .price-card .button{background:#17131d;color:white;border-color:#17131d;box-shadow:4px 4px 0 var(--purple)}
 .homepage-answer{background:#fff;color:#17131d;border:3px solid #17131d;box-shadow:7px 7px 0 #2b0758}
 .homepage-answer h2{color:var(--purple)}
-.faq-section{background:#2b0758;padding-block:80px}
+.faq-section{background:#3d087f;padding-block:80px}
 .faq-list details{border-color:#8d63bc}
 .faq-list summary,.faq-list details p{color:white}
 .faq-list summary span{color:var(--lime)}
@@ -79,15 +79,3 @@ body{background:var(--purple);color:white;background-image:radial-gradient(circl
 .closing-section .button{background:#17131d;color:white;border-color:#17131d;box-shadow:5px 5px 0 white}
 .footer{color:white;border-top:1px solid #ffffff55}
 .footer a:hover{color:var(--lime)}
-@media(max-width:700px){
- .reference-opening .hero{height:auto;padding:35px 0 24px}
- .reference-opening .hero-copy{width:100%}
- .reference-opening .hero h1{font-size:clamp(64px,15vw,104px)}
- .reference-opening .hero h1 .headline-last{font-size:clamp(44px,10vw,70px)}
- .reference-opening .hero-description{font-size:14px;max-width:100%}
- .reference-opening .machine-wrap{position:relative;left:auto;top:auto;width:100%;margin:20px auto 0}
- .reference-opening .machine-note,.reference-opening .out-note,.reference-opening .idea-arrow,.reference-opening .machine-leaders{display:none}
- .reference-workflow ol{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
- .faceless-promise{clip-path:none;padding:36px 22px}
- .collection-tabs{overflow-x:auto;flex-wrap:nowrap}
-}
