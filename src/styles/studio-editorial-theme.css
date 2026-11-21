@@ -1,0 +1,184 @@
+/* ShortClipr studio — editorial control room
+   A restrained print-inspired system: ink, warm stock, cobalt and vermilion.
+   Scoped to the authenticated studio; owner console retains its own shell. */
+:root{
+  --sc-ink:#17191d;--sc-paper:#f3efe6;--sc-stock:#e8e1d5;--sc-cobalt:#3155d9;
+  --sc-red:#e6533d;--sc-yellow:#f2c84b;--sc-mint:#b9d8c4;--sc-muted:#9a9a91;
+  --sc-rule:rgba(243,239,230,.17);--sc-display:'Barlow Condensed',Impact,sans-serif;
+}
+.studio-shell{background:var(--sc-ink);color:var(--sc-paper)}
+.studio-shell .rail{background:#111317;border-right:1px solid #34363b}
+.studio-shell .wordmark span{font-size:21px;letter-spacing:-.055em}
+.studio-shell .wordmark i{color:var(--sc-red)}
+.studio-shell .new-film{background:var(--sc-cobalt);color:white;border:1px solid #6f85ec;box-shadow:4px 4px 0 var(--sc-red);font-weight:800}
+.studio-shell .new-film:hover{background:#4668e7;transform:translate(-1px,-1px)}
+.studio-shell .rail-nav p{color:#777d87}
+.studio-shell .rail-nav a{border-left:2px solid transparent;border-radius:0;color:#c7c8c6}
+.studio-shell .rail-nav a.active{background:#242832;border-left-color:var(--sc-yellow);color:white}
+.studio-shell .rail-nav a.active .nav-mark{color:var(--sc-yellow)}
+.studio-shell .rail-nav a small{color:#666d79}
+.studio-shell .mini-credit i{background:#343941}
+.studio-shell .mini-credit em{background:var(--sc-yellow)}
+.studio-shell .profile-button>span,.studio-shell .top-avatar{background:var(--sc-yellow);color:var(--sc-ink)}
+.studio-shell .workbench{background:var(--sc-ink)}
+.studio-shell .topbar{background:rgba(23,25,29,.94);backdrop-filter:blur(16px);border-color:#34363b}
+.studio-shell .live-dot{background:var(--sc-mint);box-shadow:0 0 0 4px #b9d8c41c}
+.studio-shell .search-button,.studio-shell .top-credit-link,.studio-shell .account-trigger{background:#202329;border:1px solid #3a3d45;border-radius:3px}
+.studio-shell .search-button:hover,.studio-shell .top-credit-link:hover{border-color:var(--sc-yellow)}
+.studio-shell .account-popover{background:#202329;border:1px solid #4b4e56;box-shadow:12px 16px 0 #090a0c}
+.studio-shell .account-popover button:hover{background:#30343d}
+.studio-shell .studio-page{max-width:1600px;padding-top:clamp(34px,4.2vw,68px)}
+.studio-shell .kicker{color:var(--sc-yellow);letter-spacing:.19em}
+.studio-shell .page-intro{align-items:flex-end;margin-bottom:clamp(30px,4vw,58px)}
+.studio-shell .page-intro h1{font-family:var(--sc-display);font-size:clamp(62px,7.5vw,116px);line-height:.82;letter-spacing:-.035em;text-transform:uppercase}
+.studio-shell .page-intro h1 em{color:var(--sc-yellow);font-style:normal}
+.studio-shell .page-intro>p{color:#b5b6b4;max-width:360px;font-size:14px;line-height:1.7}
+.studio-shell .hand-note{color:var(--sc-red)!important;font-family:'Permanent Marker',cursive!important}
+.studio-shell .command-grid{grid-template-columns:minmax(0,1.6fr) minmax(280px,.8fr);gap:14px}
+.studio-shell .quick-create,.studio-shell .credit-card{border-radius:2px;min-height:390px;padding:clamp(24px,3vw,42px)}
+.studio-shell .quick-create{background:var(--sc-cobalt);color:white;isolation:isolate}
+.studio-shell .quick-create:after{content:"";position:absolute;inset:0;z-index:-1;opacity:.17;background-image:radial-gradient(#fff 0.7px,transparent .7px);background-size:8px 8px;mask-image:linear-gradient(120deg,#000,transparent 75%)}
+.studio-shell .quick-create .panel-label{border-color:#ffffff55}
+.studio-shell .quick-create h2{font-size:clamp(60px,6.2vw,92px);line-height:.83;margin:clamp(40px,5vw,70px) 0 20px;max-width:620px}
+.studio-shell .quick-create h2 span{color:var(--sc-yellow)}
+.studio-shell .quick-create>p{max-width:410px;color:#e2e7ff;line-height:1.65}
+.studio-shell .ink-button{background:var(--sc-ink);color:white;border:1px solid #ffffff70;border-radius:0;box-shadow:5px 5px 0 var(--sc-red)}
+.studio-shell .ink-button:hover{background:#2a2d34;transform:translate(-1px,-1px)}
+.studio-shell .orbit-art{border-color:#ffffff77;opacity:.88}
+.studio-shell .orbit-art:before,.studio-shell .orbit-art:after{border-color:#ffffff77}
+.studio-shell .orbit-art>i{background:var(--sc-yellow)}
+.studio-shell .credit-card{background:var(--sc-stock);color:var(--sc-ink)}
+.studio-shell .credit-card .panel-label{border-color:#25272a55}
+.studio-shell .credit-number strong{font-size:clamp(78px,8vw,118px)}
+.studio-shell .credit-meter{background:#c9c0b2}
+.studio-shell .credit-meter i{background:var(--sc-red)}
+.studio-shell .credit-card>a{border-color:#25272a33}
+.studio-shell .recent-block,.studio-shell .reel-section{margin-top:clamp(54px,7vw,94px)}
+.studio-shell .section-heading h2{font-size:clamp(44px,5vw,70px);letter-spacing:-.02em}
+.studio-shell .section-heading>a{color:var(--sc-yellow);border-color:#777b80}
+.studio-shell .project-table{border-color:#565960}
+.studio-shell .project-row{border-color:#34373d;min-height:82px}
+.studio-shell .project-row:hover{background:#22262d}
+.studio-shell .project-thumb{background:var(--sc-red);color:white;border-radius:0}
+.studio-shell .project-thumb:after{border-color:#ffffff88}
+.studio-shell .project-cell small,.studio-shell .project-title small{color:#a1a4aa}
+.studio-shell .status-pill{letter-spacing:.1em}
+.studio-shell .status-pill:before{background:var(--sc-yellow)}
+.studio-shell .status-pill.complete:before{background:var(--sc-mint)}
+.studio-shell .progress-track{background:#383c44}
+.studio-shell .progress-track i{background:var(--sc-yellow)}
+.studio-shell .screening-peek{border-radius:2px;background:#0f1115;border:1px solid #393c43}
+.studio-shell .screening-copy h2 em{color:var(--sc-yellow)}
+.studio-shell .screening-stack{background:var(--sc-red)}
+.studio-shell .stack-card{border:5px solid var(--sc-paper);box-shadow:9px 10px 0 #17191d}
+.studio-shell .stack-card:nth-child(1){background-color:var(--sc-mint)}
+.studio-shell .stack-card:nth-child(2){background-color:var(--sc-yellow)}
+.studio-shell .stack-card:nth-child(3){background-color:var(--sc-cobalt)}
+.studio-shell .stack-card i{background:var(--sc-yellow)}
+/* Creation desk: make each step a deliberate editorial spread, not a generic form. */
+.studio-shell .numbered-panel{grid-template-columns:46px minmax(190px,.72fr) minmax(0,1.55fr);gap:clamp(18px,2.5vw,36px);padding:clamp(30px,4vw,54px) 0;border-color:#4b4e54}
+.studio-shell .panel-number{color:var(--sc-red);font-weight:800}
+.studio-shell .form-heading h2{font-size:clamp(44px,4.8vw,70px);line-height:.85}
+.studio-shell .form-heading>p:last-child{color:#aeb0b2}
+.studio-shell .brief-field textarea{background:var(--sc-paper);color:var(--sc-ink);border:1px solid #c8c0b4;border-radius:0;box-shadow:7px 7px 0 var(--sc-cobalt);font-size:16px}
+.studio-shell .library-tabs{gap:0;background:#343840;border:1px solid #51555d}
+.studio-shell .library-tabs button{background:#202329;border:0;border-right:1px solid #51555d;color:#c9cbd0;min-height:106px}
+.studio-shell .library-tabs button:last-child{border-right:0}
+.studio-shell .library-tabs button[aria-selected=true]{background:var(--sc-yellow);color:var(--sc-ink)}
+.studio-shell .library-tabs button>span{color:var(--sc-red)}
+.studio-shell .type-grid{gap:10px}
+.studio-shell .type-card{border:1px solid #444850;background:#202329;border-radius:0;min-height:164px}
+.studio-shell .type-card:before{background:linear-gradient(90deg,#121419ed 0%,#121419a8 48%,#12141922 100%),linear-gradient(0deg,#121419b8,transparent 70%)}
+.studio-shell .type-card .clip-type-art{filter:saturate(.72) contrast(1.06) brightness(.83)}
+.studio-shell .type-card:hover{border-color:var(--sc-yellow);box-shadow:4px 4px 0 var(--sc-red)}
+.studio-shell .type-card.selected{border-color:var(--sc-yellow);box-shadow:4px 4px 0 var(--sc-cobalt)}
+.studio-shell .type-card.selected:after{content:"SELECTED";position:absolute;right:9px;top:9px;z-index:3;background:var(--sc-yellow);color:var(--sc-ink);padding:4px 6px;font:800 8px monospace;letter-spacing:.08em}
+.studio-shell .type-card.selected:before{background:linear-gradient(90deg,#151923f2 0%,#151923b5 48%,#3155d944 100%),linear-gradient(0deg,#151923bd,transparent 70%)}
+.studio-shell .direction-grid{gap:24px 28px}
+.studio-shell .direction-grid legend{color:#f0eee8;font-size:12px;margin-bottom:12px}
+.studio-shell .direction-grid select,.studio-shell .upload-panel input,.studio-shell .upload-panel select,.studio-shell .upload-panel textarea{background:#22262d;border:1px solid #50545d;border-radius:0;color:var(--sc-paper);min-height:48px}
+.studio-shell .choice{border:1px solid #555963;background:#202329;color:#d5d6d4;border-radius:0;min-height:46px}
+.studio-shell .choice.active{background:var(--sc-yellow);border-color:var(--sc-yellow);color:var(--sc-ink);font-weight:800}
+.studio-shell .choice:hover:not(:disabled){border-color:var(--sc-red)}
+.studio-shell .launch-panel{background:var(--sc-red);color:white;border-radius:0;box-shadow:7px 7px 0 var(--sc-yellow)}
+.studio-shell .launch-panel .kicker{color:#ffe4a1}
+.studio-shell .launch-panel h2{font-size:clamp(48px,5vw,76px);line-height:.88}
+.studio-shell .launch-panel h2 span{color:var(--sc-yellow)}
+.studio-shell .launch-ticket{background:#f3efe6;color:var(--sc-ink);border:1px solid #ffffff88;border-radius:0}
+.studio-shell .launch-ticket strong{color:var(--sc-cobalt)}
+.studio-shell .launch-panel button,.studio-shell .launch-panel .lime-button{background:var(--sc-ink);color:white;border-radius:0}
+/* Archive, player and screening room */
+.studio-shell .project-toolbar{border-bottom:1px solid #484c54;padding-bottom:18px;margin-bottom:20px}
+.studio-shell .filter-row button{border:1px solid #4a4e56;background:#202329;color:#c8c9ca;border-radius:0}
+.studio-shell .filter-row button.active{background:var(--sc-yellow);color:var(--sc-ink);border-color:var(--sc-yellow)}
+.studio-shell .project-toolbar label{background:#202329;border:1px solid #4a4e56;border-radius:0}
+.studio-shell .project-toolbar input{background:transparent;color:white}
+.studio-shell .project-stage{background:#0e1014;border:1px solid #42464e;border-radius:0}
+.studio-shell .project-aside{background:#e8e1d5;color:#17191d;border-radius:0}
+.studio-shell .project-aside .kicker{color:#3155d9}
+.studio-shell .project-aside h2{font-size:clamp(40px,4vw,58px)}
+.studio-shell .project-aside dl div{border-color:#c8c0b4}
+.studio-shell .project-aside dt{color:#77766f}
+.studio-shell .project-aside dd{color:#17191d}
+.studio-shell .project-aside>p:not(.kicker){color:#595a58}
+.studio-shell .project-aside .cancel-production{border-color:#c14a3a;color:#a33b2e}
+.studio-shell .screening-page .premiere-stage{border:1px solid #454951;border-radius:0;background:#202329}
+.studio-shell .screening-page .premiere-info{background:var(--sc-stock);color:var(--sc-ink)}
+.studio-shell .screening-page .premiere-info>span,.studio-shell .screening-page .premiere-meta{color:#3155d9}
+.studio-shell .screening-page .premiere-info h2{font-size:clamp(38px,4vw,62px)}
+.studio-shell .screening-page .video-card{background:#202329;border:1px solid #454951;border-radius:0;color:white}
+.studio-shell .screening-page .video-card:hover{border-color:var(--sc-yellow);transform:translateY(-3px)}
+.studio-shell .screening-page .department-card{background:#252a34;border:1px solid #4c5361;border-radius:0}
+.studio-shell .screening-page .department-card:nth-child(2){background:var(--sc-cobalt)}
+.studio-shell .screening-page .department-card:nth-child(3){background:var(--sc-red)}
+/* Billing retains the established plan and checkout structure, with palette alignment. */
+.studio-shell .credits-page .kicker,.studio-shell .credits-page .render-section-heading .kicker{color:var(--sc-red)}
+.studio-shell .credits-page .credits-intro h1 em{color:var(--sc-yellow)}
+.studio-shell .credits-page .render-balance{border-radius:0;box-shadow:6px 6px 0 var(--sc-cobalt)}
+.studio-shell .credits-page .render-balance-side{background:#202b27}
+.studio-shell .credits-page .render-balance-side>div>span{color:var(--sc-mint)}
+.studio-shell .credits-page .render-balance-side button,.studio-shell .credits-page .render-balance-side a{background:var(--sc-yellow);color:var(--sc-ink);border-radius:0}
+.studio-shell .credits-page .render-plan{border-radius:0}
+.studio-shell .credits-page .render-plan-featured{background:#263a35;border-color:var(--sc-mint)}
+.studio-shell .credits-page .render-plan-top>span{border-radius:0;background:var(--sc-yellow);color:var(--sc-ink)}
+.studio-shell .credits-page .render-plan-featured button{background:var(--sc-yellow);border-color:var(--sc-yellow)}
+.studio-shell .credits-page .render-plan-current{box-shadow:0 0 0 2px var(--sc-red) inset}
+.studio-shell .credits-page .render-balance-meter i{background:var(--sc-red)}
+.studio-shell .credits-page .render-activity-row>span:last-child{color:var(--sc-yellow)}
+.studio-shell .credits-page .billing-notice{border-radius:0}
+.studio-shell .credits-page .upgrade-brief{border-radius:0;background:#2b3039;border-left:4px solid var(--sc-yellow)}
+/* Focus, keyboard and reduced-motion states */
+.studio-shell :is(a,button,input,textarea,select):focus-visible{outline:2px solid var(--sc-yellow);outline-offset:3px}
+.studio-shell button,.studio-shell a{transition:background-color .18s ease,border-color .18s ease,color .18s ease,transform .18s ease}
+@media(max-width:1050px){
+ .studio-shell .command-grid{grid-template-columns:1fr 1fr}
+ .studio-shell .quick-create,.studio-shell .credit-card{min-height:340px}
+ .studio-shell .orbit-art{transform:scale(.72);transform-origin:100% 0;right:0;top:20%}
+ .studio-shell .numbered-panel{grid-template-columns:38px minmax(170px,.65fr) minmax(0,1.4fr)}
+ .studio-shell .type-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:700px){
+ .studio-shell .page-intro{display:block}
+ .studio-shell .page-intro h1{font-size:clamp(54px,15vw,78px);line-height:.88}
+ .studio-shell .page-intro>p{margin-top:18px}
+ .studio-shell .command-grid{grid-template-columns:1fr}
+ .studio-shell .quick-create,.studio-shell .credit-card{min-height:320px;padding:22px}
+ .studio-shell .quick-create h2{font-size:clamp(58px,16vw,78px);margin:34px 0 18px}
+ .studio-shell .orbit-art{transform:scale(.55);right:-20px;top:18%}
+ .studio-shell .numbered-panel{display:block;padding:30px 0}
+ .studio-shell .panel-number{margin-bottom:15px}
+ .studio-shell .form-heading{margin-bottom:22px}
+ .studio-shell .form-heading h2{font-size:clamp(42px,12vw,58px)}
+ .studio-shell .library-tabs{grid-template-columns:1fr!important}
+ .studio-shell .library-tabs button{border-right:0;border-bottom:1px solid #51555d;min-height:74px}
+ .studio-shell .type-grid{grid-template-columns:1fr 1fr!important}
+ .studio-shell .type-card{min-height:148px}
+ .studio-shell .direction-grid{grid-template-columns:1fr}
+ .studio-shell .direction-grid .style-field{grid-column:auto}
+ .studio-shell .launch-panel{box-shadow:4px 4px 0 var(--sc-yellow)}
+ .studio-shell .screening-peek{grid-template-columns:1fr}
+ .studio-shell .screening-copy{padding:28px 22px}
+ .studio-shell .screening-stack{min-height:300px}
+ .studio-shell .credits-page .render-balance{box-shadow:4px 4px 0 var(--sc-cobalt)}
+}
+@media(prefers-reduced-motion:reduce){.studio-shell button,.studio-shell a{transition:none}}
