@@ -581,7 +581,7 @@ async def main() -> None:
     db_url = os.environ["SUPABASE_DB_URL"]
     secret = os.environ["INTERNAL_TASK_SECRET"]
     api_targets = targets("API_WORKER_URLS", "API_WORKER_REGIONS", "API_REGION_SOFT_CAP", 12) or targets("WORKER_SERVICE_URLS", "WORKER_SERVICE_REGIONS", "API_REGION_SOFT_CAP", 12)
-    render_targets = targets("FFMPEG_WORKER_URLS", "FFMPEG_WORKER_REGIONS", "FFMPEG_REGION_SOFT_CAP", 3) or targets("WORKER_SERVICE_URLS", "WORKER_SERVICE_REGIONS", "FFMPEG_REGION_SOFT_CAP", 4)
+    render_targets = targets("FFMPEG_WORKER_URLS", "FFMPEG_WORKER_REGIONS", "FFMPEG_REGION_SOFT_CAP", 3) or targets("WORKER_SERVICE_URLS", "WORKER_SERVICE_REGIONS", "FFMPEG_REGION_SOFT_CAP", 3)
     if not api_targets or not render_targets:
         raise RuntimeError("API_WORKER_URLS and FFMPEG_WORKER_URLS are required")
     logger.info(
