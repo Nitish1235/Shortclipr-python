@@ -92,6 +92,59 @@ def validate_scene_plan(scenes: Any, total_frames: int) -> list[dict[str, Any]]:
         raise ValueError("Shot plan must cover the complete film duration")
     return normalized
 
+
+_DRAW_HELPER_CALL = re.compile(r"(?<![\w$.])\b(draw[A-Z][A-Za-z0-9_]*)\s*\(")
+_DRAW_HELPER_DECL = re.compile(
+    r"\bfunction\s+(draw[A-Z][A-Za-z0-9_]*)\s*\(|"
+    r"\b(?:const|let|var)\s+(draw[A-Z][A-Za-z0-9_]*)\s*=\s*(?:function\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)"
+)
+
+
+def find_unresolved_draw_helpers(shared_source: str, shot_sources: list[str]) -> list[str]:
+    """Return unqualified drawX() calls that have no shared or shot-local definition.
+
+    Only the project helper naming convention (draw + Uppercase) is checked. Canvas
+    methods such as g.drawImage are property calls and intentionally excluded.
+    """
+    shared = {
+        name
+        for match in _DRAW_HELPER_DECL.finditer(shared_source)
+        for name in match.groups()
+        if name
+    }
+    unresolved: set[str] = set()
+    for source in [shared_source, *shot_sources]:
+        local = {
+            name
+            for match in _DRAW_HELPER_DECL.finditer(source)
+            for name in match.groups()
+            if name
+        }
+        for name in _DRAW_HELPER_CALL.findall(source):
+            if name not in shared and name not in local:
+                unresolved.add(name)
+    return sorted(unresolved)
+
+
+def validate_draw_helper_definitions(source: str, required_names: list[str]) -> None:
+    """Ensure a generated helper fragment actually defines every requested helper."""
+    declared = {
+        name
+        for match in _DRAW_HELPER_DECL.finditer(source)
+        for name in match.groups()
+        if name
+    }
+    missing = sorted(set(required_names) - declared)
+    if missing:
+        raise ValueError("Generated helper library did not define: " + ", ".join(missing))
+    for name in required_names:
+        signature = re.search(
+            rf"\bfunction\s+{re.escape(name)}\s*\(\s*g\s*(?:,|\))",
+            source,
+        )
+        if not signature:
+            raise ValueError(f"Generated helper {name} must accept the Canvas context as its first argument")
+
 def validate_generated_fragment(source: Any, label: str, max_chars: int) -> str:
     if not isinstance(source, str) or not 20 <= len(source) <= max_chars:
         raise ValueError(f"{label} source length is outside allowed bounds")

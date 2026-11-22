@@ -32,6 +32,8 @@ from .animation_contracts import (
     MAX_SHARED_SOURCE,
     MAX_SHOT_SOURCE,
     validate_generated_fragment,
+    find_unresolved_draw_helpers,
+    validate_draw_helper_definitions,
     validate_scene_plan,
     validate_visual_bible,
 )
@@ -189,6 +191,9 @@ Visual bible:
             MAX_SHARED_SOURCE,
         )
 
+        shared_helper_names = sorted(set(re.findall(
+            r"\bfunction\s+(draw[A-Z][A-Za-z0-9_]*)\s*\(", shared_js
+        )))
         semaphore = asyncio.Semaphore(self.max_parallel_shots)
 
         async def compile_one(scene: dict[str, Any]) -> dict[str, Any]:
@@ -202,8 +207,14 @@ Generate only the drawing body for one shot. Return JSON only:
 The body is inserted inside:
 function drawShot_{scene["index"]}(g, t, env, absoluteTime) {{ ... }}
 Here t is local shot time starting at zero; absoluteTime is film time in seconds.
-The shared drawing library is already defined before this function. Reuse its named
-functions for recurring characters and props; do not redraw their defining features.
+The shared drawing library is already defined before this function.
+VERIFIED SHARED DRAW HELPERS (exact names): {json.dumps(shared_helper_names)}
+You may call only these shared helpers. If this shot needs another reusable drawing
+function, define that function inside this draw_body before calling it. Never invent
+a helper call and assume its implementation exists. Every custom drawX() call must
+either be in the verified shared list above or have its complete function definition
+inside this draw_body. Reuse shared functions for recurring characters and props;
+do not redraw their defining features.
 Use only CanvasRenderingContext2D methods on g, local variables, standard Math and
 the shared helper functions. Redraw the full shot deterministically from t. No state
 accumulation, random numbers, DOM/browser globals, imports, exports, network, file access,
@@ -234,6 +245,67 @@ SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s
             }
 
         compiled = await _gather_cancel_on_error(*(compile_one(scene) for scene in scenes))
+
+        # A model may still reference a helper it forgot to define. Generate those
+        # implementations explicitly, validate their declarations, and only then
+        # assemble the film. Keep this bounded to avoid recursive code-generation loops.
+        for helper_pass in range(2):
+            missing_helpers = find_unresolved_draw_helpers(
+                shared_js,
+                [shot["draw_body"] for shot in compiled],
+            )
+            if not missing_helpers:
+                break
+            helper_prompt = f"""
+You are ShortClipr's reusable Canvas 2D drawing-function engineer.
+Implement every missing helper listed below as ordinary named JavaScript function
+declarations. Return JSON only: {{"helpers_js":"JavaScript source"}}.
+MISSING HELPERS: {json.dumps(missing_helpers)}
+STYLE: {style_id}
+VISUAL BIBLE: {json.dumps(visual_bible, ensure_ascii=False)}
+SHOT CONTEXT: {json.dumps([
+    {"index": shot["index"], "name": shot["name"], "body": shot["draw_body"]}
+    for shot in compiled
+    if any(name in shot["draw_body"] for name in missing_helpers)
+], ensure_ascii=False)}
+EXISTING SHARED HELPERS: {json.dumps(shared_helper_names)}
+Rules:
+- Define every requested helper with exactly its requested name.
+- Use Canvas 2D only; function signature must start with (g, ...).
+- Do not call any helper unless it is listed as existing or defined in this same fragment.
+- Do not redefine existing helpers.
+- No browser globals, DOM, imports, exports, network, filesystem, Node APIs, timers,
+  eval, Function, Date, performance, random numbers, WebGL or 3D.
+- Keep implementations deterministic, self-contained and visually consistent with
+  the selected style. Return compact code, no markdown fences.
+""".strip()
+            helper_result = await self._json_completion(
+                "You are a senior Canvas 2D JavaScript systems programmer. Return strict JSON only.",
+                helper_prompt,
+                min(self.max_output_tokens, 10000),
+                label=f"On-demand drawing helpers pass {helper_pass + 1}",
+            )
+            generated_helpers = validate_generated_fragment(
+                helper_result.get("helpers_js"),
+                "On-demand drawing helpers",
+                MAX_SHARED_SOURCE,
+            )
+            validate_draw_helper_definitions(generated_helpers, missing_helpers)
+            shared_js += "\n" + generated_helpers
+            if len(shared_js) > MAX_SHARED_SOURCE:
+                raise ValueError("Shared drawing library exceeds the maximum source size")
+            shared_helper_names = sorted(set(shared_helper_names) | set(missing_helpers))
+
+        remaining_helpers = find_unresolved_draw_helpers(
+            shared_js,
+            [shot["draw_body"] for shot in compiled],
+        )
+        if remaining_helpers:
+            raise ValueError(
+                "Unresolved generated drawing helpers after repair: "
+                + ", ".join(remaining_helpers)
+            )
+
         source = self._assemble_film(shared_js, compiled, duration, logical, style_id)
         if len(source) > MAX_FILM_SOURCE:
             raise ValueError("Assembled animation program exceeds the maximum source size")

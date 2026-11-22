@@ -1,6 +1,10 @@
 import unittest
 
 from app.services.deepseek_animation import DeepSeekAnimationCompiler
+from app.services.animation_contracts import (
+    find_unresolved_draw_helpers,
+    validate_draw_helper_definitions,
+)
 
 
 class ShotVisualContextTests(unittest.TestCase):
@@ -34,6 +38,35 @@ class ShotVisualContextTests(unittest.TestCase):
         self.assertEqual([x["id"] for x in result["props"]], ["prop_map"])
         self.assertEqual([x["id"] for x in result["environments"]], ["env_forest"])
         self.assertEqual(result["style_notes"], "Layered paper textures")
+
+
+class DrawingHelperContractTests(unittest.TestCase):
+    def test_finds_missing_helper_used_by_shot(self):
+        shared = "function drawBridge(g) { g.beginPath(); }"
+        shots = ["drawBridge(g); drawPaperQuestionMark(g, 10, 20);"]
+        self.assertEqual(
+            find_unresolved_draw_helpers(shared, shots),
+            ["drawPaperQuestionMark"],
+        )
+
+    def test_accepts_shared_and_shot_local_helpers(self):
+        shared = "function drawBridge(g) {}"
+        shots = [
+            "function drawLocalGear(g) {} drawBridge(g); drawLocalGear(g); g.drawImage(img, 0, 0);"
+        ]
+        self.assertEqual(find_unresolved_draw_helpers(shared, shots), [])
+
+    def test_finds_missing_dependencies_inside_shared_helpers(self):
+        shared = "function drawBridge(g) { drawMissingGear(g); }"
+        self.assertEqual(find_unresolved_draw_helpers(shared, []), ["drawMissingGear"])
+
+    def test_requires_generator_to_define_each_requested_helper(self):
+        validate_draw_helper_definitions(
+            "function drawPaperQuestionMark(g, x, y) {}",
+            ["drawPaperQuestionMark"],
+        )
+        with self.assertRaisesRegex(ValueError, "drawPaperQuestionMark"):
+            validate_draw_helper_definitions("function drawQuestion(g) {}", ["drawPaperQuestionMark"])
 
 
 if __name__ == "__main__":
