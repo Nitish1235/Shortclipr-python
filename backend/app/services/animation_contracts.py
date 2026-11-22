@@ -98,8 +98,8 @@ def validate_generated_fragment(source: Any, label: str, max_chars: int) -> str:
     for pattern in _BLOCKED_PATTERNS:
         if re.search(pattern, source):
             raise ValueError(f"{label} contains a disallowed runtime capability")
-    # Reject actual browser-global access, not harmless words in comments,
-    # string literals, or illustration identifiers (e.g. a drawn window).
+    # Reject common browser-global property/index access and direct references.
+    # This is a lexical guardrail; renderer isolation and CSP remain mandatory.
     browser_global_access = re.search(
         r"\b(?:window|document|self|top|parent|frames)\s*(?:\.|\[)"
         r"|(?:=|\(|,)\s*(?:window|document|self|top|parent|frames)\b",
