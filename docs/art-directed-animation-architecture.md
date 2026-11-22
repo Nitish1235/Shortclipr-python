@@ -1,0 +1,163 @@
+# ShortClipr Art-Directed Animation Architecture
+
+Status: implementation design, version 1
+Branch: feat/art-directed-animation-foundation
+Scope: prompt-to-2D animation quality; preserve the existing Canvas 2D renderer and project pipeline.
+
+## Product invariants
+
+- Output is deterministic, code-generated 2D animation using Canvas 2D. No Three.js, WebGL, meshes, photorealistic generation, or external image assets in generated films.
+- The existing 30 FPS, aspect-ratio, narration, durable-artifact, worker-lease, Chromium/Drawn-by-Code, and FFmpeg pipeline remains in place.
+- User-selected visual direction is authoritative. Automatic direction is used only when the user selects Auto.
+- Every stage has a versioned input/output contract and persists its result before the next expensive stage.
+- Generated code is untrusted input. Existing validation and process/browser isolation remain mandatory.
+- A retry is stage- or shot-scoped; do not regenerate successful upstream stages unnecessarily.
+
+## Pipeline and stage contracts
+
+### 1. Topic analysis
+Input: project brief, clip type, language, duration, aspect ratio, selected visual style.
+Output: TopicAnalysis v1 with subject, intent, audience assumptions, key concepts, entities, relationships, mechanisms, factual claims requiring caution, visual opportunities, and complexity estimate.
+Rules: distinguish established facts from explanatory analogy; identify causal relationships before animation; flag concepts that cannot be responsibly depicted literally. Do not invent facts or use external assets.
+
+### 2. Art direction
+Input: TopicAnalysis + user visual-style choice.
+Output: ArtDirection v1 with style_id, style_version, selection_reason, palette tokens, shape language, line/edge treatment, material treatment, lighting/shadow model, texture model, perspective model, composition rules, camera grammar, transition grammar, typography/annotation policy, and forbidden treatments.
+Rules: explicit user choice cannot be overridden. Auto may select a style based on topic and visual opportunities. The selected style must be registered and renderable; unsupported styles fail clearly rather than silently downgrading.
+
+Initial complete styles:
+- cinematic-editorial: layered editorial compositions, graphic silhouettes, controlled tonal lighting, material-specific shape/detail, varied camera scale.
+- isometric-technical: consistent isometric axes, orthographic-like projection, component separation, mechanism readability, restrained technical annotation.
+- layered-paper: paper-stock palette, discrete cut layers, tactile edges, occlusion, cast shadows, layered transitions.
+
+Legacy style IDs remain readable for old projects during migration. They are not advertised as fully implemented art systems unless their render contracts and test scenes exist.
+
+### 3. Visual bible
+Input: TopicAnalysis + ArtDirection.
+Output: VisualBible v1 with stable entity IDs and explicit design data:
+- characters: silhouette, proportions, face, clothing, palette, distinctive marks, pose/expression set, scale anchors.
+- props: silhouette, components, material, dimensions/relative scale, attachment points, moving parts, pivot points.
+- environments: spatial layout, terrain/architecture, depth planes, lighting, atmosphere, repeatable landmarks.
+- materials: named surface behavior, base/highlight/shadow colors, edge and texture treatment.
+- continuity: invariants and approved per-shot variations.
+Rules: entities are defined once and referenced by ID; recurring characters and objects must not be redesigned per shot.
+
+### 4. Storyboard director
+Input: TopicAnalysis + ArtDirection + VisualBible + narration.
+Output: Storyboard v1 with contiguous frame ranges and shot records:
+purpose, learning/story beat, visual objective, composition, shot scale, camera position/movement, environment ID, focal entity, depth layers, action, mechanism/relationship changes, transition, narration alignment, and continuity notes.
+Rules: every shot must add new information or a meaningful emotional beat. Vary shot scale and composition intentionally; avoid repeating the same wide composition with cosmetic changes. Each shot has one primary visual action.
+
+### 5. Asset and drawing-function registry
+Input: VisualBible + ArtDirection.
+Output: versioned asset manifest and helper registry:
+helper ID/name, style compatibility, inputs, Canvas context convention, dependencies, deterministic behavior, source hash, and validation status.
+Layers: shared Canvas primitives; style-specific shapes/materials; reusable object/character/environment builders; project-specific generated helpers.
+Rules: helper dependencies must resolve before shot compilation. A helper must declare its context argument and supported parameters. Reuse stable assets rather than regenerating recurring entities.
+
+### 6. Scene composition
+Input: Storyboard shot + VisualBible + style contract + asset registry.
+Output: SceneComposition v1 describing coordinate space, composition bounds, object transforms, relative scale, depth ordering, focal hierarchy, negative space, perspective, occlusion, and lighting relationships.
+Rules: use the output aspect ratio and logical canvas correctly; preserve readable silhouettes; place objects according to a coherent spatial model. No decorative detail that obscures the subject or action.
+
+### 7. Animation direction
+Input: SceneComposition + shot action + entity mechanics.
+Output: AnimationPlan v1 with tracks, key events, easing, pivots, constraints, parent-child relationships, timing, anticipation, primary motion, follow-through, and settle.
+Rules: connected mechanisms move coherently. Example: a drawbridge deck rotates around a defined hinge; linked counterweight or actuator motion is based on the selected bridge mechanism, not assumed universally. Environmental motion supports rather than competes with the main action.
+
+### 8. Animation compiler
+Input: validated art direction, visual bible, storyboard, compositions, animation plans, helper registry.
+Output: deterministic shot source plus source manifest and dependency graph.
+Rules: compile each shot against declared helpers; no undefined helper calls, undeclared browser/runtime APIs, randomness, or state accumulation. Validate syntax and source limits before render. Preserve existing bounded repair behavior for missing helper dependencies.
+
+### 9. Renderer and diagnostics
+Input: compiled film source and shot manifest.
+Output: MP4 plus representative frame captures, shot timing, render logs, and technical validation.
+Rules: retain Drawn-by-Code + Chromium + FFmpeg at 30 FPS. Capture frames at defined points per shot for QA. Keep worker leases, cancellation, output validation and durable artifact behavior unchanged.
+
+### 10. Visual QA and targeted repair
+Input: representative rendered frames + ArtDirection + VisualBible + Storyboard + AnimationPlan.
+Output: VisualQA v1 with per-shot scores/findings for style adherence, composition, hierarchy, environment quality, object/character continuity, action readability, shot variety, story relevance, and technical defects.
+Rules: inspect actual rendered frames, not source code alone. A shot fails on severe continuity, unreadable action, style drift, blank/placeholder visuals, or render errors. Repair only failed shots, bounded by a small configured retry count. Do not silently accept a downgraded style.
+
+## Versioned contract envelope
+
+Every persisted stage artifact should include:
+- schema_version
+- generator_version
+- project_id
+- stage
+- created_at
+- input_hash
+- payload
+
+Initial contract names: TopicAnalysisV1, ArtDirectionV1, VisualBibleV1, StoryboardV1, AssetManifestV1, SceneCompositionV1, AnimationPlanV1, CompiledFilmV1, VisualQAV1.
+
+Existing project_pipeline_artifacts columns and legacy story_plan/animation_program fields must remain readable. Introduce new artifact fields additively; never reinterpret old JSON in place. Stage retries compare input hashes and reuse only artifacts whose upstream inputs and schema versions still match.
+
+## Data flow and ownership
+
+Topic analyzer owns subject decomposition and fact caution.
+Art director owns style selection and full style contract.
+Visual bible owns reusable entity identity/design.
+Storyboard director owns narrative-to-shot progression.
+Asset registry owns reusable drawing code and dependencies.
+Scene composer owns layout and spatial relationships.
+Animation director owns motion and mechanics.
+Compiler owns safe deterministic JavaScript assembly.
+Renderer owns pixels/video encoding and technical diagnostics.
+QA owns rendered-frame evaluation and bounded repair decisions.
+
+DeepSeek may propose structured plans and drawing functions. Python validators and deterministic code own contract validation, ID/reference integrity, timing, dependency resolution, security checks, and retry boundaries.
+
+## Rollout plan
+
+### Phase 0 — audit and baseline
+Inspect the current active path, UI visual-style values, project persistence, migrations, worker retry semantics, and current tests. Save representative old output/frame baselines. Do not merge unrelated PRs.
+
+### Phase 1 — contracts and deterministic style selection
+Add versioned contract validators and a central style registry. Map every UI visual-style value to a supported style ID or Auto. Make explicit choices authoritative in planner/compiler. Preserve legacy projects by resolving old IDs through a compatibility map. Add tests for mapping, invalid styles, defaults, and old artifact compatibility.
+
+### Phase 2 — art direction and topic analysis
+Split topic decomposition and art direction from the story planner. Persist each stage artifact with input hashes. Add Auto selection while enforcing explicit user selection.
+
+### Phase 3 — three complete art systems
+Implement cinematic-editorial, isometric-technical, and layered-paper style contracts and deterministic Canvas helpers. Create style reference test scenes and compare rendered frames at all supported aspect ratios.
+
+### Phase 4 — visual bible and storyboard
+Enrich environment/prop/character/material schemas and shot direction. Enforce shot purpose, composition variation, and continuity references.
+
+### Phase 5 — asset registry and scene composition
+Add dependency-aware helper registry, scene layout and material-aware reusable drawing functions. Integrate missing-helper repair only after registry validation.
+
+### Phase 6 — animation mechanics
+Add keyframe tracks, pivots, constraints, parent-child relationships, easing and follow-through. Validate mechanism-specific relationships.
+
+### Phase 7 — visual QA
+Capture representative frames, evaluate against the structured art direction and storyboard, repair failed shots only, and persist QA reports.
+
+### Phase 8 — expand styles and optimize
+Add more styles only after the first three pass the benchmark set. Tune token usage, generation latency, retry costs, and render time using measured data.
+
+## Acceptance benchmark
+
+Run the same benchmark topics through each relevant art system:
+- drawbridge engineering (mechanical relationships and environmental scale)
+- human heart (anatomical structure and clear motion)
+- Roman aqueduct (architecture, perspective and historical environment)
+- black hole (abstract concept explained with visual hierarchy)
+- inflation (data/diagram storytelling and readable comparisons)
+- character-led mystery (character identity, staging and emotional beats)
+
+For each: inspect opening, middle, and ending frames; inspect every shot transition; render 9:16, 1:1, and 16:9 where supported. Compare old/new outputs. Acceptance requires no runtime errors, no missing dependencies, explicit style adherence, readable main action, stable recurring entities, and meaningful shot progression. Numeric QA thresholds must be calibrated against human-reviewed examples rather than treated as already validated.
+
+## First implementation slice
+
+The first code slice should be limited to:
+1. Central style registry with explicit capabilities and legacy compatibility.
+2. Deterministic mapping from project visual_style to style ID, including Auto behavior.
+3. Versioned ArtDirection contract and validation.
+4. Planner/compiler changes to consume the resolved art direction without overriding user choice.
+5. Unit tests for mapping, validation, backward compatibility and selected-style propagation.
+
+Do not begin large-scale prompt changes or add new art systems until this foundation is merged and tested.
