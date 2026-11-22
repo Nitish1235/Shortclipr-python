@@ -74,7 +74,7 @@ steps:
       - --cpu=${_API_CPU}
       - --cpu-boost
       - --no-cpu-throttling
-      - --timeout=300
+      - --timeout=600
       - --concurrency=12
       - --min-instances=0
       - --max-instances=${_API_MAX_INSTANCES}
