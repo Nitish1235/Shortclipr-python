@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import httpx
 
-from watcher.main import Dispatcher, WorkerTarget, is_region_rejection, targets
+from watcher.main import Dispatcher, WorkerTarget, is_region_rejection, is_uncertain_delivery, targets
 
 
 class CapacityPool:
@@ -45,6 +45,16 @@ class WatcherRoutingTests(unittest.IsolatedAsyncioTestCase):
 
         released = Dispatcher(CapacityPool({"us-central1": 3, "europe-west1": 4}), "secret", [], render_targets, 60)
         self.assertEqual((await released.next_target("render")).region, "us-central1")
+
+
+    def test_uncertain_delivery_keeps_worker_lease_until_reconciliation(self):
+        request = httpx.Request("POST", "https://render.example/internal/ffmpeg-stage/run")
+        server_error = httpx.HTTPStatusError("worker error", request=request, response=httpx.Response(500, request=request))
+        self.assertTrue(is_uncertain_delivery(server_error))
+        self.assertTrue(is_uncertain_delivery(httpx.ReadTimeout("read timed out", request=request)))
+        self.assertTrue(is_uncertain_delivery(httpx.WriteTimeout("write timed out", request=request)))
+        client_error = httpx.HTTPStatusError("bad request", request=request, response=httpx.Response(400, request=request))
+        self.assertFalse(is_uncertain_delivery(client_error))
 
     def test_quota_rejection_is_safe_for_regional_failover(self):
         request = httpx.Request("POST", "https://render.example/internal/ffmpeg-stage/run")
