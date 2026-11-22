@@ -63,7 +63,7 @@ class CreateProjectRequest(ApiModel):
     language: str = Field(min_length=2, max_length=80)
     voice_id: str = Field(min_length=1, max_length=120)
     visual_style: str = Field(min_length=2, max_length=80)
-    duration_seconds: Literal[15, 20, 30, 45, 60]
+    duration_seconds: Literal[10, 15, 20, 30, 45, 60]
     aspect_ratio: AspectRatio
 
 
