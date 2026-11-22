@@ -2,13 +2,11 @@
 # trigger. It retains the split-worker architecture: planning/API work and
 # FFmpeg rendering use different images and Cloud Run service shapes.
 #
-# Each regional trigger MUST override _FFMPEG_REGION_2:
-#   Australia trigger: australia-southeast1
-#   Europe trigger: europe-west1
-# There is deliberately no regional default, to prevent both triggers from
-# accidentally deploying to the same region.
+# Numbered FFmpeg region slots let separate Cloud Build triggers select
+# their own deployment target. Leave unused slots empty.
 substitutions:
   _API_REGION: us-central1
+  _FFMPEG_REGION_1: ''
   _FFMPEG_REGION_2: ''
   _API_CPU: '4'
   _API_MAX_INSTANCES: '2'
