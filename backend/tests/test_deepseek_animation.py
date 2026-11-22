@@ -93,6 +93,9 @@ class MechanismKinematicsContextTests(unittest.TestCase):
         self.assertIn("return {type:'pivot',part:spec.part,anchor,angle_rad:angle}", source)
         self.assertIn("return {type:'translation',part:spec.part,position:", source)
         self.assertIn("return {type:'actuator',part:spec.part,base,tip:", source)
+        self.assertIn("return {type:'gear',part:spec.part,driver_part:spec.driver_part", source)
+        self.assertIn("return {type:'pulley',part:spec.part,pulley_part:spec.pulley_part", source)
+        self.assertIn("return {type:'cable',part:spec.part,points}", source)
         self.assertRegex(source, r"Object\.freeze\(\{mechanismPose,")
 
 
