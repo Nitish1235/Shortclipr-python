@@ -79,3 +79,19 @@ body{background:var(--purple);color:white;background-image:radial-gradient(circl
 .closing-section .button{background:#17131d;color:white;border-color:#17131d;box-shadow:5px 5px 0 white}
 .footer{color:white;border-top:1px solid #ffffff55}
 .footer a:hover{color:var(--lime)}
+
+/* Purple theme cascade hardening: neutral/blue legacy layers must not leak through. */
+.hero.has-admin-background::before{
+  background-image:linear-gradient(90deg,rgba(61,8,127,.94) 8%,rgba(61,8,127,.72) 48%,rgba(61,8,127,.18)),var(--admin-background-image);
+  filter:saturate(.9);
+}
+.hero-clip-wrap{border-color:#17131d;box-shadow:12px 14px 0 #e6ff00;background:#3d087f}
+.hero-clip-placeholder{background:linear-gradient(155deg,#7b2be5,#3d087f 72%,#26034f)}
+.hero-clip-admin-preview{border-color:#17131d;background:linear-gradient(155deg,#7b2be5,#3d087f 72%,#26034f)}
+.mobile-navigation:not([hidden]){background:#3d087f;border:2px solid #eee4ff;color:#fff;box-shadow:5px 5px 0 #26034f}
+.mobile-navigation a{color:#fff}
+.mobile-navigation a:hover{color:#e6ff00}
+.mobile-menu-toggle{border-color:#eee4ff;background:#3d087f}
+.mobile-menu-toggle span{background:#fff}
+.reference-opening .mobile-menu-toggle{border-color:#eee4ff;background:#3d087f}
+.reference-opening .mobile-menu-toggle span{background:#fff}
