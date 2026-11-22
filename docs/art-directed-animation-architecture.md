@@ -182,3 +182,12 @@ The active planner now requests richer, stable visual-bible data: environment sp
 Shot records now carry visual objective, composition, shot scale, camera position, ordered depth layers, focal entity, visual change and continuity notes. The planner checks focal-entity references against declared visual-bible IDs. The animation compiler includes this shot direction in each generation prompt and explicitly discourages repetitive compositions.
 
 This is structured direction, not proof of rendered quality. It does not yet implement mechanism-specific motion tracks or rendered-frame QA. Actual output still needs benchmark renders and human review.
+
+
+## Implementation progress — Mechanism-aware animation contracts (PR #30)
+
+The visual bible can now declare named mechanisms with stable IDs, prop-backed components, joints and anchors, motion constraints, and reusable action patterns. Every mechanism component must reference a declared visual-bible prop. Shot plans can request a named action pattern with a bounded normalized progress interval.
+
+The planner is instructed to identify a physical mechanism only when supported by the topic and to avoid fabricating kinematics when the mechanism is unknown. The compiler receives only the mechanisms used by a shot, validates mechanism and action-pattern references again before generation, and instructs the drawing model to derive connected driver/follower motion from shared progress while respecting joints and constraints.
+
+This is a structured motion-direction contract and prompt-level coordination, not a deterministic physics solver. Exact kinematics, mechanism-specific reusable motion functions, and rendered-frame motion QA remain future work. Qualitative motion must not be presented as engineering-accurate simulation unless the plan contains sufficient physical detail and is independently checked.
