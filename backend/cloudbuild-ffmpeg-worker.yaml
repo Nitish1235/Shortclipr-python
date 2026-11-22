@@ -1,4 +1,4 @@
-substitutions: {_REGION: us-central1, _CPU: '4', _MAX_INSTANCES: '3'}
+substitutions: {_REGION: us-central1, _CPU: '4', _MAX_INSTANCES: '2'}
 steps:
   - id: build
     name: gcr.io/cloud-builders/docker
