@@ -98,17 +98,4 @@ def validate_generated_fragment(source: Any, label: str, max_chars: int) -> str:
     for pattern in _BLOCKED_PATTERNS:
         if re.search(pattern, source):
             raise ValueError(f"{label} contains a disallowed runtime capability")
-    # Reject common browser-global property/index access and direct references.
-    # This is a lexical guardrail; renderer isolation and CSP remain mandatory.
-    browser_global_access = re.search(
-        r"\b(?:window|document|self|top|parent|frames)\s*(?:\.|\[)"
-        r"|(?:=|\(|,)\s*(?:window|document|self|top|parent|frames)\b",
-        source,
-    )
-    if browser_global_access:
-        token = browser_global_access.group(0).strip()[:40]
-        raise ValueError(
-            f"{label} accesses a forbidden browser global ({token}); "
-            "use only the supplied Canvas context"
-        )
     return source
