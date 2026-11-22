@@ -45,6 +45,43 @@ class VisualQualityReviewValidationTests(unittest.TestCase):
         self.assertIsNone(result["findings"][1]["shot_index"])
         self.assertFalse(result["automatic_repair"])
 
+    def test_repair_queue_only_selects_high_confidence_actionable_known_shots(self):
+        review = {
+            "status": "reviewed",
+            "findings": [
+                {
+                    "shot_index": 1, "severity": "critical", "confidence": 0.95,
+                    "issue": "Focal character is clipped.", "recommendation": "Move character inside frame.",
+                    "evidence_sample_indices": [3],
+                },
+                {
+                    "shot_index": 0, "severity": "high", "confidence": 0.69,
+                    "issue": "Low confidence finding.", "recommendation": "Inspect layout.",
+                    "evidence_sample_indices": [0],
+                },
+                {
+                    "shot_index": 9, "severity": "critical", "confidence": 0.99,
+                    "issue": "Unknown shot.", "recommendation": "Fix it.",
+                    "evidence_sample_indices": [99],
+                },
+                {
+                    "shot_index": 0, "severity": "medium", "confidence": 0.99,
+                    "issue": "Minor style issue.", "recommendation": "Adjust color.",
+                    "evidence_sample_indices": [0],
+                },
+                {
+                    "shot_index": 2, "severity": "high", "confidence": 0.88,
+                    "issue": "Prop overlaps subject.", "recommendation": "Separate silhouettes.",
+                    "evidence_sample_indices": [6],
+                },
+            ],
+        }
+        manifest = [{"index": 0}, {"index": 1}, {"index": 2}]
+        queue = VisualQualityReviewer.build_repair_queue(review, manifest, max_shots=1)
+        self.assertEqual(len(queue), 1)
+        self.assertEqual(queue[0]["shot_index"], 1)
+        self.assertEqual(queue[0]["findings"][0]["severity"], "critical")
+
     def test_invalid_overall_score_is_rejected(self):
         for score in (True, -1, 101, "80"):
             with self.subTest(score=score):
