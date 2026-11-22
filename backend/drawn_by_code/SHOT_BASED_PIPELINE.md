@@ -95,8 +95,8 @@ Mechanism records may include an explicit `kinematics` array. Supported Canvas 2
 specifications are:
 - `pivot`: a fixed hinge/pivot anchor and start/end angle in degrees;
 - `translation` / `slider`: explicit absolute start and end positions;
-- `gear`: a driven gear coupled to a declared driver by pitch-radius ratio and
-  external/internal mesh direction;
+- `gear`: a driven gear coupled to a declared driver by pitch-radius ratio,
+  external/internal mesh direction, and validated pitch-circle center spacing;
 - `pulley`: pulley rotation coupled to linear travel of a declared load using
   radius × angular displacement and an explicit travel axis/direction;
 - `cable`: an authored polyline whose corresponding points interpolate between
