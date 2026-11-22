@@ -93,10 +93,10 @@ def validate_scene_plan(scenes: Any, total_frames: int) -> list[dict[str, Any]]:
     return normalized
 
 
-_DRAW_HELPER_CALL = re.compile(r"(?<![\\w$.])\\b(draw[A-Z][A-Za-z0-9_]*)\\s*\\(")
+_DRAW_HELPER_CALL = re.compile(r"(?<![\w$.])\b(draw[A-Z][A-Za-z0-9_]*)\s*\(")
 _DRAW_HELPER_DECL = re.compile(
-    r"\\bfunction\\s+(draw[A-Z][A-Za-z0-9_]*)\\s*\\(|"
-    r"\\b(?:const|let|var)\\s+(draw[A-Z][A-Za-z0-9_]*)\\s*=\\s*(?:function\\b|\\([^)]*\\)\\s*=>|[A-Za-z_$][\\w$]*\\s*=>)"
+    r"\bfunction\s+(draw[A-Z][A-Za-z0-9_]*)\s*\(|"
+    r"\b(?:const|let|var)\s+(draw[A-Z][A-Za-z0-9_]*)\s*=\s*(?:function\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)"
 )
 
 
@@ -113,7 +113,7 @@ def find_unresolved_draw_helpers(shared_source: str, shot_sources: list[str]) ->
         if name
     }
     unresolved: set[str] = set()
-    for source in shot_sources:
+    for source in [shared_source, *shot_sources]:
         local = {
             name
             for match in _DRAW_HELPER_DECL.finditer(source)
