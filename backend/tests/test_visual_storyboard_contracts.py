@@ -255,7 +255,7 @@ def test_mechanism_kinematics_validates_gear_pulley_and_cable_paths():
             "kinematics": [
                 {
                     "type": "gear", "part": "gear_b", "driver_part": "gear_a",
-                    "anchor": {"x": 400, "y": 300}, "driver_anchor": {"x": 300, "y": 300},
+                    "anchor": {"x": 375, "y": 300}, "driver_anchor": {"x": 300, "y": 300},
                     "driver_radius": 50, "driven_radius": 25,
                     "driver_start_angle_deg": 0, "driver_end_angle_deg": 180,
                     "driven_start_angle_deg": 0, "mesh": "external",
