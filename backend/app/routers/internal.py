@@ -116,7 +116,7 @@ async def fail_project_in_transaction(
     project = await connection.fetchrow("SELECT * FROM projects WHERE id=$1 FOR UPDATE", project_id)
     if not project or project["status"] in {"complete", "cancelled", "failed"}:
         return
-    release_key = f"project:{project_id}:failure-release"
+    release_key = f"project:{project_id}:v{project['credit_reservation_version']}:failure-release"
     release = await connection.fetchval(
         """INSERT INTO credit_ledger(user_id,project_id,entry_type,amount,idempotency_key)
            VALUES($1,$2,'release',$3,$4) ON CONFLICT DO NOTHING RETURNING id""",
@@ -650,7 +650,7 @@ async def run_render(
                     )
                     await connection.execute(
                         "INSERT INTO credit_ledger(user_id,project_id,entry_type,amount,idempotency_key) VALUES($1,$2,'settle',$3,$4) ON CONFLICT DO NOTHING",
-                        locked["user_id"], project_id, settled, f"project:{project_id}:settle",
+                        locked["user_id"], project_id, settled, f"project:{project_id}:v{locked['credit_reservation_version']}:settle",
                     )
                     await connection.execute(
                         "INSERT INTO project_events(project_id,event_type,stage,progress,payload) VALUES($1,'completed','render',100,$2::jsonb)",
