@@ -165,6 +165,23 @@ class DeepSeekAnimationCompiler:
             "mechanisms": mechanisms,
         }
 
+    @staticmethod
+    def _visual_qa_context(visual_bible: dict[str, Any], scenes: list[dict[str, Any]]) -> dict[str, Any]:
+        """Keep the visual review context aligned to the exact plan used to compile."""
+        storyboard_fields = (
+            "index", "start_frame", "end_frame", "purpose", "visual_objective",
+            "composition", "shot_scale", "camera_position", "depth_layers",
+            "focal_entity", "visual_change", "continuity_note", "characters",
+            "props", "environment", "mechanism_actions",
+        )
+        return {
+            "visual_bible": visual_bible,
+            "storyboard": [
+                {key: scene.get(key) for key in storyboard_fields if key in scene}
+                for scene in scenes
+            ],
+        }
+
     async def compile(self, project: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
         if self.client is None:
             raise RuntimeError("DEEPSEEK_API_KEY is not configured")
@@ -378,23 +395,7 @@ Rules:
             "shared_source_chars": len(shared_js),
             "shot_source_chars": sum(len(x["draw_body"]) for x in compiled),
             "motion_diagnostics": motion_diagnostics,
-            "visual_qa_context": {
-                "visual_bible": visual_bible,
-                "storyboard": [
-                    {
-                        key: scene.get(key)
-                        for key in (
-                            "index", "start_frame", "end_frame", "purpose",
-                            "visual_objective", "composition", "shot_scale",
-                            "camera_position", "depth_layers", "focal_entity",
-                            "visual_change", "continuity_note", "characters",
-                            "props", "environment", "mechanism_actions",
-                        )
-                        if key in scene
-                    }
-                    for scene in scenes
-                ],
-            },
+            "visual_qa_context": self._visual_qa_context(visual_bible, scenes),
             "shot_manifest": [
                 {
                     "index": shot["index"],
