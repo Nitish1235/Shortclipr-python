@@ -81,8 +81,15 @@ try {
                     if (inputError) throw inputError;
                     const buf = Buffer.from(await grab(i, 'image/jpeg'), 'base64');
                     if (!ff.stdin.write(buf)) await new Promise((ok, ko) => {
-                        ff.stdin.once('drain', ok);
-                        if (inputError) ko(inputError);
+                        const cleanup = () => {
+                            ff.stdin.off('drain', onDrain);
+                            ff.stdin.off('error', onError);
+                        };
+                        const onDrain = () => { cleanup(); ok(); };
+                        const onError = (error) => { cleanup(); ko(error); };
+                        ff.stdin.once('drain', onDrain);
+                        ff.stdin.once('error', onError);
+                        if (inputError) onError(inputError);
                     });
                     renderedFrames += 1;
                     if (renderedFrames === 1 || renderedFrames % (fps * 5) === 0) {
