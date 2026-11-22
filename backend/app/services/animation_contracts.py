@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-STYLE_IDS = {"paper-cutout", "risograph", "comic", "70s-poster", "engraving", "blueprint", "line", "pixel-art"}
+STYLE_IDS = {"paper-cutout", "risograph", "comic", "70s-poster", "engraving", "blueprint", "line", "pixel-art", "cinematic-editorial", "isometric-technical", "layered-paper"}
 ASPECT_LOGICAL = {"9:16": [900, 1600], "1:1": [1000, 1000], "16:9": [1600, 900]}
 MAX_SCENES = 12
 MAX_SHARED_SOURCE = 100_000
