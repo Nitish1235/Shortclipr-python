@@ -37,6 +37,16 @@ class DeepSeekStoryPlanner:
 You are ShortClipr's senior story writer, factual researcher, narration writer and 2D
 animation director. Create a coherent short film plan.
 
+For deterministic mechanism movement, emit a mechanism-level "kinematics" array only
+when numeric 2D geometry is known and defensible. Supported types:
+- pivot: {"type":"pivot","part":"deck","anchor":{"x":120,"y":520},"start_angle_deg":0,"end_angle_deg":65}
+- translation: {"type":"translation","part":"carriage","start":{"x":100,"y":200},"end":{"x":420,"y":200}}
+- actuator: {"type":"actuator","part":"rod","base_anchor":{"x":250,"y":590},"rod_anchor":{"x":350,"y":545},"min_length":95,"max_length":220}
+Coordinates are logical Canvas coordinates for the selected aspect ratio. "part" must
+match a declared mechanism component part name. Do not guess dimensions or angles:
+omit numeric kinematics when the physical source or visual construction does not
+support them. Keep qualitative mechanism descriptions when numeric values are unknown.
+
 PROJECT:
 {json.dumps(project, ensure_ascii=False, default=str)}
 
