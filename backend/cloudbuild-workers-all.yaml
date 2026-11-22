@@ -6,6 +6,7 @@
 # their own deployment target. Leave unused slots empty.
 substitutions:
   _API_REGION: us-central1
+  _DEPLOY_API_WORKER: 'false'
   _FFMPEG_REGION_1: ''
   _FFMPEG_REGION_2: ''
   _API_CPU: '4'
@@ -58,26 +59,30 @@ steps:
   - id: deploy-api-worker
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     waitFor: [push-api-worker]
-    entrypoint: gcloud
+    entrypoint: bash
     args:
-      - run
-      - deploy
-      - shortclipr-api-worker-${_API_REGION}
-      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-api-worker:$COMMIT_SHA
-      - --region=${_API_REGION}
-      - --platform=managed
-      - --update-env-vars=LOG_LEVEL=info
-      - --allow-unauthenticated
-      - --port=8080
-      - --memory=2Gi
-      - --cpu=${_API_CPU}
-      - --cpu-boost
-      - --no-cpu-throttling
-      - --timeout=600
-      - --concurrency=12
-      - --min-instances=0
-      - --max-instances=${_API_MAX_INSTANCES}
-      - --startup-probe=httpGet.path=/health,httpGet.port=8080,initialDelaySeconds=0,timeoutSeconds=5,periodSeconds=10,failureThreshold=18
+      - -ceu
+      - |
+        if [ "${_DEPLOY_API_WORKER}" != "true" ]; then
+          echo "API worker deployment disabled for this trigger; skipping."
+          exit 0
+        fi
+        gcloud run deploy "shortclipr-api-worker-${_API_REGION}" \
+          --image="us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-api-worker:$COMMIT_SHA" \
+          --region="${_API_REGION}" \
+          --platform=managed \
+          --update-env-vars=LOG_LEVEL=info \
+          --allow-unauthenticated \
+          --port=8080 \
+          --memory=2Gi \
+          --cpu=${_API_CPU} \
+          --cpu-boost \
+          --no-cpu-throttling \
+          --timeout=600 \
+          --concurrency=12 \
+          --min-instances=0 \
+          --max-instances=${_API_MAX_INSTANCES} \
+          --startup-probe=httpGet.path=/health,httpGet.port=8080,initialDelaySeconds=0,timeoutSeconds=5,periodSeconds=10,failureThreshold=18
 
   - id: deploy-ffmpeg-worker-1
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
