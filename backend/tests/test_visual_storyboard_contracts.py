@@ -231,3 +231,92 @@ def test_mechanism_kinematics_rejects_non_finite_geometry():
     }
     with pytest.raises(ValueError, match="finite number"):
         validate_visual_bible(base)
+
+
+def test_mechanism_kinematics_validates_gear_pulley_and_cable_paths():
+    props = [
+        {"id": "prop_gear_a"}, {"id": "prop_gear_b"},
+        {"id": "prop_pulley"}, {"id": "prop_counterweight"}, {"id": "prop_cable"},
+    ]
+    components = [
+        {"prop_id": "prop_gear_a", "part": "gear_a"},
+        {"prop_id": "prop_gear_b", "part": "gear_b"},
+        {"prop_id": "prop_pulley", "part": "pulley"},
+        {"prop_id": "prop_counterweight", "part": "counterweight"},
+        {"prop_id": "prop_cable", "part": "cable"},
+    ]
+    bible = {
+        "style_id": "isometric-technical",
+        "props": props,
+        "mechanisms": [{
+            "id": "mechanism_transmission",
+            "components": components,
+            "action_patterns": [],
+            "kinematics": [
+                {
+                    "type": "gear", "part": "gear_b", "driver_part": "gear_a",
+                    "anchor": {"x": 400, "y": 300}, "driver_anchor": {"x": 300, "y": 300},
+                    "driver_radius": 50, "driven_radius": 25,
+                    "driver_start_angle_deg": 0, "driver_end_angle_deg": 180,
+                    "driven_start_angle_deg": 0, "mesh": "external",
+                },
+                {
+                    "type": "pulley", "part": "counterweight", "pulley_part": "pulley",
+                    "anchor": {"x": 450, "y": 180}, "radius": 30,
+                    "start_angle_deg": 0, "end_angle_deg": 180,
+                    "start_position": {"x": 500, "y": 420},
+                    "axis": {"x": 0, "y": 4}, "direction": 1,
+                },
+                {
+                    "type": "cable", "part": "cable",
+                    "points_start": [{"x": 100, "y": 100}, {"x": 200, "y": 150}],
+                    "points_end": [{"x": 100, "y": 100}, {"x": 260, "y": 150}],
+                },
+            ],
+        }],
+    }
+    mechanism = validate_visual_bible(bible)["mechanisms"][0]
+    gear, pulley, cable = mechanism["kinematics"]
+    assert gear["driver_radius"] / gear["driven_radius"] == 2
+    assert gear["mesh"] == "external"
+    assert pulley["axis"] == {"x": 0, "y": 1}
+    assert len(cable["points_start"]) == len(cable["points_end"]) == 2
+
+
+def test_mechanism_kinematics_rejects_invalid_gear_pulley_and_cable_data():
+    props = [{"id": "prop_a"}, {"id": "prop_b"}, {"id": "prop_c"}]
+    components = [
+        {"prop_id": "prop_a", "part": "gear_a"},
+        {"prop_id": "prop_b", "part": "gear_b"},
+        {"prop_id": "prop_c", "part": "cable"},
+    ]
+    base = {
+        "style_id": "isometric-technical",
+        "props": props,
+        "mechanisms": [{
+            "id": "mechanism_bad",
+            "components": components,
+            "action_patterns": [],
+            "kinematics": [{
+                "type": "gear", "part": "gear_b", "driver_part": "missing",
+                "anchor": {"x": 0, "y": 0}, "driver_anchor": {"x": 10, "y": 0},
+                "driver_radius": 10, "driven_radius": 5, "driver_end_angle_deg": 90,
+            }],
+        }],
+    }
+    with pytest.raises(ValueError, match="Gear driver_part"):
+        validate_visual_bible(base)
+    base["mechanisms"][0]["kinematics"] = [{
+        "type": "pulley", "part": "gear_b", "pulley_part": "gear_a",
+        "anchor": {"x": 0, "y": 0}, "radius": 20, "end_angle_deg": 90,
+        "start_position": {"x": 10, "y": 0}, "axis": {"x": 0, "y": 0},
+    }]
+    with pytest.raises(ValueError, match="non-zero"):
+        validate_visual_bible(base)
+    base["mechanisms"][0]["kinematics"] = [{
+        "type": "cable", "part": "cable",
+        "points_start": [{"x": 0, "y": 0}],
+        "points_end": [{"x": 10, "y": 0}],
+    }]
+    with pytest.raises(ValueError, match="2–24"):
+        validate_visual_bible(base)
