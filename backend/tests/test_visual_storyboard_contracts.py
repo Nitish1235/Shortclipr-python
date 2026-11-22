@@ -317,6 +317,17 @@ def test_mechanism_kinematics_rejects_invalid_gear_pulley_and_cable_data():
     }]
     with pytest.raises(ValueError, match="non-zero"):
         validate_visual_bible(base)
+    base["mechanisms"][0]["kinematics"][0]["axis"] = {"x": 0, "y": 1}
+    base["mechanisms"][0]["kinematics"][0]["direction"] = True
+    with pytest.raises(ValueError, match="-1 or 1"):
+        validate_visual_bible(base)
+    base["mechanisms"][0]["kinematics"] = [{
+        "type": "actuator", "part": "gear_b",
+        "base_anchor": {"x": 5, "y": 5}, "rod_anchor": {"x": 5, "y": 5},
+        "min_length": 10, "max_length": 20,
+    }]
+    with pytest.raises(ValueError, match="axis must be non-zero"):
+        validate_visual_bible(base)
     base["mechanisms"][0]["kinematics"] = [{
         "type": "cable", "part": "cable",
         "points_start": [{"x": 0, "y": 0}],
