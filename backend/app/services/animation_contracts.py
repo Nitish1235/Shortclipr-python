@@ -115,7 +115,7 @@ def validate_kinematics(value: Any, component_parts: set[str]) -> dict[str, Any]
         start = _finite_number(result.get("start_angle_deg", 0), "Pulley start_angle_deg")
         end = _finite_number(result.get("end_angle_deg"), "Pulley end_angle_deg")
         direction = result.get("direction", 1)
-        if isinstance(direction, bool) or direction not in {-1, 1}:
+        if isinstance(direction, bool) or not isinstance(direction, int) or direction not in {-1, 1}:
             raise ValueError("Pulley direction must be -1 or 1")
         axis = {"x": axis["x"] / axis_length, "y": axis["y"] / axis_length}
         result.update(
@@ -141,6 +141,8 @@ def validate_kinematics(value: Any, component_parts: set[str]) -> dict[str, Any]
     else:  # hydraulic/pneumatic linear actuator
         base = _kinematic_point(result.get("base_anchor"), "Actuator base_anchor")
         rod = _kinematic_point(result.get("rod_anchor"), "Actuator rod_anchor")
+        if ((rod["x"] - base["x"]) ** 2 + (rod["y"] - base["y"]) ** 2) <= 1e-18:
+            raise ValueError("Actuator extension axis must be non-zero")
         minimum = _finite_number(result.get("min_length"), "Actuator min_length")
         maximum = _finite_number(result.get("max_length"), "Actuator max_length")
         if minimum <= 0 or maximum < minimum:
