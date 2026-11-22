@@ -193,6 +193,27 @@ The planner is instructed to identify a physical mechanism only when supported b
 This is a structured motion-direction contract and prompt-level coordination, not a deterministic physics solver. Exact kinematics, mechanism-specific reusable motion functions, and rendered-frame motion QA remain future work. Qualitative motion must not be presented as engineering-accurate simulation unless the plan contains sufficient physical detail and is independently checked.
 
 
+## Implementation progress — mechanism integration and motion diagnostics (PR #30)
+
+The shot compiler now automatically includes the prop definitions backing every
+referenced mechanism component, even when the planner omitted those props from the
+shot's ordinary `props` list. This prevents a mechanism action from reaching the
+drawing prompt with component IDs but without the visual definitions needed to draw
+those components.
+
+Compilation also emits non-blocking `motion_diagnostics`:
+- `qualitative_motion_only` identifies mechanism actions without numeric kinematics;
+  these must remain qualitative and must not be presented as deterministic engineering
+  motion.
+- `progress_discontinuity` identifies adjacent shots that continue the same mechanism
+  action pattern but jump between different normalized progress values.
+
+Diagnostics do not alter authored progress or reject a plan. A discontinuity may be
+intentional (for example, a deliberate reset or a time jump), so it is surfaced for
+review rather than automatically repaired. This is structural motion QA, not rendered
+frame inspection; visual verification of component transforms and shot transitions
+remains required.
+
 ## Implementation progress — deterministic mechanism primitives (PR #30)
 
 Added validated numeric 2D motion specs for fixed pivots/hinges, translations/sliders,
