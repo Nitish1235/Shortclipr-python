@@ -39,7 +39,7 @@ def decode_json_object(value: object) -> dict:
     return dict(value)  # type: ignore[arg-type]
 
 
-LEASE_SECONDS = {"api": 6 * 60, "render": 28 * 60}
+LEASE_SECONDS = {"api": 3 * 60, "render": 3 * 60}
 LEASE_HEARTBEAT_SECONDS = 15
 
 
