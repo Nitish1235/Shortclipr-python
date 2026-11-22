@@ -141,3 +141,69 @@ def test_legacy_visual_bible_and_shots_default_to_no_mechanisms():
     ], 90)
     assert bible["mechanisms"] == []
     assert scenes[0]["mechanism_actions"] == []
+
+
+
+def test_mechanism_kinematics_validates_pivot_translation_and_actuator_geometry():
+    bible = {
+        "style_id": "isometric-technical",
+        "props": [{"id": "prop_deck"}, {"id": "prop_rod"}],
+        "mechanisms": [{
+            "id": "mechanism_test",
+            "components": [
+                {"prop_id": "prop_deck", "part": "deck"},
+                {"prop_id": "prop_rod", "part": "rod"},
+            ],
+            "action_patterns": [],
+            "kinematics": [
+                {"type": "pivot", "part": "deck", "anchor": {"x": 10, "y": 20},
+                 "start_angle_deg": 0, "end_angle_deg": 60},
+                {"type": "translation", "part": "deck", "start": {"x": 0, "y": 0},
+                 "end": {"x": 100, "y": 0}},
+                {"type": "actuator", "part": "rod", "base_anchor": {"x": 0, "y": 0},
+                 "rod_anchor": {"x": 10, "y": 0}, "min_length": 10, "max_length": 40},
+            ],
+        }],
+    }
+    mechanism = validate_visual_bible(bible)["mechanisms"][0]
+    assert [item["type"] for item in mechanism["kinematics"]] == [
+        "pivot", "translation", "actuator"
+    ]
+
+
+def test_mechanism_kinematics_rejects_unknown_part_and_invalid_actuator_lengths():
+    base = {
+        "style_id": "isometric-technical",
+        "props": [{"id": "prop_rod"}],
+        "mechanisms": [{
+            "id": "mechanism_test",
+            "components": [{"prop_id": "prop_rod", "part": "rod"}],
+            "action_patterns": [],
+            "kinematics": [{"type": "actuator", "part": "missing",
+                            "base_anchor": {"x": 0, "y": 0}, "rod_anchor": {"x": 10, "y": 0},
+                            "min_length": 10, "max_length": 40}],
+        }],
+    }
+    with pytest.raises(ValueError, match="declared mechanism component"):
+        validate_visual_bible(base)
+    base["mechanisms"][0]["kinematics"][0]["part"] = "rod"
+    base["mechanisms"][0]["kinematics"][0]["min_length"] = 0
+    with pytest.raises(ValueError, match="Actuator lengths"):
+        validate_visual_bible(base)
+
+
+def test_mechanism_kinematics_rejects_non_finite_geometry():
+    base = {
+        "style_id": "isometric-technical",
+        "props": [{"id": "prop_deck"}],
+        "mechanisms": [{
+            "id": "mechanism_test",
+            "components": [{"prop_id": "prop_deck", "part": "deck"}],
+            "action_patterns": [],
+            "kinematics": [{"type": "pivot", "part": "deck",
+                            "anchor": {"x": float("nan"), "y": 10},
+                            "start_angle_deg": 0, "end_angle_deg": 40}],
+        }],
+    }
+    with pytest.raises(ValueError, match="finite number"):
+        validate_visual_bible(base)
