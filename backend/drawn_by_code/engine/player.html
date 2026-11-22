@@ -41,6 +41,9 @@ const loadScript = (src) => new Promise((ok, ko) => {
     const root = '../';
     const scenePath = q.get('scene');
     if (!scenePath) return showErr('Missing ?scene=path/to/scene.js');
+    // Generated ShortClipr scene code can reference this helper at top level,
+    // so it must exist before the scene script is evaluated (not after Motion.scene).
+    await loadScript(root + 'styles/shortclipr.js');
     await loadScript(root + scenePath);
     const def = Motion.def;
     if (!def) return showErr('The scene did not call Motion.scene({...})');
