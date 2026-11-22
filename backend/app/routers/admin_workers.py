@@ -124,7 +124,7 @@ async def requeue_project(
                 """UPDATE projects
                    SET status='queued',progress=2,error_code=NULL,error_message=NULL,
                        credit_reservation_version=$2,credits_settled=NULL,
-                       output_object=NULL,completed_at=NULL,cancelled_at=NULL
+                       output_object=NULL,output_url=NULL,poster_object=NULL,poster_url=NULL,completed_at=NULL,cancelled_at=NULL
                    WHERE id=$1""",
                 project_id, next_version,
             )
