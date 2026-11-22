@@ -105,6 +105,16 @@ def is_region_rejection(error: Exception) -> bool:
     return False
 
 
+def is_uncertain_delivery(error: Exception) -> bool:
+    """True when the remote worker may have accepted and still be processing a request."""
+    if isinstance(error, (
+        httpx.ReadTimeout, httpx.WriteTimeout, httpx.ReadError,
+        httpx.WriteError, httpx.RemoteProtocolError,
+    )):
+        return True
+    return isinstance(error, httpx.HTTPStatusError) and (error.response.status_code == 408 or error.response.status_code >= 500)
+
+
 # ---------------------------------------------------------------------------
 # Dispatcher
 # ---------------------------------------------------------------------------
@@ -196,7 +206,7 @@ class Dispatcher:
 
     async def claim(self, job_class: str, target: WorkerTarget) -> asyncpg.Record | None:
         token = uuid4()
-        lease_interval = timedelta(minutes=28 if job_class == "render" else 6)
+        lease_interval = timedelta(minutes=3)
         async with self.pool.acquire() as connection:
             async with connection.transaction():
                 row = await connection.fetchrow(
@@ -231,7 +241,7 @@ class Dispatcher:
         """Release an unaccepted job without consuming a user-visible retry."""
         await self.pool.execute(
             """UPDATE job_attempts SET status='ready',attempts=GREATEST(0,attempts-1),
-               due_at=now()+interval '3 seconds',lease_token=NULL,lease_expires_at=NULL,last_error=$3
+               due_at=now()+interval '3 seconds',lease_token=NULL,lease_expires_at=NULL,worker_region=NULL,last_error=$3
                WHERE id=$1 AND lease_token=$2 AND status IN ('leased','running')""",
             job["id"], job["lease_token"], error[:1000],
         )
@@ -243,7 +253,7 @@ class Dispatcher:
         released = await connection.fetchval(
             """INSERT INTO credit_ledger(user_id,project_id,entry_type,amount,idempotency_key)
                VALUES($1,$2,'release',$3,$4) ON CONFLICT DO NOTHING RETURNING id""",
-            project["user_id"], project_id, -project["credits_reserved"], f"project:{project_id}:watcher-exhausted-release",
+            project["user_id"], project_id, -project["credits_reserved"], f"project:{project_id}:v{project['credit_reservation_version']}:watcher-exhausted-release",
         )
         if released:
             await connection.execute(
@@ -255,7 +265,7 @@ class Dispatcher:
             project_id, message[:1000],
         )
         await connection.execute(
-            """UPDATE job_attempts SET status='cancelled',lease_token=NULL,lease_expires_at=NULL
+            """UPDATE job_attempts SET status='cancelled',lease_token=NULL,lease_expires_at=NULL,worker_region=NULL
                WHERE project_id=$1 AND status IN ('ready','leased','running')""",
             project_id,
         )
@@ -276,20 +286,36 @@ class Dispatcher:
     async def retry_or_fail(self, job_id: UUID, lease_token: UUID, error: str, retry_seconds: int) -> None:
         async with self.pool.acquire() as connection:
             async with connection.transaction():
-                job = await connection.fetchrow("SELECT * FROM job_attempts WHERE id=$1 FOR UPDATE", job_id)
+                # Consistent lock order everywhere: project first, then attempt.
+                reference = await connection.fetchrow(
+                    "SELECT project_id FROM job_attempts WHERE id=$1", job_id,
+                )
+                if not reference:
+                    return
+                project = await connection.fetchrow(
+                    "SELECT status FROM projects WHERE id=$1 FOR UPDATE", reference["project_id"],
+                )
+                job = await connection.fetchrow(
+                    "SELECT * FROM job_attempts WHERE id=$1 FOR UPDATE", job_id,
+                )
                 if not job or job["lease_token"] != lease_token or job["status"] not in {"leased", "running"}:
+                    return
+                if not project or project["status"] in {"cancelled", "complete", "failed"}:
+                    await connection.execute(
+                        """UPDATE job_attempts SET status='cancelled',lease_token=NULL,
+                           lease_expires_at=NULL,worker_region=NULL,last_error=$3
+                           WHERE id=$1 AND lease_token=$2""",
+                        job_id, lease_token, error[:1000],
+                    )
                     return
                 if job["attempts"] < job["max_attempts"]:
                     await connection.execute(
                         """UPDATE job_attempts SET status='ready',due_at=now()+($3 * interval '1 second'),
-                           lease_token=NULL,lease_expires_at=NULL,last_error=$4 WHERE id=$1 AND lease_token=$2""",
+                           lease_token=NULL,lease_expires_at=NULL,worker_region=NULL,last_error=$4
+                           WHERE id=$1 AND lease_token=$2""",
                         job_id, lease_token, retry_seconds, error[:1000],
                     )
                     if job["job_class"] == "render":
-                        # A delivery failure/reconnect timeout can happen
-                        # outside the renderer process. Reset the project
-                        # state too, otherwise the UI can stay at 45/48% until
-                        # the next attempt completes.
                         await connection.execute(
                             "UPDATE projects SET status='queued',progress=45 WHERE id=$1 AND status='rendering'",
                             job["project_id"],
@@ -313,7 +339,8 @@ class Dispatcher:
                     )
                     return
                 await connection.execute(
-                    """UPDATE job_attempts SET status='failed',lease_token=NULL,lease_expires_at=NULL,last_error=$3
+                    """UPDATE job_attempts SET status='failed',lease_token=NULL,
+                       lease_expires_at=NULL,worker_region=NULL,last_error=$3
                        WHERE id=$1 AND lease_token=$2""",
                     job_id, lease_token, error[:1000],
                 )
@@ -323,6 +350,7 @@ class Dispatcher:
         rows = await self.pool.fetch(
             """SELECT id,lease_token,project_id,job_class FROM job_attempts
                WHERE status IN ('leased','running') AND lease_expires_at<now() AND lease_token IS NOT NULL
+               ORDER BY lease_expires_at,id
                LIMIT 100"""
         )
         if rows:
@@ -338,15 +366,28 @@ class Dispatcher:
 
     async def deliver(self, job: asyncpg.Record, target: WorkerTarget, client: httpx.AsyncClient) -> None:
         endpoint = "/internal/api-stage/run" if job["job_class"] == "api" else "/internal/ffmpeg-stage/run"
-        timeout = 1450 if job["job_class"] == "render" else 290
+        timeout = 1450 if job["job_class"] == "render" else 590
         t0 = time.monotonic()
         project_id_str = str(job["project_id"])
         attempt_id_str = str(job["id"])
         try:
-            await self.pool.execute(
-                "UPDATE job_attempts SET status='running' WHERE id=$1 AND lease_token=$2 AND status='leased'",
+            started = await self.pool.fetchval(
+                """UPDATE job_attempts SET status='running'
+                   WHERE id=$1 AND lease_token=$2 AND status='leased'
+                   RETURNING id""",
                 job["id"], job["lease_token"],
             )
+            if not started:
+                logger.info(
+                    "watcher.dispatch_skipped",
+                    extra={
+                        "job_class": job["job_class"],
+                        "project_id": project_id_str,
+                        "attempt_id": attempt_id_str,
+                        "reason": "lease is no longer current",
+                    },
+                )
+                return
             logger.info(
                 "watcher.dispatch",
                 extra={
@@ -394,21 +435,25 @@ class Dispatcher:
                         "error": str(error)[:300],
                     },
                 )
-            elif isinstance(error, httpx.ReadTimeout):
-                # The remote worker may still be rendering. Keep its lease and
-                # let lease expiry decide safely whether a retry is needed.
+            elif is_uncertain_delivery(error):
+                # A timeout, broken connection or 5xx can happen after the
+                # worker accepted the job. Do not make it claimable immediately:
+                # keep the lease until expiry and let the worker's lease fence
+                # prevent stale writes if a retry is eventually issued.
                 await self.pool.execute(
                     "UPDATE job_attempts SET last_error=$3 WHERE id=$1 AND lease_token=$2",
-                    job["id"], job["lease_token"], "Worker response timed out; awaiting lease expiry",
+                    job["id"], job["lease_token"], f"Delivery outcome uncertain: {error}"[:1000],
                 )
                 logger.warning(
-                    "watcher.read_timeout",
+                    "watcher.delivery_uncertain",
                     extra={
                         "job_class": job["job_class"],
                         "project_id": project_id_str,
                         "attempt_id": attempt_id_str,
                         "region": target.region,
                         "timeout_s": timeout,
+                        "duration_ms": duration_ms,
+                        "error": str(error)[:300],
                     },
                 )
             else:
@@ -496,6 +541,14 @@ class Dispatcher:
                         except asyncio.TimeoutError:
                             pass
             finally:
+                # Stop in-flight HTTP dispatch coroutines before closing the
+                # shared client and pool. Remote workers keep their DB lease
+                # heartbeat; the watcher will reconcile an expired lease if needed.
+                active = list(self.tasks)
+                for task in active:
+                    task.cancel()
+                if active:
+                    await asyncio.gather(*active, return_exceptions=True)
                 await listener.remove_listener("shortclipr_jobs", on_job_notification)
 
 
@@ -528,7 +581,7 @@ async def main() -> None:
     db_url = os.environ["SUPABASE_DB_URL"]
     secret = os.environ["INTERNAL_TASK_SECRET"]
     api_targets = targets("API_WORKER_URLS", "API_WORKER_REGIONS", "API_REGION_SOFT_CAP", 12) or targets("WORKER_SERVICE_URLS", "WORKER_SERVICE_REGIONS", "API_REGION_SOFT_CAP", 12)
-    render_targets = targets("FFMPEG_WORKER_URLS", "FFMPEG_WORKER_REGIONS", "FFMPEG_REGION_SOFT_CAP", 4) or targets("WORKER_SERVICE_URLS", "WORKER_SERVICE_REGIONS", "FFMPEG_REGION_SOFT_CAP", 4)
+    render_targets = targets("FFMPEG_WORKER_URLS", "FFMPEG_WORKER_REGIONS", "FFMPEG_REGION_SOFT_CAP", 2) or targets("WORKER_SERVICE_URLS", "WORKER_SERVICE_REGIONS", "FFMPEG_REGION_SOFT_CAP", 3)
     if not api_targets or not render_targets:
         raise RuntimeError("API_WORKER_URLS and FFMPEG_WORKER_URLS are required")
     logger.info(
@@ -538,7 +591,7 @@ async def main() -> None:
             "render_workers": len(render_targets),
         },
     )
-    pool = await asyncpg.create_pool(db_url, min_size=1, max_size=8, server_settings={"application_name": "shortclipr-watcher"})
+    pool = await asyncpg.create_pool(db_url, min_size=1, max_size=2, command_timeout=30, server_settings={"application_name": "shortclipr-watcher"})
     try:
         cooldown = max(5, int(os.getenv("WORKER_REGION_COOLDOWN_SECONDS", "60")))
         dispatcher = Dispatcher(pool, secret, api_targets, render_targets, cooldown)

@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     SUPABASE_DB_URL: str = ""
     DB_POOL_MIN_SIZE: int = 1
-    DB_POOL_MAX_SIZE: int = 10
+    DB_POOL_MAX_SIZE: int = 4
 
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""

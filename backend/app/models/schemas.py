@@ -173,8 +173,8 @@ class AssignProjectToShowcaseRequest(ApiModel):
 
 class InternalRunRequest(ApiModel):
     project_id: UUID
-    attempt_id: UUID | None = None
-    lease_token: UUID | None = None
+    attempt_id: UUID
+    lease_token: UUID
 
 
 class CheckoutRequest(ApiModel):

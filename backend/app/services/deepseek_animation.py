@@ -9,6 +9,20 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+
+async def _gather_cancel_on_error(*coroutines):
+    """Cancel sibling generation calls immediately when one fails or is cancelled."""
+    tasks = [asyncio.create_task(coro) for coro in coroutines]
+    try:
+        return await asyncio.gather(*tasks)
+    except BaseException:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+
+
 from openai import AsyncOpenAI
 
 from ..core.config import Settings
@@ -32,7 +46,7 @@ class DeepSeekAnimationCompiler:
         self.max_parallel_shots = max(1, min(4, settings.DEEPSEEK_MAX_PARALLEL_SHOTS))
         self.client = (
             AsyncOpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com",
-                        timeout=900.0, max_retries=2)
+                        timeout=90.0, max_retries=0)
             if settings.DEEPSEEK_API_KEY else None
         )
 
@@ -219,7 +233,7 @@ SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s
                 "transition_out": str(scene.get("transition_out", "cut")).lower(),
             }
 
-        compiled = await asyncio.gather(*(compile_one(scene) for scene in scenes))
+        compiled = await _gather_cancel_on_error(*(compile_one(scene) for scene in scenes))
         source = self._assemble_film(shared_js, compiled, duration, logical, style_id)
         if len(source) > MAX_FILM_SOURCE:
             raise ValueError("Assembled animation program exceeds the maximum source size")

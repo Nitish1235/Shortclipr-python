@@ -26,7 +26,7 @@ steps:
       - --timeout=300
       - --concurrency=40
       - --min-instances=0
-      - --max-instances=10
+      - --max-instances=2
       - --startup-probe=httpGet.path=/health,httpGet.port=8080,initialDelaySeconds=0,timeoutSeconds=5,periodSeconds=10,failureThreshold=18
 images: [us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-api:$COMMIT_SHA, us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-api:latest]
 options: {logging: CLOUD_LOGGING_ONLY}

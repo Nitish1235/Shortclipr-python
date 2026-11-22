@@ -16,7 +16,7 @@ class DeepSeekStoryPlanner:
         self.medium_reasoning_effort = "medium"
         self.max_output_tokens = settings.DEEPSEEK_PLAN_MAX_OUTPUT_TOKENS
         self.client = AsyncOpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com",
-                                  timeout=300.0, max_retries=2) if settings.DEEPSEEK_API_KEY else None
+                                  timeout=90.0, max_retries=0) if settings.DEEPSEEK_API_KEY else None
 
     async def plan(self, project: dict[str, Any]) -> dict[str, Any]:
         if self.client is None:
