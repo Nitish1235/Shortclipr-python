@@ -133,7 +133,7 @@ async def requeue_project(
                 """UPDATE job_attempts
                    SET status='ready',attempts=0,due_at=now(),lease_token=NULL,
                        lease_expires_at=NULL,last_error=NULL,worker_region=NULL
-                   WHERE project_id=$1 AND job_class='api'
+                   WHERE project_id=$1 AND job_class='api' AND pipeline_revision='v1'
                    RETURNING id""",
                 project_id,
             )
