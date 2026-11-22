@@ -241,7 +241,7 @@ class Dispatcher:
         """Release an unaccepted job without consuming a user-visible retry."""
         await self.pool.execute(
             """UPDATE job_attempts SET status='ready',attempts=GREATEST(0,attempts-1),
-               due_at=now()+interval '3 seconds',lease_token=NULL,lease_expires_at=NULL,last_error=$3
+               due_at=now()+interval '3 seconds',lease_token=NULL,lease_expires_at=NULL,worker_region=NULL,last_error=$3
                WHERE id=$1 AND lease_token=$2 AND status IN ('leased','running')""",
             job["id"], job["lease_token"], error[:1000],
         )
@@ -265,7 +265,7 @@ class Dispatcher:
             project_id, message[:1000],
         )
         await connection.execute(
-            """UPDATE job_attempts SET status='cancelled',lease_token=NULL,lease_expires_at=NULL
+            """UPDATE job_attempts SET status='cancelled',lease_token=NULL,lease_expires_at=NULL,worker_region=NULL
                WHERE project_id=$1 AND status IN ('ready','leased','running')""",
             project_id,
         )
