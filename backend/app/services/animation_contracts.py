@@ -101,8 +101,8 @@ def validate_generated_fragment(source: Any, label: str, max_chars: int) -> str:
     # Reject actual browser-global access, not harmless words in comments,
     # string literals, or illustration identifiers (e.g. a drawn window).
     browser_global_access = re.search(
-        r"\\b(?:window|document|self|top|parent|frames)\\s*(?:\\.|\\[)"
-        r"|(?:=|\\(|,)\\s*(?:window|document|self|top|parent|frames)\\b",
+        r"\b(?:window|document|self|top|parent|frames)\s*(?:\.|\[)"
+        r"|(?:=|\(|,)\s*(?:window|document|self|top|parent|frames)\b",
         source,
     )
     if browser_global_access:
