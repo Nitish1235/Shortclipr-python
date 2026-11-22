@@ -1,0 +1,42 @@
+"""Deterministic visual-direction resolution for new and legacy projects.
+
+Public UI labels are separate from renderer style IDs so the UI can evolve
+without changing persisted project records or old animation artifacts.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+# Conservative compatibility mappings to complete renderer styles that exist today.
+# New art systems are not advertised until their full rendering contracts exist.
+UI_STYLE_ALIASES: dict[str, str | None] = {
+    "AI Auto": None,
+    "Editorial": "risograph",
+    "Cinematic": "70s-poster",
+    "Diagrammatic": "line",
+    "Paper craft": "paper-cutout",
+}
+
+LEGACY_STYLE_IDS = frozenset({
+    "paper-cutout", "risograph", "comic", "70s-poster",
+    "engraving", "blueprint", "line", "pixel-art",
+})
+
+
+def resolve_visual_style(value: Any) -> str | None:
+    """Resolve a stored UI label or legacy style ID to a renderer style ID."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("Project visual_style must be a non-empty string")
+    normalized = value.strip()
+    if normalized in UI_STYLE_ALIASES:
+        return UI_STYLE_ALIASES[normalized]
+    if normalized in LEGACY_STYLE_IDS:
+        return normalized
+    raise ValueError(f"Unsupported visual direction: {normalized}")
+
+
+def apply_visual_direction(visual_bible: dict[str, Any], requested: str | None) -> dict[str, Any]:
+    """Enforce an explicit user choice after model output has been validated."""
+    if requested is not None:
+        visual_bible["style_id"] = requested
+    return visual_bible
