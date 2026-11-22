@@ -23,6 +23,69 @@ _BLOCKED_PATTERNS = (
     r"\b(?:setTimeout|setInterval|requestAnimationFrame)\s*\(",
 )
 
+
+KINEMATIC_MOTION_TYPES = {"pivot", "translation", "actuator"}
+
+
+def _finite_number(value: Any, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{label} must be a finite number")
+    number = float(value)
+    if not number == number or number in (float("inf"), float("-inf")):
+        raise ValueError(f"{label} must be a finite number")
+    return number
+
+
+def validate_kinematics(value: Any, component_parts: set[str]) -> dict[str, Any]:
+    """Validate explicit 2D motion geometry; never infer geometry from prose."""
+    if not isinstance(value, dict):
+        raise ValueError("Mechanism kinematics entries must be objects")
+    kind = value.get("type")
+    if kind not in KINEMATIC_MOTION_TYPES:
+        raise ValueError("Kinematics type must be pivot, translation or actuator")
+    result = dict(value)
+    part = result.get("part")
+    if not isinstance(part, str) or part not in component_parts:
+        raise ValueError("Kinematics part must reference a declared mechanism component")
+    if kind == "pivot":
+        anchor = result.get("anchor")
+        if not isinstance(anchor, dict):
+            raise ValueError("Pivot kinematics require a numeric anchor")
+        x = _finite_number(anchor.get("x"), "Pivot anchor x")
+        y = _finite_number(anchor.get("y"), "Pivot anchor y")
+        start = _finite_number(result.get("start_angle_deg", 0), "Pivot start_angle_deg")
+        end = _finite_number(result.get("end_angle_deg"), "Pivot end_angle_deg")
+        if not -360 <= start <= 360 or not -360 <= end <= 360:
+            raise ValueError("Pivot angles must be between -360 and 360 degrees")
+        result.update(anchor={"x": x, "y": y}, start_angle_deg=start, end_angle_deg=end)
+    elif kind == "translation":
+        start, end = result.get("start"), result.get("end")
+        if not isinstance(start, dict) or not isinstance(end, dict):
+            raise ValueError("Translation kinematics require start and end points")
+        result.update(
+            start={"x": _finite_number(start.get("x"), "Translation start x"),
+                   "y": _finite_number(start.get("y"), "Translation start y")},
+            end={"x": _finite_number(end.get("x"), "Translation end x"),
+                 "y": _finite_number(end.get("y"), "Translation end y")},
+        )
+    else:
+        base, rod = result.get("base_anchor"), result.get("rod_anchor")
+        if not isinstance(base, dict) or not isinstance(rod, dict):
+            raise ValueError("Actuator kinematics require base_anchor and rod_anchor points")
+        result.update(
+            base_anchor={"x": _finite_number(base.get("x"), "Actuator base x"),
+                         "y": _finite_number(base.get("y"), "Actuator base y")},
+            rod_anchor={"x": _finite_number(rod.get("x"), "Actuator rod x"),
+                        "y": _finite_number(rod.get("y"), "Actuator rod y")},
+        )
+        minimum = _finite_number(result.get("min_length"), "Actuator min_length")
+        maximum = _finite_number(result.get("max_length"), "Actuator max_length")
+        if minimum <= 0 or maximum < minimum:
+            raise ValueError("Actuator lengths must satisfy 0 < min_length <= max_length")
+        result.update(min_length=minimum, max_length=maximum)
+    return result
+
+
 def validate_visual_bible(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("Visual bible must be an object")
@@ -98,13 +161,24 @@ def validate_visual_bible(value: Any) -> dict[str, Any]:
         components = mechanism.setdefault("components", [])
         if not isinstance(components, list) or not components or len(components) > 20:
             raise ValueError("Mechanism components must contain 1–20 entries")
+        component_parts: set[str] = set()
         for component in components:
             if not isinstance(component, dict) or component.get("prop_id") not in prop_ids:
                 raise ValueError("Mechanism component must reference a declared prop_id")
             if not isinstance(component.get("part"), str) or not component["part"].strip():
                 raise ValueError("Mechanism component part must be named")
+            if component["part"] in component_parts:
+                raise ValueError("Mechanism component part names must be unique")
+            component_parts.add(component["part"])
             if not isinstance(component.get("role", ""), str):
                 raise ValueError("Mechanism component role must be text")
+        if "kinematics" in mechanism:
+            kinematics = mechanism["kinematics"]
+            if not isinstance(kinematics, list) or not 1 <= len(kinematics) <= 20:
+                raise ValueError("Mechanism kinematics must contain 1–20 motion definitions")
+            mechanism["kinematics"] = [
+                validate_kinematics(item, component_parts) for item in kinematics
+            ]
         joints = mechanism.setdefault("joints", [])
         if not isinstance(joints, list) or len(joints) > 20:
             raise ValueError("Mechanism joints must be an array of at most 20 entries")
