@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
@@ -78,15 +79,12 @@ async def requeue_project(
     _: CurrentUser = Depends(admin_user),
     pool: asyncpg.Pool = Depends(get_pool),
 ):
-    """Reset a failed project back to 'queued' and re-enter it into the pipeline.
-
-    Safe to call on any project with status 'failed'. Resets attempts counter
-    so it gets a full 3 more tries. Notifies the watcher immediately.
-    """
+    """Requeue a failed project with a fresh, idempotent credit reservation."""
     async with pool.acquire() as connection:
         async with connection.transaction():
             project = await connection.fetchrow(
-                "SELECT id, status, credits_reserved FROM projects WHERE id=$1 FOR UPDATE",
+                """SELECT id,user_id,status,credits_reserved,credit_reservation_version
+                   FROM projects WHERE id=$1 FOR UPDATE""",
                 project_id,
             )
             if not project:
@@ -97,41 +95,65 @@ async def requeue_project(
                     detail=f"Project is '{project['status']}', only 'failed' projects can be requeued",
                 )
 
-            # Reset project back to queued state.
+            account = await connection.fetchrow(
+                "SELECT * FROM credit_accounts WHERE user_id=$1 FOR UPDATE",
+                project["user_id"],
+            )
+            if not account:
+                raise HTTPException(status_code=409, detail="Credit account is not initialized")
+            available = account["total_credits"] - account["spent_credits"] - account["reserved_credits"]
+            if project["credits_reserved"] > available:
+                raise HTTPException(status_code=402, detail="Not enough render time to requeue this production")
+
+            next_version = project["credit_reservation_version"] + 1
+            reserved = await connection.fetchval(
+                """INSERT INTO credit_ledger(user_id,project_id,entry_type,amount,idempotency_key,metadata)
+                   VALUES($1,$2,'reserve',$3,$4,jsonb_build_object('source','admin_requeue','version',$5))
+                   ON CONFLICT DO NOTHING RETURNING id""",
+                project["user_id"], project_id, project["credits_reserved"],
+                f"project:{project_id}:v{next_version}:reserve", next_version,
+            )
+            if not reserved:
+                raise HTTPException(status_code=409, detail="This requeue reservation was already recorded")
             await connection.execute(
-                """UPDATE projects
-                   SET status='queued', progress=2, error_code=NULL, error_message=NULL
-                   WHERE id=$1""",
-                project_id,
+                "UPDATE credit_accounts SET reserved_credits=reserved_credits+$2 WHERE user_id=$1",
+                project["user_id"], project["credits_reserved"],
             )
 
-            # Try to reset an existing api job_attempt first.
-            updated = await connection.fetchval(
+            await connection.execute(
+                """UPDATE projects
+                   SET status='queued',progress=2,error_code=NULL,error_message=NULL,
+                       credit_reservation_version=$2,credits_settled=NULL,
+                       output_object=NULL,output_url=NULL,poster_object=NULL,poster_url=NULL,completed_at=NULL,cancelled_at=NULL
+                   WHERE id=$1""",
+                project_id, next_version,
+            )
+
+            api_attempt = await connection.fetchval(
                 """UPDATE job_attempts
-                   SET status='ready', attempts=0, due_at=now(),
-                       lease_token=NULL, lease_expires_at=NULL, last_error=NULL, worker_region=NULL
-                   WHERE project_id=$1 AND job_class='api'
+                   SET status='ready',attempts=0,due_at=now(),lease_token=NULL,
+                       lease_expires_at=NULL,last_error=NULL,worker_region=NULL
+                   WHERE project_id=$1 AND job_class='api' AND pipeline_revision='v1'
                    RETURNING id""",
                 project_id,
             )
-
-            # If no attempt row exists (e.g. it was hard-deleted), create a fresh one.
-            if not updated:
-                updated = uuid4()
+            if not api_attempt:
+                api_attempt = uuid4()
                 await connection.execute(
-                    "INSERT INTO job_attempts(id, project_id, job_class, status) VALUES($1,$2,'api','ready')",
-                    updated, project_id,
+                    """INSERT INTO job_attempts(id,project_id,job_class,status)
+                       VALUES($1,$2,'api','ready')""",
+                    api_attempt, project_id,
                 )
 
             await connection.execute(
-                "INSERT INTO project_events(project_id,event_type,stage,progress,payload) VALUES($1,'queued','admin',2,'{}') ",
+                """INSERT INTO project_events(project_id,event_type,stage,progress,payload)
+                   VALUES($1,'queued','admin',2,$2::jsonb)""",
                 project_id,
+                json.dumps({"credit_reservation_version": next_version}),
             )
+            await connection.execute("SELECT pg_notify('shortclipr_jobs',$1)", str(api_attempt))
 
-            # Wake the watcher immediately.
-            await connection.execute("SELECT pg_notify('shortclipr_jobs',$1)", str(updated))
-
-    return {"requeued": True, "projectId": str(project_id)}
+    return {"requeued": True, "projectId": str(project_id), "creditReservationVersion": next_version}
 
 
 @router.get("/projects/{project_id}/events")

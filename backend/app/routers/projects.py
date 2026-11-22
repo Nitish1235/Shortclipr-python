@@ -102,7 +102,7 @@ async def create_project(payload: CreateProjectRequest, user: CurrentUser = Depe
                 project_id,user.id,title_from_brief(payload.brief),payload.brief,payload.clip_type,payload.department,payload.language,payload.voice_id,payload.visual_style,payload.duration_seconds,payload.aspect_ratio,credits,
             )
             await connection.execute("UPDATE credit_accounts SET reserved_credits=reserved_credits+$2 WHERE user_id=$1", user.id, credits)
-            await connection.execute("INSERT INTO credit_ledger(user_id,project_id,entry_type,amount,idempotency_key) VALUES($1,$2,'reserve',$3,$4)", user.id, project_id, credits, f"project:{project_id}:reserve")
+            await connection.execute("INSERT INTO credit_ledger(user_id,project_id,entry_type,amount,idempotency_key) VALUES($1,$2,'reserve',$3,$4)", user.id, project_id, credits, f"project:{project_id}:v0:reserve")
             attempt_id = uuid4()
             await connection.execute("INSERT INTO job_attempts(id,project_id,job_class,status) VALUES($1,$2,'api','ready')", attempt_id, project_id)
             await connection.execute("INSERT INTO project_events(project_id,event_type,stage,progress) VALUES($1,'queued','api',2)", project_id)
@@ -130,10 +130,29 @@ async def cancel_project(project_id: UUID, user: CurrentUser = Depends(current_u
                 raise HTTPException(status_code=404, detail="Project not found")
             if project["status"] not in {"queued", "planning", "rendering"}:
                 raise HTTPException(status_code=409, detail="Project can no longer be cancelled")
-            await connection.execute("UPDATE projects SET status='cancelled',cancelled_at=now() WHERE id=$1", project_id)
-            await connection.execute("UPDATE job_attempts SET status='cancelled' WHERE project_id=$1 AND status IN ('ready','leased','running')", project_id)
-            await connection.execute("UPDATE credit_accounts SET reserved_credits=reserved_credits-$2 WHERE user_id=$1", user.id, project["credits_reserved"])
-            await connection.execute("INSERT INTO credit_ledger(user_id,project_id,entry_type,amount,idempotency_key) VALUES($1,$2,'release',$3,$4) ON CONFLICT DO NOTHING", user.id, project_id, -project["credits_reserved"], f"project:{project_id}:cancel-release")
+            version = project["credit_reservation_version"]
+            released = await connection.fetchval(
+                """INSERT INTO credit_ledger(user_id,project_id,entry_type,amount,idempotency_key)
+                   VALUES($1,$2,'release',$3,$4) ON CONFLICT DO NOTHING RETURNING id""",
+                user.id, project_id, -project["credits_reserved"],
+                f"project:{project_id}:v{version}:cancel-release",
+            )
+            await connection.execute(
+                """UPDATE projects SET status='cancelled',cancelled_at=now()
+                   WHERE id=$1 AND status IN ('queued','planning','rendering')""",
+                project_id,
+            )
+            await connection.execute(
+                """UPDATE job_attempts SET status='cancelled',lease_token=NULL,
+                   lease_expires_at=NULL,worker_region=NULL
+                   WHERE project_id=$1 AND status IN ('ready','leased','running')""",
+                project_id,
+            )
+            if released:
+                await connection.execute(
+                    "UPDATE credit_accounts SET reserved_credits=GREATEST(0,reserved_credits-$2) WHERE user_id=$1",
+                    user.id, project["credits_reserved"],
+                )
     return Response(status_code=204)
 
 

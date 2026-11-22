@@ -9,6 +9,20 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+
+async def _gather_cancel_on_error(*coroutines):
+    """Cancel sibling generation calls immediately when one fails or is cancelled."""
+    tasks = [asyncio.create_task(coro) for coro in coroutines]
+    try:
+        return await asyncio.gather(*tasks)
+    except BaseException:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+
+
 from openai import AsyncOpenAI
 
 from ..core.config import Settings
@@ -32,11 +46,11 @@ class DeepSeekAnimationCompiler:
         self.max_parallel_shots = max(1, min(4, settings.DEEPSEEK_MAX_PARALLEL_SHOTS))
         self.client = (
             AsyncOpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com",
-                        timeout=900.0, max_retries=2)
+                        timeout=90.0, max_retries=0)
             if settings.DEEPSEEK_API_KEY else None
         )
 
-    async def _json_completion(self, system_prompt: str, user_prompt: str, token_limit: int, reasoning_effort: str = "none") -> dict[str, Any]:
+    async def _json_completion(self, system_prompt: str, user_prompt: str, token_limit: int, reasoning_effort: str = "none", label: str = "animation fragment") -> dict[str, Any]:
         """Make one fast, non-thinking JSON/code generation request."""
         if self.client is None:
             raise RuntimeError("DEEPSEEK_API_KEY is not configured")
@@ -56,10 +70,18 @@ class DeepSeekAnimationCompiler:
         choice = response.choices[0] if response.choices else None
         message = choice.message if choice else None
         raw = (message.content or "").strip() if message else ""
+        usage = response.usage
+        prompt_details = getattr(usage, "prompt_tokens_details", None)
         logger.info("deepseek.animation.response", extra={
-            "model": self.model, "thinking_enabled": False, "latency_ms": latency_ms,
+            "model": self.model, "label": label, "thinking_enabled": False,
+            "latency_ms": latency_ms,
             "finish_reason": getattr(choice, "finish_reason", None),
-            "completion_tokens": getattr(response.usage, "completion_tokens", None),
+            "prompt_tokens": getattr(usage, "prompt_tokens", None),
+            "prompt_cache_hit_tokens": getattr(prompt_details, "cached_tokens", None),
+            "prompt_cache_miss_tokens": getattr(usage, "prompt_cache_miss_tokens", None),
+            "completion_tokens": getattr(usage, "completion_tokens", None),
+            "reasoning_tokens": getattr(getattr(usage, "completion_tokens_details", None), "reasoning_tokens", None),
+            "total_tokens": getattr(usage, "total_tokens", None),
             "content_chars": len(raw),
         })
         if not raw:
@@ -67,7 +89,28 @@ class DeepSeekAnimationCompiler:
         try:
             value = json.loads(raw)
         except json.JSONDecodeError as exc:
-            raise RuntimeError("DeepSeek returned invalid animation JSON") from exc
+            # Keep enough escaped context to diagnose malformed JSON without
+            # dumping the full generated source into production logs.
+            logger.error("deepseek.animation.invalid_json", extra={
+                "model": self.model,
+                "label": label,
+                "response_id": getattr(response, "id", None),
+                "finish_reason": getattr(choice, "finish_reason", None),
+                "prompt_tokens": getattr(usage, "prompt_tokens", None),
+                "completion_tokens": getattr(usage, "completion_tokens", None),
+                "content_chars": len(raw),
+                "json_error": exc.msg,
+                "json_error_pos": exc.pos,
+                "json_error_line": exc.lineno,
+                "json_error_column": exc.colno,
+                "response_prefix": repr(raw[:180]),
+                "response_suffix": repr(raw[-180:]),
+            })
+            raise RuntimeError(
+                f"DeepSeek returned invalid JSON for {label} "
+                f"(chars={len(raw)}, error={exc.msg} at line {exc.lineno}, "
+                f"column {exc.colno})"
+            ) from exc
         if not isinstance(value, dict):
             raise RuntimeError("DeepSeek animation response must be a JSON object")
         return value
@@ -77,8 +120,31 @@ class DeepSeekAnimationCompiler:
         field: str, label: str, max_chars: int, reasoning_effort: str = "none",
     ) -> str:
         """Generate once and apply only basic deterministic checks."""
-        result = await self._json_completion(system_prompt, user_prompt, token_limit)
+        result = await self._json_completion(system_prompt, user_prompt, token_limit, label=label)
         return validate_generated_fragment(result.get(field), label, max_chars)
+
+    @staticmethod
+    def _shot_visual_context(visual_bible: dict[str, Any], scene: dict[str, Any]) -> dict[str, Any]:
+        """Send each shot only the visual-bible entities it actually uses."""
+        character_ids = set(scene.get("characters") or [])
+        prop_ids = set(scene.get("props") or [])
+        environment_id = scene.get("environment")
+        return {
+            "style_id": visual_bible["style_id"],
+            "style_notes": visual_bible.get("style_notes", ""),
+            "characters": [
+                item for item in visual_bible.get("characters", [])
+                if item.get("id") in character_ids
+            ],
+            "props": [
+                item for item in visual_bible.get("props", [])
+                if item.get("id") in prop_ids
+            ],
+            "environments": [
+                item for item in visual_bible.get("environments", [])
+                if item.get("id") == environment_id
+            ],
+        }
 
     async def compile(self, project: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
         if self.client is None:
@@ -96,7 +162,7 @@ class DeepSeekAnimationCompiler:
 
         shared_prompt = f"""
 You are ShortClipr's senior 2D character and illustration systems artist.
-Create a reusable JavaScript drawing library for a {style_id} Canvas 2D film.
+Create a compact reusable JavaScript drawing library for a {style_id} Canvas 2D film. Aim for at most 1,800 output tokens.
 Return JSON only: {{"shared_js":"JavaScript source"}}.
 The source is evaluated in the same script as the film and may define ordinary named
 functions and constants. It must not call Motion.scene. Use only the supplied Canvas
@@ -111,8 +177,7 @@ ShortcliprStyles.pixelSnap(value, pixelSize) where appropriate. Use restrained t
 details rather than full-canvas particle loops. Create reusable helpers for every recurring
 character, prop and environment in the visual bible. Character functions must preserve
 silhouette, proportions, face, clothing, colours and distinctive marks across all shots.
-Prefer named functions such as drawExplorer(g, x, y, scale, pose, expression). Include
-common palette, shape, texture and shadow helpers. Keep code deterministic and self-contained.
+Prefer short named functions such as drawExplorer(g,x,y,s,pose,expression). Implement only helpers needed by this visual bible. Avoid duplicate helpers, verbose comments and decorative details that do not support the scenes. Keep code deterministic and compact.
 Do not use external assets. Do not redefine ShortcliprStyles.
 Visual bible:
 {json.dumps(visual_bible, ensure_ascii=False)}
@@ -129,6 +194,7 @@ Visual bible:
         async def compile_one(scene: dict[str, Any]) -> dict[str, Any]:
             start_s = scene["start_frame"] / 30
             end_s = scene["end_frame"] / 30
+            shot_visual_context = self._shot_visual_context(visual_bible, scene)
             shot_prompt = f"""
 You are ShortClipr's 2D animation shot director and Canvas artist.
 Generate only the drawing body for one shot. Return JSON only:
@@ -143,12 +209,10 @@ the shared helper functions. Redraw the full shot deterministically from t. No s
 accumulation, random numbers, DOM/browser globals, imports, exports, network, file access,
 Node APIs, timers, eval, Function, Date, performance, WebGL, Three.js or 3D.
 Keep all drawing within the logical canvas {logical[0]}x{logical[1]}.
-Make this a real animated action with anticipation, easing, follow-through and secondary
-motion. Compose foreground/midground/background where useful. Avoid generic placeholder
-geometry. Do not render narration or subtitles.
+Make one clear animated action with simple easing and follow-through. Use only the composition layers needed for this shot. Keep code concise: aim for at most 900 output tokens; no comments, repeated character drawings or unnecessary decorative loops. Reuse shared helpers for all recurring entities. Do not render narration or subtitles.
 STYLE: {style_id}
-VISUAL BIBLE:
-{json.dumps(visual_bible, ensure_ascii=False)}
+SHOT VISUAL REFERENCES:
+{json.dumps(shot_visual_context, ensure_ascii=False, separators=(",", ":"))}
 SHOT:
 {json.dumps(scene, ensure_ascii=False)}
 SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s.
@@ -169,7 +233,7 @@ SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s
                 "transition_out": str(scene.get("transition_out", "cut")).lower(),
             }
 
-        compiled = await asyncio.gather(*(compile_one(scene) for scene in scenes))
+        compiled = await _gather_cancel_on_error(*(compile_one(scene) for scene in scenes))
         source = self._assemble_film(shared_js, compiled, duration, logical, style_id)
         if len(source) > MAX_FILM_SOURCE:
             raise ValueError("Assembled animation program exceeds the maximum source size")

@@ -8,11 +8,29 @@ class QualityError(RuntimeError):
     pass
 
 
-async def run(*args: str) -> tuple[bytes, bytes]:
-    process = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    stdout, stderr = await process.communicate()
+async def run(*args: str, timeout: int | None = None) -> tuple[bytes, bytes]:
+    """Run one media tool with a hard deadline and guaranteed child cleanup."""
+    timeout_seconds = timeout or max(30, int(os.getenv("MEDIA_PROCESS_TIMEOUT_SECONDS", "90")))
+    process = await asyncio.create_subprocess_exec(
+        *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)
+    except asyncio.TimeoutError as error:
+        if process.returncode is None:
+            process.kill()
+        await process.communicate()
+        raise QualityError(
+            f"{Path(args[0]).name} exceeded the {timeout_seconds}s media-processing timeout"
+        ) from error
+    except asyncio.CancelledError:
+        if process.returncode is None:
+            process.kill()
+        await process.communicate()
+        raise
     if process.returncode:
-        raise QualityError(stderr.decode(errors="replace")[-1200:] or "media validation failed")
+        detail = stderr.decode(errors="replace")[-1200:] or stdout.decode(errors="replace")[-1200:]
+        raise QualityError(detail or f"{Path(args[0]).name} exited with code {process.returncode}")
     return stdout, stderr
 
 
@@ -48,25 +66,28 @@ async def mux_narration(video_path: Path, audio_path: Path, duration_seconds: in
         raise QualityError("Visual render is missing or empty")
     ffmpeg = os.getenv("FFMPEG_PATH", "ffmpeg")
     muxed_path = video_path.with_name(f"{video_path.stem}.with-audio.mp4")
-    await run(
-        ffmpeg,
-        "-y", "-v", "error",
-        "-i", str(video_path),
-        "-i", str(audio_path),
-        "-map", "0:v:0",
-        "-map", "1:a:0",
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-b:a", "192k",
-        "-af", "apad",
-        "-t", str(duration_seconds),
-        "-movflags", "+faststart",
-        str(muxed_path),
-    )
-    if not muxed_path.is_file() or muxed_path.stat().st_size == 0:
-        raise QualityError("Narration mux produced no output")
-    os.replace(muxed_path, video_path)
-    return {"size_bytes": video_path.stat().st_size}
+    try:
+        await run(
+            ffmpeg,
+            "-y", "-v", "error",
+            "-i", str(video_path),
+            "-i", str(audio_path),
+            "-map", "0:v:0",
+            "-map", "1:a:0",
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-af", "apad",
+            "-t", str(duration_seconds),
+            "-movflags", "+faststart",
+            str(muxed_path),
+        )
+        if not muxed_path.is_file() or muxed_path.stat().st_size == 0:
+            raise QualityError("Narration mux produced no output")
+        os.replace(muxed_path, video_path)
+        return {"size_bytes": video_path.stat().st_size}
+    finally:
+        muxed_path.unlink(missing_ok=True)
 
 
 async def validate_final(path: Path, aspect_ratio: str, duration_seconds: int) -> dict:

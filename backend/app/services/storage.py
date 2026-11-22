@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from pathlib import Path
 from uuid import uuid4
 
@@ -6,11 +7,30 @@ from google.cloud import storage
 
 from ..core.config import Settings
 
+logger = logging.getLogger(__name__)
+
 
 class ObjectStorage:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.client = storage.Client() if settings.GCS_BUCKET_NAME else None
+
+    async def _run_blocking(self, operation, on_cancel=None):
+        """Keep thread-backed GCS operations alive until settled, then clean up on cancellation."""
+        task = asyncio.create_task(asyncio.to_thread(operation))
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            try:
+                await asyncio.shield(task)
+            except Exception:
+                pass
+            if on_cancel is not None:
+                try:
+                    await asyncio.shield(asyncio.to_thread(on_cancel))
+                except Exception:
+                    logger.exception("storage.cancel_cleanup_failed")
+            raise
 
     async def upload_public(self, data: bytes, content_type: str, prefix: str, filename: str) -> tuple[str, str]:
         if not self.client or not self.settings.GCS_BUCKET_NAME:
@@ -30,18 +50,23 @@ class ObjectStorage:
     async def delete(self, object_name: str | None) -> None:
         if not object_name or not self.client or not self.settings.GCS_BUCKET_NAME:
             return
-        await asyncio.to_thread(self.client.bucket(self.settings.GCS_BUCKET_NAME).blob(object_name).delete)
+        blob = self.client.bucket(self.settings.GCS_BUCKET_NAME).blob(object_name)
+        await self._run_blocking(lambda: blob.delete(timeout=30))
 
     async def upload_file_private(self, path: Path, content_type: str, prefix: str) -> str:
         if not self.client or not self.settings.GCS_BUCKET_NAME:
             raise RuntimeError("GCS_BUCKET_NAME is not configured")
         object_name = f"{prefix.strip('/')}/{uuid4().hex}{path.suffix.lower()}"
 
-        def upload() -> None:
-            blob = self.client.bucket(self.settings.GCS_BUCKET_NAME).blob(object_name)
-            blob.upload_from_filename(str(path), content_type=content_type)
+        blob = self.client.bucket(self.settings.GCS_BUCKET_NAME).blob(object_name)
 
-        await asyncio.to_thread(upload)
+        def upload() -> None:
+            blob.upload_from_filename(str(path), content_type=content_type, timeout=60)
+
+        await self._run_blocking(
+            upload,
+            on_cancel=lambda: blob.delete(timeout=30),
+        )
         return object_name
 
     async def copy_to_public(self, source_object: str, prefix: str) -> tuple[str, str]:
@@ -64,10 +89,15 @@ class ObjectStorage:
             raise RuntimeError("GCS_BUCKET_NAME is not configured")
         object_name = f"{prefix.strip('/')}/{uuid4().hex}{suffix}"
 
-        def upload() -> None:
-            self.client.bucket(self.settings.GCS_BUCKET_NAME).blob(object_name).upload_from_string(data, content_type=content_type)
+        blob = self.client.bucket(self.settings.GCS_BUCKET_NAME).blob(object_name)
 
-        await asyncio.to_thread(upload)
+        def upload() -> None:
+            blob.upload_from_string(data, content_type=content_type, timeout=60)
+
+        await self._run_blocking(
+            upload,
+            on_cancel=lambda: blob.delete(timeout=30),
+        )
         return object_name
 
     async def private_object_info(self, object_name: str) -> tuple[str, int | None]:
@@ -76,20 +106,22 @@ class ObjectStorage:
 
         def load() -> tuple[str, int | None]:
             blob = self.client.bucket(self.settings.GCS_BUCKET_NAME).blob(object_name)
-            blob.reload()
+            blob.reload(timeout=30)
             return blob.content_type or "application/octet-stream", blob.size
 
-        return await asyncio.to_thread(load)
+        return await self._run_blocking(load)
 
     async def download_private(self, object_name: str, destination: Path) -> None:
         if not self.client or not self.settings.GCS_BUCKET_NAME:
             raise RuntimeError("GCS_BUCKET_NAME is not configured")
 
+        blob = self.client.bucket(self.settings.GCS_BUCKET_NAME).blob(object_name)
+
         def download() -> None:
             destination.parent.mkdir(parents=True, exist_ok=True)
-            self.client.bucket(self.settings.GCS_BUCKET_NAME).blob(object_name).download_to_filename(str(destination))
+            blob.download_to_filename(str(destination), timeout=60)
 
-        await asyncio.to_thread(download)
+        await self._run_blocking(download, on_cancel=lambda: destination.unlink(missing_ok=True))
 
     async def stream_private(self, object_name: str):
         if not self.client or not self.settings.GCS_BUCKET_NAME:

@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import httpx
 
-from watcher.main import Dispatcher, WorkerTarget, is_region_rejection, targets
+from watcher.main import Dispatcher, WorkerTarget, is_region_rejection, is_uncertain_delivery, targets
 
 
 class CapacityPool:
@@ -33,7 +33,7 @@ class WatcherRoutingTests(unittest.IsolatedAsyncioTestCase):
         }
         with patch.dict(os.environ, values, clear=True):
             result = targets("FFMPEG_WORKER_URLS", "FFMPEG_WORKER_REGIONS", "FFMPEG_REGION_SOFT_CAP", 4)
-        self.assertEqual(result[0].capacity, 4)
+        self.assertEqual(result[0].capacity, 2)
 
     async def test_ninth_render_waits_until_one_of_eight_slots_is_released(self):
         render_targets = [
@@ -45,6 +45,18 @@ class WatcherRoutingTests(unittest.IsolatedAsyncioTestCase):
 
         released = Dispatcher(CapacityPool({"us-central1": 3, "europe-west1": 4}), "secret", [], render_targets, 60)
         self.assertEqual((await released.next_target("render")).region, "us-central1")
+
+
+    def test_uncertain_delivery_keeps_worker_lease_until_reconciliation(self):
+        request = httpx.Request("POST", "https://render.example/internal/ffmpeg-stage/run")
+        server_error = httpx.HTTPStatusError("worker error", request=request, response=httpx.Response(500, request=request))
+        self.assertTrue(is_uncertain_delivery(server_error))
+        self.assertTrue(is_uncertain_delivery(httpx.ReadTimeout("read timed out", request=request)))
+        self.assertTrue(is_uncertain_delivery(httpx.WriteTimeout("write timed out", request=request)))
+        timeout_response = httpx.HTTPStatusError("request timeout", request=request, response=httpx.Response(408, request=request))
+        self.assertTrue(is_uncertain_delivery(timeout_response))
+        client_error = httpx.HTTPStatusError("bad request", request=request, response=httpx.Response(400, request=request))
+        self.assertFalse(is_uncertain_delivery(client_error))
 
     def test_quota_rejection_is_safe_for_regional_failover(self):
         request = httpx.Request("POST", "https://render.example/internal/ffmpeg-stage/run")
