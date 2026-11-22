@@ -86,7 +86,10 @@ class DrawnByCodeRenderer:
             return []
         samples: list[dict[str, Any]] = []
         seen: set[int] = set()
-        for shot in shot_manifest[:12]:
+        valid_shots = 0
+        for shot in shot_manifest:
+            if valid_shots >= 12:
+                break
             if not isinstance(shot, dict):
                 continue
             start, end = shot.get("start_frame"), shot.get("end_frame")
@@ -94,6 +97,7 @@ class DrawnByCodeRenderer:
                     or isinstance(end, bool) or not isinstance(end, int)
                     or start < 0 or end <= start):
                 continue
+            valid_shots += 1
             span = max(0, end - start - 1)
             shot_samples = []
             for fraction in (0.15, 0.5, 0.85):
