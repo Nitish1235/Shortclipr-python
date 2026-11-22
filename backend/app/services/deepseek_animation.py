@@ -186,8 +186,15 @@ A trusted runtime script ShortcliprStyles is loaded before this library. Use
 ShortcliprStyles.palette("{style_id}"), ShortcliprStyles.paperBackground(g, "{style_id}", env),
 ShortcliprStyles.paperShadow(g, x, y, blur, color), ShortcliprStyles.halftone(g, x, y, w, h, spacing, color),
 ShortcliprStyles.camera(g, env, {{cx, cy, zoom, rotation}}) inside g.save()/g.restore(), and
-ShortcliprStyles.pixelSnap(value, pixelSize) where appropriate. Use restrained texture
-details rather than full-canvas particle loops. Create reusable helpers for every recurring
+ShortcliprStyles.pixelSnap(value, pixelSize) where appropriate.
+For cinematic-editorial use ShortcliprStyles.editorialShape(g, points, opts) for layered
+graphic silhouettes and editorialLight(g,x,y,r,color) for restrained focal light.
+For isometric-technical use isoProject(x,y,z,scale,origin), isoBox(g,x,y,z,w,d,h,scale,colors),
+and isoLine(g,a,b,color,width); keep all components on the same projected axes.
+For layered-paper use paperPolygon(g,points,opts), paperEllipse(g,x,y,rx,ry,opts),
+paperLayer(g,draw,opts), and paperParallax(g,offset,layers); separate depth planes and
+keep light direction/shadow offsets consistent. These are deterministic Canvas 2D helpers.
+Use restrained texture details rather than full-canvas particle loops. Create reusable helpers for every recurring
 character, prop and environment in the visual bible. Character functions must preserve
 silhouette, proportions, face, clothing, colours and distinctive marks across all shots.
 Prefer short named functions such as drawExplorer(g,x,y,s,pose,expression). Implement only helpers needed by this visual bible. Avoid duplicate helpers, verbose comments and decorative details that do not support the scenes. Keep code deterministic and compact.
@@ -235,6 +242,10 @@ Make one clear animated action with simple easing and follow-through. Use only t
 STYLE: {style_id}
 BINDING ART DIRECTION:
 {art_direction_instructions}
+STYLE TOOLKIT REQUIREMENTS:
+- cinematic-editorial: construct foreground/midground/background layers, bold silhouette masses and one clear focal-light treatment.
+- isometric-technical: use the shared isoProject/isoBox projection helpers consistently for all related components; show component separation and mechanical relationships.
+- layered-paper: use separate paperPolygon/paperEllipse/paperLayer shapes with visible overlap and consistent cast shadows; add parallax only when it clarifies depth.
 SHOT VISUAL REFERENCES:
 {json.dumps(shot_visual_context, ensure_ascii=False, separators=(",", ":"))}
 SHOT:
