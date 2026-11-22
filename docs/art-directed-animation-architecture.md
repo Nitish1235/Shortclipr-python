@@ -191,3 +191,21 @@ The visual bible can now declare named mechanisms with stable IDs, prop-backed c
 The planner is instructed to identify a physical mechanism only when supported by the topic and to avoid fabricating kinematics when the mechanism is unknown. The compiler receives only the mechanisms used by a shot, validates mechanism and action-pattern references again before generation, and instructs the drawing model to derive connected driver/follower motion from shared progress while respecting joints and constraints.
 
 This is a structured motion-direction contract and prompt-level coordination, not a deterministic physics solver. Exact kinematics, mechanism-specific reusable motion functions, and rendered-frame motion QA remain future work. Qualitative motion must not be presented as engineering-accurate simulation unless the plan contains sufficient physical detail and is independently checked.
+
+
+## Implementation progress — deterministic mechanism primitives (PR #30)
+
+Added validated numeric 2D motion specs for fixed pivots/hinges, translations/sliders,
+meshed gear pairs, pulley-driven linear travel, authored cable polylines and telescoping
+actuators. The compiler now serializes each shot's validated mechanism actions and the
+referenced mechanism specs into local constants in that shot's generated function.
+The drawing model is instructed to call the trusted `ShortcliprStyles.mechanismPose`
+helper and apply the returned component transforms using shared normalized progress.
+
+This makes the listed primitive transforms deterministic and testable at the contract
+and assembly boundaries. It is not a general physics engine: gear motion uses ideal
+pitch-radius ratios, pulley motion uses an explicitly supplied axis, cable paths are
+interpolated from authored point arrays, and actuator extension does not solve a closed
+linkage. Collision, force, load, and linkage-closure solving remain out of scope. The
+tests and rendered benchmark videos still need execution and review in the project
+runtime before this stage can be treated as verified.
