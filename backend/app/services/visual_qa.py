@@ -123,6 +123,77 @@ class VisualQualityReviewer:
             "automatic_repair": False,
         }
 
+    @staticmethod
+    def build_repair_queue(
+        review: dict[str, Any],
+        shot_manifest: list[dict[str, Any]],
+        max_shots: int = 2,
+        min_confidence: float = 0.7,
+    ) -> list[dict[str, Any]]:
+        """Select only high-confidence, actionable findings for a bounded shot repair."""
+        if review.get("status") != "reviewed" or not isinstance(shot_manifest, list):
+            return []
+        if isinstance(max_shots, bool) or not isinstance(max_shots, int) or max_shots < 1:
+            return []
+        known_shots = {
+            item.get("index") for item in shot_manifest
+            if isinstance(item, dict)
+            and isinstance(item.get("index"), int)
+            and not isinstance(item.get("index"), bool)
+        }
+        grouped: dict[int, list[dict[str, Any]]] = {}
+        for finding in review.get("findings", []) if isinstance(review.get("findings"), list) else []:
+            if not isinstance(finding, dict):
+                continue
+            shot_index = finding.get("shot_index")
+            if (isinstance(shot_index, bool) or not isinstance(shot_index, int)
+                    or shot_index not in known_shots):
+                continue
+            if finding.get("severity") not in {"critical", "high"}:
+                continue
+            confidence = finding.get("confidence")
+            if (isinstance(confidence, bool) or not isinstance(confidence, (int, float))
+                    or confidence < min_confidence):
+                continue
+            issue = finding.get("issue")
+            recommendation = finding.get("recommendation")
+            evidence = finding.get("evidence_sample_indices")
+            if (not isinstance(issue, str) or not issue.strip()
+                    or not isinstance(recommendation, str) or not recommendation.strip()
+                    or not isinstance(evidence, list) or not evidence):
+                continue
+            grouped.setdefault(shot_index, []).append({
+                "category": finding.get("category", "other"),
+                "severity": finding["severity"],
+                "shot_index": shot_index,
+                "evidence_sample_indices": [
+                    value for value in evidence[:3]
+                    if isinstance(value, int) and not isinstance(value, bool)
+                ],
+                "issue": issue[:500],
+                "recommendation": recommendation[:500],
+                "confidence": round(float(confidence), 2),
+            })
+        priority = {"critical": 0, "high": 1}
+        ranked = sorted(
+            grouped.items(),
+            key=lambda pair: (
+                min(priority[item["severity"]] for item in pair[1]),
+                -max(item["confidence"] for item in pair[1]),
+                pair[0],
+            ),
+        )
+        return [
+            {
+                "shot_index": shot_index,
+                "findings": sorted(
+                    findings,
+                    key=lambda item: (priority[item["severity"]], -item["confidence"]),
+                )[:4],
+            }
+            for shot_index, findings in ranked[:max_shots]
+        ]
+
     async def review(
         self,
         contact_sheet_path: Path,
