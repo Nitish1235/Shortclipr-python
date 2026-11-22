@@ -89,13 +89,52 @@ class MechanismKinematicsContextTests(unittest.TestCase):
 
         styles_path = Path(__file__).resolve().parents[1] / "drawn_by_code" / "styles" / "shortclipr.js"
         source = styles_path.read_text(encoding="utf-8")
-        self.assertRegex(source, r"function mechanismPose\\(spec,progress\\)")
+        self.assertRegex(source, r"function mechanismPose\(spec,progress\)")
         self.assertIn("return {type:'pivot',part:spec.part,anchor,angle_rad:angle}", source)
         self.assertIn("return {type:'translation',part:spec.part,position:", source)
         self.assertIn("return {type:'actuator',part:spec.part,base,tip:", source)
-        self.assertRegex(source, r"Object\\.freeze\\(\\{mechanismPose,")
+        self.assertRegex(source, r"Object\.freeze\(\{mechanismPose,")
 
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MechanismAssemblyTests(unittest.TestCase):
+    def test_assembler_injects_serialized_actions_and_mechanism_specs(self):
+        source = DeepSeekAnimationCompiler._assemble_film(
+            "function drawBridge(g) {}",
+            [{
+                "index": 0,
+                "start_frame": 0,
+                "end_frame": 30,
+                "name": "Bridge lift",
+                "draw_body": "drawBridge(g);",
+                "mechanism_actions": [{
+                    "mechanism_id": "mechanism_lift",
+                    "pattern_id": "raise",
+                    "action": "raise deck",
+                    "start_progress": 0.1,
+                    "end_progress": 0.9,
+                }],
+                "mechanisms": [{
+                    "id": "mechanism_lift",
+                    "kinematics": [{
+                        "type": "pivot",
+                        "part": "deck",
+                        "anchor": {"x": 20, "y": 30},
+                        "start_angle_deg": 0,
+                        "end_angle_deg": 40,
+                    }],
+                }],
+            }],
+            duration=1,
+            logical=[1600, 900],
+            style_id="line",
+        )
+        self.assertIn("const mechanismActions = [{", source)
+        self.assertIn('"mechanism_id":"mechanism_lift"', source)
+        self.assertIn("const mechanisms = [{", source)
+        self.assertIn('"type":"pivot"', source)
+        self.assertIn("drawBridge(g);", source)
