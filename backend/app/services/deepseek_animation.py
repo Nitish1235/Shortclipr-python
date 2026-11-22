@@ -396,6 +396,20 @@ Rules:
             "shot_source_chars": sum(len(x["draw_body"]) for x in compiled),
             "motion_diagnostics": motion_diagnostics,
             "visual_qa_context": self._visual_qa_context(visual_bible, scenes),
+            # Keep the exact compiled shot bodies and shared drawing library so a
+            # later repair can replace one shot without regenerating other shots.
+            "repair_bundle": {
+                "schema_version": 1,
+                "duration": duration,
+                "logical": logical,
+                "style_id": style_id,
+                "art_direction": art_direction,
+                "art_direction_instructions": art_direction_instructions,
+                "visual_bible": visual_bible,
+                "scenes": scenes,
+                "shared_js": shared_js,
+                "shots": compiled,
+            },
             "shot_manifest": [
                 {
                     "index": shot["index"],
