@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 from openai import AsyncOpenAI
 
 from ..core.config import Settings
-from .generation_policy import coding_effort
 from .animation_contracts import (
     ASPECT_LOGICAL,
     MAX_FILM_SOURCE,
@@ -29,108 +28,57 @@ class DeepSeekAnimationCompiler:
 
     def __init__(self, settings: Settings):
         self.model = settings.DEEPSEEK_ANIMATION_MODEL
-        self.medium_reasoning_effort = "medium"
-        self.max_reasoning_effort = settings.DEEPSEEK_CODING_REASONING_EFFORT
         self.max_output_tokens = settings.DEEPSEEK_MAX_OUTPUT_TOKENS
         self.max_parallel_shots = max(1, min(4, settings.DEEPSEEK_MAX_PARALLEL_SHOTS))
-        self.enable_shot_review = settings.DEEPSEEK_ENABLE_SHOT_REVIEW
         self.client = (
             AsyncOpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com",
                         timeout=900.0, max_retries=2)
             if settings.DEEPSEEK_API_KEY else None
         )
 
-    async def _json_completion(self, system_prompt: str, user_prompt: str, token_limit: int, reasoning_effort: str = "medium") -> dict[str, Any]:
+    async def _json_completion(self, system_prompt: str, user_prompt: str, token_limit: int, reasoning_effort: str = "none") -> dict[str, Any]:
+        """Make one fast, non-thinking JSON/code generation request."""
         if self.client is None:
             raise RuntimeError("DEEPSEEK_API_KEY is not configured")
-        # DeepSeek JSON mode can return whitespace-only content when it cannot
-        # recognize the generated output as JSON. Capture finish_reason/usage and
-        # make one conservative non-thinking retry before failing the job.
-        last_error = "unknown response"
-        for attempt in range(2):
-            request_started = asyncio.get_running_loop().time()
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_format={"type": "json_object"},
-                max_tokens=token_limit,
-                # Animation source generation is a constrained coding task, not a
-                # reasoning benchmark. Reserve the completion budget for JSON/code.
-                reasoning_effort=("none" if attempt else reasoning_effort),
-                extra_body={"thinking": {"type": "disabled" if attempt else "enabled"}},
-            )
-            latency_ms = round((asyncio.get_running_loop().time() - request_started) * 1000)
-            choice = response.choices[0] if response.choices else None
-            message = choice.message if choice else None
-            raw = (message.content or "").strip() if message else ""
-            usage = response.usage
-            usage_info = {
-                "prompt_tokens": getattr(usage, "prompt_tokens", None),
-                "completion_tokens": getattr(usage, "completion_tokens", None),
-                "reasoning_tokens": getattr(getattr(usage, "completion_tokens_details", None), "reasoning_tokens", None),
-            }
-            finish_reason = getattr(choice, "finish_reason", None)
-            logger.info(
-                "deepseek.animation.response",
-                extra={
-                    "model": self.model,
-                    "reasoning_effort": "none" if attempt else reasoning_effort,
-                    "thinking_enabled": not bool(attempt),
-                    "attempt": attempt + 1,
-                    "latency_ms": latency_ms,
-                    "finish_reason": finish_reason,
-                    "response_id": getattr(response, "id", None),
-                    **usage_info,
-                    "content_chars": len(raw),
-                    "reasoning_chars": len(getattr(message, "reasoning_content", None) or "") if message else 0,
-                },
-            )
-            if not raw:
-                last_error = f"empty JSON content (finish_reason={finish_reason}, usage={usage_info})"
-                if attempt == 0:
-                    logger.warning("deepseek.animation.empty_response_retry", extra={"finish_reason": finish_reason, **usage_info})
-                    continue
-                raise RuntimeError(f"DeepSeek returned empty animation JSON after fallback retry: {last_error}")
-            try:
-                value = json.loads(raw)
-            except json.JSONDecodeError as exc:
-                last_error = f"invalid JSON (finish_reason={finish_reason}, content_chars={len(raw)})"
-                if attempt == 0:
-                    logger.warning("deepseek.animation.invalid_json_retry", extra={"finish_reason": finish_reason})
-                    continue
-                raise RuntimeError(f"DeepSeek returned invalid animation JSON after fallback retry: {last_error}") from exc
-            if not isinstance(value, dict):
-                raise RuntimeError("DeepSeek animation response must be a JSON object")
-            return value
-        raise RuntimeError(f"DeepSeek animation generation failed: {last_error}")
+        request_started = asyncio.get_running_loop().time()
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+            max_tokens=token_limit,
+            reasoning_effort="none",
+            extra_body={"thinking": {"type": "disabled"}},
+        )
+        latency_ms = round((asyncio.get_running_loop().time() - request_started) * 1000)
+        choice = response.choices[0] if response.choices else None
+        message = choice.message if choice else None
+        raw = (message.content or "").strip() if message else ""
+        logger.info("deepseek.animation.response", extra={
+            "model": self.model, "thinking_enabled": False, "latency_ms": latency_ms,
+            "finish_reason": getattr(choice, "finish_reason", None),
+            "completion_tokens": getattr(response.usage, "completion_tokens", None),
+            "content_chars": len(raw),
+        })
+        if not raw:
+            raise RuntimeError("DeepSeek returned empty animation JSON")
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("DeepSeek returned invalid animation JSON") from exc
+        if not isinstance(value, dict):
+            raise RuntimeError("DeepSeek animation response must be a JSON object")
+        return value
 
     async def _validated_fragment(
         self, system_prompt: str, user_prompt: str, token_limit: int,
-        field: str, label: str, max_chars: int, reasoning_effort: str,
+        field: str, label: str, max_chars: int, reasoning_effort: str = "none",
     ) -> str:
-        """Generate, validate, then make one targeted repair using the validator error."""
-        result = await self._json_completion(system_prompt, user_prompt, token_limit, reasoning_effort)
-        try:
-            return validate_generated_fragment(result.get(field), label, max_chars)
-        except ValueError as validation_error:
-            logger.warning("deepseek.animation.fragment_repair", extra={
-                "label": label, "reason": str(validation_error)[:300],
-                "reasoning_effort": reasoning_effort,
-            })
-            repair_prompt = (
-                f"{user_prompt}\\n\\n"
-                f"The previous {label} failed deterministic validation: {validation_error}. "
-                f"Return a complete corrected JSON object with the field {field!r}. "
-                "Keep the original visual intent and obey every Canvas-only restriction. "
-                f"Previous value:\\n{str(result.get(field, ''))[:max_chars]}"
-            )
-            repaired = await self._json_completion(
-                system_prompt, repair_prompt, token_limit, reasoning_effort
-            )
-            return validate_generated_fragment(repaired.get(field), f"Repaired {label}", max_chars)
+        """Generate once and apply only basic deterministic checks."""
+        result = await self._json_completion(system_prompt, user_prompt, token_limit)
+        return validate_generated_fragment(result.get(field), label, max_chars)
 
     async def compile(self, project: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
         if self.client is None:
@@ -169,12 +117,11 @@ Do not use external assets. Do not redefine ShortcliprStyles.
 Visual bible:
 {json.dumps(visual_bible, ensure_ascii=False)}
 """.strip()
-        shared_effort = coding_effort(None, project, self.medium_reasoning_effort, self.max_reasoning_effort)
         shared_js = await self._validated_fragment(
             "You are a senior Canvas 2D JavaScript systems programmer. Return strict JSON only.",
             shared_prompt + "\n\nReturn only the required JSON object.",
             min(self.max_output_tokens, 12000), "shared_js", "Shared drawing library",
-            MAX_SHARED_SOURCE, shared_effort,
+            MAX_SHARED_SOURCE,
         )
 
         semaphore = asyncio.Semaphore(self.max_parallel_shots)
@@ -207,12 +154,11 @@ SHOT:
 SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s.
 """.strip()
             async with semaphore:
-                effort = coding_effort(scene, project, self.medium_reasoning_effort, self.max_reasoning_effort)
                 body = await self._validated_fragment(
                     "You are a senior Canvas 2D animation programmer. Return strict JSON only.",
                     shot_prompt + "\n\nWrite the complete draw_body now.",
                     min(self.max_output_tokens, 10000), "draw_body",
-                    f"Shot {scene['index'] + 1}", MAX_SHOT_SOURCE, effort,
+                    f"Shot {scene['index'] + 1}", MAX_SHOT_SOURCE,
                 )
             return {
                 "index": scene["index"],
@@ -224,9 +170,6 @@ SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s
             }
 
         compiled = await asyncio.gather(*(compile_one(scene) for scene in scenes))
-        compiled, review_summary = await self._review_and_repair_shots(
-            compiled, scenes, visual_bible, style_id, logical
-        )
         source = self._assemble_film(shared_js, compiled, duration, logical, style_id)
         if len(source) > MAX_FILM_SOURCE:
             raise ValueError("Assembled animation program exceeds the maximum source size")
@@ -238,105 +181,8 @@ SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s
             "shot_count": len(compiled),
             "shared_source_chars": len(shared_js),
             "shot_source_chars": sum(len(x["draw_body"]) for x in compiled),
-            "quality_review": review_summary,
         }
 
-
-    async def _review_and_repair_shots(
-        self,
-        shots: list[dict[str, Any]],
-        scenes: list[dict[str, Any]],
-        visual_bible: dict[str, Any],
-        style_id: str,
-        logical: list[int],
-    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        """Review shot source and repair only shots with actionable defects.
-
-        This is source-level review, not rendered-frame or visual QA.
-        """
-        if not self.enable_shot_review:
-            return shots, {
-                "mode": "disabled", "shots_reviewed": 0, "passed": 0,
-                "repaired": 0, "skipped": len(shots), "issues": [],
-            }
-        semaphore = asyncio.Semaphore(self.max_parallel_shots)
-        scene_by_index = {scene["index"]: scene for scene in scenes}
-
-        async def review_one(shot: dict[str, Any]) -> dict[str, Any]:
-            scene = scene_by_index[shot["index"]]
-            body = shot["draw_body"]
-            prompt = f"""
-You are a strict source-code reviewer for a generated 2D Canvas animation shot.
-Review the supplied JavaScript drawing body against the shot brief and visual bible.
-You cannot see rendered frames. Do not claim to assess visual appearance; assess only
-source-level correctness and likely drawing defects.
-
-Check for: missing or ineffective visible action; missing background or composition;
-broken/imbalanced Canvas save/restore state; use of undeclared character/prop helper IDs;
-inconsistent use of the shared character drawing functions; unsupported APIs; use of
-browser/Node/network/time/random APIs; obvious unbounded loops; drawing outside the
-logical canvas {logical[0]}x{logical[1]}; failure to use deterministic time t; and
-style helper misuse. Do not demand a background if the shot intentionally continues a
-continuous environment and the code clearly paints that environment.
-
-Return strict JSON:
-{{"status":"pass"|"repair","issues":["short actionable defect"],"repaired_draw_body":"complete replacement body or empty string"}}
-Use status=pass and an empty repaired_draw_body when no material defect is found.
-Use status=repair only for concrete defects that can be fixed without changing the story,
-character identity, shot purpose, or style. Preserve all useful animation detail.
-Do not add external assets, imports, DOM, WebGL or 3D.
-STYLE: {style_id}
-VISUAL BIBLE:
-{json.dumps(visual_bible, ensure_ascii=False)}
-SHOT BRIEF:
-{json.dumps(scene, ensure_ascii=False)}
-CURRENT DRAW BODY:
-{body}
-""".strip()
-            async with semaphore:
-                try:
-                    result = await self._json_completion(
-                        "You are a conservative JavaScript animation code reviewer. Return strict JSON only.",
-                        prompt,
-                        min(self.max_output_tokens, 10000), "medium",
-                    )
-                    status = result.get("status")
-                    issues = result.get("issues", [])
-                    if not isinstance(issues, list):
-                        issues = []
-                    issues = [str(x)[:240] for x in issues[:8]]
-                    if status != "repair":
-                        return {**shot, "review_status": "passed", "review_issues": issues}
-                    repaired = validate_generated_fragment(
-                        result.get("repaired_draw_body"),
-                        f"Repaired shot {shot['index'] + 1}",
-                        MAX_SHOT_SOURCE,
-                    )
-                    return {
-                        **shot, "draw_body": repaired, "review_status": "repaired",
-                        "review_issues": issues,
-                    }
-                except Exception as exc:
-                    return {
-                        **shot, "review_status": "skipped",
-                        "review_issues": [f"Review unavailable: {type(exc).__name__}"],
-                    }
-
-        reviewed = await asyncio.gather(*(review_one(shot) for shot in shots))
-        counts = {
-            "passed": sum(x["review_status"] == "passed" for x in reviewed),
-            "repaired": sum(x["review_status"] == "repaired" for x in reviewed),
-            "skipped": sum(x["review_status"] == "skipped" for x in reviewed),
-        }
-        return reviewed, {
-            "mode": "source_only",
-            "shots_reviewed": len(reviewed) - counts["skipped"],
-            **counts,
-            "issues": [
-                {"shot": x["index"] + 1, "status": x["review_status"], "items": x["review_issues"]}
-                for x in reviewed if x["review_issues"]
-            ],
-        }
 
     @staticmethod
     def _assemble_film(shared_js: str, shots: list[dict[str, Any]], duration: int,
