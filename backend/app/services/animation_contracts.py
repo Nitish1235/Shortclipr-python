@@ -139,7 +139,7 @@ def validate_draw_helper_definitions(source: str, required_names: list[str]) -> 
         raise ValueError("Generated helper library did not define: " + ", ".join(missing))
     for name in required_names:
         signature = re.search(
-            rf"\\bfunction\\s+{re.escape(name)}\\s*\\(\\s*g\\s*(?:,|\\))",
+            rf"\bfunction\s+{re.escape(name)}\s*\(\s*g\s*(?:,|\))",
             source,
         )
         if not signature:
