@@ -3,7 +3,7 @@ import { estimateCredits } from '../data/catalog'
 
 const PROJECTS_KEY = 'shortclipr.projects.v2'
 const SHOWCASE_KEY = 'shortclipr.showcase.v2'
-const CREDITS_KEY = 'shortclipr.render-time.v4'
+const CREDITS_KEY = 'shortclipr.render-time.v5'
 
 const now = () => new Date().toISOString()
 const read = <T,>(key: string, fallback: T): T => {
@@ -25,6 +25,7 @@ export const demoStore = {
   saveProjects(projects: Project[]) { write(PROJECTS_KEY, projects) },
   project(id: string): Project | undefined { return this.projects().find((project) => project.id === id) },
   createProject(input: CreateProjectInput): Project {
+    if (input.durationSeconds !== 10) throw new Error('The Free plan includes one 10-second short each month.')
     const title = input.brief.split(/[.!?\n]/)[0].slice(0, 76) || 'Untitled production'
     const project: Project = { id:crypto.randomUUID(), title, ...input, status:'queued', progress:2, creditsReserved:estimateCredits(input.clipType,input.durationSeconds,input.visualStyle), createdAt:now(), updatedAt:now() }
     const projects = [project, ...this.projects()]
@@ -32,7 +33,7 @@ export const demoStore = {
     const credits = this.credits(); credits.used = Math.min(credits.total, credits.used + project.creditsReserved); credits.remaining = Math.max(0, credits.total - credits.used); write(CREDITS_KEY, credits)
     return project
   },
-  credits(): CreditBalance { const value=read(CREDITS_KEY,{total:15,used:0,remaining:15}); return {...value,remaining:Math.max(0,value.total-value.used)} },
+  credits(): CreditBalance { const value=read(CREDITS_KEY,{total:10,used:0,remaining:10}); return {...value,remaining:Math.max(0,value.total-value.used)} },
   voices(): Voice[] { return [
     {id:'af_bella',name:'Hannah',language:'English (US)',description:'Reserved, natural American female'},
     {id:'af_nicole',name:'Kaitlyn',language:'English (US)',description:'Casual American female'},

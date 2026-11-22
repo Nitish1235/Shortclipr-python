@@ -5,6 +5,9 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+FREE_PLAN_MONTHLY_SECONDS = 10
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=True)
 
@@ -52,7 +55,6 @@ class Settings(BaseSettings):
     DODO_PRODUCT_STARTER: str = ""
     DODO_PRODUCT_CREATOR: str = ""
     DODO_PRODUCT_STUDIO: str = ""
-    FREE_MONTHLY_RENDER_SECONDS: int = 15
     DODO_STARTER_MONTHLY_RENDER_SECONDS: int = 600
     DODO_CREATOR_MONTHLY_RENDER_SECONDS: int = 1800
     DODO_STUDIO_MONTHLY_RENDER_SECONDS: int = 4200

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 
-from ..core.config import Settings, get_settings
+from ..core.config import FREE_PLAN_MONTHLY_SECONDS, Settings, get_settings
 from ..core.security import create_access_token
 from ..db import get_pool
 from ..dependencies import ADMIN_EMAIL_ALLOWLIST, CurrentUser, current_user
@@ -63,7 +63,7 @@ async def google_login(payload: GoogleAuthRequest, settings: Settings = Depends(
                 WHERE $3='free' AND credit_accounts.cycle_ends_at<=now()
                 """,
                 row["id"],
-                settings.FREE_MONTHLY_RENDER_SECONDS,
+                FREE_PLAN_MONTHLY_SECONDS,
                 row["plan"],
             )
     user = CurrentUser(**dict(row), is_admin=email in ADMIN_EMAIL_ALLOWLIST)
