@@ -3,7 +3,7 @@ import { freePlan, paidPlans } from './plans'
 
 describe('ShortClipr plan entitlements', () => {
   it('keeps the requested free allowance', () => {
-    expect(freePlan).toMatchObject({ id: 'free', price: 0, monthlySeconds: 15 })
+    expect(freePlan).toMatchObject({ id: 'free', price: 0, monthlySeconds: 10 })
   })
 
   it('keeps each Dodo plan price and render-time allowance exact', () => {
