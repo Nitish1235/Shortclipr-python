@@ -277,6 +277,56 @@ def validate_visual_bible(value: Any) -> dict[str, Any]:
     value["environments"] = environments
     return value
 
+
+def analyze_mechanism_motion(visual_bible: dict[str, Any], scenes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return non-blocking diagnostics for mechanism integration across shots.
+
+    Structural references are validated separately and remain fatal. These
+    diagnostics identify motion that is only qualitative and progress jumps
+    between adjacent shots; they never rewrite authored motion.
+    """
+    mechanisms = {item["id"]: item for item in visual_bible.get("mechanisms", [])}
+    diagnostics: list[dict[str, Any]] = []
+    previous: dict[tuple[str, str], tuple[int, float]] = {}
+
+    for scene in scenes:
+        scene_index = scene["index"]
+        for action in scene.get("mechanism_actions", []):
+            mechanism_id = action["mechanism_id"]
+            pattern_id = action["pattern_id"]
+            mechanism = mechanisms[mechanism_id]
+            key = (mechanism_id, pattern_id)
+            start = float(action.get("start_progress", 0))
+            end = float(action.get("end_progress", 1))
+
+            if not mechanism.get("kinematics"):
+                diagnostics.append({
+                    "code": "qualitative_motion_only",
+                    "severity": "info",
+                    "scene_index": scene_index,
+                    "mechanism_id": mechanism_id,
+                    "pattern_id": pattern_id,
+                    "message": "Mechanism action has no numeric kinematics; render it as qualitative motion only.",
+                })
+
+            prior = previous.get(key)
+            if prior and prior[0] == scene_index - 1 and abs(prior[1] - start) > 1e-6:
+                diagnostics.append({
+                    "code": "progress_discontinuity",
+                    "severity": "warning",
+                    "scene_index": scene_index,
+                    "previous_scene_index": prior[0],
+                    "mechanism_id": mechanism_id,
+                    "pattern_id": pattern_id,
+                    "previous_end_progress": prior[1],
+                    "next_start_progress": start,
+                    "message": "Adjacent shots continue the same mechanism action with a progress discontinuity.",
+                })
+            previous[key] = (scene_index, end)
+
+    return diagnostics
+
+
 def validate_scene_plan(scenes: Any, total_frames: int) -> list[dict[str, Any]]:
     if not isinstance(scenes, list) or not 3 <= len(scenes) <= MAX_SCENES:
         raise ValueError(f"Scene plan must contain 3–{MAX_SCENES} shots")
