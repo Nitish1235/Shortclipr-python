@@ -937,16 +937,6 @@ async def run_render(
         if audio_path:
             audio_path.unlink(missing_ok=True)
             shutil.rmtree(audio_path.parent, ignore_errors=True)
-            try:
-                output_path.parent.rmdir()
-            except OSError:
-                pass
-        if audio_path:
-            audio_path.unlink(missing_ok=True)
-            try:
-                audio_path.parent.rmdir()
-            except OSError:
-                pass
 
 
 # ---------------------------------------------------------------------------
