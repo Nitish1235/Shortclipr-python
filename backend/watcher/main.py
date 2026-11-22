@@ -206,7 +206,7 @@ class Dispatcher:
 
     async def claim(self, job_class: str, target: WorkerTarget) -> asyncpg.Record | None:
         token = uuid4()
-        lease_interval = timedelta(minutes=28 if job_class == "render" else 6)
+        lease_interval = timedelta(minutes=3)
         async with self.pool.acquire() as connection:
             async with connection.transaction():
                 row = await connection.fetchrow(
