@@ -238,7 +238,7 @@ the shared helper functions. Redraw the full shot deterministically from t. No s
 accumulation, random numbers, DOM/browser globals, imports, exports, network, file access,
 Node APIs, timers, eval, Function, Date, performance, WebGL, Three.js or 3D.
 Keep all drawing within the logical canvas {logical[0]}x{logical[1]}.
-Make one clear animated action with simple easing and follow-through. Use only the composition layers needed for this shot. Keep code concise: aim for at most 900 output tokens; no comments, repeated character drawings or unnecessary decorative loops. Reuse shared helpers for all recurring entities. Do not render narration or subtitles.
+Honor the storyboard visual_objective, composition, shot_scale, camera_position, ordered depth_layers, focal_entity, visual_change and continuity_note. Build a readable foreground/midground/background rather than a flat repeated grid. Make the focal subject materially and spatially specific; use scale references and environment geometry. Make one clear animated action with simple easing and follow-through. Use only the composition layers needed for this shot. Keep code concise: aim for at most 900 output tokens; no comments, repeated character drawings or unnecessary decorative loops. Reuse shared helpers for all recurring entities. Do not render narration or subtitles.
 STYLE: {style_id}
 BINDING ART DIRECTION:
 {art_direction_instructions}
@@ -250,7 +250,7 @@ SHOT VISUAL REFERENCES:
 {json.dumps(shot_visual_context, ensure_ascii=False, separators=(",", ":"))}
 SHOT:
 {json.dumps(scene, ensure_ascii=False)}
-SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s.
+SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s.\nAvoid repeating the previous shot composition unless the storyboard explicitly calls for a sustained view.
 """.strip()
             async with semaphore:
                 body = await self._validated_fragment(
