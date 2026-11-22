@@ -44,7 +44,7 @@ class DrawnByCodeOutputTests(unittest.TestCase):
     def test_output_tail_joins_lines_with_newlines(self):
         self.assertEqual(
             DrawnByCodeRenderer._format_output_tail(["opening chromium", "page error: bad draw"]),
-            "opening chromium\\npage error: bad draw",
+            "opening chromium\npage error: bad draw",
         )
 
     def test_output_tail_is_bounded(self):
