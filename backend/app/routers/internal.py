@@ -486,8 +486,8 @@ async def run_planning(
 
 async def run_render(
     project_id: UUID,
-    attempt_id: UUID | None,
-    lease_token: UUID | None,
+    attempt_id: UUID,
+    lease_token: UUID,
     pool: asyncpg.Pool,
     renderer: DrawnByCodeRenderer,
     storage: ObjectStorage,
@@ -504,8 +504,28 @@ async def run_render(
     completed_project: dict | None = None
     try:
         project = await pool.fetchrow("SELECT * FROM projects WHERE id=$1", project_id)
-        if not project or project["status"] == "cancelled":
-            logger.info("render.cancelled", extra={"status": project["status"] if project else "not_found"})
+        if not project:
+            logger.info("render.project_missing")
+            await finish_attempt(pool, attempt_id, lease_token, "cancelled")
+            return
+        if project["status"] == "complete":
+            # A delivery replay after the successful DB commit is already done.
+            await finish_attempt(pool, attempt_id, lease_token, "complete")
+            logger.info("render.already_complete")
+            return
+        if project["status"] in {"cancelled", "failed"}:
+            logger.info("render.not_runnable", extra={"status": project["status"]})
+            await finish_attempt(pool, attempt_id, lease_token, "cancelled")
+            return
+        if project["status"] not in {"queued", "rendering"}:
+            raise NonRetryableRenderError(f"Project cannot enter rendering from status {project['status']!r}")
+
+        render_started = await pool.fetchval(
+            """UPDATE projects SET status='rendering',progress=GREATEST(progress,48)
+               WHERE id=$1 AND status IN ('queued','rendering') RETURNING id""",
+            project_id,
+        )
+        if not render_started:
             await finish_attempt(pool, attempt_id, lease_token, "cancelled")
             return
 
@@ -522,8 +542,6 @@ async def run_render(
                 "has_audio": bool(project["audio_object"]),
             },
         )
-
-        await pool.execute("UPDATE projects SET status='rendering',progress=48 WHERE id=$1", project_id)
 
         program = decode_json_object(scenes[0]["program"])
         scene_js = program.get("scene_js")
@@ -550,7 +568,7 @@ async def run_render(
             raise RuntimeError("Narration audio is not available for this render")
         await pool.execute("UPDATE projects SET progress=52 WHERE id=$1 AND status='rendering'", project_id)
 
-        # ── Run the Remotion renderer subprocess ─────────────────────────
+        # ── Run the Drawn-by-Code renderer subprocess ────────────────────
         output_path = Path(tempfile.mkdtemp(prefix="shortclipr-render-")) / f"{project_id}.mp4"
 
         async def update_visual_progress(render_progress: int) -> None:
@@ -595,15 +613,29 @@ async def run_render(
         final_attempt_status = "complete"
         async with pool.acquire() as connection:
             async with connection.transaction():
+                # Lock project before attempt, matching the cancellation and retry lock order.
                 locked = await connection.fetchrow("SELECT * FROM projects WHERE id=$1 FOR UPDATE", project_id)
-                if locked["status"] == "cancelled":
+                current_attempt = await connection.fetchrow(
+                    """SELECT id FROM job_attempts
+                       WHERE id=$1 AND project_id=$2 AND job_class='render'
+                         AND lease_token=$3 AND status='running' AND lease_expires_at>now()
+                       FOR UPDATE""",
+                    attempt_id, project_id, lease_token,
+                )
+                if not locked or locked["status"] in {"cancelled", "failed"} or not current_attempt:
                     discard_output = True
                     final_attempt_status = "cancelled"
-                    logger.info("render.cancelled_post_render", extra={"output_object": output_object})
+                    logger.info("render.discard_stale_output", extra={"status": locked["status"] if locked else "not_found"})
                 elif locked["credits_settled"] is not None or locked["status"] == "complete":
-                    # A retried delivery must never charge the same project twice.
+                    # A repeated delivery after completion must never render or charge twice.
                     discard_output = True
                     logger.warning("render.duplicate_delivery", extra={"output_object": output_object})
+                    await connection.execute(
+                        """UPDATE job_attempts SET status='complete',lease_token=NULL,
+                           lease_expires_at=NULL,worker_region=NULL,last_error=NULL
+                           WHERE id=$1 AND lease_token=$2""",
+                        attempt_id, lease_token,
+                    )
                 else:
                     settled = locked["credits_reserved"]
                     await connection.execute(
@@ -611,7 +643,7 @@ async def run_render(
                         project_id, output_object, settled,
                     )
                     await connection.execute(
-                        "UPDATE credit_accounts SET reserved_credits=reserved_credits-$2,spent_credits=spent_credits+$2 WHERE user_id=$1",
+                        "UPDATE credit_accounts SET reserved_credits=GREATEST(0,reserved_credits-$2),spent_credits=spent_credits+$2 WHERE user_id=$1",
                         locked["user_id"], settled,
                     )
                     await connection.execute(
@@ -621,6 +653,12 @@ async def run_render(
                     await connection.execute(
                         "INSERT INTO project_events(project_id,event_type,stage,progress,payload) VALUES($1,'completed','render',100,$2::jsonb)",
                         project_id, json.dumps({"output_object": output_object, "quality": quality}),
+                    )
+                    await connection.execute(
+                        """UPDATE job_attempts SET status='complete',lease_token=NULL,
+                           lease_expires_at=NULL,worker_region=NULL,last_error=NULL
+                           WHERE id=$1 AND lease_token=$2""",
+                        attempt_id, lease_token,
                     )
                     completed_project = dict(locked)
                     completed_project["output_object"] = output_object
@@ -645,8 +683,9 @@ async def run_render(
                 "output_object": output_object if not discard_output else None,
             },
         )
-        await finish_attempt(pool, attempt_id, lease_token, final_attempt_status)
-
+    except asyncio.CancelledError:
+        logger.warning("render.cancelled_or_lease_lost")
+        raise
     except Exception as error:
         total_ms = round((_time.monotonic() - t0_total) * 1000)
         message = str(error)[:1000]
