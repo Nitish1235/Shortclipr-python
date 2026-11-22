@@ -108,7 +108,7 @@ def validate_kinematics(value: Any, component_parts: set[str]) -> dict[str, Any]
         start = _finite_number(result.get("start_angle_deg", 0), "Pulley start_angle_deg")
         end = _finite_number(result.get("end_angle_deg"), "Pulley end_angle_deg")
         direction = result.get("direction", 1)
-        if direction not in {-1, 1}:
+        if isinstance(direction, bool) or direction not in {-1, 1}:
             raise ValueError("Pulley direction must be -1 or 1")
         axis = {"x": axis["x"] / axis_length, "y": axis["y"] / axis_length}
         result.update(
