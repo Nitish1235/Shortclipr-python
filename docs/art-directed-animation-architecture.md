@@ -270,3 +270,33 @@ interpolated from authored point arrays, and actuator extension does not solve a
 linkage. Collision, force, load, and linkage-closure solving remain out of scope. The
 tests and rendered benchmark videos still need execution and review in the project
 runtime before this stage can be treated as verified.
+
+## Implementation progress — bounded targeted shot repair (PR #30)
+
+The compiler now persists a versioned repair bundle alongside the compiled film:
+the shared drawing library, original storyboard and Visual Bible, art-direction
+instructions, mechanism definitions/actions, and each independently compiled shot
+body. This gives the repair stage source-level boundaries rather than trying to edit
+an already flattened JavaScript film.
+
+The visual reviewer can build a bounded repair queue from high/critical findings
+only. A finding must reference a known shot and captured sample, include an actionable
+recommendation, and meet the confidence threshold. At most one shot is selected for
+repair per render attempt.
+
+The repair compiler regenerates only that shot's drawing body. It reuses the original
+shared drawing library, visual identity definitions, shot timing, transition metadata,
+and validated mechanism constants. It rejects unresolved helper calls and reassembles
+the complete film with every non-target shot body unchanged.
+
+When `DEEPSEEK_ENABLE_SHOT_REPAIR=true` is explicitly enabled on the FFmpeg worker,
+the worker renders the candidate as a separate temporary MP4, muxes the original
+narration, validates the video, and reviews a fresh contact sheet. A candidate is
+accepted only when the visual score improves and the repaired shot has no remaining
+high/critical findings. Otherwise the original render is retained. Candidate render,
+review, or upload failures are non-fatal and do not affect credit settlement.
+
+Shot repair is disabled by default because it adds a generation, full-film render and
+vision-review cost. It must be benchmarked with real rendered videos before being
+enabled in production. This is a bounded visual heuristic, not a guarantee that every
+semantic or continuity issue is detected.
