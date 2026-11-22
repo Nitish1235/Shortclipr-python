@@ -87,3 +87,22 @@ This stage does not inspect rendered pixels, composition screenshots or motion. 
 visual QA. The renderer's existing Node syntax check remains the executable JavaScript
 preflight; actual visual review still requires rendered frames and an explicit human or
 vision-model inspection workflow.
+
+
+## Deterministic mechanism kinematics
+
+Mechanism records may include an explicit `kinematics` array. Supported Canvas 2D
+specifications are:
+- `pivot`: fixed anchor and start/end angle in degrees;
+- `translation`: explicit start and end points;
+- `actuator`: base/rod anchor geometry and minimum/maximum extension length.
+
+The planner must omit numeric specs when dimensions or geometry are not defensible.
+The trusted `ShortcliprStyles.mechanismPose(spec, progress)` helper evaluates a spec
+from normalized progress and returns a pure transform description. It does not perform
+collision detection, force analysis, linkage-closure solving or load simulation. A
+mechanism without numeric kinematics remains qualitative and must not be presented as
+engineering-accurate motion. These helpers make individual primitives deterministic;
+they do not yet solve an entire multi-link mechanism graph or certify that actuator
+lengths are geometrically compatible with a rotating deck. Rendered benchmark frames
+are still required to check visual integration.
