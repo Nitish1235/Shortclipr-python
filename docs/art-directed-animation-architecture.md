@@ -295,6 +295,9 @@ narration, validates the video, and reviews a fresh contact sheet. A candidate i
 accepted only when the visual score improves and the repaired shot has no remaining
 high/critical findings. Otherwise the original render is retained. Candidate render,
 review, or upload failures are non-fatal and do not affect credit settlement.
+When a candidate is accepted, its updated compiled source and repair bundle are
+persisted in the scene plan in the same transaction as project completion, so a
+subsequent delivery retry does not silently revert to the pre-repair shot.
 
 Shot repair is disabled by default because it adds a generation, full-film render and
 vision-review cost. It must be benchmarked with real rendered videos before being
