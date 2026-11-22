@@ -219,19 +219,62 @@ async def run_planning(
         job_class="api",
     )
     try:
-        project = await pool.fetchrow("SELECT * FROM projects WHERE id=$1", project_id)
-        if not project or project["status"] in {"cancelled", "failed"}:
-            logger.info("planning.cancelled", extra={"status": project["status"] if project else "not_found"})
-            await finish_attempt(pool, attempt_id, lease_token, "cancelled")
+        should_skip = False
+        skip_status = "not_found"
+        project = None
+        async with pool.acquire() as connection:
+            async with connection.transaction():
+                # Project first, then attempt: this is the same lock order used
+                # by cancellation, retry reconciliation and finalization.
+                project = await connection.fetchrow(
+                    "SELECT * FROM projects WHERE id=$1 FOR UPDATE", project_id,
+                )
+                current_attempt = await connection.fetchrow(
+                    """SELECT id FROM job_attempts
+                       WHERE id=$1 AND project_id=$2 AND job_class='api'
+                         AND lease_token=$3 AND status='running' AND lease_expires_at>now()
+                       FOR UPDATE""",
+                    attempt_id, project_id, lease_token,
+                )
+                if not project:
+                    should_skip, skip_status = True, "not_found"
+                elif not current_attempt:
+                    should_skip, skip_status = True, "stale_lease"
+                elif project["status"] in {"cancelled", "failed"}:
+                    should_skip, skip_status = True, project["status"]
+                    await connection.execute(
+                        """UPDATE job_attempts SET status='cancelled',lease_token=NULL,
+                           lease_expires_at=NULL,worker_region=NULL
+                           WHERE id=$1 AND lease_token=$2""",
+                        attempt_id, lease_token,
+                    )
+                elif project["status"] in {"rendering", "complete"}:
+                    # Planning already committed its render job. A duplicate
+                    # delivery must not regenerate the film or reset the queue.
+                    should_skip, skip_status = True, project["status"]
+                    await connection.execute(
+                        """UPDATE job_attempts SET status='complete',lease_token=NULL,
+                           lease_expires_at=NULL,worker_region=NULL,last_error=NULL
+                           WHERE id=$1 AND lease_token=$2""",
+                        attempt_id, lease_token,
+                    )
+                elif project["status"] in {"queued", "planning"}:
+                    await connection.execute(
+                        """UPDATE projects SET status='planning',progress=GREATEST(progress,12)
+                           WHERE id=$1""",
+                        project_id,
+                    )
+                else:
+                    should_skip, skip_status = True, project["status"]
+                    await connection.execute(
+                        """UPDATE job_attempts SET status='cancelled',lease_token=NULL,
+                           lease_expires_at=NULL,worker_region=NULL
+                           WHERE id=$1 AND lease_token=$2""",
+                        attempt_id, lease_token,
+                    )
+        if should_skip:
+            logger.info("planning.delivery_skipped", extra={"status": skip_status})
             return
-        if project["status"] in {"rendering", "complete"}:
-            # Planning already committed its render job. A duplicate delivery
-            # must not regenerate the film or reset the render queue.
-            await finish_attempt(pool, attempt_id, lease_token, "complete")
-            logger.info("planning.already_advanced", extra={"status": project["status"]})
-            return
-        if project["status"] not in {"queued", "planning"}:
-            raise RuntimeError(f"Project cannot enter planning from status {project['status']!r}")
 
         logger.info(
             "planning.start",
@@ -242,16 +285,6 @@ async def run_planning(
                 "voice_id": project["voice_id"],
             },
         )
-
-        started = await pool.fetchval(
-            """UPDATE projects SET status='planning',progress=GREATEST(progress,12)
-               WHERE id=$1 AND status IN ('queued','planning') RETURNING id""",
-            project_id,
-        )
-        if not started:
-            logger.info("planning.no_longer_queued")
-            await finish_attempt(pool, attempt_id, lease_token, "cancelled")
-            return
 
         # Load durable stage outputs first. A retry must not pay for stages that
         # already completed successfully on an earlier attempt.
