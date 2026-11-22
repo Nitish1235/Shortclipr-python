@@ -13,8 +13,8 @@ export const freePlan: PlanDefinition = {
   id: 'free',
   name: 'Free',
   price: 0,
-  monthlySeconds: 15,
-  description: 'One finished 15-second short each month.'
+  monthlySeconds: 10,
+  description: 'One finished 10-second short each month.'
 }
 
 export const paidPlans: Array<PlanDefinition & { id: PaidPlanId }> = [
