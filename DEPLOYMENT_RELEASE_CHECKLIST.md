@@ -64,9 +64,10 @@ shortclipr-ffmpeg-worker-{region}
 
 For rendered visual QA, optionally add `DEEPSEEK_API_KEY` to each
 `shortclipr-ffmpeg-worker-{region}` service's Secret Manager bindings and set
-`DEEPSEEK_VISUAL_QA_MODEL=deepseek-flash`. The key is optional for worker
-readiness and video delivery; without it, renders complete with visual QA marked
-as skipped. The API worker already needs its own DeepSeek key for planning and
+`DEEPSEEK_VISUAL_QA_MODEL=deepseek-flash`, and
+`DEEPSEEK_ENABLE_VISUAL_QA=true`. The key is optional for worker readiness and
+video delivery; without it, renders complete with visual QA marked as skipped.
+Set `DEEPSEEK_ENABLE_VISUAL_QA=false` to disable the additional inference/cost. The API worker already needs its own DeepSeek key for planning and
 animation compilation.
 
 Also set the optional/operational values from `.env.example` where relevant:
