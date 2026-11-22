@@ -74,7 +74,7 @@ class DrawnByCodeRenderer:
         for label, binary in (("node", self.node), ("chromium", self.chrome), ("ffmpeg", self.ffmpeg)):
             resolved = binary if Path(binary).is_absolute() else shutil.which(binary)
             if not resolved or not Path(resolved).is_file():
-                missing.append(f"{label}: {binary}")
+                missing.append(f"{label}: {binary} (not found or not a file)")
         if missing:
             raise RuntimeError("Drawn-by-Code preflight failed: " + ", ".join(missing))
         return {"engine_root": str(self.root), "node": self.node, "chromium": self.chrome, "ffmpeg": self.ffmpeg}
