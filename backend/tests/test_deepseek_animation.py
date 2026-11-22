@@ -83,6 +83,35 @@ class MechanismKinematicsContextTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in context["mechanisms"]], ["mechanism_b"])
         self.assertEqual(context["mechanisms"][0]["kinematics"][0]["type"], "translation")
 
+    def test_shot_context_includes_props_backing_referenced_mechanisms(self):
+        bible = {
+            "style_id": "isometric-technical",
+            "props": [
+                {"id": "prop_deck", "design": "bridge deck"},
+                {"id": "prop_actuator", "design": "hydraulic actuator"},
+                {"id": "prop_unrelated", "design": "tree"},
+            ],
+            "mechanisms": [{
+                "id": "mechanism_lift",
+                "components": [
+                    {"prop_id": "prop_deck", "part": "deck"},
+                    {"prop_id": "prop_actuator", "part": "rod"},
+                ],
+            }],
+        }
+        scene = {
+            "props": ["prop_unrelated"],
+            "mechanism_actions": [{"mechanism_id": "mechanism_lift"}],
+        }
+
+        result = DeepSeekAnimationCompiler._shot_visual_context(bible, scene)
+
+        self.assertEqual(
+            {item["id"] for item in result["props"]},
+            {"prop_deck", "prop_actuator", "prop_unrelated"},
+        )
+        self.assertEqual([item["id"] for item in result["mechanisms"]], ["mechanism_lift"])
+
     def test_style_runtime_exposes_mechanism_pose_helper(self):
         from pathlib import Path
         import re
