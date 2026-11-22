@@ -71,3 +71,19 @@ class DrawingHelperContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+class MechanismKinematicsContextTests(unittest.TestCase):
+    def test_shot_context_includes_only_referenced_mechanism_specs(self):
+        bible = {
+            "style_id": "line",
+            "mechanisms": [
+                {"id": "mechanism_a", "kinematics": [{"type": "pivot", "part": "deck"}]},
+                {"id": "mechanism_b", "kinematics": [{"type": "translation", "part": "carriage"}]},
+            ],
+        }
+        scene = {"mechanism_actions": [{"mechanism_id": "mechanism_b"}]}
+        context = DeepSeekAnimationCompiler._shot_visual_context(bible, scene)
+        self.assertEqual([item["id"] for item in context["mechanisms"]], ["mechanism_b"])
+        self.assertEqual(context["mechanisms"][0]["kinematics"][0]["type"], "translation")
