@@ -17,6 +17,42 @@ class DrawnByCodeDiagnosticsTests(unittest.TestCase):
     def test_empty_output_has_clear_marker(self):
         self.assertEqual(DrawnByCodeRenderer._format_output_tail([]), "no subprocess output")
 
+    def test_motion_qa_samples_three_interior_frames_per_shot(self):
+        samples = DrawnByCodeRenderer._motion_qa_samples([
+            {"index": 0, "start_frame": 0, "end_frame": 90, "name": "Bridge reveal",
+             "mechanism_ids": ["bridge_lift"]},
+            {"index": 1, "start_frame": 90, "end_frame": 180, "name": "Bridge rises",
+             "mechanism_ids": ["bridge_lift"]},
+        ])
+        self.assertEqual(len(samples), 6)
+        self.assertEqual([item["frame"] for item in samples], [13, 44, 76, 103, 134, 166])
+        self.assertTrue(all(item["time_seconds"] == round(item["frame"] / 30, 6) for item in samples))
+        self.assertEqual(samples[0]["mechanism_ids"], ["bridge_lift"])
+
+    def test_motion_qa_samples_skip_invalid_shots_and_cap_manifest(self):
+        manifest = [
+            {"index": 0, "start_frame": 4, "end_frame": 4},
+            *[
+                {"index": index, "start_frame": index * 30, "end_frame": (index + 1) * 30}
+                for index in range(1, 15)
+            ],
+        ]
+        samples = DrawnByCodeRenderer._motion_qa_samples(manifest)
+        self.assertEqual(len(samples), 12 * 3)
+        self.assertNotIn(4, [item["frame"] for item in samples])
+
+    def test_motion_qa_is_disabled_for_legacy_programs_without_manifest(self):
+        self.assertEqual(DrawnByCodeRenderer._motion_qa_samples(None), [])
+
+    def test_drawn_by_code_engine_accepts_motion_qa_capture_arguments(self):
+        from pathlib import Path
+
+        engine = Path(__file__).resolve().parents[1] / "drawn_by_code" / "engine" / "render.mjs"
+        source = engine.read_text(encoding="utf-8")
+        self.assertIn("opt['qa-at']", source)
+        self.assertIn("opt['qa-out']", source)
+        self.assertIn("drawn_by_code.motion_qa.captured", source)
+
 
 if __name__ == "__main__":
     unittest.main()

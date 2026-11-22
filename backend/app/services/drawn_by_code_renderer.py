@@ -79,12 +79,74 @@ class DrawnByCodeRenderer:
             raise RuntimeError("Drawn-by-Code preflight failed: " + ", ".join(missing))
         return {"engine_root": str(self.root), "node": self.node, "chromium": self.chrome, "ffmpeg": self.ffmpeg}
 
+    @staticmethod
+    def _motion_qa_samples(shot_manifest: Any) -> list[dict[str, Any]]:
+        """Choose three interior frames per shot, away from transition boundaries."""
+        if not isinstance(shot_manifest, list):
+            return []
+        samples: list[dict[str, Any]] = []
+        seen: set[int] = set()
+        valid_shots = 0
+        for shot in shot_manifest:
+            if valid_shots >= 12:
+                break
+            if not isinstance(shot, dict):
+                continue
+            start, end = shot.get("start_frame"), shot.get("end_frame")
+            if (isinstance(start, bool) or not isinstance(start, int)
+                    or isinstance(end, bool) or not isinstance(end, int)
+                    or start < 0 or end <= start):
+                continue
+            valid_shots += 1
+            span = max(0, end - start - 1)
+            shot_samples = []
+            for fraction in (0.15, 0.5, 0.85):
+                frame = min(end - 1, start + round(span * fraction))
+                if frame not in seen:
+                    seen.add(frame)
+                    shot_samples.append({
+                        "sample_index": len(samples) + len(shot_samples),
+                        "frame": frame,
+                        "time_seconds": round(frame / 30, 6),
+                        "shot_index": shot.get("index"),
+                        "shot_name": str(shot.get("name", ""))[:80],
+                        "mechanism_ids": shot.get("mechanism_ids", []),
+                    })
+            samples.extend(shot_samples)
+        return samples
+
+    async def _build_motion_contact_sheet(self, frames_dir: Path, output_path: Path, frame_count: int) -> None:
+        """Build a compact private review sheet from the captured PNGs."""
+        columns = 3
+        rows = max(1, (frame_count + columns - 1) // columns)
+        vf = (
+            "scale=320:568:force_original_aspect_ratio=decrease,"
+            "pad=320:568:(ow-iw)/2:(oh-ih)/2,"
+            f"tile={columns}x{rows}:padding=12:margin=12"
+        )
+        process = await asyncio.create_subprocess_exec(
+            self.ffmpeg, "-y", "-v", "error", "-framerate", "1",
+            "-pattern_type", "glob", "-i", str(frames_dir / "q_*.png"),
+            "-vf", vf, "-frames:v", "1", "-update", "1", str(output_path),
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            start_new_session=(os.name == "posix"),
+        )
+        try:
+            _, stderr = await asyncio.wait_for(process.communicate(), timeout=self.syntax_timeout)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            await self._kill_and_wait(process)
+            raise
+        if process.returncode != 0 or not output_path.is_file() or output_path.stat().st_size < 256:
+            raise RuntimeError(
+                "Motion QA contact sheet failed: " + stderr.decode(errors="replace")[-1000:]
+            )
+
     async def render(
         self,
         plan: dict[str, Any],
         output_path: Path,
         progress_callback: Callable[[int], Awaitable[None]] | None = None,
-    ) -> Path:
+    ) -> tuple[Path, dict[str, Any] | None]:
         source = plan.get("scene_js")
         aspect = plan.get("aspectRatio")
         if not isinstance(source, str) or not source:
@@ -132,6 +194,13 @@ class DrawnByCodeRenderer:
                 self.node, str(self.root / "engine" / "render.mjs"), str(scene_file),
                 "--size", str(self.widths[aspect]), "--out", str(output_path), "--crf", "18",
             ]
+            motion_samples = self._motion_qa_samples(plan.get("shot_manifest"))
+            qa_frames_dir = scene_dir / "out" / "motion-qa"
+            if motion_samples:
+                command.extend([
+                    "--qa-at", ",".join(f"{item['time_seconds']:.6f}" for item in motion_samples),
+                    "--qa-out", str(qa_frames_dir),
+                ])
             proc = await asyncio.create_subprocess_exec(
                 *command,
                 cwd=str(self.root),
@@ -240,12 +309,40 @@ class DrawnByCodeRenderer:
                     "Drawn-by-Code produced no valid MP4; last subprocess output:\n" + tail
                 )
 
+            motion_qa = None
+            if motion_samples:
+                contact_sheet_path = output_path.with_name(output_path.stem + ".motion-qa.png")
+                motion_qa = {
+                    "status": "captured",
+                    "sample_count": len(motion_samples),
+                    "samples": motion_samples,
+                    "contact_sheet_path": str(contact_sheet_path),
+                }
+                try:
+                    captured = list(qa_frames_dir.glob("q_*.png"))
+                    if len(captured) != len(motion_samples):
+                        raise RuntimeError(
+                            f"Expected {len(motion_samples)} QA frames, found {len(captured)}"
+                        )
+                    await self._build_motion_contact_sheet(
+                        qa_frames_dir, contact_sheet_path, len(captured),
+                    )
+                except Exception as error:
+                    contact_sheet_path.unlink(missing_ok=True)
+                    motion_qa["status"] = "capture_incomplete"
+                    motion_qa["error"] = str(error)[:500]
+                    motion_qa.pop("contact_sheet_path", None)
+                    logger.warning("drawn_by_code.motion_qa.failed", extra={
+                        "project_id": plan.get("projectId"),
+                        "error": str(error)[:500],
+                    })
+
             if progress_callback:
                 try:
                     await progress_callback(100)
                 except Exception:
                     logger.exception("drawn_by_code.progress_callback_failed")
-            return output_path
+            return output_path, motion_qa
         except asyncio.CancelledError:
             output_path.unlink(missing_ok=True)
             raise

@@ -14,6 +14,7 @@ from .services.deepseek_planner import DeepSeekStoryPlanner
 from .services.drawn_by_code_renderer import DrawnByCodeRenderer
 from .services.deepseek_animation import DeepSeekAnimationCompiler
 from .services.storage import ObjectStorage
+from .services.visual_qa import VisualQualityReviewer
 from .services.email import ProjectReadyEmailer
 from .services.voices import UnrealSpeech, VoiceCatalogue
 
@@ -61,6 +62,11 @@ async def lifespan(app: FastAPI):
     else:
         app.state.emailer=ProjectReadyEmailer(settings, app.state.storage)
         app.state.renderer=DrawnByCodeRenderer()
+        app.state.visual_reviewer=VisualQualityReviewer(settings)
+        app.state.shot_repairer=(
+            DeepSeekAnimationCompiler(settings)
+            if settings.DEEPSEEK_ENABLE_SHOT_REPAIR else None
+        )
         if settings.APP_ENV.lower() == "production":
             await app.state.renderer.preflight()
     yield

@@ -7,20 +7,21 @@ from __future__ import annotations
 
 from typing import Any
 
-# Conservative compatibility mappings to complete renderer styles that exist today.
-# New art systems are not advertised until their full rendering contracts exist.
+# UI choices resolve to dedicated art systems where implemented; other choices retain legacy mappings.
 UI_STYLE_ALIASES: dict[str, str | None] = {
     "AI Auto": None,
-    "Editorial": "risograph",
+    "Editorial": "cinematic-editorial",
     "Cinematic": "70s-poster",
-    "Diagrammatic": "line",
-    "Paper craft": "paper-cutout",
+    "Diagrammatic": "isometric-technical",
+    "Paper craft": "layered-paper",
 }
 
 LEGACY_STYLE_IDS = frozenset({
     "paper-cutout", "risograph", "comic", "70s-poster",
     "engraving", "blueprint", "line", "pixel-art",
 })
+
+SUPPORTED_STYLE_IDS = LEGACY_STYLE_IDS | frozenset({"cinematic-editorial", "isometric-technical", "layered-paper"})
 
 
 def resolve_visual_style(value: Any) -> str | None:
@@ -30,7 +31,7 @@ def resolve_visual_style(value: Any) -> str | None:
     normalized = value.strip()
     if normalized in UI_STYLE_ALIASES:
         return UI_STYLE_ALIASES[normalized]
-    if normalized in LEGACY_STYLE_IDS:
+    if normalized in SUPPORTED_STYLE_IDS:
         return normalized
     raise ValueError(f"Unsupported visual direction: {normalized}")
 

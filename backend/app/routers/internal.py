@@ -19,6 +19,7 @@ from ..services.quality import mux_narration, validate_audio_input, validate_fin
 from ..services.drawn_by_code_renderer import DrawnByCodeRenderer, NonRetryableRenderError
 from ..services.deepseek_animation import DeepSeekAnimationCompiler
 from ..services.storage import ObjectStorage
+from ..services.visual_qa import VisualQualityReviewer
 from ..services.email import ProjectReadyEmailer
 from ..services.voices import UnrealSpeech
 
@@ -425,6 +426,10 @@ async def run_planning(
                 "complexity": "heavy", "assigned_model": compiler.model,
                 "scene_js": compiled_film["scene_js"], "style": compiled_film["style"],
                 "quality_review": compiled_film.get("quality_review", {}),
+                "shot_manifest": compiled_film.get("shot_manifest", []),
+                "motion_diagnostics": compiled_film.get("motion_diagnostics", []),
+                "visual_qa_context": compiled_film.get("visual_qa_context", {}),
+                "repair_bundle": compiled_film.get("repair_bundle"),
             }]
             ctx["scene_count"] = len(plan["scenes"])
             ctx["render_programs"] = 1
@@ -629,6 +634,8 @@ async def run_render(
     renderer: DrawnByCodeRenderer,
     storage: ObjectStorage,
     emailer: ProjectReadyEmailer,
+    visual_reviewer: VisualQualityReviewer,
+    shot_repairer: DeepSeekAnimationCompiler | None = None,
 ):
     t0_total = _time.monotonic()
     bind(
@@ -637,9 +644,11 @@ async def run_render(
         job_class="render",
     )
     output_path: Path | None = None
+    render_temp_dirs: list[Path] = []
     audio_path: Path | None = None
     completed_project: dict | None = None
     output_object: str | None = None
+    qa_object: str | None = None
     output_committed = False
     try:
         project = None
@@ -726,6 +735,10 @@ async def run_render(
             "aspectRatio": project["aspect_ratio"], "fps": 30,
             "durationSeconds": project["duration_seconds"],
             "scene_js": scene_js, "style": program.get("style", "paper-cutout"),
+            "shot_manifest": program.get("shot_manifest", []),
+            "motion_diagnostics": program.get("motion_diagnostics", []),
+            "visual_qa_context": program.get("visual_qa_context", {}),
+            "repair_bundle": program.get("repair_bundle"),
         }
 
         # ── Download narration locally for renderer ───────────────────────
@@ -743,6 +756,7 @@ async def run_render(
 
         # ── Run the Drawn-by-Code renderer subprocess ────────────────────
         output_path = Path(tempfile.mkdtemp(prefix="shortclipr-render-")) / f"{project_id}.mp4"
+        render_temp_dirs.append(output_path.parent)
 
         async def update_visual_progress(render_progress: int) -> None:
             # Reserve 55–80 for the visual renderer; 82 means the subprocess
@@ -751,10 +765,16 @@ async def run_render(
             await set_render_progress(pool, project_id, attempt_id, lease_token, mapped)
 
         await set_render_progress(pool, project_id, attempt_id, lease_token, 55)
+        motion_qa = None
         async with timed(logger, "render.subprocess") as ctx:
-            await renderer.render(plan, output_path, progress_callback=update_visual_progress)
+            _, motion_qa = await renderer.render(
+                plan, output_path, progress_callback=update_visual_progress,
+            )
             if output_path.exists():
                 ctx["output_size_mb"] = round(output_path.stat().st_size / 1_048_576, 2)
+            if motion_qa:
+                ctx["motion_qa_status"] = motion_qa.get("status")
+                ctx["motion_qa_samples"] = motion_qa.get("sample_count", 0)
         await set_render_progress(pool, project_id, attempt_id, lease_token, 82)
 
         # ── Mux narration after visuals ──────────────────────────────────
@@ -766,6 +786,179 @@ async def run_render(
         async with timed(logger, "render.quality") as ctx:
             quality = await validate_final(output_path, project["aspect_ratio"], project["duration_seconds"])
             ctx.update(quality)
+        if motion_qa:
+            quality["motion_qa"] = {
+                "status": motion_qa.get("status"),
+                "sample_count": motion_qa.get("sample_count", 0),
+                "samples": motion_qa.get("samples", []),
+                "motion_diagnostics": plan.get("motion_diagnostics", []),
+            }
+            contact_sheet = Path(motion_qa["contact_sheet_path"]) if motion_qa.get("contact_sheet_path") else None
+            if contact_sheet and contact_sheet.is_file():
+                try:
+                    qa_object = await storage.upload_file_private(
+                        contact_sheet, "image/png",
+                        f"projects/{project['user_id']}/{project_id}/motion-qa",
+                    )
+                    quality["motion_qa"]["contact_sheet_object"] = qa_object
+                except Exception as error:
+                    logger.warning("render.motion_qa.upload_failed", extra={
+                        "project_id": str(project_id), "error": str(error)[:500],
+                    })
+                    quality["motion_qa"]["contact_sheet_upload_error"] = str(error)[:300]
+                try:
+                    async with timed(logger, "render.visual_qa") as ctx:
+                        visual_review = await visual_reviewer.review(
+                            contact_sheet,
+                            plan.get("visual_qa_context", {}),
+                            motion_qa.get("samples", []),
+                        )
+                        quality["visual_qa"] = visual_review
+                        ctx["status"] = visual_review.get("status")
+                        ctx["finding_count"] = len(visual_review.get("findings", []))
+                        ctx["overall_score"] = visual_review.get("overall_score")
+                    repair_summary = {
+                        "status": "disabled" if shot_repairer is None else "not_needed",
+                        "attempted": 0,
+                        "accepted": False,
+                        "shot_index": None,
+                        "automatic_repair_enabled": shot_repairer is not None,
+                    }
+                    repair_bundle = plan.get("repair_bundle")
+                    if (
+                        shot_repairer is not None
+                        and isinstance(repair_bundle, dict)
+                        and quality.get("visual_qa", {}).get("status") == "reviewed"
+                    ):
+                        repair_queue = visual_reviewer.build_repair_queue(
+                            quality["visual_qa"],
+                            plan.get("shot_manifest", []),
+                            max_shots=1,
+                        )
+                        if repair_queue:
+                            repair_item = repair_queue[0]
+                            repair_summary.update({
+                                "status": "attempting",
+                                "attempted": 1,
+                                "shot_index": repair_item["shot_index"],
+                            })
+                            candidate_path = None
+                            try:
+                                repaired = await shot_repairer.repair_shot(
+                                    repair_bundle,
+                                    repair_item["shot_index"],
+                                    repair_item["findings"],
+                                )
+                                candidate_plan = dict(plan)
+                                candidate_plan["scene_js"] = repaired["scene_js"]
+                                candidate_plan["repair_bundle"] = repaired["repair_bundle"]
+                                candidate_path = (
+                                    Path(tempfile.mkdtemp(prefix="shortclipr-repair-"))
+                                    / f"{project_id}-repair.mp4"
+                                )
+                                render_temp_dirs.append(candidate_path.parent)
+                                async with timed(logger, "render.targeted_shot_repair") as repair_ctx:
+                                    _, candidate_motion_qa = await renderer.render(
+                                        candidate_plan, candidate_path,
+                                    )
+                                    await mux_narration(
+                                        candidate_path, audio_path, project["duration_seconds"],
+                                    )
+                                    candidate_quality = await validate_final(
+                                        candidate_path, project["aspect_ratio"],
+                                        project["duration_seconds"],
+                                    )
+                                    candidate_sheet = (
+                                        Path(candidate_motion_qa["contact_sheet_path"])
+                                        if candidate_motion_qa
+                                        and candidate_motion_qa.get("contact_sheet_path") else None
+                                    )
+                                    if not candidate_sheet or not candidate_sheet.is_file():
+                                        raise RuntimeError("Repaired render did not produce a review contact sheet")
+                                    candidate_review = await visual_reviewer.review(
+                                        candidate_sheet,
+                                        candidate_plan.get("visual_qa_context", {}),
+                                        candidate_motion_qa.get("samples", []),
+                                    )
+                                    before_score = quality["visual_qa"].get("overall_score", 0)
+                                    after_score = candidate_review.get("overall_score", 0)
+                                    target_has_blocker = any(
+                                        finding.get("shot_index") == repair_item["shot_index"]
+                                        and finding.get("severity") in {"critical", "high"}
+                                        for finding in candidate_review.get("findings", [])
+                                    ) if candidate_review.get("status") == "reviewed" else True
+                                    accepted = (
+                                        candidate_review.get("status") == "reviewed"
+                                        and after_score > before_score
+                                        and not target_has_blocker
+                                    )
+                                    repair_ctx["before_score"] = before_score
+                                    repair_ctx["candidate_score"] = after_score
+                                    repair_ctx["accepted"] = accepted
+                                    if accepted:
+                                        candidate_qa_object = await storage.upload_file_private(
+                                            candidate_sheet, "image/png",
+                                            f"projects/{project['user_id']}/{project_id}/motion-qa-repaired",
+                                        )
+                                        previous_qa_object = qa_object
+                                        qa_object = candidate_qa_object
+                                        if previous_qa_object:
+                                            try:
+                                                await storage.delete(previous_qa_object)
+                                            except Exception:
+                                                logger.warning(
+                                                    "render.previous_motion_qa_cleanup_failed",
+                                                    extra={"qa_object": previous_qa_object},
+                                                )
+                                        output_path = candidate_path
+                                        plan = candidate_plan
+                                        motion_qa = candidate_motion_qa
+                                        quality = candidate_quality
+                                        quality["visual_qa"] = candidate_review
+                                        quality["motion_qa"] = {
+                                            "status": motion_qa.get("status"),
+                                            "sample_count": motion_qa.get("sample_count", 0),
+                                            "samples": motion_qa.get("samples", []),
+                                            "motion_diagnostics": plan.get("motion_diagnostics", []),
+                                            "contact_sheet_object": qa_object,
+                                        }
+                                        repair_summary["status"] = "accepted"
+                                        repair_summary["accepted"] = True
+                                    else:
+                                        repair_summary["status"] = "rejected"
+                                        repair_summary["candidate_score"] = after_score
+                                        repair_summary["reason"] = (
+                                            "candidate_did_not_improve_or_target_findings_remain"
+                                        )
+                            except asyncio.CancelledError:
+                                raise
+                            except Exception as repair_error:
+                                logger.warning("render.targeted_shot_repair.failed", extra={
+                                    "project_id": str(project_id),
+                                    "shot_index": repair_item["shot_index"],
+                                    "error": str(repair_error)[:500],
+                                })
+                                repair_summary["status"] = "failed"
+                                repair_summary["reason"] = str(repair_error)[:300]
+                    quality["shot_repair"] = repair_summary
+                except asyncio.CancelledError:
+                    raise
+                except Exception as error:
+                    logger.warning("render.visual_qa.failed", extra={
+                        "project_id": str(project_id), "error": str(error)[:500],
+                    })
+                    quality["visual_qa"] = {
+                        "status": "unavailable",
+                        "reason": "review_request_failed",
+                        "error": str(error)[:300],
+                        "repair_policy": "report_only",
+                    }
+            else:
+                quality["visual_qa"] = {
+                    "status": "skipped",
+                    "reason": "contact_sheet_unavailable",
+                    "repair_policy": "report_only",
+                }
         await set_render_progress(pool, project_id, attempt_id, lease_token, 90)
 
         # ── Upload final MP4 to GCS ───────────────────────────────────────
@@ -801,6 +994,14 @@ async def run_render(
                     discard_output = True
                     logger.warning("render.duplicate_delivery", extra={"output_object": output_object})
                 else:
+                    if quality.get("shot_repair", {}).get("accepted"):
+                        repaired_program = dict(program)
+                        repaired_program["scene_js"] = plan["scene_js"]
+                        repaired_program["repair_bundle"] = plan["repair_bundle"]
+                        await connection.execute(
+                            "UPDATE scene_plans SET program=$2::jsonb WHERE project_id=$1 AND scene_index=0",
+                            project_id, json.dumps(repaired_program),
+                        )
                     settled = locked["credits_reserved"]
                     await connection.execute(
                         "UPDATE projects SET status='complete',progress=100,output_object=$2,credits_settled=$3,completed_at=now() WHERE id=$1",
@@ -933,9 +1134,13 @@ async def run_render(
                 await storage.delete(output_object)
             except Exception:
                 logger.exception("render.orphan_output_cleanup_failed", extra={"output_object": output_object})
-        if output_path:
-            output_path.unlink(missing_ok=True)
-            shutil.rmtree(output_path.parent, ignore_errors=True)
+        if qa_object and not output_committed:
+            try:
+                await storage.delete(qa_object)
+            except Exception:
+                logger.exception("render.orphan_motion_qa_cleanup_failed", extra={"qa_object": qa_object})
+        for render_dir in set(render_temp_dirs):
+            shutil.rmtree(render_dir, ignore_errors=True)
         if audio_path:
             audio_path.unlink(missing_ok=True)
             shutil.rmtree(audio_path.parent, ignore_errors=True)
@@ -966,5 +1171,7 @@ async def render_stage(payload: InternalRunRequest, request: Request, pool: asyn
         await run_render(
             payload.project_id, payload.attempt_id, payload.lease_token,
             pool, request.app.state.renderer, request.app.state.storage, request.app.state.emailer,
+            request.app.state.visual_reviewer,
+            request.app.state.shot_repairer,
         )
     return {"completed": True, "projectId": str(payload.project_id), "renderer": "drawn-by-code"}

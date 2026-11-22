@@ -62,6 +62,20 @@ shortclipr-ffmpeg-worker-{region}
   INTERNAL_TASK_SECRET
 ```
 
+For rendered visual QA, optionally add `DEEPSEEK_API_KEY` to each
+`shortclipr-ffmpeg-worker-{region}` service's Secret Manager bindings and set
+`DEEPSEEK_VISUAL_QA_MODEL=deepseek-flash`, and
+`DEEPSEEK_ENABLE_VISUAL_QA=true`. The key is optional for worker readiness and
+video delivery; without it, renders complete with visual QA marked as skipped.
+Set `DEEPSEEK_ENABLE_VISUAL_QA=false` to disable the additional inference/cost.
+Targeted shot repair is separately opt-in with `DEEPSEEK_ENABLE_SHOT_REPAIR=true`.
+It performs at most one isolated shot repair per render, rerenders the candidate,
+and accepts it only when the visual score improves and the repaired shot has no
+remaining high/critical findings. Enabling it requires the DeepSeek key on the
+FFmpeg worker and adds another generation, render, and vision-review cost. Keep
+it disabled until representative production renders have been reviewed. The API worker already needs its own DeepSeek key for planning and
+animation compilation.
+
 Also set the optional/operational values from `.env.example` where relevant:
 model IDs, GCS public-base fallback, Dodo plan credit allowances, CORS origins,
 tracker keys, email/media limit, worker URLs/regions, and concurrency caps.

@@ -1,7 +1,7 @@
 # ShortClipr Art-Directed Animation Architecture
 
 Status: implementation design, version 1
-Branch: feat/art-directed-animation-foundation
+Branch: feat/structured-art-direction
 Scope: prompt-to-2D animation quality; preserve the existing Canvas 2D renderer and project pipeline.
 
 ## Product invariants
@@ -161,3 +161,145 @@ The first code slice should be limited to:
 5. Unit tests for mapping, validation, backward compatibility and selected-style propagation.
 
 Do not begin large-scale prompt changes or add new art systems until this foundation is merged and tested.
+
+
+## Implementation progress (PR #30)
+
+The structured art-direction stage is now implemented for the three initial new art systems:
+- `cinematic-editorial`
+- `isometric-technical`
+- `layered-paper`
+
+Each has a versioned art-direction profile and dedicated deterministic Canvas 2D primitives in `backend/drawn_by_code/styles/shortclipr.js`. Current UI choices now map Editorial -> cinematic-editorial, Diagrammatic -> isometric-technical, and Paper craft -> layered-paper. Cinematic retains the existing 70s-poster direction. Existing style IDs remain supported for saved projects.
+
+This is the first usable toolkit layer, not a claim that every generated video will automatically be high quality. Full visual-bible depth, storyboard composition contracts, motion mechanics, rendered-frame QA, and benchmark tuning remain subsequent phases. Actual rendered benchmark acceptance is still required before calling these systems production-proven.
+
+
+## Implementation progress — Visual Bible and Storyboard v2 (PR #30)
+
+The active planner now requests richer, stable visual-bible data: environment spatial layout and depth planes, scale references and atmosphere; prop materials, relative scale, components, anchors and moving parts; and character scale references. The validator adds backward-compatible defaults for persisted plans.
+
+Shot records now carry visual objective, composition, shot scale, camera position, ordered depth layers, focal entity, visual change and continuity notes. The planner checks focal-entity references against declared visual-bible IDs. The animation compiler includes this shot direction in each generation prompt and explicitly discourages repetitive compositions.
+
+This is structured direction, not proof of rendered quality. It does not yet implement mechanism-specific motion tracks or rendered-frame QA. Actual output still needs benchmark renders and human review.
+
+
+## Implementation progress — Mechanism-aware animation contracts (PR #30)
+
+The visual bible can now declare named mechanisms with stable IDs, prop-backed components, joints and anchors, motion constraints, and reusable action patterns. Every mechanism component must reference a declared visual-bible prop. Shot plans can request a named action pattern with a bounded normalized progress interval.
+
+The planner is instructed to identify a physical mechanism only when supported by the topic and to avoid fabricating kinematics when the mechanism is unknown. The compiler receives only the mechanisms used by a shot, validates mechanism and action-pattern references again before generation, and instructs the drawing model to derive connected driver/follower motion from shared progress while respecting joints and constraints.
+
+This is a structured motion-direction contract and prompt-level coordination, not a deterministic physics solver. Exact kinematics, mechanism-specific reusable motion functions, and rendered-frame motion QA remain future work. Qualitative motion must not be presented as engineering-accurate simulation unless the plan contains sufficient physical detail and is independently checked.
+
+
+## Implementation progress — vision-based visual QA (PR #30)
+
+The animation compiler now carries the validated Visual Bible and the storyboard fields
+used to direct each shot into the persisted render program. The FFmpeg worker can pass
+the rendered contact sheet, this exact planning context and the sample-to-shot mapping
+to the DeepSeek vision-capable model configured by `DEEPSEEK_VISUAL_QA_MODEL`
+(default: `deepseek-flash`). Inference can be disabled with
+`DEEPSEEK_ENABLE_VISUAL_QA=false` to control provider cost.
+
+The reviewer returns a bounded JSON report with an overall visual score, per-shot
+summaries, categorized findings, severity, evidence sample references, confidence and
+targeted recommendations. Findings are constrained to known shot and sample IDs.
+Review dimensions include character/prop continuity, art-style adherence, composition,
+depth, readability, storytelling clarity and visible render artifacts.
+
+This is deliberately report-only. It does not reject a video, change credits, trigger
+regeneration, or claim to verify motion between still frames, narration synchronization
+or physical correctness. If the vision key is not configured, the contact sheet is
+missing, or the review request fails, the video still completes and the quality report
+records a skipped/unavailable state. To activate this in production, configure
+`DEEPSEEK_API_KEY` on the FFmpeg worker as well as the API worker.
+
+## Implementation progress — rendered motion QA capture (PR #30)
+
+The animation compiler now returns a compact shot manifest with frame boundaries,
+shot names, referenced mechanism IDs and outgoing transitions. The planning worker
+persists this manifest beside the compiled scene program and passes it to the render
+worker. Legacy saved programs without a manifest continue to render without QA capture.
+
+The production Drawn-by-Code render now samples three interior frames per shot
+(approximately 15%, 50% and 85% through each shot) in the same Chromium session used
+for the MP4. The renderer assembles the samples into a contact sheet and uploads it
+to private project storage. The completed render's quality payload includes the
+sample timestamps, shot/mechanism references, contact-sheet object key and existing
+mechanism motion diagnostics.
+
+This stage creates reviewable rendered evidence for the vision-based reviewer described
+below. QA frame file/contact-sheet assembly and upload failures are non-fatal to the
+MP4 render; actual Chromium page errors remain fatal.
+
+## Implementation progress — mechanism integration and motion diagnostics (PR #30)
+
+The shot compiler now automatically includes the prop definitions backing every
+referenced mechanism component, even when the planner omitted those props from the
+shot's ordinary `props` list. This prevents a mechanism action from reaching the
+drawing prompt with component IDs but without the visual definitions needed to draw
+those components.
+
+Compilation also emits non-blocking `motion_diagnostics`:
+- `qualitative_motion_only` identifies mechanism actions without numeric kinematics;
+  these must remain qualitative and must not be presented as deterministic engineering
+  motion.
+- `progress_discontinuity` identifies adjacent shots that continue the same mechanism
+  action pattern but jump between different normalized progress values.
+
+Diagnostics do not alter authored progress or reject a plan. A discontinuity may be
+intentional (for example, a deliberate reset or a time jump), so it is surfaced for
+review rather than automatically repaired. This is structural motion QA, not rendered
+frame inspection; visual verification of component transforms and shot transitions
+remains required.
+
+## Implementation progress — deterministic mechanism primitives (PR #30)
+
+Added validated numeric 2D motion specs for fixed pivots/hinges, translations/sliders,
+meshed gear pairs, pulley-driven linear travel, authored cable polylines and telescoping
+actuators. The compiler now serializes each shot's validated mechanism actions and the
+referenced mechanism specs into local constants in that shot's generated function.
+The drawing model is instructed to call the trusted `ShortcliprStyles.mechanismPose`
+helper and apply the returned component transforms using shared normalized progress.
+
+This makes the listed primitive transforms deterministic and testable at the contract
+and assembly boundaries. It is not a general physics engine: gear motion uses ideal
+pitch-radius ratios, pulley motion uses an explicitly supplied axis, cable paths are
+interpolated from authored point arrays, and actuator extension does not solve a closed
+linkage. Collision, force, load, and linkage-closure solving remain out of scope. The
+tests and rendered benchmark videos still need execution and review in the project
+runtime before this stage can be treated as verified.
+
+## Implementation progress — bounded targeted shot repair (PR #30)
+
+The compiler now persists a versioned repair bundle alongside the compiled film:
+the shared drawing library, original storyboard and Visual Bible, art-direction
+instructions, mechanism definitions/actions, and each independently compiled shot
+body. This gives the repair stage source-level boundaries rather than trying to edit
+an already flattened JavaScript film.
+
+The visual reviewer can build a bounded repair queue from high/critical findings
+only. A finding must reference a known shot and captured sample, include an actionable
+recommendation, and meet the confidence threshold. At most one shot is selected for
+repair per render attempt.
+
+The repair compiler regenerates only that shot's drawing body. It reuses the original
+shared drawing library, visual identity definitions, shot timing, transition metadata,
+and validated mechanism constants. It rejects unresolved helper calls and reassembles
+the complete film with every non-target shot body unchanged.
+
+When `DEEPSEEK_ENABLE_SHOT_REPAIR=true` is explicitly enabled on the FFmpeg worker,
+the worker renders the candidate as a separate temporary MP4, muxes the original
+narration, validates the video, and reviews a fresh contact sheet. A candidate is
+accepted only when the visual score improves and the repaired shot has no remaining
+high/critical findings. Otherwise the original render is retained. Candidate render,
+review, or upload failures are non-fatal and do not affect credit settlement.
+When a candidate is accepted, its updated compiled source and repair bundle are
+persisted in the scene plan in the same transaction as project completion, so a
+subsequent delivery retry does not silently revert to the pre-repair shot.
+
+Shot repair is disabled by default because it adds a generation, full-film render and
+vision-review cost. It must be benchmarked with real rendered videos before being
+enabled in production. This is a bounded visual heuristic, not a guarantee that every
+semantic or continuity issue is detected.

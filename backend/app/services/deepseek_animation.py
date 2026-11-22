@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import re
@@ -26,6 +27,7 @@ async def _gather_cancel_on_error(*coroutines):
 from openai import AsyncOpenAI
 
 from ..core.config import Settings
+from .art_direction import build_art_direction, format_art_direction, validate_art_direction
 from .animation_contracts import (
     ASPECT_LOGICAL,
     MAX_FILM_SOURCE,
@@ -36,6 +38,7 @@ from .animation_contracts import (
     validate_draw_helper_definitions,
     validate_scene_plan,
     validate_visual_bible,
+    analyze_mechanism_motion,
 )
 
 
@@ -131,6 +134,20 @@ class DeepSeekAnimationCompiler:
         character_ids = set(scene.get("characters") or [])
         prop_ids = set(scene.get("props") or [])
         environment_id = scene.get("environment")
+        mechanism_ids = {item.get("mechanism_id") for item in scene.get("mechanism_actions", [])}
+        mechanisms = [
+            item for item in visual_bible.get("mechanisms", [])
+            if item.get("id") in mechanism_ids
+        ]
+        # Mechanism components may be omitted from scene.props by the planner.
+        # Pull their prop-backed visual definitions into the shot context so the
+        # drawing model can render the actual connected parts, not just labels.
+        mechanism_prop_ids = {
+            component.get("prop_id")
+            for mechanism in mechanisms
+            for component in mechanism.get("components", [])
+        }
+        prop_ids.update(mechanism_prop_ids)
         return {
             "style_id": visual_bible["style_id"],
             "style_notes": visual_bible.get("style_notes", ""),
@@ -146,6 +163,24 @@ class DeepSeekAnimationCompiler:
                 item for item in visual_bible.get("environments", [])
                 if item.get("id") == environment_id
             ],
+            "mechanisms": mechanisms,
+        }
+
+    @staticmethod
+    def _visual_qa_context(visual_bible: dict[str, Any], scenes: list[dict[str, Any]]) -> dict[str, Any]:
+        """Keep the visual review context aligned to the exact plan used to compile."""
+        storyboard_fields = (
+            "index", "start_frame", "end_frame", "purpose", "visual_objective",
+            "composition", "shot_scale", "camera_position", "depth_layers",
+            "focal_entity", "visual_change", "continuity_note", "characters",
+            "props", "environment", "mechanism_actions",
+        )
+        return {
+            "visual_bible": visual_bible,
+            "storyboard": [
+                {key: scene.get(key) for key in storyboard_fields if key in scene}
+                for scene in scenes
+            ],
         }
 
     async def compile(self, project: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
@@ -160,11 +195,30 @@ class DeepSeekAnimationCompiler:
 
         visual_bible = validate_visual_bible(plan.get("visual_bible"))
         scenes = validate_scene_plan(plan.get("scenes"), total_frames)
+        mechanisms_by_id = {item["id"]: item for item in visual_bible.get("mechanisms", [])}
+        for scene in scenes:
+            for action in scene.get("mechanism_actions", []):
+                mechanism = mechanisms_by_id.get(action["mechanism_id"])
+                if mechanism is None:
+                    raise ValueError("Shot mechanism action references an undeclared mechanism ID")
+                if action["pattern_id"] not in {item["id"] for item in mechanism.get("action_patterns", [])}:
+                    raise ValueError("Shot mechanism action references an undeclared action pattern")
+        motion_diagnostics = analyze_mechanism_motion(visual_bible, scenes)
         style_id = visual_bible["style_id"]
+        art_direction_value = plan.get("art_direction")
+        if art_direction_value is None:
+            # Compatibility for persisted plans created before ArtDirectionV1.
+            art_direction = build_art_direction(
+                style_id, requested_style=None,
+                style_notes=str(visual_bible.get("style_notes", "")),
+            )
+        else:
+            art_direction = validate_art_direction(art_direction_value, style_id)
+        art_direction_instructions = format_art_direction(art_direction)
 
         shared_prompt = f"""
 You are ShortClipr's senior 2D character and illustration systems artist.
-Create a compact reusable JavaScript drawing library for a {style_id} Canvas 2D film. Aim for at most 1,800 output tokens.
+Create a compact reusable JavaScript drawing library for a {style_id} Canvas 2D film.\nFollow this binding art-direction contract:\n{art_direction_instructions}\nAim for at most 1,800 output tokens.
 Return JSON only: {{"shared_js":"JavaScript source"}}.
 The source is evaluated in the same script as the film and may define ordinary named
 functions and constants. It must not call Motion.scene. Use only the supplied Canvas
@@ -175,8 +229,15 @@ A trusted runtime script ShortcliprStyles is loaded before this library. Use
 ShortcliprStyles.palette("{style_id}"), ShortcliprStyles.paperBackground(g, "{style_id}", env),
 ShortcliprStyles.paperShadow(g, x, y, blur, color), ShortcliprStyles.halftone(g, x, y, w, h, spacing, color),
 ShortcliprStyles.camera(g, env, {{cx, cy, zoom, rotation}}) inside g.save()/g.restore(), and
-ShortcliprStyles.pixelSnap(value, pixelSize) where appropriate. Use restrained texture
-details rather than full-canvas particle loops. Create reusable helpers for every recurring
+ShortcliprStyles.pixelSnap(value, pixelSize) where appropriate.
+For cinematic-editorial use ShortcliprStyles.editorialShape(g, points, opts) for layered
+graphic silhouettes and editorialLight(g,x,y,r,color) for restrained focal light.
+For isometric-technical use isoProject(x,y,z,scale,origin), isoBox(g,x,y,z,w,d,h,scale,colors),
+and isoLine(g,a,b,color,width); keep all components on the same projected axes.
+For layered-paper use paperPolygon(g,points,opts), paperEllipse(g,x,y,rx,ry,opts),
+paperLayer(g,draw,opts), and paperParallax(g,offset,layers); separate depth planes and
+keep light direction/shadow offsets consistent. These are deterministic Canvas 2D helpers.
+Use restrained texture details rather than full-canvas particle loops. Create reusable helpers for every recurring
 character, prop and environment in the visual bible. Character functions must preserve
 silhouette, proportions, face, clothing, colours and distinctive marks across all shots.
 Prefer short named functions such as drawExplorer(g,x,y,s,pose,expression). Implement only helpers needed by this visual bible. Avoid duplicate helpers, verbose comments and decorative details that do not support the scenes. Keep code deterministic and compact.
@@ -207,7 +268,8 @@ Generate only the drawing body for one shot. Return JSON only:
 The body is inserted inside:
 function drawShot_{scene["index"]}(g, t, env, absoluteTime) {{ ... }}
 Here t is local shot time starting at zero; absoluteTime is film time in seconds.
-The shared drawing library is already defined before this function.
+The compiler injects validated local constants `mechanismActions` and `mechanisms` before the drawing body.
+Use these runtime arrays directly; never invent or reconstruct mechanism data.
 VERIFIED SHARED DRAW HELPERS (exact names): {json.dumps(shared_helper_names)}
 You may call only these shared helpers. If this shot needs another reusable drawing
 function, define that function inside this draw_body before calling it. Never invent
@@ -220,13 +282,26 @@ the shared helper functions. Redraw the full shot deterministically from t. No s
 accumulation, random numbers, DOM/browser globals, imports, exports, network, file access,
 Node APIs, timers, eval, Function, Date, performance, WebGL, Three.js or 3D.
 Keep all drawing within the logical canvas {logical[0]}x{logical[1]}.
+Honor the storyboard visual_objective, composition, shot_scale, camera_position, ordered depth_layers, focal_entity, visual_change and continuity_note. Build a readable foreground/midground/background rather than a flat repeated grid. Make the focal subject materially and spatially specific; use scale references and environment geometry. Iterate with `for (const action of mechanismActions)`. For each action, find `const mechanism = mechanisms.find(item => item.id === action.mechanism_id)`. The backend has already validated that the mechanism and action pattern exist. If the mechanism is missing defensively skip it; if it has no kinematics, depict the named action qualitatively without claiming deterministic engineering motion. Only calculate normalized local progress when a kinematics array exists; use this shot's local duration ({end_s-start_s:.3f} seconds):
+const rawProgress = Ease.clamp(Ease.seg(t, 0, {end_s-start_s:.3f}));
+const easing = action.easing ?? "in_out";
+const easedProgress = easing === "linear" ? rawProgress : easing === "ease_in" ? rawProgress * rawProgress * rawProgress : easing === "ease_out" ? 1 - Math.pow(1 - rawProgress, 3) : Ease.inOut(rawProgress);
+const actionProgress = (action.start_progress ?? 0) + ((action.end_progress ?? 1) - (action.start_progress ?? 0)) * easedProgress;
+Iterate with `for (const spec of mechanism.kinematics)`. For each spec, run `const pose = ShortcliprStyles.mechanismPose(spec, actionProgress)` and apply that pose to the component identified by `pose.part`. For pivot results, rotate pose.part around pose.anchor by pose.angle_rad. For translation/slider results, place pose.part origin at pose.position. For gear results, rotate pose.driver_part around pose.driver_anchor by pose.driver_angle_rad and pose.part around pose.anchor by pose.angle_rad; preserve the declared pitch-radius ratio and external/internal mesh direction. For pulley results, rotate pose.pulley_part around pose.anchor by pose.pulley_angle_rad and place pose.part at the returned absolute pose.position. For cable results, draw pose.part as a continuous polyline through pose.points in order. For actuator results, draw the cylinder and rod along pose.base-to-pose.tip using pose.length and pose.angle_rad. Apply the same actionProgress to all kinematic parts in this action. Do not invent geometry or constraints. When kinematics is absent, use qualitative motion only and do not present it as engineering-solved.
 Make one clear animated action with simple easing and follow-through. Use only the composition layers needed for this shot. Keep code concise: aim for at most 900 output tokens; no comments, repeated character drawings or unnecessary decorative loops. Reuse shared helpers for all recurring entities. Do not render narration or subtitles.
 STYLE: {style_id}
+BINDING ART DIRECTION:
+{art_direction_instructions}
+STYLE TOOLKIT REQUIREMENTS:
+- cinematic-editorial: construct foreground/midground/background layers, bold silhouette masses and one clear focal-light treatment.
+- isometric-technical: use the shared isoProject/isoBox projection helpers consistently for all related components; show component separation and mechanical relationships.
+- layered-paper: use separate paperPolygon/paperEllipse/paperLayer shapes with visible overlap and consistent cast shadows; add parallax only when it clarifies depth.
 SHOT VISUAL REFERENCES:
 {json.dumps(shot_visual_context, ensure_ascii=False, separators=(",", ":"))}
+DETERMINISTIC KINEMATICS: numeric specs are authoritative. Evaluate the same normalized progress for every connected part and reuse the returned transform; do not independently animate connected components.
 SHOT:
 {json.dumps(scene, ensure_ascii=False)}
-SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s.
+SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s.\nAvoid repeating the previous shot composition unless the storyboard explicitly calls for a sustained view.
 """.strip()
             async with semaphore:
                 body = await self._validated_fragment(
@@ -241,6 +316,8 @@ SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s
                 "end_frame": scene["end_frame"],
                 "name": str(scene.get("purpose", f"Shot {scene['index'] + 1}"))[:80],
                 "draw_body": body,
+                "mechanism_actions": scene.get("mechanism_actions", []),
+                "mechanisms": shot_visual_context.get("mechanisms", []),
                 "transition_out": str(scene.get("transition_out", "cut")).lower(),
             }
 
@@ -262,6 +339,7 @@ Implement every missing helper listed below as ordinary named JavaScript functio
 declarations. Return JSON only: {{"helpers_js":"JavaScript source"}}.
 MISSING HELPERS: {json.dumps(missing_helpers)}
 STYLE: {style_id}
+BINDING ART DIRECTION: {art_direction_instructions}
 VISUAL BIBLE: {json.dumps(visual_bible, ensure_ascii=False)}
 SHOT CONTEXT: {json.dumps([
     {"index": shot["index"], "name": shot["name"], "body": shot["draw_body"]}
@@ -317,8 +395,190 @@ Rules:
             "shot_count": len(compiled),
             "shared_source_chars": len(shared_js),
             "shot_source_chars": sum(len(x["draw_body"]) for x in compiled),
+            "motion_diagnostics": motion_diagnostics,
+            "visual_qa_context": self._visual_qa_context(visual_bible, scenes),
+            # Keep the exact compiled shot bodies and shared drawing library so a
+            # later repair can replace one shot without regenerating other shots.
+            "repair_bundle": {
+                "schema_version": 1,
+                "duration": duration,
+                "logical": logical,
+                "style_id": style_id,
+                "art_direction": art_direction,
+                "art_direction_instructions": art_direction_instructions,
+                "visual_bible": visual_bible,
+                "scenes": scenes,
+                "shared_js": shared_js,
+                "shots": compiled,
+            },
+            "shot_manifest": [
+                {
+                    "index": shot["index"],
+                    "start_frame": shot["start_frame"],
+                    "end_frame": shot["end_frame"],
+                    "name": shot["name"],
+                    "mechanism_ids": sorted({
+                        action["mechanism_id"]
+                        for action in shot.get("mechanism_actions", [])
+                    }),
+                    "transition_out": shot.get("transition_out", "cut"),
+                }
+                for shot in compiled
+            ],
         }
 
+
+    async def repair_shot(
+        self,
+        repair_bundle: dict[str, Any],
+        shot_index: int,
+        findings: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Regenerate exactly one shot body while keeping every other source byte-stable."""
+        if self.client is None:
+            raise RuntimeError("DEEPSEEK_API_KEY is not configured")
+        if not isinstance(repair_bundle, dict) or repair_bundle.get("schema_version") != 1:
+            raise ValueError("Unsupported or missing shot repair bundle")
+        shots = repair_bundle.get("shots")
+        scenes = repair_bundle.get("scenes")
+        shared_js = repair_bundle.get("shared_js")
+        if not isinstance(shots, list) or not isinstance(scenes, list) or not isinstance(shared_js, str):
+            raise ValueError("Shot repair bundle is incomplete")
+        if (len(shots) != len(scenes) or not 3 <= len(shots) <= 12
+                or not all(isinstance(item, dict) for item in shots + scenes)):
+            raise ValueError("Shot repair bundle has invalid shot structure")
+        duration = repair_bundle.get("duration")
+        logical = repair_bundle.get("logical")
+        style_id = repair_bundle.get("style_id")
+        if (isinstance(duration, bool) or not isinstance(duration, int) or duration < 1
+                or not isinstance(logical, list) or len(logical) != 2
+                or not all(isinstance(value, int) and not isinstance(value, bool) and value > 0 for value in logical)
+                or not isinstance(style_id, str) or not style_id):
+            raise ValueError("Shot repair bundle has invalid render metadata")
+        if isinstance(shot_index, bool) or not isinstance(shot_index, int):
+            raise ValueError("Shot index must be an integer")
+        shot_positions = [i for i, shot in enumerate(shots) if shot.get("index") == shot_index]
+        scene_positions = [i for i, scene in enumerate(scenes) if scene.get("index") == shot_index]
+        if len(shot_positions) != 1 or len(scene_positions) != 1 or shot_positions[0] != scene_positions[0]:
+            raise ValueError("Target shot is not uniquely present in repair bundle")
+        if not isinstance(findings, list) or not findings:
+            raise ValueError("At least one visual QA finding is required")
+        safe_findings = []
+        for item in findings[:8]:
+            if (not isinstance(item, dict)
+                    or isinstance(item.get("shot_index"), bool)
+                    or item.get("shot_index") != shot_index):
+                continue
+            issue = item.get("issue")
+            recommendation = item.get("recommendation")
+            if not isinstance(issue, str) or not issue.strip() or not isinstance(recommendation, str) or not recommendation.strip():
+                continue
+            safe_findings.append({
+                "category": str(item.get("category", "other"))[:60],
+                "severity": str(item.get("severity", "medium"))[:20],
+                "issue": issue[:500],
+                "recommendation": recommendation[:500],
+                "evidence_sample_indices": [
+                    value for value in (
+                        item.get("evidence_sample_indices")
+                        if isinstance(item.get("evidence_sample_indices"), list) else []
+                    )[:3]
+                    if isinstance(value, int) and not isinstance(value, bool)
+                ],
+            })
+        if not safe_findings:
+            raise ValueError("No actionable findings belong to the requested shot")
+
+        position = shot_positions[0]
+        original_shot = shots[position]
+        scene = scenes[position]
+        original_body = original_shot.get("draw_body")
+        if not isinstance(original_body, str) or not original_body:
+            raise ValueError("Target shot has no original drawing body")
+        visual_bible = repair_bundle.get("visual_bible", {})
+        shot_visual_context = self._shot_visual_context(visual_bible, scene)
+        shared_helper_names = sorted(set(re.findall(
+            r"\bfunction\s+(draw[A-Z][A-Za-z0-9_]*)\s*\(", shared_js
+        )))
+        prompt = f"""
+You are ShortClipr's senior 2D animation repair artist. Repair ONLY shot {shot_index}.
+Return JSON only: {{"draw_body":"complete replacement JavaScript drawing body"}}.
+
+The replacement body is inserted into the existing drawShot_{shot_index}(g,t,env,absoluteTime)
+function. The compiler will preserve the existing validated mechanismActions and
+mechanisms constants. Do not modify them, other shots, shot timing, transitions,
+the shared drawing library, or the selected visual style.
+
+VISUAL QA FINDINGS TO FIX:
+{json.dumps(safe_findings, ensure_ascii=False)}
+
+ORIGINAL SHOT DIRECTION:
+{json.dumps(scene, ensure_ascii=False)}
+
+VISUAL REFERENCES:
+{json.dumps(shot_visual_context, ensure_ascii=False)}
+
+BINDING ART DIRECTION:
+{repair_bundle.get("art_direction_instructions", "")}
+
+EXISTING SHARED DRAW HELPERS (only these may be called):
+{json.dumps(shared_helper_names)}
+
+ORIGINAL SHOT BODY:
+{original_body}
+
+Rules:
+- Fix the listed visible problems, not unrelated aspects of the shot.
+- Preserve all named recurring characters, props, environment identity and relative scale.
+- Preserve the shot's purpose, focal entity, visual objective, composition intent,
+  visual change, continuity note and transition compatibility.
+- Use existing shared helpers only; do not add helpers or call undefined drawX functions.
+- Keep all drawing inside the original logical canvas.
+- Keep deterministic Canvas 2D only. No DOM, browser globals, network, filesystem,
+  imports, exports, Node APIs, timers, eval, Function, random numbers, WebGL or 3D.
+- Keep mechanism actions and kinematics coherent. Use the supplied validated mechanism
+  arrays as-is; do not invent physics or claim engineering accuracy for qualitative motion.
+- Return the full replacement draw_body, not a diff or patch.
+""".strip()
+        replacement_body = await self._validated_fragment(
+            "You are a senior Canvas 2D animation programmer. Return strict JSON only.",
+            prompt,
+            min(self.max_output_tokens, 10000),
+            "draw_body",
+            f"Targeted repair for shot {shot_index + 1}",
+            MAX_SHOT_SOURCE,
+        )
+        updated_bundle = copy.deepcopy(repair_bundle)
+        updated_bundle["shots"][position]["draw_body"] = replacement_body
+        remaining_helpers = find_unresolved_draw_helpers(
+            shared_js,
+            [shot["draw_body"] for shot in updated_bundle["shots"]],
+        )
+        if remaining_helpers:
+            raise ValueError(
+                "Targeted repair introduced unresolved drawing helpers: "
+                + ", ".join(remaining_helpers)
+            )
+        source = self._assemble_film(
+            shared_js,
+            updated_bundle["shots"],
+            duration,
+            logical,
+            style_id,
+        )
+        if len(source) > MAX_FILM_SOURCE:
+            raise ValueError("Repaired animation program exceeds the maximum source size")
+        self.validate_source(source, duration, logical)
+        return {
+            "scene_js": source,
+            "repair_bundle": updated_bundle,
+            "repaired_shot_index": shot_index,
+            "original_body_chars": len(original_body),
+            "replacement_body_chars": len(replacement_body),
+            "unchanged_shot_indices": [
+                shot["index"] for shot in shots if shot["index"] != shot_index
+            ],
+        }
 
     @staticmethod
     def _assemble_film(shared_js: str, shots: list[dict[str, Any]], duration: int,
@@ -327,7 +587,14 @@ Rules:
         for shot in shots:
             index = shot["index"]
             start, end = shot["start_frame"] / 30, shot["end_frame"] / 30
-            functions.append(f"function drawShot_{index}(g,t,env,absoluteTime) {{\n{shot['draw_body']}\n}}")
+            mechanism_actions_js = json.dumps(shot.get("mechanism_actions", []), ensure_ascii=False, separators=(",", ":"))
+            mechanisms_js = json.dumps(shot.get("mechanisms", []), ensure_ascii=False, separators=(",", ":"))
+            functions.append(
+                f"function drawShot_{index}(g,t,env,absoluteTime) {{\n"
+                f"const mechanismActions = {mechanism_actions_js};\n"
+                f"const mechanisms = {mechanisms_js};\n"
+                f"{shot['draw_body']}\n}}"
+            )
             name = re.sub(r"[^a-zA-Z0-9 _-]", "", shot["name"]).replace("'", "")[:60]
             ranges.append(f"[{start:.6f},{end:.6f},'{name}']")
             transition = shot.get("transition_out", "cut")
