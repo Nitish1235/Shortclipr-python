@@ -29,7 +29,7 @@ const { fps, total } = info;
 const t0 = Date.now();
 const assertNoPageErrors = () => {
     if (errors.length) {
-        throw new Error('[page error] ' + errors.slice(-8).join('\\n'));
+        throw new Error('[page error] ' + errors.slice(-8).join('\n'));
     }
 };
 const grab = async (i, type) => {
