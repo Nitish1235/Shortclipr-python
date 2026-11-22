@@ -378,6 +378,23 @@ Rules:
             "shared_source_chars": len(shared_js),
             "shot_source_chars": sum(len(x["draw_body"]) for x in compiled),
             "motion_diagnostics": motion_diagnostics,
+            "visual_qa_context": {
+                "visual_bible": visual_bible,
+                "storyboard": [
+                    {
+                        key: scene.get(key)
+                        for key in (
+                            "index", "start_frame", "end_frame", "purpose",
+                            "visual_objective", "composition", "shot_scale",
+                            "camera_position", "depth_layers", "focal_entity",
+                            "visual_change", "continuity_note", "characters",
+                            "props", "environment", "mechanism_actions",
+                        )
+                        if key in scene
+                    }
+                    for scene in scenes
+                ],
+            },
             "shot_manifest": [
                 {
                     "index": shot["index"],
