@@ -132,6 +132,7 @@ class DeepSeekAnimationCompiler:
         character_ids = set(scene.get("characters") or [])
         prop_ids = set(scene.get("props") or [])
         environment_id = scene.get("environment")
+        mechanism_ids = {item.get("mechanism_id") for item in scene.get("mechanism_actions", [])}
         return {
             "style_id": visual_bible["style_id"],
             "style_notes": visual_bible.get("style_notes", ""),
@@ -146,6 +147,10 @@ class DeepSeekAnimationCompiler:
             "environments": [
                 item for item in visual_bible.get("environments", [])
                 if item.get("id") == environment_id
+            ],
+            "mechanisms": [
+                item for item in visual_bible.get("mechanisms", [])
+                if item.get("id") in mechanism_ids
             ],
         }
 
@@ -238,7 +243,7 @@ the shared helper functions. Redraw the full shot deterministically from t. No s
 accumulation, random numbers, DOM/browser globals, imports, exports, network, file access,
 Node APIs, timers, eval, Function, Date, performance, WebGL, Three.js or 3D.
 Keep all drawing within the logical canvas {logical[0]}x{logical[1]}.
-Honor the storyboard visual_objective, composition, shot_scale, camera_position, ordered depth_layers, focal_entity, visual_change and continuity_note. Build a readable foreground/midground/background rather than a flat repeated grid. Make the focal subject materially and spatially specific; use scale references and environment geometry. Make one clear animated action with simple easing and follow-through. Use only the composition layers needed for this shot. Keep code concise: aim for at most 900 output tokens; no comments, repeated character drawings or unnecessary decorative loops. Reuse shared helpers for all recurring entities. Do not render narration or subtitles.
+Honor the storyboard visual_objective, composition, shot_scale, camera_position, ordered depth_layers, focal_entity, visual_change and continuity_note. Build a readable foreground/midground/background rather than a flat repeated grid. Make the focal subject materially and spatially specific; use scale references and environment geometry. For each mechanism_actions entry, animate the named driver and dependent followers as one coordinated system. Respect declared joint types, anchors, motion_constraints, driver/follower relationships and progress range. Derive every part position from the same normalized shot progress so the mechanism stays coherent on every frame; do not animate connected parts independently or invent extra linkages. If exact kinematics are not specified, use a visually clear qualitative approximation and preserve all stated constraints. Make one clear animated action with simple easing and follow-through. Use only the composition layers needed for this shot. Keep code concise: aim for at most 900 output tokens; no comments, repeated character drawings or unnecessary decorative loops. Reuse shared helpers for all recurring entities. Do not render narration or subtitles.
 STYLE: {style_id}
 BINDING ART DIRECTION:
 {art_direction_instructions}
