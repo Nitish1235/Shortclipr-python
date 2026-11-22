@@ -65,15 +65,42 @@ try {
             if (audio && fs.existsSync(audio)) args.push('-ss', String(from / fps), '-i', audio, '-c:a', 'aac', '-b:a', '256k', '-shortest');
             args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', String(opt.crf ?? 18), '-preset', 'medium', '-movflags', '+faststart', out);
             const ff = spawn(ffmpeg, args, { stdio: ['pipe', 'inherit', 'inherit'] });
-            const done = new Promise((ok, ko) => ff.on('close', (c) => (c === 0 ? ok() : ko(new Error('ffmpeg exited with ' + c)))));
-            for (let i = from; i <= to; i += step) {
-                const buf = Buffer.from(await grab(i, 'image/jpeg'), 'base64');
-                if (!ff.stdin.write(buf)) await new Promise((ok) => ff.stdin.once('drain', ok));
-                if ((i - from) % (fps * 5) === 0) process.stdout.write(`\r${(i / fps).toFixed(1)} / ${(to / fps).toFixed(1)} s`);
+            const done = new Promise((ok, ko) => {
+                ff.once('error', ko);
+                ff.once('close', (code) => (code === 0 ? ok() : ko(new Error('ffmpeg exited with ' + code))));
+            });
+            // Attach a handler immediately; the promise is awaited below after
+            // frame production, but FFmpeg may fail before the first frame.
+            void done.catch(() => {});
+            const frameCount = Math.max(1, Math.floor((to - from) / step) + 1);
+            let renderedFrames = 0;
+            try {
+                for (let i = from; i <= to; i += step) {
+                    const buf = Buffer.from(await grab(i, 'image/jpeg'), 'base64');
+                    if (!ff.stdin.write(buf)) await new Promise((ok, ko) => {
+                        ff.stdin.once('drain', ok);
+                        ff.stdin.once('error', ko);
+                    });
+                    renderedFrames += 1;
+                    if (renderedFrames === 1 || renderedFrames % (fps * 5) === 0) {
+                        console.log(JSON.stringify({
+                            event: 'drawn_by_code.progress',
+                            rendered_frames: renderedFrames,
+                            total_frames: frameCount,
+                            progress: Math.min(99, Math.round(renderedFrames / frameCount * 100)),
+                        }));
+                    }
+                }
+                ff.stdin.end();
+                await done;
+            } catch (error) {
+                ff.stdin.destroy();
+                if (!ff.killed && ff.exitCode === null) ff.kill('SIGKILL');
+                await done.catch(() => {});
+                throw error;
             }
-            ff.stdin.end();
-            await done;
-            console.log(`\r${out}${audio && fs.existsSync(audio) ? ' (with audio)' : ''}`);
+            console.log(JSON.stringify({ event: 'drawn_by_code.progress', rendered_frames: frameCount, total_frames: frameCount, progress: 100 }));
+            console.log(`${out}${audio && fs.existsSync(audio) ? ' (with audio)' : ''}`);
         }
     }
     console.log(`done in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
