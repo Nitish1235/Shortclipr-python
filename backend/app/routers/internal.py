@@ -951,13 +951,13 @@ async def run_render(
                         "status": "unavailable",
                         "reason": "review_request_failed",
                         "error": str(error)[:300],
-                        "automatic_repair": False,
+                        "repair_policy": "report_only",
                     }
             else:
                 quality["visual_qa"] = {
                     "status": "skipped",
                     "reason": "contact_sheet_unavailable",
-                    "automatic_repair": False,
+                    "repair_policy": "report_only",
                 }
         await set_render_progress(pool, project_id, attempt_id, lease_token, 90)
 
