@@ -557,8 +557,10 @@ async def run_planning(
                 )
                 attempt_row = await connection.fetchrow(
                     """SELECT attempts,max_attempts FROM job_attempts
-                       WHERE id=$1 AND lease_token=$2 AND status='running' FOR UPDATE""",
-                    attempt_id, lease_token,
+                       WHERE id=$1 AND lease_token=$2 AND project_id=$3
+                         AND job_class='api' AND status='running' AND lease_expires_at>now()
+                       FOR UPDATE""",
+                    attempt_id, lease_token, project_id,
                 )
                 if not attempt_row:
                     logger.warning("planning.failure_from_stale_attempt")
