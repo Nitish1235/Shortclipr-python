@@ -238,7 +238,8 @@ Generate only the drawing body for one shot. Return JSON only:
 The body is inserted inside:
 function drawShot_{scene["index"]}(g, t, env, absoluteTime) {{ ... }}
 Here t is local shot time starting at zero; absoluteTime is film time in seconds.
-The shared drawing library is already defined before this function.
+The compiler injects validated local constants `mechanismActions` and `mechanisms` before the drawing body.
+Use these runtime arrays directly; never invent or reconstruct mechanism data.
 VERIFIED SHARED DRAW HELPERS (exact names): {json.dumps(shared_helper_names)}
 You may call only these shared helpers. If this shot needs another reusable drawing
 function, define that function inside this draw_body before calling it. Never invent
@@ -251,14 +252,12 @@ the shared helper functions. Redraw the full shot deterministically from t. No s
 accumulation, random numbers, DOM/browser globals, imports, exports, network, file access,
 Node APIs, timers, eval, Function, Date, performance, WebGL, Three.js or 3D.
 Keep all drawing within the logical canvas {logical[0]}x{logical[1]}.
-Honor the storyboard visual_objective, composition, shot_scale, camera_position, ordered depth_layers, focal_entity, visual_change and continuity_note. Build a readable foreground/midground/background rather than a flat repeated grid. Make the focal subject materially and spatially specific; use scale references and environment geometry. For each mechanism_actions entry, use explicit deterministic kinematics from the matching mechanism when present. Compute action progress as:
-const actionStart = action.start_progress ?? 0;
-const actionEnd = action.end_progress ?? 1;
+Honor the storyboard visual_objective, composition, shot_scale, camera_position, ordered depth_layers, focal_entity, visual_change and continuity_note. Build a readable foreground/midground/background rather than a flat repeated grid. Make the focal subject materially and spatially specific; use scale references and environment geometry. For each item in mechanismActions, look up its mechanism in mechanisms using mechanism_id. If that mechanism has kinematics, calculate normalized local progress over this shot's local duration ({end_s-start_s:.3f} seconds):
 const rawProgress = Ease.clamp(Ease.seg(t, 0, {end_s-start_s:.3f}));
 const easing = action.easing ?? "in_out";
 const easedProgress = easing === "linear" ? rawProgress : easing === "ease_in" ? rawProgress * rawProgress * rawProgress : easing === "ease_out" ? 1 - Math.pow(1 - rawProgress, 3) : Ease.inOut(rawProgress);
-const actionProgress = actionStart + (actionEnd - actionStart) * easedProgress;
-Read the values from the current mechanism_actions entry, using action.start_progress ?? 0, action.end_progress ?? 1, and action.easing ?? "in_out"; compute the JavaScript variables shown above, then call ShortcliprStyles.mechanismPose(spec, actionProgress) for every spec in the matching mechanism's kinematics array. For pivot results, save the context, translate to the returned anchor, rotate by angle_rad, translate back and restore. For translation results, offset the declared part origin by the returned position. For actuator results, draw the cylinder and rod along the segment from returned base to tip using returned length and angle_rad. Use the exact same actionProgress for every connected component. Do not reinterpret numeric geometry or invent constraints. If no numeric kinematics exist, depict motion qualitatively and do not call it engineering-solved.
+const actionProgress = (action.start_progress ?? 0) + ((action.end_progress ?? 1) - (action.start_progress ?? 0)) * easedProgress;
+Call ShortcliprStyles.mechanismPose(spec, actionProgress) for every spec in mechanism.kinematics. For pivot results, apply the returned rotation to the matching component around the returned anchor. For translation results, place the matching component origin at the returned position. For actuator results, draw the cylinder and rod along the returned base-to-tip segment using returned length and angle_rad. Apply the same actionProgress to all kinematic parts in this action. Do not invent geometry or constraints. When kinematics is absent, use qualitative motion only and do not present it as engineering-solved.
 Make one clear animated action with simple easing and follow-through. Use only the composition layers needed for this shot. Keep code concise: aim for at most 900 output tokens; no comments, repeated character drawings or unnecessary decorative loops. Reuse shared helpers for all recurring entities. Do not render narration or subtitles.
 STYLE: {style_id}
 BINDING ART DIRECTION:
@@ -287,6 +286,8 @@ SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s
                 "end_frame": scene["end_frame"],
                 "name": str(scene.get("purpose", f"Shot {scene['index'] + 1}"))[:80],
                 "draw_body": body,
+                "mechanism_actions": scene.get("mechanism_actions", []),
+                "mechanisms": shot_visual_context.get("mechanisms", []),
                 "transition_out": str(scene.get("transition_out", "cut")).lower(),
             }
 
