@@ -40,6 +40,28 @@ class ShotVisualContextTests(unittest.TestCase):
         self.assertEqual(result["style_notes"], "Layered paper textures")
 
 
+class VisualQAContextTests(unittest.TestCase):
+    def test_visual_qa_context_preserves_bible_and_reviewable_storyboard_fields(self):
+        bible = {
+            "style_id": "cinematic-editorial",
+            "characters": [{"id": "char_engineer", "design": {"silhouette": "hard hat"}}],
+        }
+        scenes = [{
+            "index": 0,
+            "start_frame": 0,
+            "end_frame": 90,
+            "visual_objective": "Reveal the bridge hinge",
+            "composition": "Low angle with the hinge in foreground",
+            "focal_entity": "prop_hinge",
+            "internal_debug_field": "must not leak into QA prompt",
+        }]
+        context = DeepSeekAnimationCompiler._visual_qa_context(bible, scenes)
+        self.assertEqual(context["visual_bible"], bible)
+        self.assertEqual(len(context["storyboard"]), 1)
+        self.assertEqual(context["storyboard"][0]["focal_entity"], "prop_hinge")
+        self.assertNotIn("internal_debug_field", context["storyboard"][0])
+
+
 class DrawingHelperContractTests(unittest.TestCase):
     def test_finds_missing_helper_used_by_shot(self):
         shared = "function drawBridge(g) { g.beginPath(); }"
