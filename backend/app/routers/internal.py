@@ -693,6 +693,9 @@ async def run_render(
     except asyncio.CancelledError:
         logger.warning("render.cancelled_or_lease_lost")
         raise
+    except asyncio.CancelledError:
+        logger.warning("render.cancelled_or_lease_lost")
+        raise
     except Exception as error:
         total_ms = round((_time.monotonic() - t0_total) * 1000)
         message = str(error)[:1000]
@@ -705,8 +708,6 @@ async def run_render(
         attempt_row = None
         async with pool.acquire() as connection:
             async with connection.transaction():
-                # Use the same project -> attempt lock order as cancellation
-                # and planning finalization.
                 locked_project = await connection.fetchrow(
                     "SELECT status FROM projects WHERE id=$1 FOR UPDATE", project_id,
                 )
@@ -761,6 +762,7 @@ async def run_render(
                             "attempt": attempt_row["attempts"],
                             "max_attempts": attempt_row["max_attempts"],
                             "retry_in_s": retry_delay,
+                            "error": message[:240],
                         }),
                     )
         if retry_delay:
