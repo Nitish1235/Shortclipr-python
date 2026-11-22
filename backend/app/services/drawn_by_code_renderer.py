@@ -182,7 +182,7 @@ class DrawnByCodeRenderer:
                     "output_tail": tail,
                 })
                 raise RuntimeError(
-                    f"Drawn-by-Code render exceeded {self.timeout}s timeout; last subprocess output:\\n{tail}"
+                    f"Drawn-by-Code render exceeded {self.timeout}s timeout; last subprocess output:\n{tail}"
                 ) from error
             except asyncio.CancelledError:
                 await self._kill_and_wait(proc)
@@ -209,7 +209,7 @@ class DrawnByCodeRenderer:
                 })
                 output_path.unlink(missing_ok=True)
                 raise RuntimeError(
-                    f"Drawn-by-Code exited with code {code}; last subprocess output:\\n{tail}"
+                    f"Drawn-by-Code exited with code {code}; last subprocess output:\n{tail}"
                 )
 
             if not output_path.is_file() or output_path.stat().st_size < 1024:
@@ -222,7 +222,7 @@ class DrawnByCodeRenderer:
                     "output_tail": tail,
                 })
                 raise RuntimeError(
-                    "Drawn-by-Code produced no valid MP4; last subprocess output:\\n" + tail
+                    "Drawn-by-Code produced no valid MP4; last subprocess output:\n" + tail
                 )
 
             if progress_callback:
