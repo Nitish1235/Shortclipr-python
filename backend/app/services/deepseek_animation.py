@@ -36,7 +36,7 @@ class DeepSeekAnimationCompiler:
             if settings.DEEPSEEK_API_KEY else None
         )
 
-    async def _json_completion(self, system_prompt: str, user_prompt: str, token_limit: int, reasoning_effort: str = "none") -> dict[str, Any]:
+    async def _json_completion(self, system_prompt: str, user_prompt: str, token_limit: int, reasoning_effort: str = "none", label: str = "animation fragment") -> dict[str, Any]:
         """Make one fast, non-thinking JSON/code generation request."""
         if self.client is None:
             raise RuntimeError("DEEPSEEK_API_KEY is not configured")
@@ -67,7 +67,27 @@ class DeepSeekAnimationCompiler:
         try:
             value = json.loads(raw)
         except json.JSONDecodeError as exc:
-            raise RuntimeError("DeepSeek returned invalid animation JSON") from exc
+            # Keep enough escaped context to diagnose malformed JSON without
+            # dumping the full generated source into production logs.
+            logger.error("deepseek.animation.invalid_json", extra={
+                "model": self.model,
+                "label": label,
+                "response_id": getattr(response, "id", None),
+                "finish_reason": getattr(choice, "finish_reason", None),
+                "completion_tokens": getattr(response.usage, "completion_tokens", None),
+                "content_chars": len(raw),
+                "json_error": exc.msg,
+                "json_error_pos": exc.pos,
+                "json_error_line": exc.lineno,
+                "json_error_column": exc.colno,
+                "response_prefix": repr(raw[:180]),
+                "response_suffix": repr(raw[-180:]),
+            })
+            raise RuntimeError(
+                f"DeepSeek returned invalid JSON for {label} "
+                f"(chars={len(raw)}, error={exc.msg} at line {exc.lineno}, "
+                f"column {exc.colno})"
+            ) from exc
         if not isinstance(value, dict):
             raise RuntimeError("DeepSeek animation response must be a JSON object")
         return value
@@ -77,7 +97,7 @@ class DeepSeekAnimationCompiler:
         field: str, label: str, max_chars: int, reasoning_effort: str = "none",
     ) -> str:
         """Generate once and apply only basic deterministic checks."""
-        result = await self._json_completion(system_prompt, user_prompt, token_limit)
+        result = await self._json_completion(system_prompt, user_prompt, token_limit, label=label)
         return validate_generated_fragment(result.get(field), label, max_chars)
 
     async def compile(self, project: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
