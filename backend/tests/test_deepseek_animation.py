@@ -62,6 +62,80 @@ class VisualQAContextTests(unittest.TestCase):
         self.assertNotIn("internal_debug_field", context["storyboard"][0])
 
 
+class TargetedShotRepairTests(unittest.IsolatedAsyncioTestCase):
+    async def test_repair_replaces_only_requested_shot_and_keeps_shared_library(self):
+        import json
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        compiler = DeepSeekAnimationCompiler.__new__(DeepSeekAnimationCompiler)
+        compiler.client = SimpleNamespace(
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(
+                    create=AsyncMock(return_value=SimpleNamespace(
+                        choices=[SimpleNamespace(
+                            message=SimpleNamespace(content=json.dumps({
+                                "draw_body": "g.save(); drawBridge(g, 20, 20); g.restore();"
+                            })),
+                            finish_reason="stop",
+                        )],
+                        usage=SimpleNamespace(
+                            prompt_tokens=100, completion_tokens=50,
+                            prompt_tokens_details=None, completion_tokens_details=None,
+                            prompt_tokens_cache_hit=0, total_tokens=150,
+                        ),
+                    ))
+                )
+            )
+        )
+        compiler.model = "deepseek-flash"
+        compiler.max_output_tokens = 4096
+        original_body = "g.save(); drawBridge(g, 1, 1); g.restore();"
+        shots = [
+            {
+                "index": index, "start_frame": index * 30, "end_frame": (index + 1) * 30,
+                "name": f"Shot {index}", "draw_body": original_body,
+                "mechanism_actions": [], "mechanisms": [], "transition_out": "cut",
+            }
+            for index in range(3)
+        ]
+        bundle = {
+            "schema_version": 1, "duration": 3, "logical": [1600, 900],
+            "style_id": "cinematic-editorial", "art_direction": {},
+            "art_direction_instructions": "Editorial 2D shapes",
+            "visual_bible": {"style_id": "cinematic-editorial", "characters": [], "props": [], "environments": []},
+            "scenes": [
+                {
+                    "index": index, "start_frame": index * 30, "end_frame": (index + 1) * 30,
+                    "characters": [], "props": [], "environment": "",
+                }
+                for index in range(3)
+            ],
+            "shared_js": "function drawBridge(g,x,y){ g.beginPath(); g.moveTo(x,y); g.lineTo(x+2,y+2); g.stroke(); }",
+            "shots": shots,
+        }
+        result = await compiler.repair_shot(
+            bundle,
+            1,
+            [{
+                "shot_index": 1, "severity": "high", "category": "composition",
+                "issue": "The bridge is too small in frame.",
+                "recommendation": "Increase the bridge scale and keep it inside the canvas.",
+                "evidence_sample_indices": [3],
+            }],
+        )
+        self.assertEqual(result["repaired_shot_index"], 1)
+        self.assertEqual(result["unchanged_shot_indices"], [0, 2])
+        self.assertEqual(result["repair_bundle"]["shots"][0]["draw_body"], original_body)
+        self.assertEqual(result["repair_bundle"]["shots"][2]["draw_body"], original_body)
+        self.assertNotEqual(result["repair_bundle"]["shots"][1]["draw_body"], original_body)
+        self.assertEqual(bundle["shots"][1]["draw_body"], original_body)
+        self.assertIn("drawShot_0", result["scene_js"])
+        self.assertIn("drawShot_1", result["scene_js"])
+        self.assertIn("drawShot_2", result["scene_js"])
+        compiler.client.chat.completions.create.assert_awaited_once()
+
+
 class DrawingHelperContractTests(unittest.TestCase):
     def test_finds_missing_helper_used_by_shot(self):
         shared = "function drawBridge(g) { g.beginPath(); }"
