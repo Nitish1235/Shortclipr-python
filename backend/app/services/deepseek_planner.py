@@ -70,8 +70,7 @@ Shot plan: at least {minimum_scenes} and at most 12 distinct shots. Exactly 30 F
 Integer frame ranges contiguous, non-overlapping, covering frame 0 through {total_frames};
 end_frame is exclusive. Each shot has one clear visual objective and action. characters and
 props arrays must reference declared IDs; environment must reference a declared ID or "".
-Maintain exact character appearance across shots. Include composition, depth layers, camera,
-action and motivated transition. Strictly 2D Canvas/SVG; no Three.js, WebGL, meshes or 3D.
+Maintain exact character appearance across shots. Specify visual_objective, composition, shot_scale (extreme_wide/wide/medium/close_up/extreme_close_up/detail/overhead/isometric), camera_position, depth_layers (ordered back-to-front), focal_entity, visual_change and continuity_note. Vary shot scale and composition across consecutive shots unless a sustained shot is narratively intentional. Every shot must add new visual information, not merely restage the same diagram. Strictly 2D Canvas/SVG; no Three.js, WebGL, meshes or 3D.
 Do not request subtitles; narration is muxed separately. Return JSON only.
 """.strip()
         effort = planning_effort(project, self.low_reasoning_effort, self.medium_reasoning_effort)
@@ -171,6 +170,12 @@ Do not request subtitles; narration is muxed separately. Return JSON only.
                 raise RuntimeError("Shot references an undeclared character or prop ID")
             if scene["environment"] and scene["environment"] not in environment_ids:
                 raise RuntimeError("Shot references an undeclared environment ID")
+        # Validate storyboard focal references against the stable visual-bible IDs.
+        all_entity_ids = character_ids | prop_ids | environment_ids
+        for scene in scenes:
+            focal = scene.get("focal_entity", "")
+            if focal and focal not in all_entity_ids:
+                raise RuntimeError("Shot focal_entity references an undeclared visual-bible ID")
         plan["visual_bible"] = bible
         plan["art_direction"] = art_direction
         plan["scenes"] = scenes
