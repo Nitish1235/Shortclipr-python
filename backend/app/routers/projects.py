@@ -32,6 +32,14 @@ def title_from_brief(brief: str) -> str:
     return (title or "Untitled production")[:76]
 
 
+def enforce_plan_duration(plan: str, duration_seconds: int) -> None:
+    if plan == "free" and duration_seconds != FREE_PLAN_MONTHLY_SECONDS:
+        raise HTTPException(
+            status_code=403,
+            detail="The Free plan includes one 10-second short each month. Upgrade to a paid plan for longer videos.",
+        )
+
+
 @router.get("/projects", response_model=list[ProjectResponse])
 async def list_projects(request: Request, user: CurrentUser = Depends(current_user), pool: asyncpg.Pool = Depends(get_pool)):
     rows = await pool.fetch("SELECT * FROM projects WHERE user_id=$1 ORDER BY created_at DESC LIMIT 200", user.id)
@@ -81,11 +89,7 @@ async def project_media(project_id: UUID, request: Request, download: int = 0, u
 async def create_project(payload: CreateProjectRequest, user: CurrentUser = Depends(current_user), pool: asyncpg.Pool = Depends(get_pool)):
     if user.plan not in {"free", "starter", "creator", "studio"} or (user.plan != "free" and user.subscription_status != "active"):
         raise HTTPException(status_code=402, detail="Choose an active Starter, Creator, or Studio plan to continue")
-    if user.plan == "free" and payload.duration_seconds != FREE_PLAN_MONTHLY_SECONDS:
-        raise HTTPException(
-            status_code=403,
-            detail="The Free plan includes one 10-second short each month. Upgrade to a paid plan for longer videos.",
-        )
+    enforce_plan_duration(user.plan, payload.duration_seconds)
     credits = estimate_credits(payload.clip_type, payload.duration_seconds, payload.visual_style)
     project_id = uuid4()
     async with pool.acquire() as connection:
