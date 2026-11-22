@@ -306,6 +306,10 @@ def test_mechanism_kinematics_rejects_invalid_gear_pulley_and_cable_data():
     }
     with pytest.raises(ValueError, match="Gear driver_part"):
         validate_visual_bible(base)
+    base["mechanisms"][0]["kinematics"][0]["driver_part"] = "gear_a"
+    base["mechanisms"][0]["kinematics"][0]["anchor"] = {"x": 400, "y": 300}
+    with pytest.raises(ValueError, match="center distance"):
+        validate_visual_bible(base)
     base["mechanisms"][0]["kinematics"] = [{
         "type": "pulley", "part": "gear_b", "pulley_part": "gear_a",
         "anchor": {"x": 0, "y": 0}, "radius": 20, "end_angle_deg": 90,
