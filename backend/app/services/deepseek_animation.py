@@ -76,6 +76,8 @@ class DeepSeekAnimationCompiler:
                 "deepseek.animation.response",
                 extra={
                     "model": self.model,
+                    "reasoning_effort": "none" if attempt else reasoning_effort,
+                    "thinking_enabled": not bool(attempt),
                     "attempt": attempt + 1,
                     "latency_ms": latency_ms,
                     "finish_reason": finish_reason,
@@ -118,6 +120,7 @@ class DeepSeekAnimationCompiler:
                 "reasoning_effort": reasoning_effort,
             })
             repair_prompt = (
+                f"{user_prompt}\\n\\n"
                 f"The previous {label} failed deterministic validation: {validation_error}. "
                 f"Return a complete corrected JSON object with the field {field!r}. "
                 "Keep the original visual intent and obey every Canvas-only restriction. "
