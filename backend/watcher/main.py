@@ -112,7 +112,7 @@ def is_uncertain_delivery(error: Exception) -> bool:
         httpx.WriteError, httpx.RemoteProtocolError,
     )):
         return True
-    return isinstance(error, httpx.HTTPStatusError) and error.response.status_code >= 500
+    return isinstance(error, httpx.HTTPStatusError) and (error.response.status_code == 408 or error.response.status_code >= 500)
 
 
 # ---------------------------------------------------------------------------
