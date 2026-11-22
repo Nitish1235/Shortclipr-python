@@ -7,7 +7,7 @@ class DrawnByCodeDiagnosticsTests(unittest.TestCase):
     def test_output_tail_preserves_recent_lines(self):
         self.assertEqual(
             DrawnByCodeRenderer._format_output_tail(["launching chromium", "page error: bad draw"]),
-            "launching chromium\\npage error: bad draw",
+            "launching chromium\npage error: bad draw",
         )
 
     def test_output_tail_is_bounded(self):
