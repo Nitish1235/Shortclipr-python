@@ -268,6 +268,8 @@ def validate_scene_plan(scenes: Any, total_frames: int) -> list[dict[str, Any]]:
                     raise ValueError(f"Shot mechanism action {key} must be between 0 and 1")
             if action.get("start_progress", 0) >= action.get("end_progress", 1):
                 raise ValueError("Shot mechanism action progress range must increase")
+            if "easing" in action and action["easing"] not in {"linear", "in_out", "ease_in", "ease_out"}:
+                raise ValueError("Shot mechanism action easing is unsupported")
         if scene["complexity"] not in {"light", "medium", "heavy"}:
             scene["complexity"] = "medium"
         for key in ("characters", "props"):
