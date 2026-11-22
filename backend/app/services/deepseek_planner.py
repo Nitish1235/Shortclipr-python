@@ -72,13 +72,28 @@ Do not request subtitles; narration is muxed separately. Return JSON only.
             max_tokens=self.max_output_tokens,
             reasoning_effort=self.reasoning_effort,
         )
-        raw = response.choices[0].message.content
+        choice = response.choices[0] if response.choices else None
+        message = choice.message if choice else None
+        raw = (message.content or "").strip() if message else ""
+        usage = response.usage
+        usage_info = {
+            "prompt_tokens": getattr(usage, "prompt_tokens", None),
+            "completion_tokens": getattr(usage, "completion_tokens", None),
+            "reasoning_tokens": getattr(getattr(usage, "completion_tokens_details", None), "reasoning_tokens", None),
+        }
         if not raw:
-            raise RuntimeError("DeepSeek returned an empty story plan")
+            finish_reason = getattr(choice, "finish_reason", None)
+            raise RuntimeError(
+                f"DeepSeek returned empty story-plan JSON "
+                f"(finish_reason={finish_reason}, usage={usage_info}, response_id={getattr(response, 'id', None)})"
+            )
         try:
             plan = json.loads(raw)
         except json.JSONDecodeError as exc:
-            raise RuntimeError("DeepSeek returned invalid story-plan JSON") from exc
+            raise RuntimeError(
+                f"DeepSeek returned invalid story-plan JSON "
+                f"(finish_reason={getattr(choice, 'finish_reason', None)}, content_chars={len(raw)}, usage={usage_info})"
+            ) from exc
         if not isinstance(plan, dict):
             raise RuntimeError("DeepSeek story plan must be an object")
         if not isinstance(plan.get("title"), str) or not plan["title"].strip():

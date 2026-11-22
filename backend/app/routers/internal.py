@@ -123,9 +123,23 @@ async def run_planning(
 
         # ── DeepSeek full-film animation code generation + speech ──────────
         async with timed(logger, "planning.deepseek_animation_and_tts") as ctx:
+            async def compile_animation():
+                async with timed(logger, "planning.deepseek_animation") as stage:
+                    result = await compiler.compile(dict(project), plan)
+                    stage["shot_count"] = result.get("shot_count")
+                    stage["source_chars"] = len(result.get("scene_js", ""))
+                    return result
+
+            async def synthesize_narration():
+                async with timed(logger, "planning.tts") as stage:
+                    result = await speech.synthesize(plan["narration"], project["voice_id"])
+                    stage["audio_bytes"] = len(result[0])
+                    stage["timestamps_bytes"] = len(result[1])
+                    return result
+
             compiled_film, narration_assets = await asyncio.gather(
-                compiler.compile(dict(project), plan),
-                speech.synthesize(plan["narration"], project["voice_id"]),
+                compile_animation(),
+                synthesize_narration(),
             )
             audio, timestamps = narration_assets
             total_frames = int(project["duration_seconds"]) * 30
@@ -205,8 +219,50 @@ async def run_planning(
             extra={"duration_ms": total_ms, "error": message},
             exc_info=True,
         )
-        await fail_project(pool, project_id, "planning_failed", message)
-        await finish_attempt(pool, attempt_id, lease_token, "failed", message)
+        # Match render-stage retry semantics: transient provider failures must
+        # not immediately fail the project or release the user's reservation.
+        attempt_row = (
+            await pool.fetchrow("SELECT attempts, max_attempts FROM job_attempts WHERE id=$1", attempt_id)
+            if attempt_id else None
+        )
+        is_final = not attempt_row or attempt_row["attempts"] >= attempt_row["max_attempts"]
+        if is_final:
+            await fail_project(pool, project_id, "planning_failed", message)
+            await finish_attempt(pool, attempt_id, lease_token, "failed", message)
+        else:
+            retry_delay = min(300, 30 * max(1, attempt_row["attempts"]))
+            if attempt_id:
+                await pool.execute(
+                    """UPDATE job_attempts
+                       SET status='ready', due_at=now()+($3 * interval '1 second'),
+                           lease_token=NULL, lease_expires_at=NULL, last_error=$4
+                       WHERE id=$1 AND lease_token=$2""",
+                    attempt_id, lease_token, retry_delay, message[:1000],
+                )
+            await pool.execute(
+                "UPDATE projects SET status='queued',progress=8 WHERE id=$1 AND status='planning'",
+                project_id,
+            )
+            await pool.execute(
+                """INSERT INTO project_events(project_id,event_type,stage,progress,payload)
+                   VALUES($1,'retrying','api',8,$2::jsonb)""",
+                project_id,
+                json.dumps({
+                    "attempt": attempt_row["attempts"],
+                    "max_attempts": attempt_row["max_attempts"],
+                    "retry_in_s": retry_delay,
+                    "error": message[:240],
+                }),
+            )
+            logger.warning(
+                "planning.will_retry",
+                extra={
+                    "attempt": attempt_row["attempts"],
+                    "max_attempts": attempt_row["max_attempts"],
+                    "retry_in_s": retry_delay,
+                    "error": message[:240],
+                },
+            )
 
 
 # ---------------------------------------------------------------------------
