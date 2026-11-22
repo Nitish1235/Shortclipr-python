@@ -63,6 +63,10 @@ async def lifespan(app: FastAPI):
         app.state.emailer=ProjectReadyEmailer(settings, app.state.storage)
         app.state.renderer=DrawnByCodeRenderer()
         app.state.visual_reviewer=VisualQualityReviewer(settings)
+        app.state.shot_repairer=(
+            DeepSeekAnimationCompiler(settings)
+            if settings.DEEPSEEK_ENABLE_SHOT_REPAIR else None
+        )
         if settings.APP_ENV.lower() == "production":
             await app.state.renderer.preflight()
     yield
