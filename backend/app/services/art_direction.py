@@ -92,6 +92,42 @@ _STYLE_RULES: dict[str, dict[str, Any]] = {
     },
 }
 
+# First-generation complete visual systems. Each has a dedicated deterministic
+# Canvas 2D toolkit in drawn_by_code/styles/shortclipr.js.
+_STYLE_RULES.update({
+    "cinematic-editorial": {
+        "visual_identity": "Cinematic editorial illustration: bold authored silhouettes, layered environments, controlled tonal depth and graphic focal lighting.",
+        "shape_language": "Large readable silhouette masses, overlapping foreground frames, selective contour detail and asymmetric editorial shapes.",
+        "materials": "Use distinct graphic treatments for water, metal, concrete, wood, stone and foliage; material cues come from shape, value and restrained texture.",
+        "lighting": "One consistent directional key light, deliberate shadow masses, atmospheric separation and a controlled highlight on the focal subject.",
+        "composition": "Establish foreground, middle ground and background; use scale contrast, negative space, leading lines and a clear hero subject.",
+        "color": "Cinematic muted base palette with one or two high-energy accents; preserve readable value contrast.",
+        "camera": "Alternate establishing wides, medium action shots and close-up details; use motivated push-ins, pans and graphic transitions.",
+        "avoid": ["flat centered icon layouts", "uniform outline-only objects", "generic dark grid backgrounds", "photorealistic rendering", "decorative detail without story purpose"],
+    },
+    "isometric-technical": {
+        "visual_identity": "Isometric engineering illustration with consistent three-axis projection, separated components and clear mechanical relationships.",
+        "shape_language": "Axonometric forms built from consistent projected axes; distinguish top, left and right faces with stable value steps.",
+        "materials": "Separate steel, concrete, timber, water and ground using distinct fills, edge weights and restrained surface marks.",
+        "lighting": "Consistent upper-left key light expressed through face values and cast shadows; avoid perspective or lighting changes between components.",
+        "composition": "Build a legible assembly with a stable ground plane, clear component spacing, callout-safe negative space and focal hierarchy.",
+        "color": "Restrained technical neutrals with distinct component colors and one active-mechanism accent.",
+        "camera": "Keep the isometric axes stable; use controlled zooms, exploded component reveals and sectional cutaways rather than arbitrary camera rotation.",
+        "avoid": ["mixing incompatible projection axes", "flat front elevation disguised as isometric", "decorative blueprint grids", "unlabeled overlapping mechanisms", "3D meshes or WebGL"],
+    },
+    "layered-paper": {
+        "visual_identity": "Physical layered paper-craft illustration with visibly stacked cut shapes, tactile edges and soft cast shadows.",
+        "shape_language": "Distinct cut-paper silhouettes with layered contours, gentle irregularity and clear overlap boundaries.",
+        "materials": "Separate paper layers by stock color, edge tint, subtle grain and depth; each layer casts a consistent soft shadow.",
+        "lighting": "Single soft upper-left light; shadow offset and softness must remain consistent across every layer.",
+        "composition": "Use at least two meaningful depth planes where the subject permits; reveal depth through occlusion and layered parallax.",
+        "color": "Warm natural paper stocks with a small palette of contrasting cut layers and restrained accent color.",
+        "camera": "Use lateral layer reveals, paper-slide transitions and gentle parallax; avoid rotating the scene as a 3D object.",
+        "avoid": ["single flat fill with no layer separation", "heavy black outlines", "random confetti", "glossy plastic shading", "photorealistic textures"],
+    },
+})
+
+
 
 def build_art_direction(
     style_id: str,
