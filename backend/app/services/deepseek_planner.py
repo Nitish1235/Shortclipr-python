@@ -6,6 +6,7 @@ from openai import AsyncOpenAI
 from ..core.config import Settings
 from .animation_contracts import STYLE_IDS, validate_scene_plan, validate_visual_bible
 from .generation_policy import planning_effort
+from .style_registry import apply_visual_direction, resolve_visual_style
 
 
 class DeepSeekStoryPlanner:
@@ -25,6 +26,12 @@ class DeepSeekStoryPlanner:
         total_frames = duration * 30
         minimum_scenes = max(3, min(9, duration // 4))
         styles = sorted(STYLE_IDS)
+        requested_style = resolve_visual_style(project.get("visual_style", "AI Auto"))
+        style_instruction = (
+            f"MANDATORY USER SELECTION: use exactly style_id '{requested_style}'. Do not substitute another style."
+            if requested_style else
+            "AUTO SELECTION: choose the best supported style_id for this topic."
+        )
         prompt = f"""
 You are ShortClipr's senior story writer, factual researcher, narration writer and 2D
 animation director. Create a coherent short film plan.
@@ -53,7 +60,7 @@ Narration: compelling beginning, development and ending; strong opening hook; na
 language around 2.0–2.3 words/second. Do not pad. Never invent dates, quotes, statistics,
 identities or causal claims. Be cautious when facts are uncertain.
 
-Visual bible: choose one style_id from {", ".join(styles)}. Define recurring character
+Visual bible: choose one style_id from {", ".join(styles)}. {style_instruction} Define recurring character
 identity once: silhouette, face, clothing, proportions, palette, distinctive marks, poses,
 expressions. Give every character, prop and environment a unique stable ID. Designs must be
 drawable in 2D without external images.
@@ -115,6 +122,8 @@ Do not request subtitles; narration is muxed separately. Return JSON only.
         if not isinstance(plan.get("narration"), str) or len(plan["narration"].strip()) < 40:
             raise RuntimeError("DeepSeek story plan is missing usable narration")
         bible = validate_visual_bible(plan.get("visual_bible"))
+        # Explicit UI selections are authoritative even if the model drifts.
+        bible = apply_visual_direction(bible, requested_style)
         scenes = plan.get("scenes")
         if not isinstance(scenes, list) or len(scenes) < minimum_scenes:
             raise RuntimeError(f"DeepSeek must return at least {minimum_scenes} shots")
