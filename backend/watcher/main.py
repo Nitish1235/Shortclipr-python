@@ -286,20 +286,36 @@ class Dispatcher:
     async def retry_or_fail(self, job_id: UUID, lease_token: UUID, error: str, retry_seconds: int) -> None:
         async with self.pool.acquire() as connection:
             async with connection.transaction():
-                job = await connection.fetchrow("SELECT * FROM job_attempts WHERE id=$1 FOR UPDATE", job_id)
+                # Consistent lock order everywhere: project first, then attempt.
+                reference = await connection.fetchrow(
+                    "SELECT project_id FROM job_attempts WHERE id=$1", job_id,
+                )
+                if not reference:
+                    return
+                project = await connection.fetchrow(
+                    "SELECT status FROM projects WHERE id=$1 FOR UPDATE", reference["project_id"],
+                )
+                job = await connection.fetchrow(
+                    "SELECT * FROM job_attempts WHERE id=$1 FOR UPDATE", job_id,
+                )
                 if not job or job["lease_token"] != lease_token or job["status"] not in {"leased", "running"}:
+                    return
+                if not project or project["status"] in {"cancelled", "complete", "failed"}:
+                    await connection.execute(
+                        """UPDATE job_attempts SET status='cancelled',lease_token=NULL,
+                           lease_expires_at=NULL,worker_region=NULL,last_error=$3
+                           WHERE id=$1 AND lease_token=$2""",
+                        job_id, lease_token, error[:1000],
+                    )
                     return
                 if job["attempts"] < job["max_attempts"]:
                     await connection.execute(
                         """UPDATE job_attempts SET status='ready',due_at=now()+($3 * interval '1 second'),
-                           lease_token=NULL,lease_expires_at=NULL,last_error=$4 WHERE id=$1 AND lease_token=$2""",
+                           lease_token=NULL,lease_expires_at=NULL,worker_region=NULL,last_error=$4
+                           WHERE id=$1 AND lease_token=$2""",
                         job_id, lease_token, retry_seconds, error[:1000],
                     )
                     if job["job_class"] == "render":
-                        # A delivery failure/reconnect timeout can happen
-                        # outside the renderer process. Reset the project
-                        # state too, otherwise the UI can stay at 45/48% until
-                        # the next attempt completes.
                         await connection.execute(
                             "UPDATE projects SET status='queued',progress=45 WHERE id=$1 AND status='rendering'",
                             job["project_id"],
@@ -323,7 +339,8 @@ class Dispatcher:
                     )
                     return
                 await connection.execute(
-                    """UPDATE job_attempts SET status='failed',lease_token=NULL,lease_expires_at=NULL,last_error=$3
+                    """UPDATE job_attempts SET status='failed',lease_token=NULL,
+                       lease_expires_at=NULL,worker_region=NULL,last_error=$3
                        WHERE id=$1 AND lease_token=$2""",
                     job_id, lease_token, error[:1000],
                 )
