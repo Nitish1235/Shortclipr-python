@@ -19,14 +19,14 @@ async def run(*args: str, timeout: int | None = None) -> tuple[bytes, bytes]:
     except asyncio.TimeoutError as error:
         if process.returncode is None:
             process.kill()
-        await process.wait()
+        await process.communicate()
         raise QualityError(
             f"{Path(args[0]).name} exceeded the {timeout_seconds}s media-processing timeout"
         ) from error
     except asyncio.CancelledError:
         if process.returncode is None:
             process.kill()
-        await process.wait()
+        await process.communicate()
         raise
     if process.returncode:
         detail = stderr.decode(errors="replace")[-1200:] or stdout.decode(errors="replace")[-1200:]
