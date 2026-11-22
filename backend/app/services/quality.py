@@ -10,7 +10,7 @@ class QualityError(RuntimeError):
 
 async def run(*args: str, timeout: int | None = None) -> tuple[bytes, bytes]:
     """Run one media tool with a hard deadline and guaranteed child cleanup."""
-    timeout_seconds = timeout or max(30, int(os.getenv("MEDIA_PROCESS_TIMEOUT_SECONDS", "300")))
+    timeout_seconds = timeout or max(30, int(os.getenv("MEDIA_PROCESS_TIMEOUT_SECONDS", "120")))
     process = await asyncio.create_subprocess_exec(
         *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
