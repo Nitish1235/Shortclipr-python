@@ -2,6 +2,7 @@ import asyncio
 import json
 import tempfile
 import time as _time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import UUID
 
@@ -38,41 +39,121 @@ def decode_json_object(value: object) -> dict:
     return dict(value)  # type: ignore[arg-type]
 
 
-async def finish_attempt(pool: asyncpg.Pool, attempt_id: UUID | None, lease_token: UUID | None, final_status: str, error: str | None = None):
-    if not attempt_id:
+LEASE_SECONDS = {"api": 6 * 60, "render": 28 * 60}
+LEASE_HEARTBEAT_SECONDS = 15
+
+
+@asynccontextmanager
+async def maintain_worker_lease(
+    pool: asyncpg.Pool, project_id: UUID, attempt_id: UUID, lease_token: UUID, job_class: str,
+):
+    """Keep a live worker's lease fresh; stale/cancelled deliveries stop doing work."""
+    ttl_seconds = LEASE_SECONDS[job_class]
+
+    async def renew() -> bool:
+        value = await pool.fetchval(
+            """UPDATE job_attempts
+               SET lease_expires_at=now()+($5 * interval '1 second')
+               WHERE id=$1 AND project_id=$2 AND job_class=$3 AND lease_token=$4
+                 AND status='running' AND lease_expires_at>now()
+               RETURNING id""",
+            attempt_id, project_id, job_class, lease_token, ttl_seconds,
+        )
+        return value is not None
+
+    if not await renew():
+        yield False
         return
+
+    owner_task = asyncio.current_task()
+
+    async def heartbeat() -> None:
+        while True:
+            await asyncio.sleep(LEASE_HEARTBEAT_SECONDS)
+            try:
+                current = await renew()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("worker.lease_heartbeat_error", extra={
+                    "job_class": job_class, "project_id": str(project_id),
+                    "attempt_id": str(attempt_id),
+                })
+                continue
+            if not current:
+                logger.warning("worker.lease_lost", extra={
+                    "job_class": job_class, "project_id": str(project_id),
+                    "attempt_id": str(attempt_id),
+                })
+                if owner_task and not owner_task.done():
+                    owner_task.cancel()
+                return
+
+    heartbeat_task = asyncio.create_task(heartbeat())
+    try:
+        yield True
+    finally:
+        heartbeat_task.cancel()
+        await asyncio.gather(heartbeat_task, return_exceptions=True)
+
+
+async def finish_attempt(
+    pool: asyncpg.Pool, attempt_id: UUID, lease_token: UUID,
+    final_status: str, error: str | None = None,
+) -> None:
     await pool.execute(
-        "UPDATE job_attempts SET status=$3,lease_expires_at=NULL,last_error=$4 WHERE id=$1 AND ($2::uuid IS NULL OR lease_token=$2)",
+        """UPDATE job_attempts
+           SET status=$3,lease_token=NULL,lease_expires_at=NULL,worker_region=NULL,last_error=$4
+           WHERE id=$1 AND lease_token=$2 AND status IN ('leased','running')""",
         attempt_id, lease_token, final_status, error,
     )
 
 
+async def fail_project_in_transaction(
+    connection: asyncpg.Connection, project_id: UUID, code: str, message: str,
+) -> None:
+    """Fail once and release the reservation exactly once; provider failures never burn user credits."""
+    project = await connection.fetchrow("SELECT * FROM projects WHERE id=$1 FOR UPDATE", project_id)
+    if not project or project["status"] in {"complete", "cancelled", "failed"}:
+        return
+    release_key = f"project:{project_id}:failure-release"
+    release = await connection.fetchval(
+        """INSERT INTO credit_ledger(user_id,project_id,entry_type,amount,idempotency_key)
+           VALUES($1,$2,'release',$3,$4) ON CONFLICT DO NOTHING RETURNING id""",
+        project["user_id"], project_id, -project["credits_reserved"], release_key,
+    )
+    if release:
+        await connection.execute(
+            "UPDATE credit_accounts SET reserved_credits=GREATEST(0,reserved_credits-$2) WHERE user_id=$1",
+            project["user_id"], project["credits_reserved"],
+        )
+    await connection.execute(
+        "UPDATE projects SET status='failed',error_code=$2,error_message=$3 WHERE id=$1",
+        project_id, code, message,
+    )
+    await connection.execute(
+        "INSERT INTO project_events(project_id,event_type,stage,progress,payload) VALUES($1,'failed',$2,0,$3::jsonb)",
+        project_id, code.split("_")[0], json.dumps({"code": code}),
+    )
+
+
 async def fail_project(pool: asyncpg.Pool, project_id: UUID, code: str, message: str) -> None:
-    """Fail once and release a reservation exactly once; provider failures never burn user credits."""
     async with pool.acquire() as connection:
         async with connection.transaction():
-            project = await connection.fetchrow("SELECT * FROM projects WHERE id=$1 FOR UPDATE", project_id)
-            if not project or project["status"] in {"complete", "cancelled"}:
-                return
-            release_key = f"project:{project_id}:failure-release"
-            release = await connection.fetchval(
-                """INSERT INTO credit_ledger(user_id,project_id,entry_type,amount,idempotency_key)
-                   VALUES($1,$2,'release',$3,$4) ON CONFLICT DO NOTHING RETURNING id""",
-                project["user_id"], project_id, -project["credits_reserved"], release_key,
-            )
-            if release:
-                await connection.execute(
-                    "UPDATE credit_accounts SET reserved_credits=GREATEST(0,reserved_credits-$2) WHERE user_id=$1",
-                    project["user_id"], project["credits_reserved"],
-                )
-            await connection.execute(
-                "UPDATE projects SET status='failed',error_code=$2,error_message=$3 WHERE id=$1",
-                project_id, code, message,
-            )
-            await connection.execute(
-                "INSERT INTO project_events(project_id,event_type,stage,progress,payload) VALUES($1,'failed',$2,0,$3::jsonb)",
-                project_id, code.split("_")[0], json.dumps({"code": code}),
-            )
+            await fail_project_in_transaction(connection, project_id, code, message)
+
+
+async def gather_cancel_on_error(*coroutines):
+    """Do not leave provider/TTS requests running after a sibling stage fails."""
+    tasks = [asyncio.create_task(coro) for coro in coroutines]
+    try:
+        return await asyncio.gather(*tasks)
+    except BaseException:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
 
 
 # ---------------------------------------------------------------------------
