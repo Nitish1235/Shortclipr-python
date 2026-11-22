@@ -204,14 +204,14 @@ class VisualQualityReviewer:
         samples: list[dict[str, Any]],
     ) -> dict[str, Any]:
         if not self.enabled:
-            return {"status": "skipped", "reason": "visual_qa_disabled", "automatic_repair": False}
+            return {"status": "skipped", "reason": "visual_qa_disabled", "repair_policy": "report_only"}
         if self.client is None:
-            return {"status": "skipped", "reason": "deepseek_api_key_not_configured", "automatic_repair": False}
+            return {"status": "skipped", "reason": "deepseek_api_key_not_configured", "repair_policy": "report_only"}
         if not contact_sheet_path.is_file():
-            return {"status": "skipped", "reason": "contact_sheet_missing", "automatic_repair": False}
+            return {"status": "skipped", "reason": "contact_sheet_missing", "repair_policy": "report_only"}
         size = contact_sheet_path.stat().st_size
         if size <= 0 or size > 32 * 1024 * 1024:
-            return {"status": "skipped", "reason": "contact_sheet_size_out_of_range", "automatic_repair": False}
+            return {"status": "skipped", "reason": "contact_sheet_size_out_of_range", "repair_policy": "report_only"}
 
         shot_ids = {
             item.get("index") for item in visual_context.get("storyboard", [])
