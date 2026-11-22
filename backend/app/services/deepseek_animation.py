@@ -26,6 +26,7 @@ async def _gather_cancel_on_error(*coroutines):
 from openai import AsyncOpenAI
 
 from ..core.config import Settings
+from .art_direction import build_art_direction, format_art_direction, validate_art_direction
 from .animation_contracts import (
     ASPECT_LOGICAL,
     MAX_FILM_SOURCE,
@@ -161,10 +162,20 @@ class DeepSeekAnimationCompiler:
         visual_bible = validate_visual_bible(plan.get("visual_bible"))
         scenes = validate_scene_plan(plan.get("scenes"), total_frames)
         style_id = visual_bible["style_id"]
+        art_direction_value = plan.get("art_direction")
+        if art_direction_value is None:
+            # Compatibility for persisted plans created before ArtDirectionV1.
+            art_direction = build_art_direction(
+                style_id, requested_style=None,
+                style_notes=str(visual_bible.get("style_notes", "")),
+            )
+        else:
+            art_direction = validate_art_direction(art_direction_value, style_id)
+        art_direction_instructions = format_art_direction(art_direction)
 
         shared_prompt = f"""
 You are ShortClipr's senior 2D character and illustration systems artist.
-Create a compact reusable JavaScript drawing library for a {style_id} Canvas 2D film. Aim for at most 1,800 output tokens.
+Create a compact reusable JavaScript drawing library for a {style_id} Canvas 2D film.\nFollow this binding art-direction contract:\n{art_direction_instructions}\nAim for at most 1,800 output tokens.
 Return JSON only: {{"shared_js":"JavaScript source"}}.
 The source is evaluated in the same script as the film and may define ordinary named
 functions and constants. It must not call Motion.scene. Use only the supplied Canvas
@@ -222,6 +233,8 @@ Node APIs, timers, eval, Function, Date, performance, WebGL, Three.js or 3D.
 Keep all drawing within the logical canvas {logical[0]}x{logical[1]}.
 Make one clear animated action with simple easing and follow-through. Use only the composition layers needed for this shot. Keep code concise: aim for at most 900 output tokens; no comments, repeated character drawings or unnecessary decorative loops. Reuse shared helpers for all recurring entities. Do not render narration or subtitles.
 STYLE: {style_id}
+BINDING ART DIRECTION:
+{art_direction_instructions}
 SHOT VISUAL REFERENCES:
 {json.dumps(shot_visual_context, ensure_ascii=False, separators=(",", ":"))}
 SHOT:
@@ -262,6 +275,7 @@ Implement every missing helper listed below as ordinary named JavaScript functio
 declarations. Return JSON only: {{"helpers_js":"JavaScript source"}}.
 MISSING HELPERS: {json.dumps(missing_helpers)}
 STYLE: {style_id}
+BINDING ART DIRECTION: {art_direction_instructions}
 VISUAL BIBLE: {json.dumps(visual_bible, ensure_ascii=False)}
 SHOT CONTEXT: {json.dumps([
     {"index": shot["index"], "name": shot["name"], "body": shot["draw_body"]}
