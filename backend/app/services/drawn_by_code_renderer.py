@@ -32,7 +32,7 @@ class DrawnByCodeRenderer:
     @staticmethod
     def _format_output_tail(lines: list[str], max_chars: int = 4000) -> str:
         """Return a bounded diagnostic tail without retaining the full subprocess log."""
-        value = "\\n".join(lines)[-max_chars:]
+        value = "\n".join(lines)[-max_chars:]
         return value or "no subprocess output"
 
     @staticmethod
