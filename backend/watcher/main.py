@@ -591,7 +591,7 @@ async def main() -> None:
             "render_workers": len(render_targets),
         },
     )
-    pool = await asyncpg.create_pool(db_url, min_size=1, max_size=2, command_timeout=30, server_settings={"application_name": "shortclipr-watcher"})
+    pool = await asyncpg.create_pool(db_url, min_size=1, max_size=1, command_timeout=30, server_settings={"application_name": "shortclipr-watcher"})
     try:
         cooldown = max(5, int(os.getenv("WORKER_REGION_COOLDOWN_SECONDS", "60")))
         dispatcher = Dispatcher(pool, secret, api_targets, render_targets, cooldown)
