@@ -193,6 +193,26 @@ The planner is instructed to identify a physical mechanism only when supported b
 This is a structured motion-direction contract and prompt-level coordination, not a deterministic physics solver. Exact kinematics, mechanism-specific reusable motion functions, and rendered-frame motion QA remain future work. Qualitative motion must not be presented as engineering-accurate simulation unless the plan contains sufficient physical detail and is independently checked.
 
 
+## Implementation progress — rendered motion QA capture (PR #30)
+
+The animation compiler now returns a compact shot manifest with frame boundaries,
+shot names, referenced mechanism IDs and outgoing transitions. The planning worker
+persists this manifest beside the compiled scene program and passes it to the render
+worker. Legacy saved programs without a manifest continue to render without QA capture.
+
+The production Drawn-by-Code render now samples three interior frames per shot
+(approximately 15%, 50% and 85% through each shot) in the same Chromium session used
+for the MP4. The renderer assembles the samples into a contact sheet and uploads it
+to private project storage. The completed render's quality payload includes the
+sample timestamps, shot/mechanism references, contact-sheet object key and existing
+mechanism motion diagnostics.
+
+This stage creates reviewable rendered evidence; it does not yet run an image model
+or claim semantic validation of engineering correctness, character continuity,
+composition or visual storytelling. A human or future vision-QA stage must inspect
+the contact sheet and compare it with the storyboard and visual bible. Capture or
+contact-sheet upload failures are non-fatal to the MP4 render.
+
 ## Implementation progress — mechanism integration and motion diagnostics (PR #30)
 
 The shot compiler now automatically includes the prop definitions backing every
