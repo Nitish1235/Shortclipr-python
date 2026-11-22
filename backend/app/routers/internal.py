@@ -109,6 +109,50 @@ async def finish_attempt(
     )
 
 
+async def save_pipeline_artifacts(
+    pool: asyncpg.Pool, project_id: UUID, attempt_id: UUID, lease_token: UUID,
+    **artifacts: str,
+) -> None:
+    """Persist a stage artifact only while the same API attempt owns the project."""
+    casts = {
+        "story_plan": "::jsonb",
+        "animation_program": "::jsonb",
+        "audio_object": "",
+        "timestamps_object": "",
+    }
+    if not artifacts or any(name not in casts for name in artifacts):
+        raise ValueError("Unsupported or empty pipeline artifact update")
+
+    columns = list(artifacts)
+    values = [project_id, *[artifacts[name] for name in columns]]
+    assignments = [
+        f"{name}=${index + 2}{casts[name]}" for index, name in enumerate(columns)
+    ]
+
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            project = await connection.fetchrow(
+                "SELECT status FROM projects WHERE id=$1 FOR UPDATE", project_id,
+            )
+            attempt = await connection.fetchrow(
+                """SELECT id FROM job_attempts
+                   WHERE id=$1 AND project_id=$2 AND job_class='api'
+                     AND lease_token=$3 AND status='running' AND lease_expires_at>now()
+                   FOR UPDATE""",
+                attempt_id, project_id, lease_token,
+            )
+            if not project or project["status"] != "planning" or not attempt:
+                raise asyncio.CancelledError("planning lease was lost before artifact persistence")
+            await connection.execute(
+                "INSERT INTO project_pipeline_artifacts(project_id) VALUES($1) ON CONFLICT(project_id) DO NOTHING",
+                project_id,
+            )
+            await connection.execute(
+                f"UPDATE project_pipeline_artifacts SET {', '.join(assignments)} WHERE project_id=$1",
+                *values,
+            )
+
+
 async def assert_worker_lease(
     pool: asyncpg.Pool, project_id: UUID, attempt_id: UUID,
     lease_token: UUID, job_class: str,
@@ -303,12 +347,9 @@ async def run_planning(
                 plan = plan_value
             else:
                 plan = await planner.plan(dict(project))
-                await assert_worker_lease(pool, project_id, attempt_id, lease_token, "api")
-                await pool.execute(
-                    """INSERT INTO project_pipeline_artifacts(project_id,story_plan)
-                       VALUES($1,$2::jsonb)
-                       ON CONFLICT(project_id) DO UPDATE SET story_plan=EXCLUDED.story_plan""",
-                    project_id, json.dumps(plan),
+                await save_pipeline_artifacts(
+                    pool, project_id, attempt_id, lease_token,
+                    story_plan=json.dumps(plan),
                 )
                 logger.info("planning.artifact_saved", extra={"artifact":"story_plan"})
             ctx["scene_count"] = len(plan["scenes"])
@@ -330,11 +371,9 @@ async def run_planning(
                     await assert_worker_lease(pool, project_id, attempt_id, lease_token, "api")
                     stage["shot_count"] = result.get("shot_count")
                     stage["source_chars"] = len(result.get("scene_js", ""))
-                await pool.execute(
-                    """INSERT INTO project_pipeline_artifacts(project_id,animation_program)
-                       VALUES($1,$2::jsonb)
-                       ON CONFLICT(project_id) DO UPDATE SET animation_program=EXCLUDED.animation_program""",
-                    project_id, json.dumps(result),
+                await save_pipeline_artifacts(
+                    pool, project_id, attempt_id, lease_token,
+                    animation_program=json.dumps(result),
                 )
                 logger.info("planning.artifact_saved", extra={"artifact":"animation_program"})
                 return result
@@ -355,15 +394,21 @@ async def run_planning(
                         storage.upload_bytes_private(audio_bytes, "audio/mpeg", prefix, ".mp3"),
                         storage.upload_bytes_private(timestamp_bytes or b"[]", "application/json", prefix, ".json"),
                     )
-                    await assert_worker_lease(pool, project_id, attempt_id, lease_token, "api")
-                    await pool.execute(
-                        """INSERT INTO project_pipeline_artifacts(project_id,audio_object,timestamps_object)
-                           VALUES($1,$2,$3)
-                           ON CONFLICT(project_id) DO UPDATE SET
-                             audio_object=EXCLUDED.audio_object,
-                             timestamps_object=EXCLUDED.timestamps_object""",
-                        project_id, audio_object, timestamps_object,
-                    )
+                    try:
+                        await save_pipeline_artifacts(
+                            pool, project_id, attempt_id, lease_token,
+                            audio_object=audio_object,
+                            timestamps_object=timestamps_object,
+                        )
+                    except BaseException:
+                        # These objects have not been committed to the artifact
+                        # manifest, so clean up successful uploads if lease is lost.
+                        await asyncio.gather(
+                            storage.delete(audio_object),
+                            storage.delete(timestamps_object),
+                            return_exceptions=True,
+                        )
+                        raise
                     stage["audio_bytes"] = len(audio_bytes)
                     stage["timestamps_bytes"] = len(timestamp_bytes or b"[]")
                     stage["audio_object"] = audio_object
