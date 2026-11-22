@@ -69,11 +69,6 @@ class DrawingHelperContractTests(unittest.TestCase):
             validate_draw_helper_definitions("function drawQuestion(g) {}", ["drawPaperQuestionMark"])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
-
 class MechanismKinematicsContextTests(unittest.TestCase):
     def test_shot_context_includes_only_referenced_mechanism_specs(self):
         bible = {
@@ -87,3 +82,19 @@ class MechanismKinematicsContextTests(unittest.TestCase):
         context = DeepSeekAnimationCompiler._shot_visual_context(bible, scene)
         self.assertEqual([item["id"] for item in context["mechanisms"]], ["mechanism_b"])
         self.assertEqual(context["mechanisms"][0]["kinematics"][0]["type"], "translation")
+    def test_style_runtime_exposes_mechanism_pose_helper(self):
+        from pathlib import Path
+        import re
+
+        styles_path = Path(__file__).resolve().parents[1] / "drawn_by_code" / "styles" / "shortclipr.js"
+        source = styles_path.read_text(encoding="utf-8")
+        self.assertRegex(source, r"function mechanismPose\\(spec,progress\\)")
+        self.assertIn("return {type:'pivot',part:spec.part,anchor,angle_rad:angle}", source)
+        self.assertIn("return {type:'translation',part:spec.part,position:", source)
+        self.assertIn("return {type:'actuator',part:spec.part,base,tip:", source)
+        self.assertRegex(source, r"Object\\.freeze\\(\\{mechanismPose,")
+
+
+
+if __name__ == "__main__":
+    unittest.main()
