@@ -253,7 +253,7 @@ class Dispatcher:
         released = await connection.fetchval(
             """INSERT INTO credit_ledger(user_id,project_id,entry_type,amount,idempotency_key)
                VALUES($1,$2,'release',$3,$4) ON CONFLICT DO NOTHING RETURNING id""",
-            project["user_id"], project_id, -project["credits_reserved"], f"project:{project_id}:watcher-exhausted-release",
+            project["user_id"], project_id, -project["credits_reserved"], f"project:{project_id}:v{project['credit_reservation_version']}:watcher-exhausted-release",
         )
         if released:
             await connection.execute(
