@@ -155,7 +155,7 @@ async def credit_balance(user: CurrentUser = Depends(current_user), settings: Se
             """UPDATE credit_accounts SET total_credits=$2+reserved_credits,spent_credits=0,
                cycle_started_at=date_trunc('month',now()),cycle_ends_at=date_trunc('month',now())+interval '1 month'
                WHERE user_id=$1 AND cycle_ends_at<=now()""",
-            user.id, settings.free_monthly_render_seconds,
+            user.id, FREE_PLAN_MONTHLY_SECONDS,
         )
     row = await pool.fetchrow("SELECT * FROM credit_accounts WHERE user_id=$1", user.id)
     if not row:
