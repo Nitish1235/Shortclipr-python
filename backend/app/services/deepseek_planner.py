@@ -48,8 +48,8 @@ Return strict JSON:
    "style_id":"one allowed style",
    "style_notes":"specific art direction",
    "characters":[{{"id":"char_explorer","name":"Explorer","design":{{"silhouette":"...","face":"...","clothing":"...","palette":["#..."],"proportions":"...","distinctive_marks":"..."}},"poses":["standing","walking"],"expressions":["curious","surprised"]}}],
-   "props":[{{"id":"prop_map","name":"Map","design":"..."}}],
-   "environments":[{{"id":"env_forest","name":"Forest","design":"..."}}]
+   "props":[{{"id":"prop_map","name":"Map","design":"...","material":"...","relative_scale":"...","components":["..."],"anchors":["..."],"moving_parts":["..."]}}],
+   "environments":[{{"id":"env_forest","name":"Forest","design":"...","spatial_layout":"...","foreground":"...","midground":"...","background":"...","scale_reference":"...","atmosphere":"..."}}]
  }},
  "scenes":[{{"index":0,"start_frame":0,"end_frame":180,"purpose":"...","visual_description":"...",
  "complexity":"medium","characters":["char_explorer"],"props":["prop_map"],
