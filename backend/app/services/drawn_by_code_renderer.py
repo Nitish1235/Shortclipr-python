@@ -105,6 +105,7 @@ class DrawnByCodeRenderer:
                 if frame not in seen:
                     seen.add(frame)
                     shot_samples.append({
+                        "sample_index": len(samples) + len(shot_samples),
                         "frame": frame,
                         "time_seconds": round(frame / 30, 6),
                         "shot_index": shot.get("index"),
