@@ -180,6 +180,9 @@ class DrawnByCodeRenderer:
             except asyncio.CancelledError:
                 await self._kill_and_wait(proc)
                 raise
+            except Exception:
+                await self._kill_and_wait(proc)
+                raise
 
             duration_ms = round((time.monotonic() - started) * 1000)
             if code != 0:
