@@ -48,19 +48,28 @@ try {
     // shot without opening a second Chromium session or changing MP4 rendering.
     if (opt['qa-at']) {
         const out = opt['qa-out'] ?? path.join(outBase, 'motion-qa');
-        fs.mkdirSync(out, { recursive: true });
-        const times = [...new Set(String(opt['qa-at']).split(',').map(Number))]
-            .filter((value) => Number.isFinite(value) && value >= 0);
-        for (const [index, seconds] of times.entries()) {
-            const frame = Math.min(total - 1, Math.max(0, Math.round(seconds * fps)));
-            const file = path.join(out, `q_${String(index).padStart(3, '0')}.png`);
-            fs.writeFileSync(file, Buffer.from(await grab(frame, 'image/png'), 'base64'));
+        try {
+            fs.mkdirSync(out, { recursive: true });
+            const times = [...new Set(String(opt['qa-at']).split(',').map(Number))]
+                .filter((value) => Number.isFinite(value) && value >= 0);
+            for (const [index, seconds] of times.entries()) {
+                const frame = Math.min(total - 1, Math.max(0, Math.round(seconds * fps)));
+                const file = path.join(out, `q_${String(index).padStart(3, '0')}.png`);
+                fs.writeFileSync(file, Buffer.from(await grab(frame, 'image/png'), 'base64'));
+            }
+            console.log(JSON.stringify({
+                event: 'drawn_by_code.motion_qa.captured',
+                frame_count: times.length,
+                output: out,
+            }));
+        } catch (error) {
+            // QA file-system failures should not prevent delivery of an otherwise
+            // valid MP4. Actual Chromium page errors are still fatal at final check.
+            console.warn(JSON.stringify({
+                event: 'drawn_by_code.motion_qa.capture_failed',
+                error: String(error).slice(0, 500),
+            }));
         }
-        console.log(JSON.stringify({
-            event: 'drawn_by_code.motion_qa.captured',
-            frame_count: times.length,
-            output: out,
-        }));
     }
 
     if (opt.at) {
