@@ -46,7 +46,7 @@ class DeepSeekAnimationCompiler:
         self.max_parallel_shots = max(1, min(4, settings.DEEPSEEK_MAX_PARALLEL_SHOTS))
         self.client = (
             AsyncOpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com",
-                        timeout=900.0, max_retries=2)
+                        timeout=90.0, max_retries=0)
             if settings.DEEPSEEK_API_KEY else None
         )
 
