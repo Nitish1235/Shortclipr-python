@@ -63,7 +63,7 @@ async def google_login(payload: GoogleAuthRequest, settings: Settings = Depends(
                 WHERE $3='free' AND credit_accounts.cycle_ends_at<=now()
                 """,
                 row["id"],
-                settings.FREE_MONTHLY_RENDER_SECONDS,
+                settings.free_monthly_render_seconds,
                 row["plan"],
             )
     user = CurrentUser(**dict(row), is_admin=email in ADMIN_EMAIL_ALLOWLIST)
