@@ -30,6 +30,7 @@ class VisualQualityReviewer:
 
     def __init__(self, settings: Settings):
         self.model = settings.DEEPSEEK_VISUAL_QA_MODEL
+        self.enabled = getattr(settings, "DEEPSEEK_ENABLE_VISUAL_QA", True)
         self.client = (
             AsyncOpenAI(
                 api_key=settings.DEEPSEEK_API_KEY,
@@ -128,6 +129,8 @@ class VisualQualityReviewer:
         visual_context: dict[str, Any],
         samples: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        if not self.enabled:
+            return {"status": "skipped", "reason": "visual_qa_disabled", "automatic_repair": False}
         if self.client is None:
             return {"status": "skipped", "reason": "deepseek_api_key_not_configured", "automatic_repair": False}
         if not contact_sheet_path.is_file():
