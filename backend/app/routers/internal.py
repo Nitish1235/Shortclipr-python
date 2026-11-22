@@ -162,8 +162,8 @@ async def gather_cancel_on_error(*coroutines):
 
 async def run_planning(
     project_id: UUID,
-    attempt_id: UUID | None,
-    lease_token: UUID | None,
+    attempt_id: UUID,
+    lease_token: UUID,
     pool: asyncpg.Pool,
     planner: DeepSeekStoryPlanner,
     compiler: DeepSeekAnimationCompiler,
@@ -178,10 +178,18 @@ async def run_planning(
     )
     try:
         project = await pool.fetchrow("SELECT * FROM projects WHERE id=$1", project_id)
-        if not project or project["status"] == "cancelled":
+        if not project or project["status"] in {"cancelled", "failed"}:
             logger.info("planning.cancelled", extra={"status": project["status"] if project else "not_found"})
             await finish_attempt(pool, attempt_id, lease_token, "cancelled")
             return
+        if project["status"] in {"rendering", "complete"}:
+            # Planning already committed its render job. A duplicate delivery
+            # must not regenerate the film or reset the render queue.
+            await finish_attempt(pool, attempt_id, lease_token, "complete")
+            logger.info("planning.already_advanced", extra={"status": project["status"]})
+            return
+        if project["status"] not in {"queued", "planning"}:
+            raise RuntimeError(f"Project cannot enter planning from status {project['status']!r}")
 
         logger.info(
             "planning.start",
@@ -193,7 +201,15 @@ async def run_planning(
             },
         )
 
-        await pool.execute("UPDATE projects SET status='planning',progress=12 WHERE id=$1", project_id)
+        started = await pool.fetchval(
+            """UPDATE projects SET status='planning',progress=GREATEST(progress,12)
+               WHERE id=$1 AND status IN ('queued','planning') RETURNING id""",
+            project_id,
+        )
+        if not started:
+            logger.info("planning.no_longer_queued")
+            await finish_attempt(pool, attempt_id, lease_token, "cancelled")
+            return
 
         # Load durable stage outputs first. A retry must not pay for stages that
         # already completed successfully on an earlier attempt.
@@ -274,7 +290,7 @@ async def run_planning(
                     stage["audio_object"] = audio_object
                     return audio_object, timestamps_object
 
-            compiled_film, narration_objects = await asyncio.gather(
+            compiled_film, narration_objects = await gather_cancel_on_error(
                 compile_animation(), synthesize_narration(),
             )
             audio_object, timestamps_object = narration_objects
@@ -299,6 +315,34 @@ async def run_planning(
         # ── Persist scene plans + queue render job ─────────────────────────
         async with pool.acquire() as connection:
             async with connection.transaction():
+                # Lock the project before the attempt (same order as cancellation
+                # and watcher retries) so a cancelled or stale job cannot revive it.
+                locked_project = await connection.fetchrow(
+                    "SELECT status FROM projects WHERE id=$1 FOR UPDATE", project_id,
+                )
+                if not locked_project or locked_project["status"] in {"cancelled", "failed", "complete"}:
+                    logger.info("planning.finalize_skipped", extra={
+                        "status": locked_project["status"] if locked_project else "not_found",
+                    })
+                    return
+                current_attempt = await connection.fetchrow(
+                    """SELECT id FROM job_attempts
+                       WHERE id=$1 AND project_id=$2 AND job_class='api'
+                         AND lease_token=$3 AND status='running' AND lease_expires_at>now()
+                       FOR UPDATE""",
+                    attempt_id, project_id, lease_token,
+                )
+                if not current_attempt:
+                    logger.warning("planning.stale_attempt_at_finalize")
+                    return
+                if locked_project["status"] == "rendering":
+                    await connection.execute(
+                        """UPDATE job_attempts SET status='complete',lease_token=NULL,
+                           lease_expires_at=NULL,worker_region=NULL,last_error=NULL
+                           WHERE id=$1 AND lease_token=$2""",
+                        attempt_id, lease_token,
+                    )
+                    return
                 await connection.execute("DELETE FROM scene_plans WHERE project_id=$1", project_id)
                 for scene in compiled_scenes:
                     await connection.execute(
@@ -310,21 +354,41 @@ async def run_planning(
                         scene["complexity"], scene["assigned_model"], json.dumps(scene),
                     )
                 render_attempt = await connection.fetchval(
-                    """
-                    INSERT INTO job_attempts(project_id,job_class,status) VALUES($1,'render','ready')
-                    ON CONFLICT(project_id,job_class,pipeline_revision) DO UPDATE SET status='ready',due_at=now()
-                    RETURNING id
-                    """,
+                    """INSERT INTO job_attempts(project_id,job_class,status)
+                       VALUES($1,'render','ready')
+                       ON CONFLICT(project_id,job_class,pipeline_revision) DO NOTHING
+                       RETURNING id""",
                     project_id,
                 )
-                await connection.execute(
-                    "UPDATE projects SET title=$2,narration_script=$3,audio_object=$4,timestamps_object=$5,status='rendering',progress=38 WHERE id=$1",
+                if not render_attempt:
+                    existing_render = await connection.fetchrow(
+                        """SELECT id,status FROM job_attempts
+                           WHERE project_id=$1 AND job_class='render' AND pipeline_revision='v1'""",
+                        project_id,
+                    )
+                    if not existing_render or existing_render["status"] in {"failed", "cancelled"}:
+                        raise RuntimeError("Existing render attempt is terminal; use project requeue to restart it")
+                    render_attempt = existing_render["id"]
+                updated_project = await connection.fetchval(
+                    """UPDATE projects SET title=$2,narration_script=$3,audio_object=$4,
+                       timestamps_object=$5,status='rendering',progress=38
+                       WHERE id=$1 AND status IN ('queued','planning') RETURNING id""",
                     project_id, plan["title"][:76], plan["narration"], audio_object, timestamps_object,
                 )
+                if not updated_project:
+                    raise RuntimeError("Project left the planning state before render was queued")
                 await connection.execute(
                     "INSERT INTO project_events(project_id,event_type,stage,progress,payload) VALUES($1,'planned','api',38,$2::jsonb)",
                     project_id, json.dumps({"scene_count": len(plan["scenes"]), "render_program_count": len(compiled_scenes), "shot_count": compiled_film.get("shot_count", len(plan["scenes"])), "visual_style": compiled_film.get("style", "unknown"), "quality_review": compiled_film.get("quality_review", {}), "models": sorted({scene["assigned_model"] for scene in compiled_scenes})}),
                 )
+                completed_attempt = await connection.fetchval(
+                    """UPDATE job_attempts SET status='complete',lease_token=NULL,
+                       lease_expires_at=NULL,worker_region=NULL,last_error=NULL
+                       WHERE id=$1 AND lease_token=$2 AND status='running' RETURNING id""",
+                    attempt_id, lease_token,
+                )
+                if not completed_attempt:
+                    raise RuntimeError("Planning lease was lost before commit")
                 await connection.execute("SELECT pg_notify('shortclipr_jobs',$1)", str(render_attempt))
 
         total_ms = round((_time.monotonic() - t0_total) * 1000)
@@ -337,8 +401,9 @@ async def run_planning(
                 "audio_object": audio_object,
             },
         )
-        await finish_attempt(pool, attempt_id, lease_token, "complete")
-
+    except asyncio.CancelledError:
+        logger.warning("planning.cancelled_or_lease_lost")
+        raise
     except Exception as error:
         total_ms = round((_time.monotonic() - t0_total) * 1000)
         message = str(error)[:1000]
@@ -349,39 +414,61 @@ async def run_planning(
         )
         # Match render-stage retry semantics: transient provider failures must
         # not immediately fail the project or release the user's reservation.
-        attempt_row = (
-            await pool.fetchrow("SELECT attempts, max_attempts FROM job_attempts WHERE id=$1", attempt_id)
-            if attempt_id else None
-        )
-        is_final = not attempt_row or attempt_row["attempts"] >= attempt_row["max_attempts"]
-        if is_final:
-            await fail_project(pool, project_id, "planning_failed", message)
-            await finish_attempt(pool, attempt_id, lease_token, "failed", message)
-        else:
-            retry_delay = min(300, 30 * max(1, attempt_row["attempts"]))
-            if attempt_id:
-                await pool.execute(
-                    """UPDATE job_attempts
-                       SET status='ready', due_at=now()+($3 * interval '1 second'),
-                           lease_token=NULL, lease_expires_at=NULL, last_error=$4
-                       WHERE id=$1 AND lease_token=$2""",
-                    attempt_id, lease_token, retry_delay, message[:1000],
+        retry_delay = 0
+        async with pool.acquire() as connection:
+            async with connection.transaction():
+                locked_project = await connection.fetchrow(
+                    "SELECT status FROM projects WHERE id=$1 FOR UPDATE", project_id,
                 )
-            await pool.execute(
-                "UPDATE projects SET status='queued',progress=8 WHERE id=$1 AND status='planning'",
-                project_id,
-            )
-            await pool.execute(
-                """INSERT INTO project_events(project_id,event_type,stage,progress,payload)
-                   VALUES($1,'retrying','api',8,$2::jsonb)""",
-                project_id,
-                json.dumps({
-                    "attempt": attempt_row["attempts"],
-                    "max_attempts": attempt_row["max_attempts"],
-                    "retry_in_s": retry_delay,
-                    "error": message[:240],
-                }),
-            )
+                attempt_row = await connection.fetchrow(
+                    """SELECT attempts,max_attempts FROM job_attempts
+                       WHERE id=$1 AND lease_token=$2 AND status='running' FOR UPDATE""",
+                    attempt_id, lease_token,
+                )
+                if not attempt_row:
+                    logger.warning("planning.failure_from_stale_attempt")
+                    return
+                if not locked_project or locked_project["status"] in {"cancelled", "complete", "failed"}:
+                    await connection.execute(
+                        """UPDATE job_attempts SET status='cancelled',lease_token=NULL,
+                           lease_expires_at=NULL,worker_region=NULL
+                           WHERE id=$1 AND lease_token=$2""",
+                        attempt_id, lease_token,
+                    )
+                    return
+                is_final = attempt_row["attempts"] >= attempt_row["max_attempts"]
+                if is_final:
+                    await connection.execute(
+                        """UPDATE job_attempts SET status='failed',lease_token=NULL,
+                           lease_expires_at=NULL,worker_region=NULL,last_error=$3
+                           WHERE id=$1 AND lease_token=$2""",
+                        attempt_id, lease_token, message,
+                    )
+                    await fail_project_in_transaction(connection, project_id, "planning_failed", message)
+                else:
+                    retry_delay = min(300, 30 * max(1, attempt_row["attempts"]))
+                    await connection.execute(
+                        """UPDATE job_attempts SET status='ready',due_at=now()+($3 * interval '1 second'),
+                           lease_token=NULL,lease_expires_at=NULL,worker_region=NULL,last_error=$4
+                           WHERE id=$1 AND lease_token=$2""",
+                        attempt_id, lease_token, retry_delay, message,
+                    )
+                    await connection.execute(
+                        "UPDATE projects SET status='queued',progress=8 WHERE id=$1 AND status='planning'",
+                        project_id,
+                    )
+                    await connection.execute(
+                        """INSERT INTO project_events(project_id,event_type,stage,progress,payload)
+                           VALUES($1,'retrying','api',8,$2::jsonb)""",
+                        project_id,
+                        json.dumps({
+                            "attempt": attempt_row["attempts"],
+                            "max_attempts": attempt_row["max_attempts"],
+                            "retry_in_s": retry_delay,
+                            "error": message[:240],
+                        }),
+                    )
+        if retry_delay:
             logger.warning(
                 "planning.will_retry",
                 extra={
