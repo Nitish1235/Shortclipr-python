@@ -66,25 +66,28 @@ async def mux_narration(video_path: Path, audio_path: Path, duration_seconds: in
         raise QualityError("Visual render is missing or empty")
     ffmpeg = os.getenv("FFMPEG_PATH", "ffmpeg")
     muxed_path = video_path.with_name(f"{video_path.stem}.with-audio.mp4")
-    await run(
-        ffmpeg,
-        "-y", "-v", "error",
-        "-i", str(video_path),
-        "-i", str(audio_path),
-        "-map", "0:v:0",
-        "-map", "1:a:0",
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-b:a", "192k",
-        "-af", "apad",
-        "-t", str(duration_seconds),
-        "-movflags", "+faststart",
-        str(muxed_path),
-    )
-    if not muxed_path.is_file() or muxed_path.stat().st_size == 0:
-        raise QualityError("Narration mux produced no output")
-    os.replace(muxed_path, video_path)
-    return {"size_bytes": video_path.stat().st_size}
+    try:
+        await run(
+            ffmpeg,
+            "-y", "-v", "error",
+            "-i", str(video_path),
+            "-i", str(audio_path),
+            "-map", "0:v:0",
+            "-map", "1:a:0",
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-af", "apad",
+            "-t", str(duration_seconds),
+            "-movflags", "+faststart",
+            str(muxed_path),
+        )
+        if not muxed_path.is_file() or muxed_path.stat().st_size == 0:
+            raise QualityError("Narration mux produced no output")
+        os.replace(muxed_path, video_path)
+        return {"size_bytes": video_path.stat().st_size}
+    finally:
+        muxed_path.unlink(missing_ok=True)
 
 
 async def validate_final(path: Path, aspect_ratio: str, duration_seconds: int) -> dict:
