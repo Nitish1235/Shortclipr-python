@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import re
@@ -426,6 +427,144 @@ Rules:
             ],
         }
 
+
+    async def repair_shot(
+        self,
+        repair_bundle: dict[str, Any],
+        shot_index: int,
+        findings: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Regenerate exactly one shot body while keeping every other source byte-stable."""
+        if self.client is None:
+            raise RuntimeError("DEEPSEEK_API_KEY is not configured")
+        if not isinstance(repair_bundle, dict) or repair_bundle.get("schema_version") != 1:
+            raise ValueError("Unsupported or missing shot repair bundle")
+        shots = repair_bundle.get("shots")
+        scenes = repair_bundle.get("scenes")
+        shared_js = repair_bundle.get("shared_js")
+        if not isinstance(shots, list) or not isinstance(scenes, list) or not isinstance(shared_js, str):
+            raise ValueError("Shot repair bundle is incomplete")
+        if len(shots) != len(scenes) or not 1 <= len(shots) <= 12:
+            raise ValueError("Shot repair bundle has invalid shot structure")
+        if isinstance(shot_index, bool) or not isinstance(shot_index, int):
+            raise ValueError("Shot index must be an integer")
+        shot_positions = [i for i, shot in enumerate(shots) if shot.get("index") == shot_index]
+        scene_positions = [i for i, scene in enumerate(scenes) if scene.get("index") == shot_index]
+        if len(shot_positions) != 1 or len(scene_positions) != 1 or shot_positions[0] != scene_positions[0]:
+            raise ValueError("Target shot is not uniquely present in repair bundle")
+        if not isinstance(findings, list) or not findings:
+            raise ValueError("At least one visual QA finding is required")
+        safe_findings = []
+        for item in findings[:8]:
+            if not isinstance(item, dict) or item.get("shot_index") != shot_index:
+                continue
+            issue = item.get("issue")
+            recommendation = item.get("recommendation")
+            if not isinstance(issue, str) or not issue.strip() or not isinstance(recommendation, str) or not recommendation.strip():
+                continue
+            safe_findings.append({
+                "category": str(item.get("category", "other"))[:60],
+                "severity": str(item.get("severity", "medium"))[:20],
+                "issue": issue[:500],
+                "recommendation": recommendation[:500],
+                "evidence_sample_indices": [
+                    value for value in item.get("evidence_sample_indices", [])
+                    if isinstance(value, int) and not isinstance(value, bool)
+                ][:3],
+            })
+        if not safe_findings:
+            raise ValueError("No actionable findings belong to the requested shot")
+
+        position = shot_positions[0]
+        original_shot = shots[position]
+        scene = scenes[position]
+        original_body = original_shot.get("draw_body")
+        if not isinstance(original_body, str) or not original_body:
+            raise ValueError("Target shot has no original drawing body")
+        visual_bible = repair_bundle.get("visual_bible", {})
+        shot_visual_context = self._shot_visual_context(visual_bible, scene)
+        shared_helper_names = sorted(set(re.findall(
+            r"\\bfunction\\s+(draw[A-Z][A-Za-z0-9_]*)\\s*\\(", shared_js
+        )))
+        prompt = f"""
+You are ShortClipr's senior 2D animation repair artist. Repair ONLY shot {shot_index}.
+Return JSON only: {{"draw_body":"complete replacement JavaScript drawing body"}}.
+
+The replacement body is inserted into the existing drawShot_{shot_index}(g,t,env,absoluteTime)
+function. The compiler will preserve the existing validated mechanismActions and
+mechanisms constants. Do not modify them, other shots, shot timing, transitions,
+the shared drawing library, or the selected visual style.
+
+VISUAL QA FINDINGS TO FIX:
+{json.dumps(safe_findings, ensure_ascii=False)}
+
+ORIGINAL SHOT DIRECTION:
+{json.dumps(scene, ensure_ascii=False)}
+
+VISUAL REFERENCES:
+{json.dumps(shot_visual_context, ensure_ascii=False)}
+
+BINDING ART DIRECTION:
+{repair_bundle.get("art_direction_instructions", "")}
+
+EXISTING SHARED DRAW HELPERS (only these may be called):
+{json.dumps(shared_helper_names)}
+
+ORIGINAL SHOT BODY:
+{original_body}
+
+Rules:
+- Fix the listed visible problems, not unrelated aspects of the shot.
+- Preserve all named recurring characters, props, environment identity and relative scale.
+- Preserve the shot's purpose, focal entity, visual objective, composition intent,
+  visual change, continuity note and transition compatibility.
+- Use existing shared helpers only; do not add helpers or call undefined drawX functions.
+- Keep all drawing inside the original logical canvas.
+- Keep deterministic Canvas 2D only. No DOM, browser globals, network, filesystem,
+  imports, exports, Node APIs, timers, eval, Function, random numbers, WebGL or 3D.
+- Keep mechanism actions and kinematics coherent. Use the supplied validated mechanism
+  arrays as-is; do not invent physics or claim engineering accuracy for qualitative motion.
+- Return the full replacement draw_body, not a diff or patch.
+""".strip()
+        replacement_body = await self._validated_fragment(
+            "You are a senior Canvas 2D animation programmer. Return strict JSON only.",
+            prompt,
+            min(self.max_output_tokens, 10000),
+            "draw_body",
+            f"Targeted repair for shot {shot_index + 1}",
+            MAX_SHOT_SOURCE,
+        )
+        updated_bundle = copy.deepcopy(repair_bundle)
+        updated_bundle["shots"][position]["draw_body"] = replacement_body
+        remaining_helpers = find_unresolved_draw_helpers(
+            shared_js,
+            [shot["draw_body"] for shot in updated_bundle["shots"]],
+        )
+        if remaining_helpers:
+            raise ValueError(
+                "Targeted repair introduced unresolved drawing helpers: "
+                + ", ".join(remaining_helpers)
+            )
+        source = self._assemble_film(
+            shared_js,
+            updated_bundle["shots"],
+            int(repair_bundle["duration"]),
+            repair_bundle["logical"],
+            str(repair_bundle["style_id"]),
+        )
+        if len(source) > MAX_FILM_SOURCE:
+            raise ValueError("Repaired animation program exceeds the maximum source size")
+        self.validate_source(source, int(repair_bundle["duration"]), repair_bundle["logical"])
+        return {
+            "scene_js": source,
+            "repair_bundle": updated_bundle,
+            "repaired_shot_index": shot_index,
+            "original_body_chars": len(original_body),
+            "replacement_body_chars": len(replacement_body),
+            "unchanged_shot_indices": [
+                shot["index"] for shot in shots if shot["index"] != shot_index
+            ],
+        }
 
     @staticmethod
     def _assemble_film(shared_js: str, shots: list[dict[str, Any]], duration: int,
