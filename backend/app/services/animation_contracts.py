@@ -137,6 +137,13 @@ def validate_draw_helper_definitions(source: str, required_names: list[str]) -> 
     missing = sorted(set(required_names) - declared)
     if missing:
         raise ValueError("Generated helper library did not define: " + ", ".join(missing))
+    for name in required_names:
+        signature = re.search(
+            rf"\\bfunction\\s+{re.escape(name)}\\s*\\(\\s*g\\s*(?:,|\\))",
+            source,
+        )
+        if not signature:
+            raise ValueError(f"Generated helper {name} must accept the Canvas context as its first argument")
 
 def validate_generated_fragment(source: Any, label: str, max_chars: int) -> str:
     if not isinstance(source, str) or not 20 <= len(source) <= max_chars:
