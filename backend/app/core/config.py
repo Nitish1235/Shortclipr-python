@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_STORY_MODEL: str = "deepseek-flash"
     DEEPSEEK_ANIMATION_MODEL: str = "deepseek-flash"
+    DEEPSEEK_VISUAL_QA_MODEL: str = "deepseek-flash"
     DEEPSEEK_REASONING_EFFORT: str = "medium"  # legacy fallback; stage policies below take precedence
     DEEPSEEK_PLANNING_REASONING_EFFORT: str = "low"
     DEEPSEEK_CODING_REASONING_EFFORT: str = "max"
