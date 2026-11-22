@@ -12,7 +12,7 @@ substitutions:
   _API_CPU: '4'
   _API_MAX_INSTANCES: '2'
   _FFMPEG_CPU: '4'
-  _FFMPEG_MAX_INSTANCES: '3'
+  _FFMPEG_MAX_INSTANCES: '2'
 
 steps:
   - id: build-api-worker
