@@ -201,7 +201,19 @@ def test_mechanism_action_rejects_unsupported_easing():
             }]},
             {"start_frame": 30, "end_frame": 60},
             {"start_frame": 60, "end_frame": 90},
-        ])
+        ], 90)
+
+
+def test_mechanism_action_rejects_non_finite_progress():
+    with pytest.raises(ValueError, match="finite number"):
+        validate_scene_plan([
+            {"start_frame": 0, "end_frame": 30, "mechanism_actions": [{
+                "mechanism_id": "mechanism_lift", "pattern_id": "raise",
+                "action": "raise deck", "start_progress": float("nan"),
+            }]},
+            {"start_frame": 30, "end_frame": 60},
+            {"start_frame": 60, "end_frame": 90},
+        ], 90)
 
 
 def test_mechanism_kinematics_rejects_non_finite_geometry():
