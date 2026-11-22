@@ -50,7 +50,7 @@ def validate_kinematics(value: Any, component_parts: set[str]) -> dict[str, Any]
     if not isinstance(value, dict):
         raise ValueError("Mechanism kinematics entries must be objects")
     kind = value.get("type")
-    if kind not in KINEMATIC_MOTION_TYPES:
+    if not isinstance(kind, str) or kind not in KINEMATIC_MOTION_TYPES:
         raise ValueError("Unsupported kinematics type")
     result = dict(value)
     part = result.get("part")
@@ -81,8 +81,15 @@ def validate_kinematics(value: Any, component_parts: set[str]) -> dict[str, Any]
         if driver_radius <= 0 or driven_radius <= 0:
             raise ValueError("Gear pitch radii must be positive")
         mesh = result.get("mesh", "external")
-        if mesh not in {"external", "internal"}:
+        if not isinstance(mesh, str) or mesh not in {"external", "internal"}:
             raise ValueError("Gear mesh must be external or internal")
+        center_distance = ((anchor["x"] - driver_anchor["x"]) ** 2
+                           + (anchor["y"] - driver_anchor["y"]) ** 2) ** 0.5
+        expected_distance = (driver_radius + driven_radius if mesh == "external"
+                             else abs(driver_radius - driven_radius))
+        tolerance = max(0.5, expected_distance * 0.02)
+        if abs(center_distance - expected_distance) > tolerance:
+            raise ValueError("Gear center distance must match the declared pitch radii and mesh")
         driver_start = _finite_number(result.get("driver_start_angle_deg", 0), "Gear driver_start_angle_deg")
         driver_end = _finite_number(result.get("driver_end_angle_deg"), "Gear driver_end_angle_deg")
         driven_start = _finite_number(result.get("driven_start_angle_deg", 0), "Gear driven_start_angle_deg")
