@@ -53,6 +53,8 @@ class WatcherRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(is_uncertain_delivery(server_error))
         self.assertTrue(is_uncertain_delivery(httpx.ReadTimeout("read timed out", request=request)))
         self.assertTrue(is_uncertain_delivery(httpx.WriteTimeout("write timed out", request=request)))
+        timeout_response = httpx.HTTPStatusError("request timeout", request=request, response=httpx.Response(408, request=request))
+        self.assertTrue(is_uncertain_delivery(timeout_response))
         client_error = httpx.HTTPStatusError("bad request", request=request, response=httpx.Response(400, request=request))
         self.assertFalse(is_uncertain_delivery(client_error))
 
