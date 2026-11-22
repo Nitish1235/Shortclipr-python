@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 from openai import AsyncOpenAI
 
 from ..core.config import Settings
+from .generation_policy import coding_effort
 from .animation_contracts import (
     ASPECT_LOGICAL,
     MAX_FILM_SOURCE,
@@ -28,7 +29,8 @@ class DeepSeekAnimationCompiler:
 
     def __init__(self, settings: Settings):
         self.model = settings.DEEPSEEK_ANIMATION_MODEL
-        self.reasoning_effort = settings.DEEPSEEK_REASONING_EFFORT
+        self.medium_reasoning_effort = "medium"
+        self.max_reasoning_effort = settings.DEEPSEEK_CODING_REASONING_EFFORT
         self.max_output_tokens = settings.DEEPSEEK_MAX_OUTPUT_TOKENS
         self.max_parallel_shots = max(1, min(4, settings.DEEPSEEK_MAX_PARALLEL_SHOTS))
         self.enable_shot_review = settings.DEEPSEEK_ENABLE_SHOT_REVIEW
@@ -38,7 +40,7 @@ class DeepSeekAnimationCompiler:
             if settings.DEEPSEEK_API_KEY else None
         )
 
-    async def _json_completion(self, system_prompt: str, user_prompt: str, token_limit: int) -> dict[str, Any]:
+    async def _json_completion(self, system_prompt: str, user_prompt: str, token_limit: int, reasoning_effort: str = "medium") -> dict[str, Any]:
         if self.client is None:
             raise RuntimeError("DEEPSEEK_API_KEY is not configured")
         # DeepSeek JSON mode can return whitespace-only content when it cannot
@@ -55,7 +57,9 @@ class DeepSeekAnimationCompiler:
                 ],
                 response_format={"type": "json_object"},
                 max_tokens=token_limit,
-                reasoning_effort=("none" if attempt else self.reasoning_effort),
+                # Animation source generation is a constrained coding task, not a
+                # reasoning benchmark. Reserve the completion budget for JSON/code.
+                reasoning_effort=("none" if attempt else reasoning_effort),
                 extra_body={"thinking": {"type": "disabled" if attempt else "enabled"}},
             )
             latency_ms = round((asyncio.get_running_loop().time() - request_started) * 1000)
@@ -73,6 +77,8 @@ class DeepSeekAnimationCompiler:
                 "deepseek.animation.response",
                 extra={
                     "model": self.model,
+                    "reasoning_effort": "none" if attempt else reasoning_effort,
+                    "thinking_enabled": not bool(attempt),
                     "attempt": attempt + 1,
                     "latency_ms": latency_ms,
                     "finish_reason": finish_reason,
@@ -101,6 +107,31 @@ class DeepSeekAnimationCompiler:
             return value
         raise RuntimeError(f"DeepSeek animation generation failed: {last_error}")
 
+    async def _validated_fragment(
+        self, system_prompt: str, user_prompt: str, token_limit: int,
+        field: str, label: str, max_chars: int, reasoning_effort: str,
+    ) -> str:
+        """Generate, validate, then make one targeted repair using the validator error."""
+        result = await self._json_completion(system_prompt, user_prompt, token_limit, reasoning_effort)
+        try:
+            return validate_generated_fragment(result.get(field), label, max_chars)
+        except ValueError as validation_error:
+            logger.warning("deepseek.animation.fragment_repair", extra={
+                "label": label, "reason": str(validation_error)[:300],
+                "reasoning_effort": reasoning_effort,
+            })
+            repair_prompt = (
+                f"{user_prompt}\\n\\n"
+                f"The previous {label} failed deterministic validation: {validation_error}. "
+                f"Return a complete corrected JSON object with the field {field!r}. "
+                "Keep the original visual intent and obey every Canvas-only restriction. "
+                f"Previous value:\\n{str(result.get(field, ''))[:max_chars]}"
+            )
+            repaired = await self._json_completion(
+                system_prompt, repair_prompt, token_limit, reasoning_effort
+            )
+            return validate_generated_fragment(repaired.get(field), f"Repaired {label}", max_chars)
+
     async def compile(self, project: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
         if self.client is None:
             raise RuntimeError("DEEPSEEK_API_KEY is not configured")
@@ -121,7 +152,8 @@ Create a reusable JavaScript drawing library for a {style_id} Canvas 2D film.
 Return JSON only: {{"shared_js":"JavaScript source"}}.
 The source is evaluated in the same script as the film and may define ordinary named
 functions and constants. It must not call Motion.scene. Use only the supplied Canvas
-2D context in functions; no DOM, browser globals, imports, exports, network, filesystem,
+2D context in functions. Never reference browser-global identifiers such as window,
+document, self, top, parent or frames. No DOM, browser globals, imports, exports, network, filesystem,
 Node APIs, timers, eval, Function, Date, performance, Math.random, WebGL or 3D.
 A trusted runtime script ShortcliprStyles is loaded before this library. Use
 ShortcliprStyles.palette("{style_id}"), ShortcliprStyles.paperBackground(g, "{style_id}", env),
@@ -137,13 +169,12 @@ Do not use external assets. Do not redefine ShortcliprStyles.
 Visual bible:
 {json.dumps(visual_bible, ensure_ascii=False)}
 """.strip()
-        shared_result = await self._json_completion(
-            shared_prompt,
-            "Generate the shared drawing library. Return only the required JSON object.",
-            min(self.max_output_tokens, 12000),
-        )
-        shared_js = validate_generated_fragment(
-            shared_result.get("shared_js"), "Shared drawing library", MAX_SHARED_SOURCE
+        shared_effort = coding_effort(None, project, self.medium_reasoning_effort, self.max_reasoning_effort)
+        shared_js = await self._validated_fragment(
+            "You are a senior Canvas 2D JavaScript systems programmer. Return strict JSON only.",
+            shared_prompt + "\n\nReturn only the required JSON object.",
+            min(self.max_output_tokens, 12000), "shared_js", "Shared drawing library",
+            MAX_SHARED_SOURCE, shared_effort,
         )
 
         semaphore = asyncio.Semaphore(self.max_parallel_shots)
@@ -176,14 +207,13 @@ SHOT:
 SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s.
 """.strip()
             async with semaphore:
-                result = await self._json_completion(
-                    shot_prompt,
-                    "Write this shot's complete drawing body now. Return strict JSON only.",
-                    min(self.max_output_tokens, 10000),
+                effort = coding_effort(scene, project, self.medium_reasoning_effort, self.max_reasoning_effort)
+                body = await self._validated_fragment(
+                    "You are a senior Canvas 2D animation programmer. Return strict JSON only.",
+                    shot_prompt + "\n\nWrite the complete draw_body now.",
+                    min(self.max_output_tokens, 10000), "draw_body",
+                    f"Shot {scene['index'] + 1}", MAX_SHOT_SOURCE, effort,
                 )
-            body = validate_generated_fragment(
-                result.get("draw_body"), f"Shot {scene['index'] + 1}", MAX_SHOT_SOURCE
-            )
             return {
                 "index": scene["index"],
                 "start_frame": scene["start_frame"],
@@ -268,7 +298,7 @@ CURRENT DRAW BODY:
                     result = await self._json_completion(
                         "You are a conservative JavaScript animation code reviewer. Return strict JSON only.",
                         prompt,
-                        min(self.max_output_tokens, 10000),
+                        min(self.max_output_tokens, 10000), "medium",
                     )
                     status = result.get("status")
                     issues = result.get("issues", [])
