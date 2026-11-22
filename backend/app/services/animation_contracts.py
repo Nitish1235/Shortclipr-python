@@ -32,9 +32,10 @@ def validate_visual_bible(value: Any) -> dict[str, Any]:
     characters = value.get("characters", [])
     props = value.get("props", [])
     environments = value.get("environments", [])
-    if not all(isinstance(x, list) for x in (characters, props, environments)):
+    mechanisms = value.get("mechanisms", [])
+    if not all(isinstance(x, list) for x in (characters, props, environments, mechanisms)):
         raise ValueError("Visual bible characters, props and environments must be arrays")
-    if len(characters) > 20 or len(props) > 40 or len(environments) > 20:
+    if len(characters) > 20 or len(props) > 40 or len(environments) > 20 or len(mechanisms) > 20:
         raise ValueError("Visual bible exceeds entity limits")
     seen: set[str] = set()
     for group_name, group in (("character", characters), ("prop", props), ("environment", environments)):
@@ -80,6 +81,60 @@ def validate_visual_bible(value: Any) -> dict[str, Any]:
     value["style_id"] = style
     value["characters"] = characters
     value["props"] = props
+    mechanism_ids: set[str] = set()
+    prop_ids = {item["id"] for item in props}
+    for mechanism in mechanisms:
+        if not isinstance(mechanism, dict):
+            raise ValueError("Visual bible mechanisms must contain objects")
+        mechanism_id = mechanism.get("id")
+        if not isinstance(mechanism_id, str) or not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_-]{1,63}", mechanism_id):
+            raise ValueError("Invalid mechanism ID")
+        if mechanism_id in seen or mechanism_id in mechanism_ids:
+            raise ValueError(f"Duplicate visual bible ID: {mechanism_id}")
+        mechanism_ids.add(mechanism_id)
+        for key in ("name", "principle"):
+            if not isinstance(mechanism.get(key, ""), str):
+                raise ValueError(f"Mechanism {key} must be text")
+        components = mechanism.setdefault("components", [])
+        if not isinstance(components, list) or not components or len(components) > 20:
+            raise ValueError("Mechanism components must contain 1–20 entries")
+        for component in components:
+            if not isinstance(component, dict) or component.get("prop_id") not in prop_ids:
+                raise ValueError("Mechanism component must reference a declared prop_id")
+            if not isinstance(component.get("part"), str) or not component["part"].strip():
+                raise ValueError("Mechanism component part must be named")
+            if not isinstance(component.get("role", ""), str):
+                raise ValueError("Mechanism component role must be text")
+        joints = mechanism.setdefault("joints", [])
+        if not isinstance(joints, list) or len(joints) > 20:
+            raise ValueError("Mechanism joints must be an array of at most 20 entries")
+        for joint in joints:
+            if not isinstance(joint, dict) or not isinstance(joint.get("type"), str) or not isinstance(joint.get("anchor"), str):
+                raise ValueError("Mechanism joints require a type and anchor")
+            between = joint.get("between")
+            if not isinstance(between, list) or len(between) != 2 or not all(isinstance(x, str) and x.strip() for x in between):
+                raise ValueError("Mechanism joint between must name exactly two parts")
+        constraints = mechanism.setdefault("motion_constraints", [])
+        if not isinstance(constraints, list) or not all(isinstance(x, str) for x in constraints):
+            raise ValueError("Mechanism motion_constraints must be an array of text")
+        patterns = mechanism.setdefault("action_patterns", [])
+        if not isinstance(patterns, list) or len(patterns) > 12:
+            raise ValueError("Mechanism action_patterns must be an array of at most 12 entries")
+        pattern_ids: set[str] = set()
+        for pattern in patterns:
+            if not isinstance(pattern, dict):
+                raise ValueError("Mechanism action patterns must be objects")
+            pattern_id = pattern.get("id")
+            if not isinstance(pattern_id, str) or not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_-]{1,63}", pattern_id) or pattern_id in pattern_ids:
+                raise ValueError("Invalid or duplicate mechanism action pattern ID")
+            pattern_ids.add(pattern_id)
+            for key in ("description", "driver", "relationship"):
+                if not isinstance(pattern.get(key), str) or not pattern[key].strip():
+                    raise ValueError(f"Mechanism action pattern {key} is required")
+            followers = pattern.get("followers")
+            if not isinstance(followers, list) or not all(isinstance(x, str) and x.strip() for x in followers):
+                raise ValueError("Mechanism action pattern followers must be an array of named parts")
+    value["mechanisms"] = mechanisms
     value["environments"] = environments
     return value
 
@@ -118,6 +173,7 @@ def validate_scene_plan(scenes: Any, total_frames: int) -> list[dict[str, Any]]:
         scene.setdefault("focal_entity", "")
         scene.setdefault("visual_change", scene["action"])
         scene.setdefault("continuity_note", "")
+        scene.setdefault("mechanism_actions", [])
         for key in ("visual_objective", "composition", "camera_position", "focal_entity", "visual_change", "continuity_note"):
             if not isinstance(scene[key], str):
                 raise ValueError(f"Shot {key} must be text")
@@ -125,6 +181,19 @@ def validate_scene_plan(scenes: Any, total_frames: int) -> list[dict[str, Any]]:
             raise ValueError("Shot shot_scale is unsupported")
         if not isinstance(scene["depth_layers"], list) or not scene["depth_layers"] or len(scene["depth_layers"]) > 6 or not all(isinstance(x, str) and x.strip() for x in scene["depth_layers"]):
             raise ValueError("Shot depth_layers must contain 1–6 named layers")
+        if not isinstance(scene["mechanism_actions"], list) or len(scene["mechanism_actions"]) > 8:
+            raise ValueError("Shot mechanism_actions must be an array of at most 8 entries")
+        for action in scene["mechanism_actions"]:
+            if not isinstance(action, dict):
+                raise ValueError("Shot mechanism actions must be objects")
+            for key in ("mechanism_id", "pattern_id", "action"):
+                if not isinstance(action.get(key), str) or not action[key].strip():
+                    raise ValueError(f"Shot mechanism action {key} is required")
+            for key in ("start_progress", "end_progress"):
+                if key in action and (not isinstance(action[key], (int, float)) or not 0 <= action[key] <= 1):
+                    raise ValueError(f"Shot mechanism action {key} must be between 0 and 1")
+            if action.get("start_progress", 0) >= action.get("end_progress", 1):
+                raise ValueError("Shot mechanism action progress range must increase")
         if scene["complexity"] not in {"light", "medium", "heavy"}:
             scene["complexity"] = "medium"
         for key in ("characters", "props"):
