@@ -26,7 +26,7 @@ class DrawnByCodeRenderer:
         self.node = os.getenv("NODE_BINARY", shutil.which("node") or "node")
         self.ffmpeg = os.getenv("FFMPEG_PATH", shutil.which("ffmpeg") or "ffmpeg")
         self.chrome = os.getenv("CHROME_PATH", shutil.which("chromium") or "chromium")
-        self.timeout = max(60, int(os.getenv("DRAWN_BY_CODE_RENDER_TIMEOUT", "1400")))
+        self.timeout = max(60, int(os.getenv("DRAWN_BY_CODE_RENDER_TIMEOUT", "1100")))
         self.syntax_timeout = max(5, int(os.getenv("DRAWN_BY_CODE_SYNTAX_TIMEOUT", "30")))
         self.widths = {"9:16": 1080, "1:1": 1080, "16:9": 1920}
 
