@@ -994,6 +994,14 @@ async def run_render(
                     discard_output = True
                     logger.warning("render.duplicate_delivery", extra={"output_object": output_object})
                 else:
+                    if quality.get("shot_repair", {}).get("accepted"):
+                        repaired_program = dict(program)
+                        repaired_program["scene_js"] = plan["scene_js"]
+                        repaired_program["repair_bundle"] = plan["repair_bundle"]
+                        await connection.execute(
+                            "UPDATE scene_plans SET program=$2::jsonb WHERE project_id=$1 AND scene_index=0",
+                            project_id, json.dumps(repaired_program),
+                        )
                     settled = locked["credits_reserved"]
                     await connection.execute(
                         "UPDATE projects SET status='complete',progress=100,output_object=$2,credits_settled=$3,completed_at=now() WHERE id=$1",
