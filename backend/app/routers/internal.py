@@ -642,6 +642,7 @@ async def run_render(
     audio_path: Path | None = None
     completed_project: dict | None = None
     output_object: str | None = None
+    qa_object: str | None = None
     output_committed = False
     try:
         project = None
@@ -963,6 +964,11 @@ async def run_render(
                 await storage.delete(output_object)
             except Exception:
                 logger.exception("render.orphan_output_cleanup_failed", extra={"output_object": output_object})
+        if qa_object and not output_committed:
+            try:
+                await storage.delete(qa_object)
+            except Exception:
+                logger.exception("render.orphan_motion_qa_cleanup_failed", extra={"qa_object": qa_object})
         if output_path:
             output_path.unlink(missing_ok=True)
             shutil.rmtree(output_path.parent, ignore_errors=True)
