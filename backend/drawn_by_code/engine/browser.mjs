@@ -161,44 +161,53 @@ export async function openScene(scenePath, { size, gpu = process.env.MOTION_GPU 
     const abs = path.resolve(scenePath);
     const ext = inside(abs, ROOT) ? null : extRoot(abs);
     if (!inside(abs, ROOT) && !ext) throw new Error(`A scene outside this repo needs a ${EXT_MARK} at the root of its folder: ${scenePath}`);
+
     const { server, port } = await serve(0, null, ext);
-    const browser = await launchBrowser(chromium, executablePath, gpu);
-    const page = await browser.newPage({ viewport: { width: 800, height: 800 } });
-    const errors = [];
-    page.on('console', (m) => {
-        if (m.type() === 'error') errors.push(m.text());
-        console.log('[page]', m.text());
-    });
-    page.on('pageerror', (e) => {
-        errors.push(e.message);
-        console.error('[page error]', e.message);
-    });
-    const q = new URLSearchParams({ scene: rel(scenePath), render: '1' });
-    if (size) q.set('size', String(size));
-    await page.goto(`http://127.0.0.1:${port}/engine/player.html?${q}`);
-    // which GL the page really got: a software renderer means the GPU flag did not take
-    const glName = await page.evaluate(() => {
-        const g = document.createElement('canvas').getContext('webgl2');
-        const e = g && g.getExtension('WEBGL_debug_renderer_info');
-        return g ? (e ? g.getParameter(e.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER)) : 'no WebGL2';
-    });
-    console.log(`GL: ${glName}${gpu && /swiftshader|llvmpipe|software/i.test(glName) ? '  (!) --gpu asked, but this is software GL' : ''}`);
-    try {
-        await page.waitForFunction(() => window.READY === true, null, { timeout: 60000 });
-    } catch (e) {
-        const msg = await page.evaluate(() => document.getElementById('err')?.textContent).catch(() => '');
-        await browser.close();
-        server.close();
-        throw new Error('The scene never reached READY.\n' + (msg || errors.join('\n') || e.message));
-    }
-    const info = await page.evaluate(() => window.SCENE_INFO);
-    return {
-        page, info, errors,
-        close: async () => {
-            await browser.close();
-            server.close();
-        },
+    let browser = null;
+    let closed = false;
+    const close = async () => {
+        if (closed) return;
+        closed = true;
+        await browser?.close().catch(() => {});
+        await new Promise((resolve) => server.close(() => resolve()));
     };
+
+    try {
+        browser = await launchBrowser(chromium, executablePath, gpu);
+        const page = await browser.newPage({ viewport: { width: 800, height: 800 } });
+        const errors = [];
+        page.on('console', (m) => {
+            if (m.type() === 'error') errors.push(m.text());
+            console.log('[page]', m.text());
+        });
+        page.on('pageerror', (e) => {
+            errors.push(e.message);
+            console.error('[page error]', e.message);
+        });
+
+        const q = new URLSearchParams({ scene: rel(scenePath), render: '1' });
+        if (size) q.set('size', String(size));
+        await page.goto(`http://127.0.0.1:${port}/engine/player.html?${q}`);
+
+        const glName = await page.evaluate(() => {
+            const g = document.createElement('canvas').getContext('webgl2');
+            const e = g && g.getExtension('WEBGL_debug_renderer_info');
+            return g ? (e ? g.getParameter(e.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER)) : 'no WebGL2';
+        });
+        console.log(`GL: ${glName}${gpu && /swiftshader|llvmpipe|software/i.test(glName) ? '  (!) --gpu asked, but this is software GL' : ''}`);
+
+        try {
+            await page.waitForFunction(() => window.READY === true, null, { timeout: 60000 });
+        } catch (error) {
+            const msg = await page.evaluate(() => document.getElementById('err')?.textContent).catch(() => '');
+            throw new Error('The scene never reached READY.\\n' + (msg || errors.join('\\n') || error.message));
+        }
+        const info = await page.evaluate(() => window.SCENE_INFO);
+        return { page, info, close, errors };
+    } catch (error) {
+        await close();
+        throw error;
+    }
 }
 
 // Arguments: --key value and --flag.
