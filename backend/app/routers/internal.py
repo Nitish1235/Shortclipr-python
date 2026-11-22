@@ -132,6 +132,12 @@ async def fail_project_in_transaction(
         project_id, code, message,
     )
     await connection.execute(
+        """UPDATE job_attempts SET status='cancelled',lease_token=NULL,
+           lease_expires_at=NULL,worker_region=NULL
+           WHERE project_id=$1 AND status IN ('ready','leased','running')""",
+        project_id,
+    )
+    await connection.execute(
         "INSERT INTO project_events(project_id,event_type,stage,progress,payload) VALUES($1,'failed',$2,0,$3::jsonb)",
         project_id, code.split("_")[0], json.dumps({"code": code}),
     )
@@ -366,9 +372,19 @@ async def run_planning(
                            WHERE project_id=$1 AND job_class='render' AND pipeline_revision='v1'""",
                         project_id,
                     )
-                    if not existing_render or existing_render["status"] in {"failed", "cancelled"}:
-                        raise RuntimeError("Existing render attempt is terminal; use project requeue to restart it")
-                    render_attempt = existing_render["id"]
+                    if not existing_render:
+                        raise RuntimeError("Render attempt could not be recovered")
+                    if existing_render["status"] in {"failed", "cancelled"}:
+                        render_attempt = await connection.fetchval(
+                            """UPDATE job_attempts SET status='ready',attempts=0,due_at=now(),
+                               lease_token=NULL,lease_expires_at=NULL,last_error=NULL,worker_region=NULL
+                               WHERE id=$1 AND status IN ('failed','cancelled') RETURNING id""",
+                            existing_render["id"],
+                        )
+                        if not render_attempt:
+                            raise RuntimeError("Render attempt changed while the project was being queued")
+                    else:
+                        render_attempt = existing_render["id"]
                 updated_project = await connection.fetchval(
                     """UPDATE projects SET title=$2,narration_script=$3,audio_object=$4,
                        timestamps_object=$5,status='rendering',progress=38
