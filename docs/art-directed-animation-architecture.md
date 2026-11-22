@@ -161,3 +161,15 @@ The first code slice should be limited to:
 5. Unit tests for mapping, validation, backward compatibility and selected-style propagation.
 
 Do not begin large-scale prompt changes or add new art systems until this foundation is merged and tested.
+
+
+## Implementation progress (PR #30)
+
+The structured art-direction stage is now implemented for the three initial new art systems:
+- `cinematic-editorial`
+- `isometric-technical`
+- `layered-paper`
+
+Each has a versioned art-direction profile and dedicated deterministic Canvas 2D primitives in `backend/drawn_by_code/styles/shortclipr.js`. Current UI choices now map Editorial -> cinematic-editorial, Diagrammatic -> isometric-technical, and Paper craft -> layered-paper. Cinematic retains the existing 70s-poster direction. Existing style IDs remain supported for saved projects.
+
+This is the first usable toolkit layer, not a claim that every generated video will automatically be high quality. Full visual-bible depth, storyboard composition contracts, motion mechanics, rendered-frame QA, and benchmark tuning remain subsequent phases. Actual rendered benchmark acceptance is still required before calling these systems production-proven.
