@@ -199,7 +199,8 @@ The animation compiler now carries the validated Visual Bible and the storyboard
 used to direct each shot into the persisted render program. The FFmpeg worker can pass
 the rendered contact sheet, this exact planning context and the sample-to-shot mapping
 to the DeepSeek vision-capable model configured by `DEEPSEEK_VISUAL_QA_MODEL`
-(default: `deepseek-flash`).
+(default: `deepseek-flash`). Inference can be disabled with
+`DEEPSEEK_ENABLE_VISUAL_QA=false` to control provider cost.
 
 The reviewer returns a bounded JSON report with an overall visual score, per-shot
 summaries, categorized findings, severity, evidence sample references, confidence and
