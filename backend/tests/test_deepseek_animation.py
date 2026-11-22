@@ -97,9 +97,6 @@ class MechanismKinematicsContextTests(unittest.TestCase):
 
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class MechanismAssemblyTests(unittest.TestCase):
     def test_assembler_injects_serialized_actions_and_mechanism_specs(self):
@@ -138,3 +135,7 @@ class MechanismAssemblyTests(unittest.TestCase):
         self.assertIn("const mechanisms = [{", source)
         self.assertIn('"type":"pivot"', source)
         self.assertIn("drawBridge(g);", source)
+
+
+if __name__ == "__main__":
+    unittest.main()
