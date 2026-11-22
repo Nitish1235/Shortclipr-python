@@ -109,6 +109,42 @@ async def finish_attempt(
     )
 
 
+async def assert_worker_lease(
+    pool: asyncpg.Pool, project_id: UUID, attempt_id: UUID,
+    lease_token: UUID, job_class: str,
+) -> None:
+    """Stop a stale worker before it persists another stage artifact."""
+    owned = await pool.fetchval(
+        """SELECT 1 FROM job_attempts
+           WHERE id=$1 AND project_id=$2 AND job_class=$3 AND lease_token=$4
+             AND status='running' AND lease_expires_at>now()""",
+        attempt_id, project_id, job_class, lease_token,
+    )
+    if not owned:
+        raise asyncio.CancelledError("worker lease is no longer current")
+
+
+async def set_render_progress(
+    pool: asyncpg.Pool, project_id: UUID, attempt_id: UUID,
+    lease_token: UUID, progress: int,
+) -> None:
+    """Write render progress only while this exact attempt still owns the lease."""
+    updated = await pool.fetchval(
+        """UPDATE projects AS p SET progress=GREATEST(p.progress,$4)
+           WHERE p.id=$1 AND p.status='rendering'
+             AND EXISTS (
+                 SELECT 1 FROM job_attempts AS j
+                 WHERE j.id=$2 AND j.project_id=p.id AND j.job_class='render'
+                   AND j.lease_token=$3 AND j.status='running'
+                   AND j.lease_expires_at>now()
+             )
+           RETURNING p.id""",
+        project_id, attempt_id, lease_token, progress,
+    )
+    if not updated:
+        raise asyncio.CancelledError("render lease was lost while updating progress")
+
+
 async def fail_project_in_transaction(
     connection: asyncpg.Connection, project_id: UUID, code: str, message: str,
 ) -> None:
