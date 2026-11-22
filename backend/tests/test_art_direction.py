@@ -15,6 +15,7 @@ from app.services.art_direction import (
     [
         "paper-cutout", "risograph", "comic", "70s-poster",
         "engraving", "blueprint", "line", "pixel-art",
+        "cinematic-editorial", "isometric-technical", "layered-paper",
     ],
 )
 def test_every_registered_legacy_style_has_a_complete_direction_contract(style_id: str) -> None:
