@@ -208,9 +208,13 @@ class DrawnByCodeRenderer:
                     "output_tail": tail,
                 })
                 output_path.unlink(missing_ok=True)
-                raise RuntimeError(
-                    f"Drawn-by-Code exited with code {code}; last subprocess output:\n{tail}"
-                )
+                detail = f"Drawn-by-Code exited with code {code}; last subprocess output:\n{tail}"
+                lowered_tail = tail.lower()
+                if "[page error]" in lowered_tail or "error(s) in the page" in lowered_tail:
+                    raise NonRetryableRenderError(
+                        "Generated animation triggered a deterministic browser error: " + detail[-1800:]
+                    )
+                raise RuntimeError(detail)
 
             if not output_path.is_file() or output_path.stat().st_size < 1024:
                 tail = self._format_output_tail(list(output_tail))
