@@ -228,10 +228,9 @@ to private project storage. The completed render's quality payload includes the
 sample timestamps, shot/mechanism references, contact-sheet object key and existing
 mechanism motion diagnostics.
 
-This stage creates reviewable rendered evidence; it does not yet run an image model
-or claim semantic validation of engineering correctness, character continuity,
-composition or visual storytelling. A human or future vision-QA stage must inspect
-the contact sheet and compare it with the storyboard and visual bible. QA frame file/contact-sheet assembly and upload failures are non-fatal to the MP4 render; actual Chromium page errors remain fatal.
+This stage creates reviewable rendered evidence for the vision-based reviewer described
+below. QA frame file/contact-sheet assembly and upload failures are non-fatal to the
+MP4 render; actual Chromium page errors remain fatal.
 
 ## Implementation progress — mechanism integration and motion diagnostics (PR #30)
 
