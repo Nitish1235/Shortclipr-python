@@ -34,5 +34,24 @@ function paperPolygon(g,points,opts={}){if(!Array.isArray(points)||points.length
 function paperEllipse(g,x,y,rx,ry,opts={}){paperLayer(g,ctx=>{ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);},opts);}
 function paperParallax(g,offset,drawLayers){for(let i=0;i<drawLayers.length;i++){const layer=drawLayers[i];g.save();g.translate(offset*(layer.depth||0),0);layer.draw(g);g.restore();}}
 
-window.ShortcliprStyles=Object.freeze({palette:id=>palettes[id]||palettes['paper-cutout'],paletteIds:Object.freeze(Object.keys(palettes)),paperBackground,paperShadow,halftone,camera,transition,pixelSnap,ease,editorialShape,editorialLight,isoProject,isoBox,isoLine,paperLayer,paperPolygon,paperEllipse,paperParallax});
+function mechanismPose(spec,progress){
+if(!spec||typeof spec!=='object')throw new TypeError('mechanism spec is required');
+const p=clamp(Number(progress)||0),lerp=(a,b,t)=>a+(b-a)*t;
+const point=v=>({x:Number(v.x),y:Number(v.y)});
+if(spec.type==='pivot'){
+const anchor=point(spec.anchor),angle=lerp(Number(spec.start_angle_deg),Number(spec.end_angle_deg),p)*Math.PI/180;
+return {type:'pivot',part:spec.part,anchor,angle_rad:angle};
+}
+if(spec.type==='translation'){
+const start=point(spec.start),end=point(spec.end);
+return {type:'translation',part:spec.part,position:{x:lerp(start.x,end.x,p),y:lerp(start.y,end.y,p)}};
+}
+if(spec.type==='actuator'){
+const base=point(spec.base_anchor),rod=point(spec.rod_anchor),dx=rod.x-base.x,dy=rod.y-base.y;
+const initial=Math.hypot(dx,dy)||1,length=lerp(Number(spec.min_length),Number(spec.max_length),p),ratio=length/initial;
+return {type:'actuator',part:spec.part,base,tip:{x:base.x+dx*ratio,y:base.y+dy*ratio},length,angle_rad:Math.atan2(dy,dx)};
+}
+throw new TypeError('Unsupported kinematics type: '+spec.type);
+}
+window.ShortcliprStyles=Object.freeze({mechanismPose,palette:id=>palettes[id]||palettes['paper-cutout'],paletteIds:Object.freeze(Object.keys(palettes)),paperBackground,paperShadow,halftone,camera,transition,pixelSnap,ease,editorialShape,editorialLight,isoProject,isoBox,isoLine,paperLayer,paperPolygon,paperEllipse,paperParallax});
 })();
