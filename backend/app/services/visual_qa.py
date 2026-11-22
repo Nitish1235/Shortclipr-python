@@ -1,7 +1,7 @@
 """Vision-based review of rendered Drawn-by-Code contact sheets.
 
-This stage reports visual findings only. It never blocks delivery or triggers
-automatic regeneration; the returned evidence is stored with the render event.
+This reviewer produces findings only. The render worker may optionally use its
+validated findings to drive a separate, bounded shot-repair workflow.
 """
 from __future__ import annotations
 
@@ -120,7 +120,7 @@ class VisualQualityReviewer:
             "shot_reviews": shot_reviews,
             "findings": findings,
             "recommended_next_action": cls._bounded_text(value.get("recommended_next_action"), 500),
-            "automatic_repair": False,
+            "repair_policy": "report_only",
         }
 
     @staticmethod
