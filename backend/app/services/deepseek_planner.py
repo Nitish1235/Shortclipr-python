@@ -49,12 +49,12 @@ Return strict JSON:
    "style_notes":"specific art direction",
    "characters":[{{"id":"char_explorer","name":"Explorer","design":{{"silhouette":"...","face":"...","clothing":"...","palette":["#..."],"proportions":"...","distinctive_marks":"..."}},"poses":["standing","walking"],"expressions":["curious","surprised"]}}],
    "props":[{{"id":"prop_map","name":"Map","design":"...","material":"...","relative_scale":"...","components":["..."],"anchors":["..."],"moving_parts":["..."]}}],
-   "environments":[{{"id":"env_forest","name":"Forest","design":"...","spatial_layout":"...","foreground":"...","midground":"...","background":"...","scale_reference":"...","atmosphere":"..."}}]
+   "environments":[{{"id":"env_forest","name":"Forest","design":"...","spatial_layout":"...","foreground":"...","midground":"...","background":"...","scale_reference":"...","atmosphere":"..."} }},\n   "mechanisms":[{{"id":"mechanism_bridge_lift","name":"Drawbridge lift","principle":"A hinged deck rotates upward; the actuator extends to drive it","components":[{{"prop_id":"prop_bridge","part":"deck","role":"rotating load"}},{{"prop_id":"prop_actuator","part":"cylinder","role":"linear driver"}}],"joints":[{{"type":"revolute","between":["deck","bridge frame"],"anchor":"fixed hinge"}}],"motion_constraints":["deck rotates around the fixed hinge","actuator length changes as deck angle changes"],"action_patterns":[{{"id":"raise_deck","description":"Raise deck from horizontal to open angle","driver":"actuator extends","followers":["deck rotates upward around hinge"],"relationship":"coordinated hinge rotation and actuator extension"}}]}}]
  }},
  "scenes":[{{"index":0,"start_frame":0,"end_frame":180,"purpose":"...","visual_description":"...",
  "complexity":"medium","characters":["char_explorer"],"props":["prop_map"],
  "environment":"env_forest","action":"one clear visible action","camera":"2D camera direction",
- "transition_out":"motivated transition"}}]
+ "transition_out":"motivated transition","mechanism_actions":[{{"mechanism_id":"mechanism_bridge_lift","pattern_id":"raise_deck","action":"raise deck","start_progress":0,"end_progress":1}}]}}]
 }}
 
 Narration: compelling beginning, development and ending; strong opening hook; natural spoken
@@ -71,7 +71,7 @@ Integer frame ranges contiguous, non-overlapping, covering frame 0 through {tota
 end_frame is exclusive. Each shot has one clear visual objective and action. characters and
 props arrays must reference declared IDs; environment must reference a declared ID or "".
 Maintain exact character appearance across shots. Specify visual_objective, composition, shot_scale (extreme_wide/wide/medium/close_up/extreme_close_up/detail/overhead/isometric), camera_position, depth_layers (ordered back-to-front), focal_entity, visual_change and continuity_note. Vary shot scale and composition across consecutive shots unless a sustained shot is narratively intentional. Every shot must add new visual information, not merely restage the same diagram. Strictly 2D Canvas/SVG; no Three.js, WebGL, meshes or 3D.
-Do not request subtitles; narration is muxed separately. Return JSON only.
+For mechanisms, identify the actual physical principle only when supported by the topic; do not invent a mechanism. Define components, joints/anchors, motion constraints and named action patterns. A shot that depicts mechanism motion must reference a declared mechanism_id and pattern_id via mechanism_actions. Describe driver motion and dependent follower motion together. If the mechanism is unknown or ambiguous, explain the uncertainty and use a non-mechanical explanatory shot rather than fabricated physics.\nDo not request subtitles; narration is muxed separately. Return JSON only.
 """.strip()
         effort = planning_effort(project, self.low_reasoning_effort, self.medium_reasoning_effort)
         response = await self.client.chat.completions.create(
@@ -170,6 +170,14 @@ Do not request subtitles; narration is muxed separately. Return JSON only.
                 raise RuntimeError("Shot references an undeclared character or prop ID")
             if scene["environment"] and scene["environment"] not in environment_ids:
                 raise RuntimeError("Shot references an undeclared environment ID")
+        mechanisms_by_id = {item["id"]: item for item in bible.get("mechanisms", [])}
+        for scene in scenes:
+            for action in scene.get("mechanism_actions", []):
+                mechanism = mechanisms_by_id.get(action["mechanism_id"])
+                if mechanism is None:
+                    raise RuntimeError("Shot mechanism action references an undeclared mechanism ID")
+                if action["pattern_id"] not in {x["id"] for x in mechanism.get("action_patterns", [])}:
+                    raise RuntimeError("Shot mechanism action references an undeclared action pattern")
         # Validate storyboard focal references against the stable visual-bible IDs.
         all_entity_ids = character_ids | prop_ids | environment_ids
         for scene in scenes:
