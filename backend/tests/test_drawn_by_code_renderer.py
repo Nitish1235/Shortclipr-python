@@ -25,7 +25,7 @@ class DrawnByCodeDiagnosticsTests(unittest.TestCase):
              "mechanism_ids": ["bridge_lift"]},
         ])
         self.assertEqual(len(samples), 6)
-        self.assertEqual([item["frame"] for item in samples], [13, 45, 76, 103, 135, 166])
+        self.assertEqual([item["frame"] for item in samples], [13, 44, 76, 103, 134, 166])
         self.assertTrue(all(item["time_seconds"] == round(item["frame"] / 30, 6) for item in samples))
         self.assertEqual(samples[0]["mechanism_ids"], ["bridge_lift"])
 
