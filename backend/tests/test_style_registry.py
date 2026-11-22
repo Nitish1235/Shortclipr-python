@@ -13,10 +13,10 @@ from app.services.style_registry import (
     ("label", "expected"),
     [
         ("AI Auto", None),
-        ("Editorial", "risograph"),
+        ("Editorial", "cinematic-editorial"),
         ("Cinematic", "70s-poster"),
-        ("Diagrammatic", "line"),
-        ("Paper craft", "paper-cutout"),
+        ("Diagrammatic", "isometric-technical"),
+        ("Paper craft", "layered-paper"),
     ],
 )
 def test_ui_visual_direction_resolves_deterministically(label: str, expected: str | None) -> None:
