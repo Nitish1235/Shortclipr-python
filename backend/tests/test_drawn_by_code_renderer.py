@@ -44,6 +44,15 @@ class DrawnByCodeDiagnosticsTests(unittest.TestCase):
     def test_motion_qa_is_disabled_for_legacy_programs_without_manifest(self):
         self.assertEqual(DrawnByCodeRenderer._motion_qa_samples(None), [])
 
+    def test_drawn_by_code_engine_accepts_motion_qa_capture_arguments(self):
+        from pathlib import Path
+
+        engine = Path(__file__).resolve().parents[1] / "drawn_by_code" / "engine" / "render.mjs"
+        source = engine.read_text(encoding="utf-8")
+        self.assertIn("opt['qa-at']", source)
+        self.assertIn("opt['qa-out']", source)
+        self.assertIn("drawn_by_code.motion_qa.captured", source)
+
 
 if __name__ == "__main__":
     unittest.main()
