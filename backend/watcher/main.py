@@ -366,7 +366,7 @@ class Dispatcher:
 
     async def deliver(self, job: asyncpg.Record, target: WorkerTarget, client: httpx.AsyncClient) -> None:
         endpoint = "/internal/api-stage/run" if job["job_class"] == "api" else "/internal/ffmpeg-stage/run"
-        timeout = 1450 if job["job_class"] == "render" else 290
+        timeout = 1450 if job["job_class"] == "render" else 590
         t0 = time.monotonic()
         project_id_str = str(job["project_id"])
         attempt_id_str = str(job["id"])
