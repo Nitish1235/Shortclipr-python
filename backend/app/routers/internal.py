@@ -502,6 +502,8 @@ async def run_render(
     output_path: Path | None = None
     audio_path: Path | None = None
     completed_project: dict | None = None
+    output_object: str | None = None
+    output_committed = False
     try:
         project = await pool.fetchrow("SELECT * FROM projects WHERE id=$1", project_id)
         if not project:
@@ -662,11 +664,13 @@ async def run_render(
                     )
                     completed_project = dict(locked)
                     completed_project["output_object"] = output_object
+                    output_committed = True
                     logger.info("render.settled", extra={"credits_settled": settled, "output_object": output_object})
 
         # ── Send delivery email ───────────────────────────────────────────
         if discard_output:
             await storage.delete(output_object)
+            output_object = None
         elif completed_project:
             owner = await pool.fetchrow("SELECT id,email,full_name FROM users WHERE id=$1", completed_project["user_id"])
             if owner:
@@ -686,6 +690,9 @@ async def run_render(
     except asyncio.CancelledError:
         logger.warning("render.cancelled_or_lease_lost")
         raise
+    except asyncio.CancelledError:
+        logger.warning("render.cancelled_or_lease_lost")
+        raise
     except Exception as error:
         total_ms = round((_time.monotonic() - t0_total) * 1000)
         message = str(error)[:1000]
@@ -694,57 +701,84 @@ async def run_render(
             extra={"duration_ms": total_ms, "error": message},
             exc_info=True,
         )
-        # Only permanently fail the project once all watcher retries are
-        # exhausted (attempts >= max_attempts). For earlier failures, mark
-        # the job_attempt as failed so the watcher can schedule the next
-        # attempt without immediately burning the user's credits.
-        attempt_row = (
-            await pool.fetchrow("SELECT attempts, max_attempts FROM job_attempts WHERE id=$1", attempt_id)
-            if attempt_id else None
-        )
-        is_final = (
-            isinstance(error, NonRetryableRenderError)
-            or not attempt_row
-            or attempt_row["attempts"] >= attempt_row["max_attempts"]
-        )
-        if is_final:
-            await fail_project(pool, project_id, "render_failed", message)
-            await finish_attempt(pool, attempt_id, lease_token, "failed", message)
-        else:
-            # Non-final failure — requeue with exponential back-off so the
-            # watcher can dispatch it again without user intervention.
-            retry_delay = min(300, 30 * (attempt_row["attempts"] if attempt_row else 1))
+        retry_delay = 0
+        attempt_row = None
+        async with pool.acquire() as connection:
+            async with connection.transaction():
+                # Use the same project -> attempt lock order as cancellation
+                # and planning finalization.
+                locked_project = await connection.fetchrow(
+                    "SELECT status FROM projects WHERE id=$1 FOR UPDATE", project_id,
+                )
+                attempt_row = await connection.fetchrow(
+                    """SELECT attempts,max_attempts FROM job_attempts
+                       WHERE id=$1 AND project_id=$2 AND job_class='render'
+                         AND lease_token=$3 AND status='running' AND lease_expires_at>now()
+                       FOR UPDATE""",
+                    attempt_id, project_id, lease_token,
+                )
+                if not attempt_row:
+                    logger.warning("render.failure_from_stale_attempt")
+                    return
+                if not locked_project or locked_project["status"] in {"cancelled", "complete", "failed"}:
+                    await connection.execute(
+                        """UPDATE job_attempts SET status='cancelled',lease_token=NULL,
+                           lease_expires_at=NULL,worker_region=NULL
+                           WHERE id=$1 AND lease_token=$2""",
+                        attempt_id, lease_token,
+                    )
+                    return
+                is_final = (
+                    isinstance(error, NonRetryableRenderError)
+                    or attempt_row["attempts"] >= attempt_row["max_attempts"]
+                )
+                if is_final:
+                    await connection.execute(
+                        """UPDATE job_attempts SET status='failed',lease_token=NULL,
+                           lease_expires_at=NULL,worker_region=NULL,last_error=$3
+                           WHERE id=$1 AND lease_token=$2""",
+                        attempt_id, lease_token, message,
+                    )
+                    await fail_project_in_transaction(connection, project_id, "render_failed", message)
+                else:
+                    retry_delay = min(300, 30 * max(1, attempt_row["attempts"]))
+                    await connection.execute(
+                        """UPDATE job_attempts SET status='ready',
+                           due_at=now()+($3 * interval '1 second'),
+                           lease_token=NULL,lease_expires_at=NULL,worker_region=NULL,last_error=$4
+                           WHERE id=$1 AND lease_token=$2""",
+                        attempt_id, lease_token, retry_delay, message,
+                    )
+                    await connection.execute(
+                        "UPDATE projects SET status='queued',progress=45 WHERE id=$1 AND status='rendering'",
+                        project_id,
+                    )
+                    await connection.execute(
+                        """INSERT INTO project_events(project_id,event_type,stage,progress,payload)
+                           VALUES($1,'retrying','render',45,$2::jsonb)""",
+                        project_id,
+                        json.dumps({
+                            "attempt": attempt_row["attempts"],
+                            "max_attempts": attempt_row["max_attempts"],
+                            "retry_in_s": retry_delay,
+                        }),
+                    )
+        if retry_delay:
             logger.warning(
                 "render.will_retry",
                 extra={
-                    "attempt": attempt_row["attempts"] if attempt_row else "?",
-                    "max_attempts": attempt_row["max_attempts"] if attempt_row else "?",
+                    "attempt": attempt_row["attempts"],
+                    "max_attempts": attempt_row["max_attempts"],
                     "retry_in_s": retry_delay,
                     "error": message[:200],
                 },
             )
-            if attempt_id:
-                await pool.execute(
-                    """UPDATE job_attempts
-                       SET status='ready', due_at=now()+($3 * interval '1 second'),
-                           lease_token=NULL, lease_expires_at=NULL, last_error=$4
-                       WHERE id=$1 AND lease_token=$2""",
-                    attempt_id, lease_token, retry_delay, message[:1000],
-                )
-            # Keep the durable project state aligned with the retry queue.
-            # Otherwise the UI remains at the last render milestone (usually
-            # 48%) while the job is waiting for its next attempt.
-            await pool.execute(
-                "UPDATE projects SET status='queued',progress=45 WHERE id=$1 AND status='rendering'",
-                project_id,
-            )
-            await pool.execute(
-                """INSERT INTO project_events(project_id,event_type,stage,progress,payload)
-                   VALUES($1,'retrying','render',45,$2::jsonb)""",
-                project_id,
-                json.dumps({"attempt": attempt_row["attempts"], "max_attempts": attempt_row["max_attempts"], "retry_in_s": retry_delay}),
-            )
     finally:
+        if output_object and not output_committed:
+            try:
+                await storage.delete(output_object)
+            except Exception:
+                logger.exception("render.orphan_output_cleanup_failed", extra={"output_object": output_object})
         if output_path:
             output_path.unlink(missing_ok=True)
             try:
@@ -765,24 +799,24 @@ async def run_render(
 
 @api_router.post("/api-stage/run", status_code=status.HTTP_202_ACCEPTED)
 async def api_stage(payload: InternalRunRequest, request: Request, pool: asyncpg.Pool = Depends(get_pool)):
-    planner: DeepSeekStoryPlanner = request.app.state.planner
-    await run_planning(
-        payload.project_id, payload.attempt_id, payload.lease_token, pool, planner,
-        request.app.state.scene_compiler, request.app.state.speech, request.app.state.storage,
-    )
+    async with maintain_worker_lease(pool, payload.project_id, payload.attempt_id, payload.lease_token, "api") as owned:
+        if not owned:
+            return {"accepted": False, "reason": "stale_or_cancelled_lease"}
+        planner: DeepSeekStoryPlanner = request.app.state.planner
+        await run_planning(
+            payload.project_id, payload.attempt_id, payload.lease_token, pool, planner,
+            request.app.state.scene_compiler, request.app.state.speech, request.app.state.storage,
+        )
     return {"completed": True, "projectId": str(payload.project_id)}
 
 
 @ffmpeg_router.post("/ffmpeg-stage/run", status_code=status.HTTP_202_ACCEPTED)
 async def render_stage(payload: InternalRunRequest, request: Request, pool: asyncpg.Pool = Depends(get_pool)):
-    project = await pool.fetchrow("SELECT id,status FROM projects WHERE id=$1", payload.project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    if project["status"] == "cancelled":
-        return {"accepted": False, "reason": "cancelled"}
-    await pool.execute("UPDATE projects SET status='rendering',progress=45 WHERE id=$1", payload.project_id)
-    await run_render(
-        payload.project_id, payload.attempt_id, payload.lease_token,
-        pool, request.app.state.renderer, request.app.state.storage, request.app.state.emailer,
-    )
+    async with maintain_worker_lease(pool, payload.project_id, payload.attempt_id, payload.lease_token, "render") as owned:
+        if not owned:
+            return {"accepted": False, "reason": "stale_or_cancelled_lease"}
+        await run_render(
+            payload.project_id, payload.attempt_id, payload.lease_token,
+            pool, request.app.state.renderer, request.app.state.storage, request.app.state.emailer,
+        )
     return {"completed": True, "projectId": str(payload.project_id), "renderer": "drawn-by-code"}
