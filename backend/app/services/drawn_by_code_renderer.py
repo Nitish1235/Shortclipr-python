@@ -41,16 +41,22 @@ class DrawnByCodeRenderer:
         # start_new_session=True makes pid the process-group ID. Kill the
         # whole group even if Node already exited, because FFmpeg/Chromium
         # children can outlive their parent after an abnormal exit.
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        except OSError:
-            if process.returncode is None:
-                try:
-                    process.kill()
-                except ProcessLookupError:
-                    pass
+        if os.name == "posix":
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except OSError:
+                if process.returncode is None:
+                    try:
+                        process.kill()
+                    except ProcessLookupError:
+                        pass
+        elif process.returncode is None:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
         try:
             await process.wait()
         except ProcessLookupError:
@@ -98,7 +104,7 @@ class DrawnByCodeRenderer:
             syntax = await asyncio.create_subprocess_exec(
                 self.node, "--check", str(scene_file),
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-                start_new_session=True,
+                start_new_session=(os.name == "posix"),
             )
             try:
                 _, syntax_error = await asyncio.wait_for(syntax.communicate(), timeout=self.syntax_timeout)
