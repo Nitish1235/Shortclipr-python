@@ -149,6 +149,8 @@ class Settings(BaseSettings):
             missing.append("DB pool sizing")
         if self.SERVICE_ROLE == "ffmpeg-worker" and self.DEEPSEEK_ENABLE_SHOT_REPAIR and not self.DEEPSEEK_API_KEY:
             missing.append("DEEPSEEK_API_KEY (required when shot repair is enabled)")
+        if self.SERVICE_ROLE == "ffmpeg-worker" and self.DEEPSEEK_ENABLE_SHOT_REPAIR and not self.DEEPSEEK_ENABLE_VISUAL_QA:
+            missing.append("DEEPSEEK_ENABLE_VISUAL_QA (must be true when shot repair is enabled)")
         if self.MAX_LANDING_MEDIA_BYTES < 1:
             missing.append("MAX_LANDING_MEDIA_BYTES")
         return missing
