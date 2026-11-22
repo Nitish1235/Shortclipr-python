@@ -2,10 +2,14 @@
 # trigger. It retains the split-worker architecture: planning/API work and
 # FFmpeg rendering use different images and Cloud Run service shapes.
 #
-# FFmpeg rendering is deployed only to the configured secondary region.
+# Each regional trigger MUST override _FFMPEG_REGION_2:
+#   Australia trigger: australia-southeast1
+#   Europe trigger: europe-west1
+# There is deliberately no regional default, to prevent both triggers from
+# accidentally deploying to the same region.
 substitutions:
   _API_REGION: us-central1
-  _FFMPEG_REGION_2: europe-west1
+  _FFMPEG_REGION_2: ''
   _API_CPU: '4'
   _API_MAX_INSTANCES: '2'
   _FFMPEG_CPU: '4'
@@ -85,10 +89,13 @@ steps:
       - -ceu
       - |
         region='${_FFMPEG_REGION_2}'
-        if [ -z "$$region" ]; then
-          echo "FFmpeg slot 2 is empty; skipping deployment."
-          exit 0
-        fi
+        case "$$region" in
+          australia-southeast1|europe-west1) ;;
+          *)
+            echo "Invalid or missing _FFMPEG_REGION_2: '$$region'. Set it on this Cloud Build trigger to australia-southeast1 or europe-west1."
+            exit 1
+            ;;
+        esac
         gcloud run deploy "shortclipr-ffmpeg-worker-$${region}" \
           --image="us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-ffmpeg-worker:$COMMIT_SHA" \
           --region="$$region" \
