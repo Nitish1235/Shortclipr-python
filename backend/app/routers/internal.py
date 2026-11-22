@@ -425,6 +425,8 @@ async def run_planning(
                 "complexity": "heavy", "assigned_model": compiler.model,
                 "scene_js": compiled_film["scene_js"], "style": compiled_film["style"],
                 "quality_review": compiled_film.get("quality_review", {}),
+                "shot_manifest": compiled_film.get("shot_manifest", []),
+                "motion_diagnostics": compiled_film.get("motion_diagnostics", []),
             }]
             ctx["scene_count"] = len(plan["scenes"])
             ctx["render_programs"] = 1
@@ -726,6 +728,8 @@ async def run_render(
             "aspectRatio": project["aspect_ratio"], "fps": 30,
             "durationSeconds": project["duration_seconds"],
             "scene_js": scene_js, "style": program.get("style", "paper-cutout"),
+            "shot_manifest": program.get("shot_manifest", []),
+            "motion_diagnostics": program.get("motion_diagnostics", []),
         }
 
         # ── Download narration locally for renderer ───────────────────────
