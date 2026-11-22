@@ -5,6 +5,9 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+FREE_PLAN_MONTHLY_SECONDS = 10
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=True)
 
@@ -52,7 +55,7 @@ class Settings(BaseSettings):
     DODO_PRODUCT_STARTER: str = ""
     DODO_PRODUCT_CREATOR: str = ""
     DODO_PRODUCT_STUDIO: str = ""
-    FREE_MONTHLY_RENDER_SECONDS: int = 15
+    FREE_MONTHLY_RENDER_SECONDS: int = 10
     DODO_STARTER_MONTHLY_RENDER_SECONDS: int = 600
     DODO_CREATOR_MONTHLY_RENDER_SECONDS: int = 1800
     DODO_STUDIO_MONTHLY_RENDER_SECONDS: int = 4200
@@ -81,6 +84,11 @@ class Settings(BaseSettings):
     DEFAULT_MONTHLY_CREDITS: int = 15
     MAX_PROJECT_DURATION_SECONDS: int = 60
     ALLOWED_ORIGINS: list[str] = Field(default_factory=list)
+
+    @property
+    def free_monthly_render_seconds(self) -> int:
+        # A stale deployment environment variable must not restore the old 15s free allowance.
+        return max(0, min(self.FREE_MONTHLY_RENDER_SECONDS, FREE_PLAN_MONTHLY_SECONDS))
 
     @property
     def cors_origins(self) -> list[str]:
