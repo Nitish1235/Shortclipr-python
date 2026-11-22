@@ -1,5 +1,6 @@
 import asyncio
 import json
+import shutil
 import tempfile
 import time as _time
 from contextlib import asynccontextmanager
@@ -932,6 +933,10 @@ async def run_render(
                 logger.exception("render.orphan_output_cleanup_failed", extra={"output_object": output_object})
         if output_path:
             output_path.unlink(missing_ok=True)
+            shutil.rmtree(output_path.parent, ignore_errors=True)
+        if audio_path:
+            audio_path.unlink(missing_ok=True)
+            shutil.rmtree(audio_path.parent, ignore_errors=True)
             try:
                 output_path.parent.rmdir()
             except OSError:
