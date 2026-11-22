@@ -53,6 +53,20 @@ class VisualQualityReviewValidationTests(unittest.TestCase):
                         {"overall_score": score}, {0}, {0},
                     )
 
+    def test_visual_qa_can_be_disabled_without_calling_provider(self):
+        from types import SimpleNamespace
+        from pathlib import Path
+        import asyncio
+
+        reviewer = VisualQualityReviewer(SimpleNamespace(
+            DEEPSEEK_VISUAL_QA_MODEL="deepseek-flash",
+            DEEPSEEK_ENABLE_VISUAL_QA=False,
+            DEEPSEEK_API_KEY="",
+        ))
+        result = asyncio.run(reviewer.review(Path("missing-contact-sheet.png"), {}, []))
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["reason"], "visual_qa_disabled")
+
     def test_unconfigured_vision_key_skips_without_failing_render(self):
         from types import SimpleNamespace
         from pathlib import Path
@@ -60,6 +74,7 @@ class VisualQualityReviewValidationTests(unittest.TestCase):
 
         reviewer = VisualQualityReviewer(SimpleNamespace(
             DEEPSEEK_VISUAL_QA_MODEL="deepseek-flash",
+            DEEPSEEK_ENABLE_VISUAL_QA=True,
             DEEPSEEK_API_KEY="",
         ))
         result = asyncio.run(reviewer.review(Path("missing-contact-sheet.png"), {}, []))
