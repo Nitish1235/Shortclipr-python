@@ -374,11 +374,11 @@ async def run_planning(
                     )
                     if not existing_render:
                         raise RuntimeError("Render attempt could not be recovered")
-                    if existing_render["status"] in {"failed", "cancelled"}:
+                    if existing_render["status"] in {"failed", "cancelled", "complete"}:
                         render_attempt = await connection.fetchval(
                             """UPDATE job_attempts SET status='ready',attempts=0,due_at=now(),
                                lease_token=NULL,lease_expires_at=NULL,last_error=NULL,worker_region=NULL
-                               WHERE id=$1 AND status IN ('failed','cancelled') RETURNING id""",
+                               WHERE id=$1 AND status IN ('failed','cancelled','complete') RETURNING id""",
                             existing_render["id"],
                         )
                         if not render_attempt:
