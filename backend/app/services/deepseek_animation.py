@@ -168,7 +168,7 @@ Visual bible:
         shared_effort = coding_effort(None, project, "medium", "max")
         shared_js = await self._validated_fragment(
             "You are a senior Canvas 2D JavaScript systems programmer. Return strict JSON only.",
-            shared_prompt + "\\n\\nReturn only the required JSON object.",
+            shared_prompt + "\n\nReturn only the required JSON object.",
             min(self.max_output_tokens, 12000), "shared_js", "Shared drawing library",
             MAX_SHARED_SOURCE, shared_effort,
         )
@@ -206,7 +206,7 @@ SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s
                 effort = coding_effort(scene, project, "medium", "max")
                 body = await self._validated_fragment(
                     "You are a senior Canvas 2D animation programmer. Return strict JSON only.",
-                    shot_prompt + "\\n\\nWrite the complete draw_body now.",
+                    shot_prompt + "\n\nWrite the complete draw_body now.",
                     min(self.max_output_tokens, 10000), "draw_body",
                     f"Shot {scene['index'] + 1}", MAX_SHOT_SOURCE, effort,
                 )
