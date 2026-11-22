@@ -8,11 +8,29 @@ class QualityError(RuntimeError):
     pass
 
 
-async def run(*args: str) -> tuple[bytes, bytes]:
-    process = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    stdout, stderr = await process.communicate()
+async def run(*args: str, timeout: int | None = None) -> tuple[bytes, bytes]:
+    """Run one media tool with a hard deadline and guaranteed child cleanup."""
+    timeout_seconds = timeout or max(30, int(os.getenv("MEDIA_PROCESS_TIMEOUT_SECONDS", "300")))
+    process = await asyncio.create_subprocess_exec(
+        *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)
+    except asyncio.TimeoutError as error:
+        if process.returncode is None:
+            process.kill()
+        await process.wait()
+        raise QualityError(
+            f"{Path(args[0]).name} exceeded the {timeout_seconds}s media-processing timeout"
+        ) from error
+    except asyncio.CancelledError:
+        if process.returncode is None:
+            process.kill()
+        await process.wait()
+        raise
     if process.returncode:
-        raise QualityError(stderr.decode(errors="replace")[-1200:] or "media validation failed")
+        detail = stderr.decode(errors="replace")[-1200:] or stdout.decode(errors="replace")[-1200:]
+        raise QualityError(detail or f"{Path(args[0]).name} exited with code {process.returncode}")
     return stdout, stderr
 
 
