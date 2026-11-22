@@ -26,7 +26,9 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_STORY_MODEL: str = "deepseek-flash"
     DEEPSEEK_ANIMATION_MODEL: str = "deepseek-flash"
-    DEEPSEEK_REASONING_EFFORT: str = "max"
+    DEEPSEEK_REASONING_EFFORT: str = "medium"  # legacy fallback; stage policies below take precedence
+    DEEPSEEK_PLANNING_REASONING_EFFORT: str = "low"
+    DEEPSEEK_CODING_REASONING_EFFORT: str = "max"
     DEEPSEEK_PLAN_MAX_OUTPUT_TOKENS: int = 16384
     DEEPSEEK_MAX_OUTPUT_TOKENS: int = 65536
     DEEPSEEK_MAX_PARALLEL_SHOTS: int = 3
