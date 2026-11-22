@@ -27,11 +27,21 @@ const outBase = path.join(dir, 'out');
 const { page, info, close, errors } = await openScene(scene, { size: opt.size ? Number(opt.size) : 1920, gpu: opt.gpu || process.env.MOTION_GPU === '1' });
 const { fps, total } = info;
 const t0 = Date.now();
-const grab = (i, type) =>
-    page.evaluate(([i, type]) => {
+const assertNoPageErrors = () => {
+    if (errors.length) {
+        throw new Error('[page error] ' + errors.slice(-8).join('\\n'));
+    }
+};
+const grab = async (i, type) => {
+    const data = await page.evaluate(([i, type]) => {
         window.renderFrame(i);
         return document.getElementById('c').toDataURL(type, 0.95).split(',')[1];
     }, [i, type]);
+    // Do not spend the remaining frame budget when a deterministic scene error
+    // has already been reported by Chromium.
+    assertNoPageErrors();
+    return data;
+};
 
 try {
     if (opt.at) {
@@ -114,6 +124,7 @@ try {
             console.log(`${out}${audio && fs.existsSync(audio) ? ' (with audio)' : ''}`);
         }
     }
+    assertNoPageErrors();
     console.log(`done in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 } finally {
     await close();
