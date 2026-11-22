@@ -42,9 +42,30 @@ if(spec.type==='pivot'){
 const anchor=point(spec.anchor),angle=lerp(Number(spec.start_angle_deg),Number(spec.end_angle_deg),p)*Math.PI/180;
 return {type:'pivot',part:spec.part,anchor,angle_rad:angle};
 }
-if(spec.type==='translation'){
+if(spec.type==='translation'||spec.type==='slider'){
 const start=point(spec.start),end=point(spec.end);
-return {type:'translation',part:spec.part,position:{x:lerp(start.x,end.x,p),y:lerp(start.y,end.y,p)}};
+return {type:spec.type,part:spec.part,position:{x:lerp(start.x,end.x,p),y:lerp(start.y,end.y,p)}};
+}
+if(spec.type==='gear'){
+const driverStart=Number(spec.driver_start_angle_deg||0),driverEnd=Number(spec.driver_end_angle_deg);
+const driverAngle=lerp(driverStart,driverEnd,p);
+const ratio=Number(spec.driver_radius)/Number(spec.driven_radius);
+const sign=spec.mesh==='internal'?1:-1;
+const drivenAngle=Number(spec.driven_start_angle_deg||0)+(driverAngle-driverStart)*ratio*sign;
+return {type:'gear',part:spec.part,driver_part:spec.driver_part,anchor:point(spec.anchor),driver_anchor:point(spec.driver_anchor),driver_angle_rad:driverAngle*Math.PI/180,angle_rad:drivenAngle*Math.PI/180,ratio};
+}
+if(spec.type==='pulley'){
+const start=Number(spec.start_angle_deg||0),angle=lerp(start,Number(spec.end_angle_deg),p);
+const delta=(angle-start)*Math.PI/180*Number(spec.direction||1),travel=Number(spec.radius)*delta,axis=point(spec.axis),origin=point(spec.start_position);
+return {type:'pulley',part:spec.part,pulley_part:spec.pulley_part,anchor:point(spec.anchor),pulley_angle_rad:angle*Math.PI/180,position:{x:origin.x+axis.x*travel,y:origin.y+axis.y*travel},length_travelled:travel};
+}
+if(spec.type==='cable'){
+const points=[];
+for(let i=0;i<spec.points_start.length;i++){
+const a=point(spec.points_start[i]),b=point(spec.points_end[i]);
+points.push({x:lerp(a.x,b.x,p),y:lerp(a.y,b.y,p)});
+}
+return {type:'cable',part:spec.part,points};
 }
 if(spec.type==='actuator'){
 const base=point(spec.base_anchor),rod=point(spec.rod_anchor),dx=rod.x-base.x,dy=rod.y-base.y;
