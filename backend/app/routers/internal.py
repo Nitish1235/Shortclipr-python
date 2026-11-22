@@ -429,6 +429,7 @@ async def run_planning(
                 "shot_manifest": compiled_film.get("shot_manifest", []),
                 "motion_diagnostics": compiled_film.get("motion_diagnostics", []),
                 "visual_qa_context": compiled_film.get("visual_qa_context", {}),
+                "repair_bundle": compiled_film.get("repair_bundle"),
             }]
             ctx["scene_count"] = len(plan["scenes"])
             ctx["render_programs"] = 1
