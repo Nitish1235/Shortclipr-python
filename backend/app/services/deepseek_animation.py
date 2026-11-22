@@ -166,6 +166,14 @@ class DeepSeekAnimationCompiler:
 
         visual_bible = validate_visual_bible(plan.get("visual_bible"))
         scenes = validate_scene_plan(plan.get("scenes"), total_frames)
+        mechanisms_by_id = {item["id"]: item for item in visual_bible.get("mechanisms", [])}
+        for scene in scenes:
+            for action in scene.get("mechanism_actions", []):
+                mechanism = mechanisms_by_id.get(action["mechanism_id"])
+                if mechanism is None:
+                    raise ValueError("Shot mechanism action references an undeclared mechanism ID")
+                if action["pattern_id"] not in {item["id"] for item in mechanism.get("action_patterns", [])}:
+                    raise ValueError("Shot mechanism action references an undeclared action pattern")
         style_id = visual_bible["style_id"]
         art_direction_value = plan.get("art_direction")
         if art_direction_value is None:
