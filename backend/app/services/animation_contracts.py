@@ -49,6 +49,34 @@ def validate_visual_bible(value: Any) -> dict[str, Any]:
             seen.add(entity_id)
             if not isinstance(item.get("design", item.get("appearance", "")), (str, dict)):
                 raise ValueError(f"{group_name} design must be text or an object")
+    # Additive VisualBible v2 fields. Legacy persisted plans receive safe defaults.
+    for environment in environments:
+        environment.setdefault("spatial_layout", "clear foreground, midground and background")
+        environment.setdefault("foreground", "")
+        environment.setdefault("midground", str(environment.get("design", "")))
+        environment.setdefault("background", "")
+        environment.setdefault("scale_reference", "")
+        environment.setdefault("atmosphere", "")
+        for key in ("spatial_layout", "foreground", "midground", "background", "scale_reference", "atmosphere"):
+            if not isinstance(environment[key], str):
+                raise ValueError(f"Environment {key} must be text")
+    for prop in props:
+        prop.setdefault("material", "")
+        prop.setdefault("relative_scale", "")
+        prop.setdefault("components", [])
+        prop.setdefault("anchors", [])
+        prop.setdefault("moving_parts", [])
+        for key in ("material", "relative_scale"):
+            if not isinstance(prop[key], str):
+                raise ValueError(f"Prop {key} must be text")
+        for key in ("components", "anchors", "moving_parts"):
+            if not isinstance(prop[key], list) or not all(isinstance(x, str) for x in prop[key]):
+                raise ValueError(f"Prop {key} must be an array of text")
+    for character in characters:
+        character.setdefault("scale_reference", "")
+        if not isinstance(character["scale_reference"], str):
+            raise ValueError("Character scale_reference must be text")
+    value["schema_version"] = max(2, int(value.get("schema_version", 1)))
     value["style_id"] = style
     value["characters"] = characters
     value["props"] = props
@@ -81,6 +109,22 @@ def validate_scene_plan(scenes: Any, total_frames: int) -> list[dict[str, Any]]:
         scene.setdefault("action", scene["visual_description"])
         scene.setdefault("camera", "locked composition")
         scene.setdefault("transition_out", "cut")
+        # Storyboard v2 direction. Defaults preserve old saved plans.
+        scene.setdefault("visual_objective", scene["visual_description"])
+        scene.setdefault("composition", "clear focal hierarchy with intentional negative space")
+        scene.setdefault("shot_scale", "medium")
+        scene.setdefault("camera_position", scene["camera"])
+        scene.setdefault("depth_layers", ["background", "subject", "foreground"])
+        scene.setdefault("focal_entity", "")
+        scene.setdefault("visual_change", scene["action"])
+        scene.setdefault("continuity_note", "")
+        for key in ("visual_objective", "composition", "camera_position", "focal_entity", "visual_change", "continuity_note"):
+            if not isinstance(scene[key], str):
+                raise ValueError(f"Shot {key} must be text")
+        if scene["shot_scale"] not in {"extreme_wide", "wide", "medium", "close_up", "extreme_close_up", "detail", "overhead", "isometric"}:
+            raise ValueError("Shot shot_scale is unsupported")
+        if not isinstance(scene["depth_layers"], list) or not scene["depth_layers"] or len(scene["depth_layers"]) > 6 or not all(isinstance(x, str) and x.strip() for x in scene["depth_layers"]):
+            raise ValueError("Shot depth_layers must contain 1–6 named layers")
         if scene["complexity"] not in {"light", "medium", "heavy"}:
             scene["complexity"] = "medium"
         for key in ("characters", "props"):
