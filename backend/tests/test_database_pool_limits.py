@@ -11,7 +11,7 @@ class DatabasePoolLimitTests(unittest.TestCase):
 
     def test_api_worker_pool_is_capped_per_cloud_run_instance(self):
         settings = Settings(SERVICE_ROLE="api-worker", DB_POOL_MIN_SIZE=1, DB_POOL_MAX_SIZE=10)
-        self.assertEqual(effective_pool_sizes(settings), (1, 2))
+        self.assertEqual(effective_pool_sizes(settings), (1, 1))
 
     def test_single_concurrency_ffmpeg_worker_uses_one_database_connection(self):
         settings = Settings(SERVICE_ROLE="ffmpeg-worker", DB_POOL_MIN_SIZE=1, DB_POOL_MAX_SIZE=10)
