@@ -114,34 +114,89 @@ async def run_planning(
 
         await pool.execute("UPDATE projects SET status='planning',progress=12 WHERE id=$1", project_id)
 
-        # ── DeepSeek story + narration + scene planning ───────────────────
+        # Load durable stage outputs first. A retry must not pay for stages that
+        # already completed successfully on an earlier attempt.
+        artifacts = await pool.fetchrow(
+            "SELECT story_plan,animation_program,audio_object,timestamps_object FROM project_pipeline_artifacts WHERE project_id=$1",
+            project_id,
+        )
+        artifacts = dict(artifacts) if artifacts else {}
+
+        # ── Stage 1: story, narration script and timed shot plan ────────────
         async with timed(logger, "planning.deepseek_story") as ctx:
-            plan = await planner.plan(dict(project))
+            plan_value = artifacts.get("story_plan")
+            if isinstance(plan_value, str):
+                plan = json.loads(plan_value)
+            elif isinstance(plan_value, dict):
+                plan = plan_value
+            else:
+                plan = await planner.plan(dict(project))
+                await pool.execute(
+                    """INSERT INTO project_pipeline_artifacts(project_id,story_plan)
+                       VALUES($1,$2::jsonb)
+                       ON CONFLICT(project_id) DO UPDATE SET story_plan=EXCLUDED.story_plan""",
+                    project_id, json.dumps(plan),
+                )
+                logger.info("planning.artifact_saved", extra={"artifact":"story_plan"})
             ctx["scene_count"] = len(plan["scenes"])
             ctx["narration_chars"] = len(plan.get("narration", ""))
             ctx["title"] = plan.get("title", "")[:60]
+            ctx["cache_hit"] = bool(artifacts.get("story_plan"))
 
-        # ── DeepSeek full-film animation code generation + speech ──────────
+        # ── Stage 2: animation code and narration audio (independent) ──────
         async with timed(logger, "planning.deepseek_animation_and_tts") as ctx:
             async def compile_animation():
+                cached = artifacts.get("animation_program")
+                if isinstance(cached, str):
+                    cached = json.loads(cached)
+                if isinstance(cached, dict) and isinstance(cached.get("scene_js"), str):
+                    logger.info("planning.artifact_reused", extra={"artifact":"animation_program"})
+                    return cached
                 async with timed(logger, "planning.deepseek_animation") as stage:
                     result = await compiler.compile(dict(project), plan)
                     stage["shot_count"] = result.get("shot_count")
                     stage["source_chars"] = len(result.get("scene_js", ""))
-                    return result
+                await pool.execute(
+                    """INSERT INTO project_pipeline_artifacts(project_id,animation_program)
+                       VALUES($1,$2::jsonb)
+                       ON CONFLICT(project_id) DO UPDATE SET animation_program=EXCLUDED.animation_program""",
+                    project_id, json.dumps(result),
+                )
+                logger.info("planning.artifact_saved", extra={"artifact":"animation_program"})
+                return result
 
             async def synthesize_narration():
+                cached_audio = artifacts.get("audio_object")
+                cached_timestamps = artifacts.get("timestamps_object")
+                if cached_audio and cached_timestamps:
+                    logger.info("planning.artifact_reused", extra={"artifact":"narration_audio"})
+                    return cached_audio, cached_timestamps
                 async with timed(logger, "planning.tts") as stage:
-                    result = await speech.synthesize(plan["narration"], project["voice_id"])
-                    stage["audio_bytes"] = len(result[0])
-                    stage["timestamps_bytes"] = len(result[1])
-                    return result
+                    audio_bytes, timestamp_bytes = await speech.synthesize(plan["narration"], project["voice_id"])
+                    if not audio_bytes:
+                        raise RuntimeError("TTS returned empty narration audio")
+                    prefix = f"projects/{project['user_id']}/{project_id}/audio"
+                    audio_object, timestamps_object = await asyncio.gather(
+                        storage.upload_bytes_private(audio_bytes, "audio/mpeg", prefix, ".mp3"),
+                        storage.upload_bytes_private(timestamp_bytes or b"[]", "application/json", prefix, ".json"),
+                    )
+                    await pool.execute(
+                        """INSERT INTO project_pipeline_artifacts(project_id,audio_object,timestamps_object)
+                           VALUES($1,$2,$3)
+                           ON CONFLICT(project_id) DO UPDATE SET
+                             audio_object=EXCLUDED.audio_object,
+                             timestamps_object=EXCLUDED.timestamps_object""",
+                        project_id, audio_object, timestamps_object,
+                    )
+                    stage["audio_bytes"] = len(audio_bytes)
+                    stage["timestamps_bytes"] = len(timestamp_bytes or b"[]")
+                    stage["audio_object"] = audio_object
+                    return audio_object, timestamps_object
 
-            compiled_film, narration_assets = await asyncio.gather(
-                compile_animation(),
-                synthesize_narration(),
+            compiled_film, narration_objects = await asyncio.gather(
+                compile_animation(), synthesize_narration(),
             )
-            audio, timestamps = narration_assets
+            audio_object, timestamps_object = narration_objects
             total_frames = int(project["duration_seconds"]) * 30
             compiled_scenes = [{
                 "index": 0, "start_frame": 0, "end_frame": total_frames,
@@ -158,15 +213,6 @@ async def run_planning(
             ctx["quality_review"] = compiled_film.get("quality_review", {})
             ctx["audio_bytes"] = len(audio)
             ctx["timestamps_bytes"] = len(timestamps)
-
-        # ── Upload audio + timestamps to GCS ─────────────────────────────
-        prefix = f"projects/{project['user_id']}/{project_id}/audio"
-        async with timed(logger, "planning.upload") as ctx:
-            audio_object, timestamps_object = await asyncio.gather(
-                storage.upload_bytes_private(audio, "audio/mpeg", prefix, ".mp3"),
-                storage.upload_bytes_private(timestamps, "application/json", prefix, ".json"),
-            )
-            ctx["audio_object"] = audio_object
 
         # ── Persist scene plans + queue render job ─────────────────────────
         async with pool.acquire() as connection:
