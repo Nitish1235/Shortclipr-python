@@ -755,10 +755,16 @@ async def run_render(
             await set_render_progress(pool, project_id, attempt_id, lease_token, mapped)
 
         await set_render_progress(pool, project_id, attempt_id, lease_token, 55)
+        motion_qa = None
         async with timed(logger, "render.subprocess") as ctx:
-            await renderer.render(plan, output_path, progress_callback=update_visual_progress)
+            _, motion_qa = await renderer.render(
+                plan, output_path, progress_callback=update_visual_progress,
+            )
             if output_path.exists():
                 ctx["output_size_mb"] = round(output_path.stat().st_size / 1_048_576, 2)
+            if motion_qa:
+                ctx["motion_qa_status"] = motion_qa.get("status")
+                ctx["motion_qa_samples"] = motion_qa.get("sample_count", 0)
         await set_render_progress(pool, project_id, attempt_id, lease_token, 82)
 
         # ── Mux narration after visuals ──────────────────────────────────
@@ -770,6 +776,26 @@ async def run_render(
         async with timed(logger, "render.quality") as ctx:
             quality = await validate_final(output_path, project["aspect_ratio"], project["duration_seconds"])
             ctx.update(quality)
+        if motion_qa:
+            quality["motion_qa"] = {
+                "status": motion_qa.get("status"),
+                "sample_count": motion_qa.get("sample_count", 0),
+                "samples": motion_qa.get("samples", []),
+                "motion_diagnostics": plan.get("motion_diagnostics", []),
+            }
+            contact_sheet = Path(motion_qa["contact_sheet_path"]) if motion_qa.get("contact_sheet_path") else None
+            if contact_sheet and contact_sheet.is_file():
+                try:
+                    qa_object = await storage.upload_file_private(
+                        contact_sheet, "image/png",
+                        f"projects/{project['user_id']}/{project_id}/motion-qa",
+                    )
+                    quality["motion_qa"]["contact_sheet_object"] = qa_object
+                except Exception as error:
+                    logger.warning("render.motion_qa.upload_failed", extra={
+                        "project_id": str(project_id), "error": str(error)[:500],
+                    })
+                    quality["motion_qa"]["contact_sheet_upload_error"] = str(error)[:300]
         await set_render_progress(pool, project_id, attempt_id, lease_token, 90)
 
         # ── Upload final MP4 to GCS ───────────────────────────────────────
