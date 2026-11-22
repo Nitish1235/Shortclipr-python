@@ -273,7 +273,7 @@ async def run_planning(
                     if not audio_bytes:
                         raise RuntimeError("TTS returned empty narration audio")
                     prefix = f"projects/{project['user_id']}/{project_id}/audio"
-                    audio_object, timestamps_object = await asyncio.gather(
+                    audio_object, timestamps_object = await gather_cancel_on_error(
                         storage.upload_bytes_private(audio_bytes, "audio/mpeg", prefix, ".mp3"),
                         storage.upload_bytes_private(timestamp_bytes or b"[]", "application/json", prefix, ".json"),
                     )
@@ -687,12 +687,6 @@ async def run_render(
                 "output_object": output_object if not discard_output else None,
             },
         )
-    except asyncio.CancelledError:
-        logger.warning("render.cancelled_or_lease_lost")
-        raise
-    except asyncio.CancelledError:
-        logger.warning("render.cancelled_or_lease_lost")
-        raise
     except asyncio.CancelledError:
         logger.warning("render.cancelled_or_lease_lost")
         raise
