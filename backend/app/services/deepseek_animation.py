@@ -378,6 +378,20 @@ Rules:
             "shared_source_chars": len(shared_js),
             "shot_source_chars": sum(len(x["draw_body"]) for x in compiled),
             "motion_diagnostics": motion_diagnostics,
+            "shot_manifest": [
+                {
+                    "index": shot["index"],
+                    "start_frame": shot["start_frame"],
+                    "end_frame": shot["end_frame"],
+                    "name": shot["name"],
+                    "mechanism_ids": sorted({
+                        action["mechanism_id"]
+                        for action in shot.get("mechanism_actions", [])
+                    }),
+                    "transition_out": shot.get("transition_out", "cut"),
+                }
+                for shot in compiled
+            ],
         }
 
 
