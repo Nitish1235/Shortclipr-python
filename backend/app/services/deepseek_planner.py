@@ -76,7 +76,7 @@ Do not request subtitles; narration is muxed separately. Return JSON only.
             reasoning_effort=effort,
             extra_body={"thinking": {"type": "enabled"}},
         )
-        choice = response.choices[0] if response.choices else None
+        import logging\n        logging.getLogger(__name__).info("deepseek.story.response", extra={"model": self.model, "reasoning_effort": effort, "finish_reason": getattr(response.choices[0], "finish_reason", None) if response.choices else None, "completion_tokens": getattr(response.usage, "completion_tokens", None)})\n        choice = response.choices[0] if response.choices else None
         message = choice.message if choice else None
         raw = (message.content or "").strip() if message else ""
         usage = response.usage
