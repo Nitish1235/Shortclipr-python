@@ -160,16 +160,19 @@ class VisualQualityReviewer:
             evidence = finding.get("evidence_sample_indices")
             if (not isinstance(issue, str) or not issue.strip()
                     or not isinstance(recommendation, str) or not recommendation.strip()
-                    or not isinstance(evidence, list) or not evidence):
+                    or not isinstance(evidence, list)):
+                continue
+            valid_evidence = [
+                value for value in evidence[:3]
+                if isinstance(value, int) and not isinstance(value, bool)
+            ]
+            if not valid_evidence:
                 continue
             grouped.setdefault(shot_index, []).append({
                 "category": finding.get("category", "other"),
                 "severity": finding["severity"],
                 "shot_index": shot_index,
-                "evidence_sample_indices": [
-                    value for value in evidence[:3]
-                    if isinstance(value, int) and not isinstance(value, bool)
-                ],
+                "evidence_sample_indices": valid_evidence,
                 "issue": issue[:500],
                 "recommendation": recommendation[:500],
                 "confidence": round(float(confidence), 2),
