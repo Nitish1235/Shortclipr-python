@@ -139,15 +139,18 @@ class VisualQualityReviewer:
         shot_ids = {
             item.get("index") for item in visual_context.get("storyboard", [])
             if isinstance(item, dict) and isinstance(item.get("index"), int)
+            and not isinstance(item.get("index"), bool)
         }
         if not shot_ids:
             shot_ids = {
                 item.get("shot_index") for item in samples
                 if isinstance(item.get("shot_index"), int)
+            and not isinstance(item.get("shot_index"), bool)
             }
         sample_ids = {
             item.get("sample_index") for item in samples
             if isinstance(item.get("sample_index"), int)
+            and not isinstance(item.get("sample_index"), bool)
         }
         prompt = f"""
 You are ShortClipr's visual quality reviewer. Review the supplied contact sheet
