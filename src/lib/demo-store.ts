@@ -32,7 +32,7 @@ export const demoStore = {
     const credits = this.credits(); credits.used = Math.min(credits.total, credits.used + project.creditsReserved); credits.remaining = Math.max(0, credits.total - credits.used); write(CREDITS_KEY, credits)
     return project
   },
-  credits(): CreditBalance { const value=read(CREDITS_KEY,{total:15,used:0,remaining:15}); return {...value,remaining:Math.max(0,value.total-value.used)} },
+  credits(): CreditBalance { const value=read(CREDITS_KEY,{total:10,used:0,remaining:10}); return {...value,remaining:Math.max(0,value.total-value.used)} },
   voices(): Voice[] { return [
     {id:'af_bella',name:'Hannah',language:'English (US)',description:'Reserved, natural American female'},
     {id:'af_nicole',name:'Kaitlyn',language:'English (US)',description:'Casual American female'},
