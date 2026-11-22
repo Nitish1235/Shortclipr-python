@@ -85,7 +85,7 @@ class DrawnByCodeRenderer:
                 })
                 raise RuntimeError(
                     f"Drawn-by-Code exited with code {code}; "
-                    f"last subprocess output:\\n{tail}"
+                    f"last subprocess output:\n{tail}"
                 )
             if not output_path.is_file() or output_path.stat().st_size<1024:
                 tail=self._format_output_tail(list(output_tail))
