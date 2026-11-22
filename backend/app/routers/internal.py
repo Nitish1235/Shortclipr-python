@@ -19,6 +19,7 @@ from ..services.quality import mux_narration, validate_audio_input, validate_fin
 from ..services.drawn_by_code_renderer import DrawnByCodeRenderer, NonRetryableRenderError
 from ..services.deepseek_animation import DeepSeekAnimationCompiler
 from ..services.storage import ObjectStorage
+from ..services.visual_qa import VisualQualityReviewer
 from ..services.email import ProjectReadyEmailer
 from ..services.voices import UnrealSpeech
 
@@ -427,6 +428,7 @@ async def run_planning(
                 "quality_review": compiled_film.get("quality_review", {}),
                 "shot_manifest": compiled_film.get("shot_manifest", []),
                 "motion_diagnostics": compiled_film.get("motion_diagnostics", []),
+                "visual_qa_context": compiled_film.get("visual_qa_context", {}),
             }]
             ctx["scene_count"] = len(plan["scenes"])
             ctx["render_programs"] = 1
@@ -631,6 +633,7 @@ async def run_render(
     renderer: DrawnByCodeRenderer,
     storage: ObjectStorage,
     emailer: ProjectReadyEmailer,
+    visual_reviewer: VisualQualityReviewer,
 ):
     t0_total = _time.monotonic()
     bind(
@@ -731,6 +734,7 @@ async def run_render(
             "scene_js": scene_js, "style": program.get("style", "paper-cutout"),
             "shot_manifest": program.get("shot_manifest", []),
             "motion_diagnostics": program.get("motion_diagnostics", []),
+            "visual_qa_context": program.get("visual_qa_context", {}),
         }
 
         # ── Download narration locally for renderer ───────────────────────
@@ -797,6 +801,35 @@ async def run_render(
                         "project_id": str(project_id), "error": str(error)[:500],
                     })
                     quality["motion_qa"]["contact_sheet_upload_error"] = str(error)[:300]
+                try:
+                    async with timed(logger, "render.visual_qa") as ctx:
+                        visual_review = await visual_reviewer.review(
+                            contact_sheet,
+                            plan.get("visual_qa_context", {}),
+                            motion_qa.get("samples", []),
+                        )
+                        quality["visual_qa"] = visual_review
+                        ctx["status"] = visual_review.get("status")
+                        ctx["finding_count"] = len(visual_review.get("findings", []))
+                        ctx["overall_score"] = visual_review.get("overall_score")
+                except asyncio.CancelledError:
+                    raise
+                except Exception as error:
+                    logger.warning("render.visual_qa.failed", extra={
+                        "project_id": str(project_id), "error": str(error)[:500],
+                    })
+                    quality["visual_qa"] = {
+                        "status": "unavailable",
+                        "reason": "review_request_failed",
+                        "error": str(error)[:300],
+                        "automatic_repair": False,
+                    }
+            else:
+                quality["visual_qa"] = {
+                    "status": "skipped",
+                    "reason": "contact_sheet_unavailable",
+                    "automatic_repair": False,
+                }
         await set_render_progress(pool, project_id, attempt_id, lease_token, 90)
 
         # ── Upload final MP4 to GCS ───────────────────────────────────────
@@ -1002,5 +1035,6 @@ async def render_stage(payload: InternalRunRequest, request: Request, pool: asyn
         await run_render(
             payload.project_id, payload.attempt_id, payload.lease_token,
             pool, request.app.state.renderer, request.app.state.storage, request.app.state.emailer,
+            request.app.state.visual_reviewer,
         )
     return {"completed": True, "projectId": str(payload.project_id), "renderer": "drawn-by-code"}
