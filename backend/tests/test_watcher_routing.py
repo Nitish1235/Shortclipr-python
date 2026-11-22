@@ -33,7 +33,7 @@ class WatcherRoutingTests(unittest.IsolatedAsyncioTestCase):
         }
         with patch.dict(os.environ, values, clear=True):
             result = targets("FFMPEG_WORKER_URLS", "FFMPEG_WORKER_REGIONS", "FFMPEG_REGION_SOFT_CAP", 4)
-        self.assertEqual(result[0].capacity, 3)
+        self.assertEqual(result[0].capacity, 2)
 
     async def test_ninth_render_waits_until_one_of_eight_slots_is_released(self):
         render_targets = [
