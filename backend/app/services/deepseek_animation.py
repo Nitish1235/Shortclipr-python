@@ -456,7 +456,9 @@ Rules:
             raise ValueError("At least one visual QA finding is required")
         safe_findings = []
         for item in findings[:8]:
-            if not isinstance(item, dict) or item.get("shot_index") != shot_index:
+            if (not isinstance(item, dict)
+                    or isinstance(item.get("shot_index"), bool)
+                    or item.get("shot_index") != shot_index):
                 continue
             issue = item.get("issue")
             recommendation = item.get("recommendation")
@@ -468,9 +470,12 @@ Rules:
                 "issue": issue[:500],
                 "recommendation": recommendation[:500],
                 "evidence_sample_indices": [
-                    value for value in item.get("evidence_sample_indices", [])
+                    value for value in (
+                        item.get("evidence_sample_indices")
+                        if isinstance(item.get("evidence_sample_indices"), list) else []
+                    )[:3]
                     if isinstance(value, int) and not isinstance(value, bool)
-                ][:3],
+                ],
             })
         if not safe_findings:
             raise ValueError("No actionable findings belong to the requested shot")
@@ -484,7 +489,7 @@ Rules:
         visual_bible = repair_bundle.get("visual_bible", {})
         shot_visual_context = self._shot_visual_context(visual_bible, scene)
         shared_helper_names = sorted(set(re.findall(
-            r"\\bfunction\\s+(draw[A-Z][A-Za-z0-9_]*)\\s*\\(", shared_js
+            r"\bfunction\s+(draw[A-Z][A-Za-z0-9_]*)\s*\(", shared_js
         )))
         prompt = f"""
 You are ShortClipr's senior 2D animation repair artist. Repair ONLY shot {shot_index}.
