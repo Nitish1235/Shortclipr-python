@@ -6,7 +6,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 
-from ..core.config import Settings, get_settings
+from ..core.config import FREE_PLAN_MONTHLY_SECONDS
 from ..core.log import get_logger
 from ..db import get_pool
 from ..dependencies import CurrentUser, current_user
@@ -30,6 +30,14 @@ async def project_payload(row: asyncpg.Record, storage: ObjectStorage) -> dict:
 def title_from_brief(brief: str) -> str:
     title = re.split(r"[.!?\n]", brief.strip(), maxsplit=1)[0].strip()
     return (title or "Untitled production")[:76]
+
+
+def enforce_plan_duration(plan: str, duration_seconds: int) -> None:
+    if plan == "free" and duration_seconds != FREE_PLAN_MONTHLY_SECONDS:
+        raise HTTPException(
+            status_code=403,
+            detail="The Free plan includes one 10-second short each month. Upgrade to a paid plan for longer videos.",
+        )
 
 
 @router.get("/projects", response_model=list[ProjectResponse])
@@ -81,6 +89,7 @@ async def project_media(project_id: UUID, request: Request, download: int = 0, u
 async def create_project(payload: CreateProjectRequest, user: CurrentUser = Depends(current_user), pool: asyncpg.Pool = Depends(get_pool)):
     if user.plan not in {"free", "starter", "creator", "studio"} or (user.plan != "free" and user.subscription_status != "active"):
         raise HTTPException(status_code=402, detail="Choose an active Starter, Creator, or Studio plan to continue")
+    enforce_plan_duration(user.plan, payload.duration_seconds)
     credits = estimate_credits(payload.clip_type, payload.duration_seconds, payload.visual_style)
     project_id = uuid4()
     async with pool.acquire() as connection:
@@ -138,7 +147,7 @@ async def cancel_project(project_id: UUID, user: CurrentUser = Depends(current_u
 
 
 @router.get("/account/credits", response_model=CreditBalanceResponse)
-async def credit_balance(user: CurrentUser = Depends(current_user), settings: Settings = Depends(get_settings), pool: asyncpg.Pool = Depends(get_pool)):
+async def credit_balance(user: CurrentUser = Depends(current_user), pool: asyncpg.Pool = Depends(get_pool)):
     if user.plan not in {"free", "starter", "creator", "studio"} or (user.plan != "free" and user.subscription_status != "active"):
         return {"total": 0, "used": 0, "remaining": 0, "cycle_ends_at": None}
     if user.plan == "free":
@@ -146,7 +155,7 @@ async def credit_balance(user: CurrentUser = Depends(current_user), settings: Se
             """UPDATE credit_accounts SET total_credits=$2+reserved_credits,spent_credits=0,
                cycle_started_at=date_trunc('month',now()),cycle_ends_at=date_trunc('month',now())+interval '1 month'
                WHERE user_id=$1 AND cycle_ends_at<=now()""",
-            user.id, settings.FREE_MONTHLY_RENDER_SECONDS,
+            user.id, FREE_PLAN_MONTHLY_SECONDS,
         )
     row = await pool.fetchrow("SELECT * FROM credit_accounts WHERE user_id=$1", user.id)
     if not row:

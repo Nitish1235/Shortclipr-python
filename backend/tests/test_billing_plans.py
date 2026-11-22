@@ -1,6 +1,6 @@
 import unittest
 
-from app.core.config import Settings
+from app.core.config import FREE_PLAN_MONTHLY_SECONDS, Settings
 from app.routers.billing import (
     ENTITLEMENT_EVENTS,
     PLAN_SYNC_EVENTS,
@@ -30,7 +30,7 @@ class BillingPlanTests(unittest.TestCase):
         self.assertEqual(plan_product_id(self.settings, "studio"), "prod_studio")
 
     def test_paid_allowances_are_exact_render_seconds(self):
-        self.assertEqual(self.settings.FREE_MONTHLY_RENDER_SECONDS, 15)
+        self.assertEqual(FREE_PLAN_MONTHLY_SECONDS, 10)
         self.assertEqual(plan_render_seconds(self.settings, "starter"), 600)
         self.assertEqual(plan_render_seconds(self.settings, "creator"), 1800)
         self.assertEqual(plan_render_seconds(self.settings, "studio"), 4200)
