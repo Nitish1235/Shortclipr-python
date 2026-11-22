@@ -200,7 +200,7 @@ export async function openScene(scenePath, { size, gpu = process.env.MOTION_GPU 
             await page.waitForFunction(() => window.READY === true, null, { timeout: 60000 });
         } catch (error) {
             const msg = await page.evaluate(() => document.getElementById('err')?.textContent).catch(() => '');
-            throw new Error('The scene never reached READY.\\n' + (msg || errors.join('\\n') || error.message));
+            throw new Error('The scene never reached READY.\n' + (msg || errors.join('\n') || error.message));
         }
         const info = await page.evaluate(() => window.SCENE_INFO);
         return { page, info, close, errors };
