@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import shutil
+import signal
 import tempfile
 import time
 from collections import deque
@@ -39,9 +40,14 @@ class DrawnByCodeRenderer:
     async def _kill_and_wait(process: asyncio.subprocess.Process) -> None:
         if process.returncode is None:
             try:
-                process.kill()
+                os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+            except OSError:
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
         try:
             await process.wait()
         except ProcessLookupError:
@@ -122,6 +128,7 @@ class DrawnByCodeRenderer:
                 env=env,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
+                start_new_session=True,
             )
             deadline = asyncio.get_running_loop().time() + self.timeout
             try:
