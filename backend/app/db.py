@@ -11,7 +11,7 @@ POOL_LIMITS_BY_ROLE = {
     # Each Cloud Run instance owns a pool. Keep these small so autoscaling
     # cannot multiply ten-session pools into hundreds of database sessions.
     "api": 2,
-    "api-worker": 1,
+    "api-worker": 2,
     "ffmpeg-worker": 1,
 }
 
