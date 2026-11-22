@@ -5,13 +5,15 @@ from typing import Any
 from openai import AsyncOpenAI
 from ..core.config import Settings
 from .animation_contracts import STYLE_IDS, validate_scene_plan, validate_visual_bible
+from .generation_policy import planning_effort
 
 
 class DeepSeekStoryPlanner:
     """Creates the factual story, reusable visual bible and contiguous 30 FPS shot plan."""
     def __init__(self, settings: Settings):
         self.model = settings.DEEPSEEK_STORY_MODEL
-        self.reasoning_effort = settings.DEEPSEEK_REASONING_EFFORT
+        self.low_reasoning_effort = settings.DEEPSEEK_PLANNING_REASONING_EFFORT
+        self.medium_reasoning_effort = "medium"
         self.max_output_tokens = settings.DEEPSEEK_PLAN_MAX_OUTPUT_TOKENS
         self.client = AsyncOpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com",
                                   timeout=300.0, max_retries=2) if settings.DEEPSEEK_API_KEY else None
@@ -64,6 +66,7 @@ Maintain exact character appearance across shots. Include composition, depth lay
 action and motivated transition. Strictly 2D Canvas/SVG; no Three.js, WebGL, meshes or 3D.
 Do not request subtitles; narration is muxed separately. Return JSON only.
 """.strip()
+        effort = planning_effort(project, self.low_reasoning_effort, self.medium_reasoning_effort)
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=[{"role":"system","content":prompt},
