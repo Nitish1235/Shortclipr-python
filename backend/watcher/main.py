@@ -105,6 +105,16 @@ def is_region_rejection(error: Exception) -> bool:
     return False
 
 
+def is_uncertain_delivery(error: Exception) -> bool:
+    """True when the remote worker may have accepted and still be processing a request."""
+    if isinstance(error, (
+        httpx.ReadTimeout, httpx.WriteTimeout, httpx.ReadError,
+        httpx.WriteError, httpx.RemoteProtocolError,
+    )):
+        return True
+    return isinstance(error, httpx.HTTPStatusError) and error.response.status_code >= 500
+
+
 # ---------------------------------------------------------------------------
 # Dispatcher
 # ---------------------------------------------------------------------------
@@ -323,6 +333,7 @@ class Dispatcher:
         rows = await self.pool.fetch(
             """SELECT id,lease_token,project_id,job_class FROM job_attempts
                WHERE status IN ('leased','running') AND lease_expires_at<now() AND lease_token IS NOT NULL
+               ORDER BY lease_expires_at,id
                LIMIT 100"""
         )
         if rows:
@@ -343,10 +354,23 @@ class Dispatcher:
         project_id_str = str(job["project_id"])
         attempt_id_str = str(job["id"])
         try:
-            await self.pool.execute(
-                "UPDATE job_attempts SET status='running' WHERE id=$1 AND lease_token=$2 AND status='leased'",
+            started = await self.pool.fetchval(
+                """UPDATE job_attempts SET status='running'
+                   WHERE id=$1 AND lease_token=$2 AND status='leased'
+                   RETURNING id""",
                 job["id"], job["lease_token"],
             )
+            if not started:
+                logger.info(
+                    "watcher.dispatch_skipped",
+                    extra={
+                        "job_class": job["job_class"],
+                        "project_id": project_id_str,
+                        "attempt_id": attempt_id_str,
+                        "reason": "lease is no longer current",
+                    },
+                )
+                return
             logger.info(
                 "watcher.dispatch",
                 extra={
@@ -394,21 +418,25 @@ class Dispatcher:
                         "error": str(error)[:300],
                     },
                 )
-            elif isinstance(error, httpx.ReadTimeout):
-                # The remote worker may still be rendering. Keep its lease and
-                # let lease expiry decide safely whether a retry is needed.
+            elif is_uncertain_delivery(error):
+                # A timeout, broken connection or 5xx can happen after the
+                # worker accepted the job. Do not make it claimable immediately:
+                # keep the lease until expiry and let the worker's lease fence
+                # prevent stale writes if a retry is eventually issued.
                 await self.pool.execute(
                     "UPDATE job_attempts SET last_error=$3 WHERE id=$1 AND lease_token=$2",
-                    job["id"], job["lease_token"], "Worker response timed out; awaiting lease expiry",
+                    job["id"], job["lease_token"], f"Delivery outcome uncertain: {error}"[:1000],
                 )
                 logger.warning(
-                    "watcher.read_timeout",
+                    "watcher.delivery_uncertain",
                     extra={
                         "job_class": job["job_class"],
                         "project_id": project_id_str,
                         "attempt_id": attempt_id_str,
                         "region": target.region,
                         "timeout_s": timeout,
+                        "duration_ms": duration_ms,
+                        "error": str(error)[:300],
                     },
                 )
             else:
