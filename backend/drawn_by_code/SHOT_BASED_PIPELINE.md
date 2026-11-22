@@ -93,16 +93,29 @@ vision-model inspection workflow.
 
 Mechanism records may include an explicit `kinematics` array. Supported Canvas 2D
 specifications are:
-- `pivot`: fixed anchor and start/end angle in degrees;
-- `translation`: explicit start and end points;
-- `actuator`: base/rod anchor geometry and minimum/maximum extension length.
+- `pivot`: a fixed hinge/pivot anchor and start/end angle in degrees;
+- `translation` / `slider`: explicit absolute start and end positions;
+- `gear`: a driven gear coupled to a declared driver by pitch-radius ratio and
+  external/internal mesh direction;
+- `pulley`: pulley rotation coupled to linear travel of a declared load using
+  radius × angular displacement and an explicit travel axis/direction;
+- `cable`: an authored polyline whose corresponding points interpolate between
+  equal-length start/end path arrays;
+- `actuator`: a fixed-axis telescoping actuator with base/rod anchors and
+  minimum/maximum extension length.
 
 The planner must omit numeric specs when dimensions or geometry are not defensible.
-The trusted `ShortcliprStyles.mechanismPose(spec, progress)` helper evaluates a spec
-from normalized progress and returns a pure transform description. It does not perform
-collision detection, force analysis, linkage-closure solving or load simulation. A
-mechanism without numeric kinematics remains qualitative and must not be presented as
-engineering-accurate motion. These helpers make individual primitives deterministic;
-they do not yet solve an entire multi-link mechanism graph or certify that actuator
-lengths are geometrically compatible with a rotating deck. Rendered benchmark frames
-are still required to check visual integration.
+The trusted `ShortcliprStyles.mechanismPose(spec, progress)` helper evaluates each
+spec from normalized progress and returns a pure transform description. The compiler
+injects the validated shot actions and only the mechanisms used by that shot into the
+generated drawing function, so the generated code consumes those records rather than
+reconstructing them from prose.
+
+These are deterministic 2D primitives, not a general physics or constraint solver.
+The gear transform applies an ideal pitch-radius ratio; the pulley transform applies a
+specified radius/travel axis; the cable helper interpolates an explicitly authored
+polyline rather than solving tangent contact around pulleys; and actuator extension
+does not solve closed-linkage geometry. No collision detection, force analysis, load
+simulation or linkage-closure solving is performed. A mechanism without numeric
+kinematics remains qualitative and must not be presented as engineering-accurate
+motion. Rendered benchmark frames are still required to validate visual integration.
