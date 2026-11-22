@@ -37,6 +37,7 @@ from .animation_contracts import (
     validate_draw_helper_definitions,
     validate_scene_plan,
     validate_visual_bible,
+    analyze_mechanism_motion,
 )
 
 
@@ -133,6 +134,19 @@ class DeepSeekAnimationCompiler:
         prop_ids = set(scene.get("props") or [])
         environment_id = scene.get("environment")
         mechanism_ids = {item.get("mechanism_id") for item in scene.get("mechanism_actions", [])}
+        mechanisms = [
+            item for item in visual_bible.get("mechanisms", [])
+            if item.get("id") in mechanism_ids
+        ]
+        # Mechanism components may be omitted from scene.props by the planner.
+        # Pull their prop-backed visual definitions into the shot context so the
+        # drawing model can render the actual connected parts, not just labels.
+        mechanism_prop_ids = {
+            component.get("prop_id")
+            for mechanism in mechanisms
+            for component in mechanism.get("components", [])
+        }
+        prop_ids.update(mechanism_prop_ids)
         return {
             "style_id": visual_bible["style_id"],
             "style_notes": visual_bible.get("style_notes", ""),
@@ -148,10 +162,7 @@ class DeepSeekAnimationCompiler:
                 item for item in visual_bible.get("environments", [])
                 if item.get("id") == environment_id
             ],
-            "mechanisms": [
-                item for item in visual_bible.get("mechanisms", [])
-                if item.get("id") in mechanism_ids
-            ],
+            "mechanisms": mechanisms,
         }
 
     async def compile(self, project: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
@@ -174,6 +185,7 @@ class DeepSeekAnimationCompiler:
                     raise ValueError("Shot mechanism action references an undeclared mechanism ID")
                 if action["pattern_id"] not in {item["id"] for item in mechanism.get("action_patterns", [])}:
                     raise ValueError("Shot mechanism action references an undeclared action pattern")
+        motion_diagnostics = analyze_mechanism_motion(visual_bible, scenes)
         style_id = visual_bible["style_id"]
         art_direction_value = plan.get("art_direction")
         if art_direction_value is None:
@@ -365,6 +377,7 @@ Rules:
             "shot_count": len(compiled),
             "shared_source_chars": len(shared_js),
             "shot_source_chars": sum(len(x["draw_body"]) for x in compiled),
+            "motion_diagnostics": motion_diagnostics,
         }
 
 
