@@ -82,6 +82,7 @@ class MechanismKinematicsContextTests(unittest.TestCase):
         context = DeepSeekAnimationCompiler._shot_visual_context(bible, scene)
         self.assertEqual([item["id"] for item in context["mechanisms"]], ["mechanism_b"])
         self.assertEqual(context["mechanisms"][0]["kinematics"][0]["type"], "translation")
+
     def test_style_runtime_exposes_mechanism_pose_helper(self):
         from pathlib import Path
         import re
