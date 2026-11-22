@@ -8,6 +8,7 @@ from .animation_contracts import STYLE_IDS, validate_scene_plan, validate_visual
 from .generation_policy import planning_effort
 from .style_registry import apply_visual_direction, resolve_visual_style
 from .art_direction import build_art_direction
+from .art_direction import build_art_direction
 
 
 class DeepSeekStoryPlanner:
