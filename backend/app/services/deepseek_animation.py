@@ -444,8 +444,17 @@ Rules:
         shared_js = repair_bundle.get("shared_js")
         if not isinstance(shots, list) or not isinstance(scenes, list) or not isinstance(shared_js, str):
             raise ValueError("Shot repair bundle is incomplete")
-        if len(shots) != len(scenes) or not 1 <= len(shots) <= 12:
+        if (len(shots) != len(scenes) or not 3 <= len(shots) <= 12
+                or not all(isinstance(item, dict) for item in shots + scenes)):
             raise ValueError("Shot repair bundle has invalid shot structure")
+        duration = repair_bundle.get("duration")
+        logical = repair_bundle.get("logical")
+        style_id = repair_bundle.get("style_id")
+        if (isinstance(duration, bool) or not isinstance(duration, int) or duration < 1
+                or not isinstance(logical, list) or len(logical) != 2
+                or not all(isinstance(value, int) and not isinstance(value, bool) and value > 0 for value in logical)
+                or not isinstance(style_id, str) or not style_id):
+            raise ValueError("Shot repair bundle has invalid render metadata")
         if isinstance(shot_index, bool) or not isinstance(shot_index, int):
             raise ValueError("Shot index must be an integer")
         shot_positions = [i for i, shot in enumerate(shots) if shot.get("index") == shot_index]
@@ -553,13 +562,13 @@ Rules:
         source = self._assemble_film(
             shared_js,
             updated_bundle["shots"],
-            int(repair_bundle["duration"]),
-            repair_bundle["logical"],
-            str(repair_bundle["style_id"]),
+            duration,
+            logical,
+            style_id,
         )
         if len(source) > MAX_FILM_SOURCE:
             raise ValueError("Repaired animation program exceeds the maximum source size")
-        self.validate_source(source, int(repair_bundle["duration"]), repair_bundle["logical"])
+        self.validate_source(source, duration, logical)
         return {
             "scene_js": source,
             "repair_bundle": updated_bundle,
