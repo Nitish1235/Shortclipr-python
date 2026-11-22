@@ -594,12 +594,55 @@ async def run_render(
     output_object: str | None = None
     output_committed = False
     try:
-        project = await pool.fetchrow("SELECT * FROM projects WHERE id=$1", project_id)
-        if not project:
-            logger.info("render.project_missing")
-            await finish_attempt(pool, attempt_id, lease_token, "cancelled")
+        project = None
+        should_skip = False
+        skip_status = "not_found"
+        already_complete = False
+        async with pool.acquire() as connection:
+            async with connection.transaction():
+                project = await connection.fetchrow(
+                    "SELECT * FROM projects WHERE id=$1 FOR UPDATE", project_id,
+                )
+                current_attempt = await connection.fetchrow(
+                    """SELECT id FROM job_attempts
+                       WHERE id=$1 AND project_id=$2 AND job_class='render'
+                         AND lease_token=$3 AND status='running' AND lease_expires_at>now()
+                       FOR UPDATE""",
+                    attempt_id, project_id, lease_token,
+                )
+                if not project:
+                    should_skip, skip_status = True, "not_found"
+                elif not current_attempt:
+                    should_skip, skip_status = True, "stale_lease"
+                elif project["status"] in {"cancelled", "failed"}:
+                    should_skip, skip_status = True, project["status"]
+                    await connection.execute(
+                        """UPDATE job_attempts SET status='cancelled',lease_token=NULL,
+                           lease_expires_at=NULL,worker_region=NULL
+                           WHERE id=$1 AND lease_token=$2""",
+                        attempt_id, lease_token,
+                    )
+                elif project["status"] == "complete":
+                    already_complete = True
+                elif project["status"] in {"queued", "rendering"}:
+                    await connection.execute(
+                        """UPDATE projects SET status='rendering',progress=GREATEST(progress,48)
+                           WHERE id=$1""",
+                        project_id,
+                    )
+                else:
+                    should_skip, skip_status = True, project["status"]
+                    await connection.execute(
+                        """UPDATE job_attempts SET status='cancelled',lease_token=NULL,
+                           lease_expires_at=NULL,worker_region=NULL
+                           WHERE id=$1 AND lease_token=$2""",
+                        attempt_id, lease_token,
+                    )
+
+        if should_skip:
+            logger.info("render.delivery_skipped", extra={"status": skip_status})
             return
-        if project["status"] == "complete":
+        if already_complete:
             # A delivery replay must not render or settle again. The ready-email
             # helper is idempotent, so this also recovers a process crash after settlement.
             owner = await pool.fetchrow(
@@ -609,21 +652,6 @@ async def run_render(
                 await emailer.send_project_ready(pool, dict(project), dict(owner))
             await finish_attempt(pool, attempt_id, lease_token, "complete")
             logger.info("render.already_complete")
-            return
-        if project["status"] in {"cancelled", "failed"}:
-            logger.info("render.not_runnable", extra={"status": project["status"]})
-            await finish_attempt(pool, attempt_id, lease_token, "cancelled")
-            return
-        if project["status"] not in {"queued", "rendering"}:
-            raise NonRetryableRenderError(f"Project cannot enter rendering from status {project['status']!r}")
-
-        render_started = await pool.fetchval(
-            """UPDATE projects SET status='rendering',progress=GREATEST(progress,48)
-               WHERE id=$1 AND status IN ('queued','rendering') RETURNING id""",
-            project_id,
-        )
-        if not render_started:
-            await finish_attempt(pool, attempt_id, lease_token, "cancelled")
             return
 
         scenes = await pool.fetch("SELECT program FROM scene_plans WHERE project_id=$1 ORDER BY scene_index", project_id)
