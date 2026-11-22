@@ -634,6 +634,7 @@ async def run_render(
     storage: ObjectStorage,
     emailer: ProjectReadyEmailer,
     visual_reviewer: VisualQualityReviewer,
+    shot_repairer: DeepSeekAnimationCompiler | None = None,
 ):
     t0_total = _time.monotonic()
     bind(
@@ -642,6 +643,7 @@ async def run_render(
         job_class="render",
     )
     output_path: Path | None = None
+    render_temp_dirs: list[Path] = []
     audio_path: Path | None = None
     completed_project: dict | None = None
     output_object: str | None = None
@@ -735,6 +737,7 @@ async def run_render(
             "shot_manifest": program.get("shot_manifest", []),
             "motion_diagnostics": program.get("motion_diagnostics", []),
             "visual_qa_context": program.get("visual_qa_context", {}),
+            "repair_bundle": program.get("repair_bundle"),
         }
 
         # ── Download narration locally for renderer ───────────────────────
@@ -752,6 +755,7 @@ async def run_render(
 
         # ── Run the Drawn-by-Code renderer subprocess ────────────────────
         output_path = Path(tempfile.mkdtemp(prefix="shortclipr-render-")) / f"{project_id}.mp4"
+        render_temp_dirs.append(output_path.parent)
 
         async def update_visual_progress(render_progress: int) -> None:
             # Reserve 55–80 for the visual renderer; 82 means the subprocess
@@ -1036,5 +1040,6 @@ async def render_stage(payload: InternalRunRequest, request: Request, pool: asyn
             payload.project_id, payload.attempt_id, payload.lease_token,
             pool, request.app.state.renderer, request.app.state.storage, request.app.state.emailer,
             request.app.state.visual_reviewer,
+            request.app.state.shot_repairer,
         )
     return {"completed": True, "projectId": str(payload.project_id), "renderer": "drawn-by-code"}
