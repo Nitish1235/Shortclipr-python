@@ -1,7 +1,7 @@
 # ShortClipr Art-Directed Animation Architecture
 
 Status: implementation design, version 1
-Branch: feat/art-directed-animation-foundation
+Branch: feat/structured-art-direction
 Scope: prompt-to-2D animation quality; preserve the existing Canvas 2D renderer and project pipeline.
 
 ## Product invariants
@@ -173,3 +173,12 @@ The structured art-direction stage is now implemented for the three initial new 
 Each has a versioned art-direction profile and dedicated deterministic Canvas 2D primitives in `backend/drawn_by_code/styles/shortclipr.js`. Current UI choices now map Editorial -> cinematic-editorial, Diagrammatic -> isometric-technical, and Paper craft -> layered-paper. Cinematic retains the existing 70s-poster direction. Existing style IDs remain supported for saved projects.
 
 This is the first usable toolkit layer, not a claim that every generated video will automatically be high quality. Full visual-bible depth, storyboard composition contracts, motion mechanics, rendered-frame QA, and benchmark tuning remain subsequent phases. Actual rendered benchmark acceptance is still required before calling these systems production-proven.
+
+
+## Implementation progress — Visual Bible and Storyboard v2 (PR #30)
+
+The active planner now requests richer, stable visual-bible data: environment spatial layout and depth planes, scale references and atmosphere; prop materials, relative scale, components, anchors and moving parts; and character scale references. The validator adds backward-compatible defaults for persisted plans.
+
+Shot records now carry visual objective, composition, shot scale, camera position, ordered depth layers, focal entity, visual change and continuity notes. The planner checks focal-entity references against declared visual-bible IDs. The animation compiler includes this shot direction in each generation prompt and explicitly discourages repetitive compositions.
+
+This is structured direction, not proof of rendered quality. It does not yet implement mechanism-specific motion tracks or rendered-frame QA. Actual output still needs benchmark renders and human review.
