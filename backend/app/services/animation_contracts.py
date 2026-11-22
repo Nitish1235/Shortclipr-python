@@ -24,7 +24,7 @@ _BLOCKED_PATTERNS = (
 )
 
 
-KINEMATIC_MOTION_TYPES = {"pivot", "translation", "actuator"}
+KINEMATIC_MOTION_TYPES = {"pivot", "translation", "slider", "gear", "pulley", "cable", "actuator"}
 
 
 def _finite_number(value: Any, label: str) -> float:
@@ -36,53 +36,109 @@ def _finite_number(value: Any, label: str) -> float:
     return number
 
 
+def _kinematic_point(value: Any, label: str) -> dict[str, float]:
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be a point object")
+    return {
+        "x": _finite_number(value.get("x"), f"{label} x"),
+        "y": _finite_number(value.get("y"), f"{label} y"),
+    }
+
+
 def validate_kinematics(value: Any, component_parts: set[str]) -> dict[str, Any]:
     """Validate explicit 2D motion geometry; never infer geometry from prose."""
     if not isinstance(value, dict):
         raise ValueError("Mechanism kinematics entries must be objects")
     kind = value.get("type")
     if kind not in KINEMATIC_MOTION_TYPES:
-        raise ValueError("Kinematics type must be pivot, translation or actuator")
+        raise ValueError("Unsupported kinematics type")
     result = dict(value)
     part = result.get("part")
     if not isinstance(part, str) or part not in component_parts:
         raise ValueError("Kinematics part must reference a declared mechanism component")
+
     if kind == "pivot":
-        anchor = result.get("anchor")
-        if not isinstance(anchor, dict):
-            raise ValueError("Pivot kinematics require a numeric anchor")
-        x = _finite_number(anchor.get("x"), "Pivot anchor x")
-        y = _finite_number(anchor.get("y"), "Pivot anchor y")
+        anchor = _kinematic_point(result.get("anchor"), "Pivot anchor")
         start = _finite_number(result.get("start_angle_deg", 0), "Pivot start_angle_deg")
         end = _finite_number(result.get("end_angle_deg"), "Pivot end_angle_deg")
         if not -360 <= start <= 360 or not -360 <= end <= 360:
             raise ValueError("Pivot angles must be between -360 and 360 degrees")
-        result.update(anchor={"x": x, "y": y}, start_angle_deg=start, end_angle_deg=end)
-    elif kind == "translation":
-        start, end = result.get("start"), result.get("end")
-        if not isinstance(start, dict) or not isinstance(end, dict):
-            raise ValueError("Translation kinematics require start and end points")
+        result.update(anchor=anchor, start_angle_deg=start, end_angle_deg=end)
+
+    elif kind in {"translation", "slider"}:
+        start = _kinematic_point(result.get("start"), "Translation start")
+        end = _kinematic_point(result.get("end"), "Translation end")
+        result.update(start=start, end=end)
+
+    elif kind == "gear":
+        driver_part = result.get("driver_part")
+        if not isinstance(driver_part, str) or driver_part not in component_parts or driver_part == part:
+            raise ValueError("Gear driver_part must reference a different declared mechanism component")
+        driver_anchor = _kinematic_point(result.get("driver_anchor"), "Gear driver_anchor")
+        anchor = _kinematic_point(result.get("anchor"), "Gear anchor")
+        driver_radius = _finite_number(result.get("driver_radius"), "Gear driver_radius")
+        driven_radius = _finite_number(result.get("driven_radius"), "Gear driven_radius")
+        if driver_radius <= 0 or driven_radius <= 0:
+            raise ValueError("Gear pitch radii must be positive")
+        mesh = result.get("mesh", "external")
+        if mesh not in {"external", "internal"}:
+            raise ValueError("Gear mesh must be external or internal")
+        driver_start = _finite_number(result.get("driver_start_angle_deg", 0), "Gear driver_start_angle_deg")
+        driver_end = _finite_number(result.get("driver_end_angle_deg"), "Gear driver_end_angle_deg")
+        driven_start = _finite_number(result.get("driven_start_angle_deg", 0), "Gear driven_start_angle_deg")
         result.update(
-            start={"x": _finite_number(start.get("x"), "Translation start x"),
-                   "y": _finite_number(start.get("y"), "Translation start y")},
-            end={"x": _finite_number(end.get("x"), "Translation end x"),
-                 "y": _finite_number(end.get("y"), "Translation end y")},
+            driver_anchor=driver_anchor, anchor=anchor, driver_radius=driver_radius,
+            driven_radius=driven_radius, mesh=mesh, driver_start_angle_deg=driver_start,
+            driver_end_angle_deg=driver_end, driven_start_angle_deg=driven_start,
         )
-    else:
-        base, rod = result.get("base_anchor"), result.get("rod_anchor")
-        if not isinstance(base, dict) or not isinstance(rod, dict):
-            raise ValueError("Actuator kinematics require base_anchor and rod_anchor points")
+
+    elif kind == "pulley":
+        pulley_part = result.get("pulley_part")
+        if not isinstance(pulley_part, str) or pulley_part not in component_parts or pulley_part == part:
+            raise ValueError("Pulley pulley_part must reference a different declared mechanism component")
+        anchor = _kinematic_point(result.get("anchor"), "Pulley anchor")
+        start_position = _kinematic_point(result.get("start_position"), "Pulley start_position")
+        axis = _kinematic_point(result.get("axis"), "Pulley travel axis")
+        axis_length = (axis["x"] ** 2 + axis["y"] ** 2) ** 0.5
+        if axis_length <= 1e-9:
+            raise ValueError("Pulley travel axis must be non-zero")
+        radius = _finite_number(result.get("radius"), "Pulley radius")
+        if radius <= 0:
+            raise ValueError("Pulley radius must be positive")
+        start = _finite_number(result.get("start_angle_deg", 0), "Pulley start_angle_deg")
+        end = _finite_number(result.get("end_angle_deg"), "Pulley end_angle_deg")
+        direction = result.get("direction", 1)
+        if direction not in {-1, 1}:
+            raise ValueError("Pulley direction must be -1 or 1")
+        axis = {"x": axis["x"] / axis_length, "y": axis["y"] / axis_length}
         result.update(
-            base_anchor={"x": _finite_number(base.get("x"), "Actuator base x"),
-                         "y": _finite_number(base.get("y"), "Actuator base y")},
-            rod_anchor={"x": _finite_number(rod.get("x"), "Actuator rod x"),
-                        "y": _finite_number(rod.get("y"), "Actuator rod y")},
+            anchor=anchor, start_position=start_position, axis=axis, radius=radius,
+            start_angle_deg=start, end_angle_deg=end, direction=direction,
         )
+
+    elif kind == "cable":
+        points_start = result.get("points_start")
+        points_end = result.get("points_end")
+        if (not isinstance(points_start, list) or not isinstance(points_end, list)
+                or not 2 <= len(points_start) <= 24 or len(points_start) != len(points_end)):
+            raise ValueError("Cable paths need matching arrays of 2–24 start/end points")
+        result["points_start"] = [
+            _kinematic_point(point, f"Cable start point {index}")
+            for index, point in enumerate(points_start)
+        ]
+        result["points_end"] = [
+            _kinematic_point(point, f"Cable end point {index}")
+            for index, point in enumerate(points_end)
+        ]
+
+    else:  # hydraulic/pneumatic linear actuator
+        base = _kinematic_point(result.get("base_anchor"), "Actuator base_anchor")
+        rod = _kinematic_point(result.get("rod_anchor"), "Actuator rod_anchor")
         minimum = _finite_number(result.get("min_length"), "Actuator min_length")
         maximum = _finite_number(result.get("max_length"), "Actuator max_length")
         if minimum <= 0 or maximum < minimum:
             raise ValueError("Actuator lengths must satisfy 0 < min_length <= max_length")
-        result.update(min_length=minimum, max_length=maximum)
+        result.update(base_anchor=base, rod_anchor=rod, min_length=minimum, max_length=maximum)
     return result
 
 
