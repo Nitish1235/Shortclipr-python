@@ -527,7 +527,13 @@ async def run_render(
             await finish_attempt(pool, attempt_id, lease_token, "cancelled")
             return
         if project["status"] == "complete":
-            # A delivery replay after the successful DB commit is already done.
+            # A delivery replay must not render or settle again. The ready-email
+            # helper is idempotent, so this also recovers a process crash after settlement.
+            owner = await pool.fetchrow(
+                "SELECT id,email,full_name FROM users WHERE id=$1", project["user_id"],
+            )
+            if owner and project["output_object"]:
+                await emailer.send_project_ready(pool, dict(project), dict(owner))
             await finish_attempt(pool, attempt_id, lease_token, "complete")
             logger.info("render.already_complete")
             return
@@ -648,12 +654,6 @@ async def run_render(
                     # A repeated delivery after completion must never render or charge twice.
                     discard_output = True
                     logger.warning("render.duplicate_delivery", extra={"output_object": output_object})
-                    await connection.execute(
-                        """UPDATE job_attempts SET status='complete',lease_token=NULL,
-                           lease_expires_at=NULL,worker_region=NULL,last_error=NULL
-                           WHERE id=$1 AND lease_token=$2""",
-                        attempt_id, lease_token,
-                    )
                 else:
                     settled = locked["credits_reserved"]
                     await connection.execute(
@@ -672,16 +672,11 @@ async def run_render(
                         "INSERT INTO project_events(project_id,event_type,stage,progress,payload) VALUES($1,'completed','render',100,$2::jsonb)",
                         project_id, json.dumps({"output_object": output_object, "quality": quality}),
                     )
-                    await connection.execute(
-                        """UPDATE job_attempts SET status='complete',lease_token=NULL,
-                           lease_expires_at=NULL,worker_region=NULL,last_error=NULL
-                           WHERE id=$1 AND lease_token=$2""",
-                        attempt_id, lease_token,
-                    )
                     completed_project = dict(locked)
                     completed_project["output_object"] = output_object
-                    output_committed = True
                     logger.info("render.settled", extra={"credits_settled": settled, "output_object": output_object})
+
+        output_committed = completed_project is not None
 
         # ── Send delivery email ───────────────────────────────────────────
         if discard_output:
@@ -694,6 +689,7 @@ async def run_render(
                     await emailer.send_project_ready(pool, completed_project, dict(owner))
                     ctx["email"] = owner["email"]
 
+        await finish_attempt(pool, attempt_id, lease_token, final_attempt_status)
         total_ms = round((_time.monotonic() - t0_total) * 1000)
         logger.info(
             "render.complete",
