@@ -31,8 +31,6 @@ class BillingPlanTests(unittest.TestCase):
 
     def test_paid_allowances_are_exact_render_seconds(self):
         self.assertEqual(FREE_PLAN_MONTHLY_SECONDS, 10)
-        # A legacy FREE_MONTHLY_RENDER_SECONDS environment value is ignored because
-        # the free allowance is now a fixed product entitlement.
         self.assertEqual(plan_render_seconds(self.settings, "starter"), 600)
         self.assertEqual(plan_render_seconds(self.settings, "creator"), 1800)
         self.assertEqual(plan_render_seconds(self.settings, "studio"), 4200)
