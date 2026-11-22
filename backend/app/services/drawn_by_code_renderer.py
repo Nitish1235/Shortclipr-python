@@ -19,7 +19,7 @@ class DrawnByCodeRenderer:
     @staticmethod
     def _format_output_tail(lines: list[str], max_chars: int = 4000) -> str:
         """Return a bounded diagnostic tail without retaining the full subprocess log."""
-        value = "\\n".join(lines)[-max_chars:]
+        value = "\n".join(lines)[-max_chars:]
         return value or "no subprocess output"
     async def preflight(self)->dict[str,str]:
         required=[self.root/"engine"/"render.mjs",self.root/"engine"/"browser.mjs",self.root/"engine"/"player.html",self.root/"engine"/"core.js",self.root/"node_modules"/"playwright-core"]
@@ -69,7 +69,7 @@ class DrawnByCodeRenderer:
                 })
                 raise RuntimeError(
                     f"Drawn-by-Code render exceeded {self.timeout}s timeout; "
-                    f"last subprocess output:\\n{tail}"
+                    f"last subprocess output:\n{tail}"
                 ) from error
             duration_ms=round((asyncio.get_running_loop().time()-started)*1000)
             if code!=0:
@@ -95,7 +95,7 @@ class DrawnByCodeRenderer:
                     "output_size_bytes":output_path.stat().st_size if output_path.is_file() else 0,
                     "output_tail":tail,
                 })
-                raise RuntimeError("Drawn-by-Code produced no valid MP4; last subprocess output:\\n"+tail)
+                raise RuntimeError("Drawn-by-Code produced no valid MP4; last subprocess output:\n"+tail)
             if progress_callback: await progress_callback(100)
             return output_path
         finally: shutil.rmtree(work,ignore_errors=True)
