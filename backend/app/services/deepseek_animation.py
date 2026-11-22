@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from openai import AsyncOpenAI
 
@@ -38,27 +41,65 @@ class DeepSeekAnimationCompiler:
     async def _json_completion(self, system_prompt: str, user_prompt: str, token_limit: int) -> dict[str, Any]:
         if self.client is None:
             raise RuntimeError("DEEPSEEK_API_KEY is not configured")
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format={"type": "json_object"},
-            max_tokens=token_limit,
-            reasoning_effort=self.reasoning_effort,
-            extra_body={"thinking": {"type": "enabled"}},
-        )
-        raw = response.choices[0].message.content
-        if not raw:
-            raise RuntimeError("DeepSeek returned an empty animation response")
-        try:
-            value = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("DeepSeek returned invalid animation JSON") from exc
-        if not isinstance(value, dict):
-            raise RuntimeError("DeepSeek animation response must be a JSON object")
-        return value
+        # DeepSeek JSON mode can return whitespace-only content when it cannot
+        # recognize the generated output as JSON. Capture finish_reason/usage and
+        # make one conservative non-thinking retry before failing the job.
+        last_error = "unknown response"
+        for attempt in range(2):
+            request_started = asyncio.get_running_loop().time()
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={"type": "json_object"},
+                max_tokens=token_limit,
+                reasoning_effort=("none" if attempt else self.reasoning_effort),
+                extra_body={"thinking": {"type": "disabled" if attempt else "enabled"}},
+            )
+            latency_ms = round((asyncio.get_running_loop().time() - request_started) * 1000)
+            choice = response.choices[0] if response.choices else None
+            message = choice.message if choice else None
+            raw = (message.content or "").strip() if message else ""
+            usage = response.usage
+            usage_info = {
+                "prompt_tokens": getattr(usage, "prompt_tokens", None),
+                "completion_tokens": getattr(usage, "completion_tokens", None),
+                "reasoning_tokens": getattr(getattr(usage, "completion_tokens_details", None), "reasoning_tokens", None),
+            }
+            finish_reason = getattr(choice, "finish_reason", None)
+            logger.info(
+                "deepseek.animation.response",
+                extra={
+                    "model": self.model,
+                    "attempt": attempt + 1,
+                    "latency_ms": latency_ms,
+                    "finish_reason": finish_reason,
+                    "response_id": getattr(response, "id", None),
+                    **usage_info,
+                    "content_chars": len(raw),
+                    "reasoning_chars": len(getattr(message, "reasoning_content", None) or "") if message else 0,
+                },
+            )
+            if not raw:
+                last_error = f"empty JSON content (finish_reason={finish_reason}, usage={usage_info})"
+                if attempt == 0:
+                    logger.warning("deepseek.animation.empty_response_retry", extra={"finish_reason": finish_reason, **usage_info})
+                    continue
+                raise RuntimeError(f"DeepSeek returned empty animation JSON after fallback retry: {last_error}")
+            try:
+                value = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                last_error = f"invalid JSON (finish_reason={finish_reason}, content_chars={len(raw)})"
+                if attempt == 0:
+                    logger.warning("deepseek.animation.invalid_json_retry", extra={"finish_reason": finish_reason})
+                    continue
+                raise RuntimeError(f"DeepSeek returned invalid animation JSON after fallback retry: {last_error}") from exc
+            if not isinstance(value, dict):
+                raise RuntimeError("DeepSeek animation response must be a JSON object")
+            return value
+        raise RuntimeError(f"DeepSeek animation generation failed: {last_error}")
 
     async def compile(self, project: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
         if self.client is None:
