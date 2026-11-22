@@ -193,6 +193,27 @@ The planner is instructed to identify a physical mechanism only when supported b
 This is a structured motion-direction contract and prompt-level coordination, not a deterministic physics solver. Exact kinematics, mechanism-specific reusable motion functions, and rendered-frame motion QA remain future work. Qualitative motion must not be presented as engineering-accurate simulation unless the plan contains sufficient physical detail and is independently checked.
 
 
+## Implementation progress — vision-based visual QA (PR #30)
+
+The animation compiler now carries the validated Visual Bible and the storyboard fields
+used to direct each shot into the persisted render program. The FFmpeg worker can pass
+the rendered contact sheet, this exact planning context and the sample-to-shot mapping
+to the DeepSeek vision-capable model configured by `DEEPSEEK_VISUAL_QA_MODEL`
+(default: `deepseek-flash`).
+
+The reviewer returns a bounded JSON report with an overall visual score, per-shot
+summaries, categorized findings, severity, evidence sample references, confidence and
+targeted recommendations. Findings are constrained to known shot and sample IDs.
+Review dimensions include character/prop continuity, art-style adherence, composition,
+depth, readability, storytelling clarity and visible render artifacts.
+
+This is deliberately report-only. It does not reject a video, change credits, trigger
+regeneration, or claim to verify motion between still frames, narration synchronization
+or physical correctness. If the vision key is not configured, the contact sheet is
+missing, or the review request fails, the video still completes and the quality report
+records a skipped/unavailable state. To activate this in production, configure
+`DEEPSEEK_API_KEY` on the FFmpeg worker as well as the API worker.
+
 ## Implementation progress — rendered motion QA capture (PR #30)
 
 The animation compiler now returns a compact shot manifest with frame boundaries,
