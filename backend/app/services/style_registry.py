@@ -11,15 +11,16 @@ from typing import Any
 # New art systems are not advertised until their full rendering contracts exist.
 UI_STYLE_ALIASES: dict[str, str | None] = {
     "AI Auto": None,
-    "Editorial": "risograph",
+    "Editorial": "cinematic-editorial",
     "Cinematic": "70s-poster",
-    "Diagrammatic": "line",
-    "Paper craft": "paper-cutout",
+    "Diagrammatic": "isometric-technical",
+    "Paper craft": "layered-paper",
 }
 
 LEGACY_STYLE_IDS = frozenset({
     "paper-cutout", "risograph", "comic", "70s-poster",
     "engraving", "blueprint", "line", "pixel-art",
+    "cinematic-editorial", "isometric-technical", "layered-paper",
 })
 
 
