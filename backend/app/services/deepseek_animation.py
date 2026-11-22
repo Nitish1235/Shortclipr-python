@@ -257,7 +257,7 @@ const rawProgress = Ease.clamp(Ease.seg(t, 0, {end_s-start_s:.3f}));
 const easing = action.easing ?? "in_out";
 const easedProgress = easing === "linear" ? rawProgress : easing === "ease_in" ? rawProgress * rawProgress * rawProgress : easing === "ease_out" ? 1 - Math.pow(1 - rawProgress, 3) : Ease.inOut(rawProgress);
 const actionProgress = (action.start_progress ?? 0) + ((action.end_progress ?? 1) - (action.start_progress ?? 0)) * easedProgress;
-Call ShortcliprStyles.mechanismPose(spec, actionProgress) for every spec in mechanism.kinematics. For pivot results, apply the returned rotation to the matching component around the returned anchor. For translation results, place the matching component origin at the returned absolute position (do not add it twice). For actuator results, draw the cylinder and rod along the returned base-to-tip segment using returned length and angle_rad. Apply the same actionProgress to all kinematic parts in this action. Do not invent geometry or constraints. When kinematics is absent, use qualitative motion only and do not present it as engineering-solved.
+Iterate with `for (const spec of mechanism.kinematics)`. For each spec, run `const pose = ShortcliprStyles.mechanismPose(spec, actionProgress)` and apply that pose to the component identified by `pose.part`. For pivot results, apply the returned rotation to the matching component around the returned anchor. For translation results, place the matching component origin at the returned absolute position (do not add it twice). For actuator results, draw the cylinder and rod along the returned base-to-tip segment using returned length and angle_rad. Apply the same actionProgress to all kinematic parts in this action. Do not invent geometry or constraints. When kinematics is absent, use qualitative motion only and do not present it as engineering-solved.
 Make one clear animated action with simple easing and follow-through. Use only the composition layers needed for this shot. Keep code concise: aim for at most 900 output tokens; no comments, repeated character drawings or unnecessary decorative loops. Reuse shared helpers for all recurring entities. Do not render narration or subtitles.
 STYLE: {style_id}
 BINDING ART DIRECTION:
@@ -378,10 +378,10 @@ Rules:
             mechanism_actions_js = json.dumps(shot.get("mechanism_actions", []), ensure_ascii=False, separators=(",", ":"))
             mechanisms_js = json.dumps(shot.get("mechanisms", []), ensure_ascii=False, separators=(",", ":"))
             functions.append(
-                f"function drawShot_{index}(g,t,env,absoluteTime) {{\\n"
-                f"const mechanismActions = {mechanism_actions_js};\\n"
-                f"const mechanisms = {mechanisms_js};\\n"
-                f"{shot['draw_body']}\\n}}"
+                f"function drawShot_{index}(g,t,env,absoluteTime) {{\n"
+                f"const mechanismActions = {mechanism_actions_js};\n"
+                f"const mechanisms = {mechanisms_js};\n"
+                f"{shot['draw_body']}\n}}"
             )
             name = re.sub(r"[^a-zA-Z0-9 _-]", "", shot["name"]).replace("'", "")[:60]
             ranges.append(f"[{start:.6f},{end:.6f},'{name}']")
