@@ -6,7 +6,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 
-from ..core.config import FREE_PLAN_MONTHLY_SECONDS, Settings, get_settings
+from ..core.config import FREE_PLAN_MONTHLY_SECONDS
 from ..core.log import get_logger
 from ..db import get_pool
 from ..dependencies import CurrentUser, current_user
@@ -147,7 +147,7 @@ async def cancel_project(project_id: UUID, user: CurrentUser = Depends(current_u
 
 
 @router.get("/account/credits", response_model=CreditBalanceResponse)
-async def credit_balance(user: CurrentUser = Depends(current_user), settings: Settings = Depends(get_settings), pool: asyncpg.Pool = Depends(get_pool)):
+async def credit_balance(user: CurrentUser = Depends(current_user), pool: asyncpg.Pool = Depends(get_pool)):
     if user.plan not in {"free", "starter", "creator", "studio"} or (user.plan != "free" and user.subscription_status != "active"):
         return {"total": 0, "used": 0, "remaining": 0, "cycle_ends_at": None}
     if user.plan == "free":
