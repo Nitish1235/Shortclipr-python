@@ -7,6 +7,7 @@ from ..core.config import Settings
 from .animation_contracts import STYLE_IDS, validate_scene_plan, validate_visual_bible
 from .generation_policy import planning_effort
 from .style_registry import apply_visual_direction, resolve_visual_style
+from .art_direction import build_art_direction
 
 
 class DeepSeekStoryPlanner:
@@ -124,6 +125,11 @@ Do not request subtitles; narration is muxed separately. Return JSON only.
         bible = validate_visual_bible(plan.get("visual_bible"))
         # Explicit UI selections are authoritative even if the model drifts.
         bible = apply_visual_direction(bible, requested_style)
+        art_direction = build_art_direction(
+            bible["style_id"],
+            requested_style=requested_style,
+            style_notes=str(bible.get("style_notes", "")),
+        )
         scenes = plan.get("scenes")
         if not isinstance(scenes, list) or len(scenes) < minimum_scenes:
             raise RuntimeError(f"DeepSeek must return at least {minimum_scenes} shots")
@@ -166,5 +172,6 @@ Do not request subtitles; narration is muxed separately. Return JSON only.
             if scene["environment"] and scene["environment"] not in environment_ids:
                 raise RuntimeError("Shot references an undeclared environment ID")
         plan["visual_bible"] = bible
+        plan["art_direction"] = art_direction
         plan["scenes"] = scenes
         return plan
