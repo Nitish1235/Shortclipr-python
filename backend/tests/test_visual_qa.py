@@ -43,7 +43,7 @@ class VisualQualityReviewValidationTests(unittest.TestCase):
         self.assertEqual(result["findings"][1]["category"], "other")
         self.assertEqual(result["findings"][1]["severity"], "low")
         self.assertIsNone(result["findings"][1]["shot_index"])
-        self.assertFalse(result["automatic_repair"])
+        self.assertEqual(result["repair_policy"], "report_only")
 
     def test_repair_queue_only_selects_high_confidence_actionable_known_shots(self):
         review = {
