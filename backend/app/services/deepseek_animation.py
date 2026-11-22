@@ -29,7 +29,8 @@ class DeepSeekAnimationCompiler:
 
     def __init__(self, settings: Settings):
         self.model = settings.DEEPSEEK_ANIMATION_MODEL
-        self.reasoning_effort = settings.DEEPSEEK_REASONING_EFFORT
+        self.medium_reasoning_effort = "medium"
+        self.max_reasoning_effort = settings.DEEPSEEK_CODING_REASONING_EFFORT
         self.max_output_tokens = settings.DEEPSEEK_MAX_OUTPUT_TOKENS
         self.max_parallel_shots = max(1, min(4, settings.DEEPSEEK_MAX_PARALLEL_SHOTS))
         self.enable_shot_review = settings.DEEPSEEK_ENABLE_SHOT_REVIEW
@@ -168,7 +169,7 @@ Do not use external assets. Do not redefine ShortcliprStyles.
 Visual bible:
 {json.dumps(visual_bible, ensure_ascii=False)}
 """.strip()
-        shared_effort = coding_effort(None, project, "medium", "max")
+        shared_effort = coding_effort(None, project, self.medium_reasoning_effort, self.max_reasoning_effort)
         shared_js = await self._validated_fragment(
             "You are a senior Canvas 2D JavaScript systems programmer. Return strict JSON only.",
             shared_prompt + "\n\nReturn only the required JSON object.",
@@ -206,7 +207,7 @@ SHOT:
 SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s.
 """.strip()
             async with semaphore:
-                effort = coding_effort(scene, project, "medium", "max")
+                effort = coding_effort(scene, project, self.medium_reasoning_effort, self.max_reasoning_effort)
                 body = await self._validated_fragment(
                     "You are a senior Canvas 2D animation programmer. Return strict JSON only.",
                     shot_prompt + "\n\nWrite the complete draw_body now.",
