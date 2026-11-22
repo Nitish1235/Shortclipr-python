@@ -30,7 +30,10 @@ class BillingPlanTests(unittest.TestCase):
         self.assertEqual(plan_product_id(self.settings, "studio"), "prod_studio")
 
     def test_paid_allowances_are_exact_render_seconds(self):
-        self.assertEqual(self.settings.FREE_MONTHLY_RENDER_SECONDS, 15)
+        self.assertEqual(self.settings.FREE_MONTHLY_RENDER_SECONDS, 10)
+        self.assertEqual(self.settings.free_monthly_render_seconds, 10)
+        # Old Cloud Run env values are capped so the former 15s allowance cannot return.
+        self.assertEqual(Settings(FREE_MONTHLY_RENDER_SECONDS=15).free_monthly_render_seconds, 10)
         self.assertEqual(plan_render_seconds(self.settings, "starter"), 600)
         self.assertEqual(plan_render_seconds(self.settings, "creator"), 1800)
         self.assertEqual(plan_render_seconds(self.settings, "studio"), 4200)
