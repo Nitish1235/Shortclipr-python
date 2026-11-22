@@ -55,8 +55,10 @@ class DeepSeekAnimationCompiler:
                 ],
                 response_format={"type": "json_object"},
                 max_tokens=token_limit,
-                reasoning_effort=("none" if attempt else self.reasoning_effort),
-                extra_body={"thinking": {"type": "disabled" if attempt else "enabled"}},
+                # Animation source generation is a constrained coding task, not a
+                # reasoning benchmark. Reserve the completion budget for JSON/code.
+                reasoning_effort="none",
+                extra_body={"thinking": {"type": "disabled"}},
             )
             latency_ms = round((asyncio.get_running_loop().time() - request_started) * 1000)
             choice = response.choices[0] if response.choices else None
@@ -121,7 +123,8 @@ Create a reusable JavaScript drawing library for a {style_id} Canvas 2D film.
 Return JSON only: {{"shared_js":"JavaScript source"}}.
 The source is evaluated in the same script as the film and may define ordinary named
 functions and constants. It must not call Motion.scene. Use only the supplied Canvas
-2D context in functions; no DOM, browser globals, imports, exports, network, filesystem,
+2D context in functions. Never reference browser-global identifiers such as window,
+document, self, top, parent or frames. No DOM, browser globals, imports, exports, network, filesystem,
 Node APIs, timers, eval, Function, Date, performance, Math.random, WebGL or 3D.
 A trusted runtime script ShortcliprStyles is loaded before this library. Use
 ShortcliprStyles.palette("{style_id}"), ShortcliprStyles.paperBackground(g, "{style_id}", env),
