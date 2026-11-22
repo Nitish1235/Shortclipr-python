@@ -821,7 +821,7 @@ async def run_render(
                         "attempted": 0,
                         "accepted": False,
                         "shot_index": None,
-                        "automatic_repair": False,
+                        "automatic_repair_enabled": shot_repairer is not None,
                     }
                     repair_bundle = plan.get("repair_bundle")
                     if (
