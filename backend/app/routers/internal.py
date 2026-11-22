@@ -211,8 +211,9 @@ async def run_planning(
             ctx["compiled_shot_count"] = compiled_film.get("shot_count", len(plan["scenes"]))
             ctx["visual_style"] = compiled_film.get("style", "unknown")
             ctx["quality_review"] = compiled_film.get("quality_review", {})
-            ctx["audio_bytes"] = len(audio)
-            ctx["timestamps_bytes"] = len(timestamps)
+            ctx["audio_object"] = audio_object
+            ctx["timestamps_object"] = timestamps_object
+            ctx["audio_cached"] = bool(artifacts.get("audio_object"))
 
         # ── Persist scene plans + queue render job ─────────────────────────
         async with pool.acquire() as connection:
