@@ -192,6 +192,18 @@ def test_mechanism_kinematics_rejects_unknown_part_and_invalid_actuator_lengths(
         validate_visual_bible(base)
 
 
+def test_mechanism_action_rejects_unsupported_easing():
+    with pytest.raises(ValueError, match="easing"):
+        validate_scene_plan([
+            {"start_frame": 0, "end_frame": 30, "mechanism_actions": [{
+                "mechanism_id": "mechanism_lift", "pattern_id": "raise",
+                "action": "raise deck", "easing": "elastic",
+            }]},
+            {"start_frame": 30, "end_frame": 60},
+            {"start_frame": 60, "end_frame": 90},
+        ])
+
+
 def test_mechanism_kinematics_rejects_non_finite_geometry():
     base = {
         "style_id": "isometric-technical",
