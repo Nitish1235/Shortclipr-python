@@ -62,3 +62,82 @@ def test_storyboard_rejects_unknown_shot_scale_and_empty_depth_layers():
             {"start_frame": 30, "end_frame": 60},
             {"start_frame": 60, "end_frame": 90},
         ], 90)
+
+
+def _bridge_mechanism_bible():
+    return {
+        "style_id": "isometric-technical",
+        "props": [
+            {"id": "prop_deck", "design": "bridge deck"},
+            {"id": "prop_actuator", "design": "hydraulic actuator"},
+        ],
+        "mechanisms": [{
+            "id": "mechanism_lift",
+            "name": "Deck lift",
+            "principle": "The actuator extends and the deck rotates around a fixed hinge",
+            "components": [
+                {"prop_id": "prop_deck", "part": "deck", "role": "rotating load"},
+                {"prop_id": "prop_actuator", "part": "rod", "role": "linear driver"},
+            ],
+            "joints": [{
+                "type": "revolute", "between": ["deck", "frame"], "anchor": "fixed hinge",
+            }],
+            "motion_constraints": ["deck rotates around the fixed hinge"],
+            "action_patterns": [{
+                "id": "raise",
+                "description": "Raise the deck",
+                "driver": "actuator rod extends",
+                "followers": ["deck rotates upward"],
+                "relationship": "linked actuator extension and deck rotation",
+            }],
+        }],
+    }
+
+
+def test_mechanism_contract_accepts_linked_components_and_motion_pattern():
+    bible = validate_visual_bible(_bridge_mechanism_bible())
+    mechanism = bible["mechanisms"][0]
+    assert mechanism["components"][0]["prop_id"] == "prop_deck"
+    assert mechanism["action_patterns"][0]["driver"] == "actuator rod extends"
+
+
+def test_mechanism_contract_rejects_unknown_component_prop():
+    bible = _bridge_mechanism_bible()
+    bible["mechanisms"][0]["components"][0]["prop_id"] = "prop_missing"
+    with pytest.raises(ValueError, match="declared prop_id"):
+        validate_visual_bible(bible)
+
+
+def test_mechanism_action_progress_is_bounded_and_ordered():
+    scenes = validate_scene_plan([
+        {"start_frame": 0, "end_frame": 30, "mechanism_actions": [{
+            "mechanism_id": "mechanism_lift", "pattern_id": "raise",
+            "action": "raise deck", "start_progress": 0.2, "end_progress": 0.9,
+        }]},
+        {"start_frame": 30, "end_frame": 60},
+        {"start_frame": 60, "end_frame": 90},
+    ], 90)
+    assert scenes[0]["mechanism_actions"][0]["end_progress"] == 0.9
+
+
+def test_mechanism_action_rejects_invalid_progress():
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        validate_scene_plan([
+            {"start_frame": 0, "end_frame": 30, "mechanism_actions": [{
+                "mechanism_id": "mechanism_lift", "pattern_id": "raise",
+                "action": "raise deck", "start_progress": -0.1, "end_progress": 0.9,
+            }]},
+            {"start_frame": 30, "end_frame": 60},
+            {"start_frame": 60, "end_frame": 90},
+        ], 90)
+
+
+def test_legacy_visual_bible_and_shots_default_to_no_mechanisms():
+    bible = validate_visual_bible({"style_id": "paper-cutout"})
+    scenes = validate_scene_plan([
+        {"start_frame": 0, "end_frame": 30},
+        {"start_frame": 30, "end_frame": 60},
+        {"start_frame": 60, "end_frame": 90},
+    ], 90)
+    assert bible["mechanisms"] == []
+    assert scenes[0]["mechanism_actions"] == []
