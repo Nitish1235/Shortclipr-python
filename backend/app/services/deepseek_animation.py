@@ -192,7 +192,7 @@ Visual bible:
         )
 
         shared_helper_names = sorted(set(re.findall(
-            r"\\bfunction\\s+(draw[A-Z][A-Za-z0-9_]*)\\s*\\(", shared_js
+            r"\bfunction\s+(draw[A-Z][A-Za-z0-9_]*)\s*\(", shared_js
         )))
         semaphore = asyncio.Semaphore(self.max_parallel_shots)
 
@@ -291,7 +291,7 @@ Rules:
                 MAX_SHARED_SOURCE,
             )
             validate_draw_helper_definitions(generated_helpers, missing_helpers)
-            shared_js += "\\n" + generated_helpers
+            shared_js += "\n" + generated_helpers
             if len(shared_js) > MAX_SHARED_SOURCE:
                 raise ValueError("Shared drawing library exceeds the maximum source size")
             shared_helper_names = sorted(set(shared_helper_names) | set(missing_helpers))
