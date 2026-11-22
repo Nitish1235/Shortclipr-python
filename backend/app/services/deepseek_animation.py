@@ -378,10 +378,10 @@ Rules:
             mechanism_actions_js = json.dumps(shot.get("mechanism_actions", []), ensure_ascii=False, separators=(",", ":"))
             mechanisms_js = json.dumps(shot.get("mechanisms", []), ensure_ascii=False, separators=(",", ":"))
             functions.append(
-                f"function drawShot_{index}(g,t,env,absoluteTime) {{{{\\n"
+                f"function drawShot_{index}(g,t,env,absoluteTime) {{\\n"
                 f"const mechanismActions = {mechanism_actions_js};\\n"
                 f"const mechanisms = {mechanisms_js};\\n"
-                f"{shot['draw_body']}\\n}}}}"
+                f"{shot['draw_body']}\\n}}"
             )
             name = re.sub(r"[^a-zA-Z0-9 _-]", "", shot["name"]).replace("'", "")[:60]
             ranges.append(f"[{start:.6f},{end:.6f},'{name}']")
