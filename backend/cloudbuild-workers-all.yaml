@@ -10,9 +10,9 @@ substitutions:
   _FFMPEG_REGION_1: us-central1
   _FFMPEG_REGION_2: europe-west1
   _API_CPU: '4'
-  _API_MAX_INSTANCES: '5'
+  _API_MAX_INSTANCES: '2'
   _FFMPEG_CPU: '4'
-  _FFMPEG_MAX_INSTANCES: '5'
+  _FFMPEG_MAX_INSTANCES: '3'
 
 steps:
   - id: build-api-worker
