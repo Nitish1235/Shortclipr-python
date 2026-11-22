@@ -69,6 +69,8 @@ try {
                 ff.once('error', ko);
                 ff.once('close', (code) => (code === 0 ? ok() : ko(new Error('ffmpeg exited with ' + code))));
             });
+            let inputError = null;
+            ff.stdin.on('error', (error) => { inputError = error; });
             // Attach a handler immediately; the promise is awaited below after
             // frame production, but FFmpeg may fail before the first frame.
             void done.catch(() => {});
@@ -76,10 +78,11 @@ try {
             let renderedFrames = 0;
             try {
                 for (let i = from; i <= to; i += step) {
+                    if (inputError) throw inputError;
                     const buf = Buffer.from(await grab(i, 'image/jpeg'), 'base64');
                     if (!ff.stdin.write(buf)) await new Promise((ok, ko) => {
                         ff.stdin.once('drain', ok);
-                        ff.stdin.once('error', ko);
+                        if (inputError) ko(inputError);
                     });
                     renderedFrames += 1;
                     if (renderedFrames === 1 || renderedFrames % (fps * 5) === 0) {
@@ -93,6 +96,7 @@ try {
                 }
                 ff.stdin.end();
                 await done;
+                if (inputError) throw inputError;
             } catch (error) {
                 ff.stdin.destroy();
                 if (!ff.killed && ff.exitCode === null) ff.kill('SIGKILL');
