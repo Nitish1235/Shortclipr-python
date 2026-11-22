@@ -541,6 +541,14 @@ class Dispatcher:
                         except asyncio.TimeoutError:
                             pass
             finally:
+                # Stop in-flight HTTP dispatch coroutines before closing the
+                # shared client and pool. Remote workers keep their DB lease
+                # heartbeat; the watcher will reconcile an expired lease if needed.
+                active = list(self.tasks)
+                for task in active:
+                    task.cancel()
+                if active:
+                    await asyncio.gather(*active, return_exceptions=True)
                 await listener.remove_listener("shortclipr_jobs", on_job_notification)
 
 
@@ -573,7 +581,7 @@ async def main() -> None:
     db_url = os.environ["SUPABASE_DB_URL"]
     secret = os.environ["INTERNAL_TASK_SECRET"]
     api_targets = targets("API_WORKER_URLS", "API_WORKER_REGIONS", "API_REGION_SOFT_CAP", 12) or targets("WORKER_SERVICE_URLS", "WORKER_SERVICE_REGIONS", "API_REGION_SOFT_CAP", 12)
-    render_targets = targets("FFMPEG_WORKER_URLS", "FFMPEG_WORKER_REGIONS", "FFMPEG_REGION_SOFT_CAP", 4) or targets("WORKER_SERVICE_URLS", "WORKER_SERVICE_REGIONS", "FFMPEG_REGION_SOFT_CAP", 4)
+    render_targets = targets("FFMPEG_WORKER_URLS", "FFMPEG_WORKER_REGIONS", "FFMPEG_REGION_SOFT_CAP", 3) or targets("WORKER_SERVICE_URLS", "WORKER_SERVICE_REGIONS", "FFMPEG_REGION_SOFT_CAP", 4)
     if not api_targets or not render_targets:
         raise RuntimeError("API_WORKER_URLS and FFMPEG_WORKER_URLS are required")
     logger.info(
