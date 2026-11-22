@@ -60,7 +60,8 @@ class VisualQualityReviewer:
                 if not isinstance(item, dict):
                     continue
                 shot_index = item.get("shot_index")
-                if shot_index not in valid_shot_ids:
+                if (isinstance(shot_index, bool) or not isinstance(shot_index, int)
+                        or shot_index not in valid_shot_ids):
                     shot_index = None
                 sample_ids = item.get("evidence_sample_indices", [])
                 if not isinstance(sample_ids, list):
@@ -73,8 +74,8 @@ class VisualQualityReviewer:
                 category = item.get("category")
                 severity = item.get("severity")
                 findings.append({
-                    "category": category if category in CATEGORIES else "other",
-                    "severity": severity if severity in SEVERITIES else "low",
+                    "category": category if isinstance(category, str) and category in CATEGORIES else "other",
+                    "severity": severity if isinstance(severity, str) and severity in SEVERITIES else "low",
                     "shot_index": shot_index,
                     "evidence_sample_indices": sample_ids,
                     "issue": cls._bounded_text(item.get("issue"), 500),
