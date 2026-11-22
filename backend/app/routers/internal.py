@@ -691,7 +691,7 @@ async def run_render(
                 ctx.update(await validate_audio_input(audio_path))
         else:
             raise RuntimeError("Narration audio is not available for this render")
-        await pool.execute("UPDATE projects SET progress=52 WHERE id=$1 AND status='rendering'", project_id)
+        await set_render_progress(pool, project_id, attempt_id, lease_token, 52)
 
         # ── Run the Drawn-by-Code renderer subprocess ────────────────────
         output_path = Path(tempfile.mkdtemp(prefix="shortclipr-render-")) / f"{project_id}.mp4"
@@ -700,28 +700,25 @@ async def run_render(
             # Reserve 55–80 for the visual renderer; 82 means the subprocess
             # has fully completed and the mux stage is next.
             mapped = min(80, 55 + round(render_progress * 0.25))
-            await pool.execute(
-                "UPDATE projects SET progress=GREATEST(progress,$2) WHERE id=$1 AND status='rendering'",
-                project_id, mapped,
-            )
+            await set_render_progress(pool, project_id, attempt_id, lease_token, mapped)
 
-        await pool.execute("UPDATE projects SET progress=55 WHERE id=$1 AND status='rendering'", project_id)
+        await set_render_progress(pool, project_id, attempt_id, lease_token, 55)
         async with timed(logger, "render.subprocess") as ctx:
             await renderer.render(plan, output_path, progress_callback=update_visual_progress)
             if output_path.exists():
                 ctx["output_size_mb"] = round(output_path.stat().st_size / 1_048_576, 2)
-        await pool.execute("UPDATE projects SET progress=82 WHERE id=$1 AND status='rendering'", project_id)
+        await set_render_progress(pool, project_id, attempt_id, lease_token, 82)
 
         # ── Mux narration after visuals ──────────────────────────────────
         async with timed(logger, "render.mux_audio") as ctx:
             ctx.update(await mux_narration(output_path, audio_path, project["duration_seconds"]))
-        await pool.execute("UPDATE projects SET progress=86 WHERE id=$1 AND status='rendering'", project_id)
+        await set_render_progress(pool, project_id, attempt_id, lease_token, 86)
 
         # ── Quality validation ────────────────────────────────────────────
         async with timed(logger, "render.quality") as ctx:
             quality = await validate_final(output_path, project["aspect_ratio"], project["duration_seconds"])
             ctx.update(quality)
-        await pool.execute("UPDATE projects SET progress=90 WHERE id=$1 AND status='rendering'", project_id)
+        await set_render_progress(pool, project_id, attempt_id, lease_token, 90)
 
         # ── Upload final MP4 to GCS ───────────────────────────────────────
         async with timed(logger, "render.upload") as ctx:
@@ -731,7 +728,7 @@ async def run_render(
             )
             ctx["output_object"] = output_object
             ctx["size_mb"] = round(output_path.stat().st_size / 1_048_576, 2) if output_path.exists() else None
-        await pool.execute("UPDATE projects SET progress=96 WHERE id=$1 AND status='rendering'", project_id)
+        await set_render_progress(pool, project_id, attempt_id, lease_token, 96)
 
         # ── Settle credits (idempotent) ───────────────────────────────────
         discard_output = False
