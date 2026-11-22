@@ -24,7 +24,7 @@ const expectedMigrations = [
   '0004_billing_checkout_sessions.sql', '0005_project_email_notifications.sql',
   '0006_landing_media_slots.sql', '0007_pricing_entitlements.sql', '0008_free_plan_15_seconds.sql',
   '0009_media_placement_map.sql', '0010_worker_region_state.sql', '0011_landing_thumbnail_slots.sql',
-  '0012_editorial_landing_media.sql', '0013_billing_plan_constraint.sql'
+  '0012_editorial_landing_media.sql', '0013_billing_plan_constraint.sql', '0014_landing_media_revisions.sql'
 ];
 check(JSON.stringify(migrationFiles) === JSON.stringify(expectedMigrations), 'Migration sequence is incomplete or out of order');
 
@@ -43,6 +43,8 @@ check(nginx.includes('listen 8080 default_server;'), 'Frontend canonical server 
 check(nginx.includes('server_name shortclipr.com _;'), 'Frontend canonical server must accept the apex hostname');
 check(nginx.includes('location ^~ /youtube-shorts/ { return 410; }'), 'Frontend must return 410 for retired YouTube-clipping routes');
 
+check(nginx.includes('no-store, no-cache, must-revalidate, max-age=0'), 'HTML and stable CSS/JS must not be served from stale browser caches');
+check(nginx.includes('location ^~ /assets/'), 'Fingerprintable Vite assets must have an explicit immutable cache policy');
 const viteConfig = await read('vite.config.ts');
 check(viteConfig.includes('sourcemap: false'), 'Production source maps must remain disabled');
 const sitemap = await read('public/sitemap.xml');
