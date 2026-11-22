@@ -73,7 +73,8 @@ Do not request subtitles; narration is muxed separately. Return JSON only.
                       {"role":"user","content":"Create the story, visual bible and timed shot plan."}],
             response_format={"type":"json_object"},
             max_tokens=self.max_output_tokens,
-            reasoning_effort="none",
+            reasoning_effort=effort,
+            extra_body={"thinking": {"type": "enabled"}},
         )
         choice = response.choices[0] if response.choices else None
         message = choice.message if choice else None
