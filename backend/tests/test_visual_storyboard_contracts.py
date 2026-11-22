@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.animation_contracts import validate_scene_plan, validate_visual_bible
+from app.services.animation_contracts import analyze_mechanism_motion, validate_scene_plan, validate_visual_bible
 
 
 def test_legacy_visual_bible_gets_backward_compatible_spatial_defaults():
@@ -335,3 +335,62 @@ def test_mechanism_kinematics_rejects_invalid_gear_pulley_and_cable_data():
     }]
     with pytest.raises(ValueError, match="2–24"):
         validate_visual_bible(base)
+
+
+def test_mechanism_motion_diagnostics_report_qualitative_only_actions():
+    bible = _bridge_mechanism_bible()
+    scenes = validate_scene_plan([
+        {"start_frame": 0, "end_frame": 30, "mechanism_actions": [{
+            "mechanism_id": "mechanism_lift", "pattern_id": "raise", "action": "raise deck",
+        }]},
+        {"start_frame": 30, "end_frame": 60},
+        {"start_frame": 60, "end_frame": 90},
+    ], 90)
+    diagnostics = analyze_mechanism_motion(validate_visual_bible(bible), scenes)
+    assert len(diagnostics) == 1
+    assert diagnostics[0]["code"] == "qualitative_motion_only"
+    assert diagnostics[0]["severity"] == "info"
+
+
+def test_mechanism_motion_diagnostics_detect_adjacent_shot_progress_jump():
+    bible = _bridge_mechanism_bible()
+    bible["mechanisms"][0]["kinematics"] = [{
+        "type": "pivot", "part": "deck", "anchor": {"x": 10, "y": 20},
+        "start_angle_deg": 0, "end_angle_deg": 60,
+    }]
+    scenes = validate_scene_plan([
+        {"start_frame": 0, "end_frame": 30, "mechanism_actions": [{
+            "mechanism_id": "mechanism_lift", "pattern_id": "raise", "action": "raise deck",
+            "start_progress": 0.0, "end_progress": 0.5,
+        }]},
+        {"start_frame": 30, "end_frame": 60, "mechanism_actions": [{
+            "mechanism_id": "mechanism_lift", "pattern_id": "raise", "action": "continue raising deck",
+            "start_progress": 0.7, "end_progress": 1.0,
+        }]},
+        {"start_frame": 60, "end_frame": 90},
+    ], 90)
+    diagnostics = analyze_mechanism_motion(validate_visual_bible(bible), scenes)
+    assert len(diagnostics) == 1
+    assert diagnostics[0]["code"] == "progress_discontinuity"
+    assert diagnostics[0]["previous_end_progress"] == 0.5
+    assert diagnostics[0]["next_start_progress"] == 0.7
+
+
+def test_mechanism_motion_diagnostics_accept_continuous_adjacent_shots():
+    bible = _bridge_mechanism_bible()
+    bible["mechanisms"][0]["kinematics"] = [{
+        "type": "pivot", "part": "deck", "anchor": {"x": 10, "y": 20},
+        "start_angle_deg": 0, "end_angle_deg": 60,
+    }]
+    scenes = validate_scene_plan([
+        {"start_frame": 0, "end_frame": 30, "mechanism_actions": [{
+            "mechanism_id": "mechanism_lift", "pattern_id": "raise", "action": "raise deck",
+            "start_progress": 0.0, "end_progress": 0.5,
+        }]},
+        {"start_frame": 30, "end_frame": 60, "mechanism_actions": [{
+            "mechanism_id": "mechanism_lift", "pattern_id": "raise", "action": "continue raising deck",
+            "start_progress": 0.5, "end_progress": 1.0,
+        }]},
+        {"start_frame": 60, "end_frame": 90},
+    ], 90)
+    assert analyze_mechanism_motion(validate_visual_bible(bible), scenes) == []
