@@ -303,6 +303,7 @@ async def run_planning(
                 plan = plan_value
             else:
                 plan = await planner.plan(dict(project))
+                await assert_worker_lease(pool, project_id, attempt_id, lease_token, "api")
                 await pool.execute(
                     """INSERT INTO project_pipeline_artifacts(project_id,story_plan)
                        VALUES($1,$2::jsonb)
@@ -326,6 +327,7 @@ async def run_planning(
                     return cached
                 async with timed(logger, "planning.deepseek_animation") as stage:
                     result = await compiler.compile(dict(project), plan)
+                    await assert_worker_lease(pool, project_id, attempt_id, lease_token, "api")
                     stage["shot_count"] = result.get("shot_count")
                     stage["source_chars"] = len(result.get("scene_js", ""))
                 await pool.execute(
@@ -345,6 +347,7 @@ async def run_planning(
                     return cached_audio, cached_timestamps
                 async with timed(logger, "planning.tts") as stage:
                     audio_bytes, timestamp_bytes = await speech.synthesize(plan["narration"], project["voice_id"])
+                    await assert_worker_lease(pool, project_id, attempt_id, lease_token, "api")
                     if not audio_bytes:
                         raise RuntimeError("TTS returned empty narration audio")
                     prefix = f"projects/{project['user_id']}/{project_id}/audio"
@@ -352,6 +355,7 @@ async def run_planning(
                         storage.upload_bytes_private(audio_bytes, "audio/mpeg", prefix, ".mp3"),
                         storage.upload_bytes_private(timestamp_bytes or b"[]", "application/json", prefix, ".json"),
                     )
+                    await assert_worker_lease(pool, project_id, attempt_id, lease_token, "api")
                     await pool.execute(
                         """INSERT INTO project_pipeline_artifacts(project_id,audio_object,timestamps_object)
                            VALUES($1,$2,$3)
