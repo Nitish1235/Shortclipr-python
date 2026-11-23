@@ -361,10 +361,97 @@ class DeepSeekAnimationCompiler:
     async def _validated_fragment(
         self, system_prompt: str, user_prompt: str, token_limit: int,
         field: str, label: str, max_chars: int, reasoning_effort: str = "none",
+        validator: Any | None = None,
     ) -> str:
-        """Generate once and apply only basic deterministic checks."""
-        source = await self._code_completion(system_prompt, user_prompt, token_limit, label=label)
-        return validate_generated_fragment(source, label, max_chars)
+        """Generate a fragment and make bounded, contract-directed repair attempts.
+
+        Validation happens before the fragment is accepted into the compiler pipeline.
+        The model receives the concrete compiler error and its rejected output, never a
+        vague request to try again. No invalid candidate is persisted or assembled.
+        """
+        prompt = user_prompt
+        last_error: Exception | None = None
+        rejected_source = ""
+        for attempt in range(1, 4):
+            source = await self._code_completion(
+                system_prompt, prompt, token_limit, label=label,
+            )
+            try:
+                source = validate_generated_fragment(source, label, max_chars)
+                if validator is not None:
+                    validator(source)
+                if attempt > 1:
+                    logger.info("deepseek.animation.fragment_repaired", extra={
+                        "label": label, "attempt": attempt,
+                    })
+                return source
+            except (TypeError, ValueError, KeyError, IndexError) as error:
+                last_error = error
+                rejected_source = source
+                logger.warning("deepseek.animation.fragment_rejected", extra={
+                    "label": label, "attempt": attempt, "max_attempts": 3,
+                    "reason": str(error)[:700],
+                })
+                if attempt == 3:
+                    break
+                prompt = (
+                    user_prompt
+                    + "\\n\\nCOMPILER REPAIR REQUIRED\\n"
+                    + f"Your previous candidate failed validation: {str(error)[:1400]}\\n"
+                    + "Correct every listed violation. Preserve the requested design and "
+                      "return the complete replacement source, not a patch. Do not omit "
+                      "required functions or weaken the contract.\\n"
+                    + "REJECTED CANDIDATE (may be truncated):\\n"
+                    + rejected_source[:18000]
+                )
+        raise ValueError(
+            f"{label} failed its compiler contract after 3 generation attempts: "
+            f"{str(last_error)[:900] if last_error else 'unknown validation error'}"
+        ) from last_error
+
+    async def _validated_json_object_completion(
+        self, system_prompt: str, user_prompt: str, token_limit: int,
+        label: str, validator: Any,
+    ) -> dict[str, Any]:
+        """Generate structured direction and retry only malformed/invalid candidates."""
+        prompt = user_prompt
+        last_error: Exception | None = None
+        rejected_value: dict[str, Any] | None = None
+        for attempt in range(1, 4):
+            try:
+                value = await self._json_object_completion(
+                    system_prompt, prompt, token_limit, label,
+                )
+                validated = validator(value)
+                if not isinstance(validated, dict):
+                    raise ValueError(f"{label} validator did not return an object")
+                if attempt > 1:
+                    logger.info("deepseek.animation.structured_repaired", extra={
+                        "label": label, "attempt": attempt,
+                    })
+                return validated
+            except (RuntimeError, TypeError, ValueError, KeyError, IndexError) as error:
+                last_error = error
+                logger.warning("deepseek.animation.structured_rejected", extra={
+                    "label": label, "attempt": attempt, "max_attempts": 3,
+                    "reason": str(error)[:700],
+                })
+                if attempt == 3:
+                    break
+                rejected_value = value if "value" in locals() and isinstance(value, dict) else None
+                prompt = (
+                    user_prompt
+                    + "\\n\\nSTRUCTURED OUTPUT REPAIR REQUIRED\\n"
+                    + f"Your previous response failed validation: {str(error)[:1200]}\\n"
+                    + "Return a complete corrected JSON object that satisfies the original "
+                      "schema and every rule. Do not add keys or explanatory prose.\\n"
+                    + "REJECTED JSON CANDIDATE:\\n"
+                    + json.dumps(rejected_value, ensure_ascii=False)[:10000]
+                )
+        raise ValueError(
+            f"{label} failed its structured contract after 3 generation attempts: "
+            f"{str(last_error)[:900] if last_error else 'unknown validation error'}"
+        ) from last_error
 
     @staticmethod
     def _shot_visual_context(visual_bible: dict[str, Any], scene: dict[str, Any]) -> dict[str, Any]:
