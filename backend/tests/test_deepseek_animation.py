@@ -799,5 +799,77 @@ class PhysicalMotionContractTests(unittest.TestCase):
             )
 
 
+
+class SharedHelperScopeRegressionTests(unittest.TestCase):
+    def test_helper_definition_must_be_top_level_and_unique(self):
+        nested = """
+        function drawWrapper(g) {
+            function drawRequested(g) { g.fillRect(0, 0, 10, 10); }
+        }
+        """
+        with self.assertRaisesRegex(ValueError, "top-level"):
+            validate_draw_helper_definitions(nested, ["drawRequested"])
+
+        duplicate = (
+            "function drawRequested(g) { g.fillRect(0, 0, 2, 2); }"
+            "function drawRequested(g) { g.fillRect(0, 0, 3, 3); }"
+        )
+        with self.assertRaisesRegex(ValueError, "exactly once"):
+            validate_draw_helper_definitions(duplicate, ["drawRequested"])
+
+    def test_compiled_program_rejects_unresolved_helpers_before_render(self):
+        valid_bundle = {
+            "shared_js": "function drawBridge(g) { g.fillRect(0, 0, 10, 10); }",
+            "shots": [{
+                "index": 0,
+                "start_frame": 0,
+                "end_frame": 30,
+                "name": "Bridge",
+                "draw_body": "drawBridge(g);",
+            }],
+            "duration": 1,
+            "logical": [1600, 900],
+            "style_id": "line",
+        }
+        source = DeepSeekAnimationCompiler._assemble_film(
+            valid_bundle["shared_js"], valid_bundle["shots"], 1, [1600, 900], "line",
+        )
+        DeepSeekAnimationCompiler.validate_compiled_program({
+            "scene_js": source,
+            "repair_bundle": valid_bundle,
+        })
+
+        invalid_source = source.replace("drawBridge(g);", "drawMissingWheel(g);")
+        with self.assertRaisesRegex(ValueError, "drawMissingWheel"):
+            DeepSeekAnimationCompiler.validate_compiled_program({
+                "scene_js": invalid_source,
+                "repair_bundle": valid_bundle,
+            })
+
+    def test_compiled_program_rejects_scene_and_repair_bundle_drift(self):
+        bundle = {
+            "shared_js": "function drawBridge(g) { g.fillRect(0, 0, 10, 10); }",
+            "shots": [{
+                "index": 0,
+                "start_frame": 0,
+                "end_frame": 30,
+                "name": "Bridge",
+                "draw_body": "drawBridge(g);",
+            }],
+            "duration": 1,
+            "logical": [1600, 900],
+            "style_id": "line",
+        }
+        different_source = DeepSeekAnimationCompiler._assemble_film(
+            "function drawOtherBridge(g) { g.fillRect(0, 0, 10, 10); }",
+            bundle["shots"], 1, [1600, 900], "line",
+        )
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            DeepSeekAnimationCompiler.validate_compiled_program({
+                "scene_js": different_source,
+                "repair_bundle": bundle,
+            })
+
+
 if __name__ == "__main__":
     unittest.main()
