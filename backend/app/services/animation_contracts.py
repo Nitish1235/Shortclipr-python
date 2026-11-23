@@ -664,6 +664,48 @@ def validate_draw_helper_specs(value: Any, required_names: list[str]) -> list[di
 
 
 
+
+def extract_shared_draw_helpers(shared_source: str, helper_names: list[str]) -> dict[str, str]:
+    """Extract exact top-level helper declarations for targeted model context."""
+    masked = _mask_js_comments_and_strings(shared_source)
+    depth = 0
+    brace_depth = [0] * (len(masked) + 1)
+    for index, char in enumerate(masked):
+        brace_depth[index] = depth
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth = max(0, depth - 1)
+
+    result: dict[str, str] = {}
+    for name in helper_names:
+        matches = [
+            match for match in re.finditer(
+                rf"\bfunction\s+{re.escape(name)}\s*\([^)]*\)\s*\{{",
+                masked,
+            )
+            if brace_depth[match.start()] == 0
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                f"Expected exactly one top-level shared declaration for {name}; found {len(matches)}"
+            )
+        declaration = matches[0]
+        body_depth = 1
+        body_end = None
+        for position in range(declaration.end(), len(masked)):
+            if masked[position] == "{":
+                body_depth += 1
+            elif masked[position] == "}":
+                body_depth -= 1
+                if body_depth == 0:
+                    body_end = position + 1
+                    break
+        if body_end is None:
+            raise ValueError(f"Existing shared helper {name} has an incomplete body")
+        result[name] = shared_source[declaration.start():body_end]
+    return result
+
 def replace_shared_draw_helpers(
     shared_source: str,
     replacement_source: str,
