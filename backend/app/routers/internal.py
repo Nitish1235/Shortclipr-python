@@ -1,5 +1,6 @@
 import asyncio
 import json
+import hashlib
 import shutil
 import tempfile
 import time as _time
@@ -740,6 +741,39 @@ async def run_render(
         scene_js = program.get("scene_js")
         if not isinstance(scene_js, str) or not scene_js:
             raise NonRetryableRenderError("Persisted Drawn-by-Code animation program is missing scene_js")
+
+        # Revalidate the exact JSONB artifact read by the render worker. This
+        # closes the API -> scene_plans -> FFmpeg handoff instead of trusting
+        # that the compiler's in-memory object is byte-for-byte what was stored.
+        repair_bundle = program.get("repair_bundle")
+        if isinstance(repair_bundle, dict):
+            try:
+                DeepSeekAnimationCompiler.validate_compiled_program(program)
+            except (TypeError, ValueError, KeyError, IndexError) as validation_error:
+                raise NonRetryableRenderError(
+                    "Persisted animation program failed render-boundary integrity validation: "
+                    + str(validation_error)[:700]
+                ) from validation_error
+        else:
+            logger.warning(
+                "render.animation_program_missing_repair_bundle",
+                extra={"project_id": str(project_id), "legacy_compatibility": True},
+            )
+
+        logger.info(
+            "render.animation_program_validated",
+            extra={
+                "scene_js_sha256": hashlib.sha256(scene_js.encode("utf-8")).hexdigest(),
+                "repair_bundle_schema_version": (
+                    repair_bundle.get("schema_version") if isinstance(repair_bundle, dict) else None
+                ),
+                "shot_count": (
+                    len(repair_bundle.get("shots", []))
+                    if isinstance(repair_bundle, dict) and isinstance(repair_bundle.get("shots"), list)
+                    else None
+                ),
+            },
+        )
         plan = {
             "projectId": str(project_id), "title": project["title"],
             "narration": project["narration_script"] or "",
