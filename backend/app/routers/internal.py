@@ -346,22 +346,36 @@ async def run_planning(
 
         # ── Stage 1: story, narration script and timed shot plan ────────────
         async with timed(logger, "planning.deepseek_story") as ctx:
+            plan = None
+            story_cache_hit = False
             plan_value = artifacts.get("story_plan")
-            if isinstance(plan_value, str):
-                plan = json.loads(plan_value)
-            elif isinstance(plan_value, dict):
-                plan = plan_value
-            else:
+            if plan_value is not None:
+                try:
+                    cached_plan = json.loads(plan_value) if isinstance(plan_value, str) else plan_value
+                    plan = planner.validate_cached_plan(dict(project), cached_plan)
+                    story_cache_hit = True
+                    logger.info("planning.artifact_reused", extra={
+                        "artifact": "story_plan",
+                        "scene_count": len(plan.get("scenes", [])),
+                        "title": plan.get("title", "")[:60],
+                    })
+                except (TypeError, ValueError, KeyError, IndexError) as validation_error:
+                    logger.warning("planning.cached_story_plan_invalidated", extra={
+                        "artifact": "story_plan",
+                        "reason": str(validation_error)[:600],
+                    })
+            if plan is None:
                 plan = await planner.plan(dict(project))
+                await assert_worker_lease(pool, project_id, attempt_id, lease_token, "api")
                 await save_pipeline_artifacts(
                     pool, project_id, attempt_id, lease_token,
                     story_plan=json.dumps(plan),
                 )
-                logger.info("planning.artifact_saved", extra={"artifact":"story_plan"})
+                logger.info("planning.artifact_saved", extra={"artifact": "story_plan"})
             ctx["scene_count"] = len(plan["scenes"])
             ctx["narration_chars"] = len(plan.get("narration", ""))
             ctx["title"] = plan.get("title", "")[:60]
-            ctx["cache_hit"] = bool(artifacts.get("story_plan"))
+            ctx["cache_hit"] = story_cache_hit
 
         # ── Stage 2: animation code and narration audio (independent) ──────
         async with timed(logger, "planning.deepseek_animation_and_tts") as ctx:
