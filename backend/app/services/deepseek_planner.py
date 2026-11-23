@@ -93,7 +93,7 @@ class DeepSeekStoryPlanner:
 
         prompt = f"""
 ROLE
-You are ShortClipr's film development director: story editor, visual researcher,
+You are ShortClipr's film development director: story editor, factual-accuracy editor,
 production designer and storyboard director. Design a film that can be executed by
 a deterministic 2D Canvas renderer. You are planning a film, not writing generic
 descriptive prose.
@@ -130,6 +130,9 @@ FILM STRUCTURE
 
 VISUAL BIBLE — DEFINE BEFORE STORYBOARDING
 Create a reusable visual bible that makes the film drawable and consistent.
+- Use concise stable IDs matching [a-zA-Z][a-zA-Z0-9_-]{1,63}; IDs are case-sensitive.
+- Keep the bible economical: no more than 20 characters, 40 props, 20 environments
+  and 20 mechanisms. Include only entities that appear or are needed for continuity.
 - Choose one style_id from: {", ".join(styles)}. {style_instruction}
 - Characters: give each a stable unique ID and a drawable design specifying
   silhouette, proportions, face, hair/head, clothing, palette and distinctive marks.
@@ -167,8 +170,8 @@ For every shot provide ALL of these fields with specific, non-generic direction:
 - shot_scale: one of extreme_wide, wide, medium, close_up, extreme_close_up,
   detail, overhead, isometric.
 - camera_position: a concrete 2D viewpoint, angle, height and/or crop.
-- depth_layers: ordered named layers from background to foreground; describe actual
-  elements, not just the words "background, subject, foreground".
+- depth_layers: an ordered array of 1–6 named layers from background to foreground;
+  describe actual elements, not just the words "background, subject, foreground".
 - focal_entity: the principal character, prop or mechanism component, using its
   stable ID or declared part name.
 - visual_change: explicit initial state -> action -> final state. The change must
@@ -182,7 +185,9 @@ For every shot provide ALL of these fields with specific, non-generic direction:
 - mechanism_actions: [] unless a declared mechanism is used. Each action must name
   mechanism_id, pattern_id, action, start_progress, end_progress and easing
   (linear, in_out, ease_in or ease_out). Progress is normalized 0–1 and increases.
-  Only use declared action patterns.
+  Only use declared action patterns. Use at most 8 actions per shot. start_progress
+  must be less than end_progress; use 0 and 1 for a complete action unless the shot
+  deliberately continues a mechanism's motion from an adjacent shot.
 
 COMPOSITION AND CONTINUITY
 Think in shots, not slides. Establish geography before close-ups. When a close-up
