@@ -102,13 +102,22 @@ class DeepSeekAnimationCompiler:
         ):
             raise ValueError("Animation repair bundle is incomplete or malformed")
 
-        shot_bodies = [
-            shot.get("draw_body")
-            for shot in shots
-            if isinstance(shot, dict) and isinstance(shot.get("draw_body"), str)
-        ]
-        if len(shot_bodies) != len(shots):
-            raise ValueError("Animation repair bundle contains an invalid shot body")
+        required_shot_fields = ("index", "start_frame", "end_frame", "name", "draw_body")
+        for shot in shots:
+            if (
+                not isinstance(shot, dict)
+                or any(field not in shot for field in required_shot_fields)
+                or isinstance(shot.get("index"), bool)
+                or not isinstance(shot.get("index"), int)
+                or isinstance(shot.get("start_frame"), bool)
+                or not isinstance(shot.get("start_frame"), int)
+                or isinstance(shot.get("end_frame"), bool)
+                or not isinstance(shot.get("end_frame"), int)
+                or not isinstance(shot.get("name"), str)
+                or not isinstance(shot.get("draw_body"), str)
+            ):
+                raise ValueError("Animation repair bundle contains an invalid shot")
+        shot_bodies = [shot["draw_body"] for shot in shots]
         bundle_unresolved = find_unresolved_draw_helpers(shared_js, shot_bodies)
         if bundle_unresolved:
             raise ValueError(
