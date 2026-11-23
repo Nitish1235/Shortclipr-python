@@ -187,6 +187,24 @@ class DeepSeekAnimationCompiler:
         ):
             raise ValueError("Animation helper manifest contains invalid or duplicate names")
         validate_draw_helper_definitions(shared_js, required_names, manifest_functions)
+        function_specs = bundle.get("function_specs")
+        if not isinstance(function_specs, list) or len(function_specs) != len(manifest_functions):
+            raise ValueError("Persisted function specifications do not match the canonical helper manifest")
+        specs_by_name = {
+            item.get("name"): item for item in function_specs
+            if isinstance(item, dict) and isinstance(item.get("name"), str)
+        }
+        if set(specs_by_name) != set(required_names):
+            raise ValueError("Persisted function specifications contain missing or unexpected helpers")
+        for spec in manifest_functions:
+            persisted_spec = specs_by_name.get(spec["name"])
+            if not isinstance(persisted_spec, dict):
+                raise ValueError(f"Persisted function specifications are missing {spec['name']}")
+            for field in ("signature", "dependencies", "required_by_shots", "version"):
+                if persisted_spec.get(field) != spec.get(field):
+                    raise ValueError(
+                        f"Persisted function specification drift for {spec['name']}: {field}"
+                    )
         declared_names = set(top_level_draw_helper_names(shared_js))
         if declared_names != set(required_names):
             raise ValueError(
@@ -259,6 +277,9 @@ class DeepSeekAnimationCompiler:
         persisted_manifest = program.get("helper_manifest")
         if persisted_manifest is not None and persisted_manifest != helper_manifest:
             raise ValueError("Top-level helper manifest differs from the persisted repair bundle")
+        persisted_registry = program.get("function_registry")
+        if persisted_registry is not None and persisted_registry != registry:
+            raise ValueError("Top-level function registry differs from the persisted repair bundle")
 
         expected_source = DeepSeekAnimationCompiler._assemble_film(
             shared_js, shots, duration, logical, style_id,
@@ -1344,6 +1365,15 @@ Return the complete repaired function declarations now.""".strip()
             for spec in updated_specs:
                 if isinstance(spec, dict) and spec.get("name") in helper_names:
                     spec["version"] = int(spec.get("version", 1)) + 1
+        updated_manifest = updated_bundle.get("helper_manifest")
+        updated_manifest_functions = (
+            updated_manifest.get("functions") if isinstance(updated_manifest, dict) else None
+        )
+        if not isinstance(updated_manifest_functions, list):
+            raise ValueError("Shared-helper repair bundle has no canonical function manifest")
+        for spec in updated_manifest_functions:
+            if isinstance(spec, dict) and spec.get("name") in helper_names:
+                spec["version"] = int(spec.get("version", 1)) + 1
         registry = updated_bundle.get("function_registry", [])
         if isinstance(registry, list):
             for entry in registry:
@@ -1372,7 +1402,13 @@ Return the complete repaired function declarations now.""".strip()
         if len(source) > MAX_FILM_SOURCE:
             raise ValueError("Repaired animation program exceeds the maximum source size")
         self.validate_source(source, duration, logical)
-        repaired_program = {"scene_js": source, "repair_bundle": updated_bundle}
+        repaired_program = {
+            "scene_js": source,
+            "repair_bundle": updated_bundle,
+            "helper_manifest": updated_bundle["helper_manifest"],
+            "function_registry": updated_bundle.get("function_registry", []),
+            "function_specs": updated_bundle.get("function_specs", []),
+        }
         self.validate_compiled_program(repaired_program)
         return {
             **repaired_program,
