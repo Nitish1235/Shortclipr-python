@@ -64,6 +64,104 @@ class VisualQAContextTests(unittest.TestCase):
         self.assertEqual(len(context["storyboard"]), 1)
         self.assertEqual(context["storyboard"][0]["focal_entity"], "prop_hinge")
         self.assertNotIn("internal_debug_field", context["storyboard"][0])
+        self.assertEqual(context["function_registry"], [])
+        self.assertEqual(context["function_specs"], [])
+        helper_context = DeepSeekAnimationCompiler._visual_qa_context(
+            bible, scenes, [{
+                "name": "drawHinge",
+                "category": "visual",
+                "signature": "function drawHinge(g, x)",
+                "purpose": "Draw the hinge",
+                "visual_target": "A visible hinge",
+                "dependencies": [],
+                "required_by_shots": [0],
+                "version": 1,
+            }],
+        )
+        self.assertEqual(helper_context["function_registry"][0]["name"], "drawHinge")
+        self.assertEqual(helper_context["function_registry"][0]["required_by_shots"], [0])
+
+
+class TargetedSharedHelperRepairTests(unittest.IsolatedAsyncioTestCase):
+    async def test_repairs_only_registered_helper_and_preserves_shot_sources(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        compiler = DeepSeekAnimationCompiler.__new__(DeepSeekAnimationCompiler)
+        compiler.client = object()
+        compiler.max_output_tokens = 12000
+        compiler._code_completion = AsyncMock(return_value=(
+            "function drawBridge(g, x) { g.fillStyle = '#222'; g.fillRect(x, 0, 20, 10); }"
+        ))
+        spec = {
+            "name": "drawBridge",
+            "category": "visual",
+            "signature": "function drawBridge(g, x)",
+            "purpose": "Draw the bridge deck.",
+            "coordinate_system": "Logical canvas pixels.",
+            "origin": "The deck left edge.",
+            "visual_target": "A readable horizontal deck silhouette.",
+            "style_requirements": "Use the existing film palette.",
+            "animation_behavior": "Static.",
+            "dependencies": [],
+            "acceptance_criteria": [
+                "Deck is visible at the specified x coordinate.",
+                "Deck has a consistent 20 pixel width.",
+            ],
+            "required_by_shots": [0],
+            "version": 1,
+        }
+        original_body = "drawBridge(g, 30);"
+        bundle = {
+            "schema_version": 1,
+            "duration": 3,
+            "logical": [1080, 1920],
+            "style_id": "cinematic-editorial",
+            "shared_js": (
+                "function drawBridge(g, x) { g.fillRect(x, 0, 10, 10); }\\n"
+                "function drawTower(g, x) { g.fillRect(x, 0, 5, 20); }"
+            ),
+            "shots": [{
+                "index": 0,
+                "name": "Bridge",
+                "start_frame": 0,
+                "end_frame": 90,
+                "draw_body": original_body,
+                "mechanism_actions": [],
+                "mechanisms": [],
+                "transition_out": "cut",
+            }],
+            "function_specs": [spec],
+            "function_registry": [{
+                "name": "drawBridge",
+                "category": "visual",
+                "signature": spec["signature"],
+                "dependencies": [],
+                "required_by_shots": [0],
+                "version": 1,
+            }],
+            "visual_bible": {},
+            "art_direction": {},
+            "art_direction_instructions": "Cinematic editorial.",
+        }
+        findings = [{
+            "shot_index": 0,
+            "severity": "high",
+            "confidence": 0.9,
+            "evidence_sample_indices": [0],
+            "issue": "The bridge deck appears too narrow.",
+            "recommendation": "Increase the deck's visible width.",
+        }]
+
+        result = await compiler.repair_shared_helpers(bundle, ["drawBridge"], findings)
+
+        self.assertIn("g.fillRect(x, 0, 20, 10)", result["repair_bundle"]["shared_js"])
+        self.assertIn("function drawTower(g, x)", result["repair_bundle"]["shared_js"])
+        self.assertEqual(result["repair_bundle"]["shots"][0]["draw_body"], original_body)
+        self.assertEqual(result["repaired_function_names"], ["drawBridge"])
+        self.assertEqual(result["repair_bundle"]["function_specs"][0]["version"], 2)
+        self.assertEqual(result["repair_bundle"]["function_registry"][0]["version"], 2)
+        compiler._code_completion.assert_awaited_once()
 
 
 class TargetedShotRepairTests(unittest.IsolatedAsyncioTestCase):
