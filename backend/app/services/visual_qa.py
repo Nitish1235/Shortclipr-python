@@ -277,7 +277,7 @@ class VisualQualityReviewer:
         # 
         # SAMPLE INDEX / SHOT / TIME MAPPING:
         # {json.dumps(samples, ensure_ascii=False, separators=(",", ":"))}
-        # """.strip(
+        # """.strip()
         # === END LEGACY VISUAL QA PROMPT ===
         prompt = f"""
 ROLE
@@ -367,7 +367,7 @@ STORYBOARD:
 SAMPLE INDEX / SHOT / TIME MAPPING:
 {json.dumps(samples, ensure_ascii=False, separators=(",", ":"))}
 
-Review the supplied frames now. Be candid, concise and evidence-specific.""".strip())
+Review the supplied frames now. Be candid, concise and evidence-specific.""".strip()
         encoded = base64.b64encode(contact_sheet_path.read_bytes()).decode("ascii")
         response = await self.client.chat.completions.create(
             model=self.model,
