@@ -395,9 +395,18 @@ skip it. If no numeric kinematics exist, depict only the qualitative action desc
 by its declared pattern; do not imply engineering simulation.
 When kinematics exist, compute normalized action progress once from this shot's local
 duration ({end_s-start_s:.3f}), action.start_progress, action.end_progress and easing.
+Use this exact deterministic calculation (the compiler/runtime provides Ease):
+const rawProgress = Ease.clamp(Ease.seg(t, 0, {end_s-start_s:.3f}));
+const easing = action.easing ?? "in_out";
+const easedProgress = easing === "linear" ? rawProgress : easing === "ease_in" ? rawProgress * rawProgress * rawProgress : easing === "ease_out" ? 1 - Math.pow(1 - rawProgress, 3) : Ease.inOut(rawProgress);
+const actionProgress = (action.start_progress ?? 0) + ((action.end_progress ?? 1) - (action.start_progress ?? 0)) * easedProgress;
 Use that identical progress for every connected component. For each kinematic spec,
-call ShortcliprStyles.mechanismPose(spec, actionProgress) once and use its returned
-pose values; do not independently animate followers.
+call ShortcliprStyles.mechanismPose(spec, actionProgress) exactly once and use its
+returned pose values; do not independently animate followers. Define a small local
+drawing function for each mechanism part. Its origin must match the declared part's
+local origin or joint anchor; all declared anchor coordinates and part geometry must
+use the same logical-canvas coordinate system. Apply transforms with g.save(),
+translate/rotate as specified, draw the part once, then g.restore().
 - pivot: rotate the declared part around pose.anchor by pose.angle_rad.
 - translation/slider: translate the part's local origin to pose.position.
 - gear: rotate driver_part around driver_anchor and the driven part around anchor
