@@ -8,7 +8,7 @@ class MediaPlacementTests(unittest.TestCase):
     def test_only_named_direct_upload_slots_are_accepted(self):
         self.assertEqual(
             LANDING_MEDIA_SLOTS,
-            frozenset({"landing_hero_background", "screening_feature", "screening_side"})
+            frozenset({"landing_hero_background", "landing_hero_clip", "screening_feature", "screening_side"})
             | frozenset(f"landing_thumbnail_{index}" for index in range(1, 7))
             | LANDING_COLLECTION_SLOTS | {"landing_hero_machine"},
         )
