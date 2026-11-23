@@ -540,19 +540,19 @@ and do not redesign the composition. Return one JSON object with exactly these k
   "secondary_motion": "Only supporting motion that improves readability; otherwise state none.",
   "camera_motion": "Specific camera movement if motivated; otherwise state locked camera.",
   "mechanism_motion": "How supplied mechanism data is depicted, or state no mechanism motion.",
-  "physical_constraints": {
+  "physical_constraints": {{
     "motion_type": "rigid_body, articulated, ballistic, fluid, elastic, mechanical, camera, mixed or static",
-    "anchors": [{"entity_id": "supplied entity ID", "point": "stable anchor location", "role": "what is fixed or connected"}],
-    "relationships": [{"source_entity_id": "supplied entity ID", "target_entity_id": "supplied entity ID", "relationship": "physical relationship", "behavior": "how target responds"}],
-    "constraints": [{"entity_id": "supplied entity ID", "rule": "supported axis, boundary, attachment or movement constraint"}],
-    "forces_and_effects": [{"entity_id": "supplied entity ID", "effect": "relevant effect", "description": "visible consequence supported by the scene"}],
-    "collision_rules": [{"entity_a": "supplied entity ID", "entity_b": "supplied entity ID", "response": "visible contact behavior"}],
-    "motion_profile": {"start": "initial hold or anticipation", "acceleration": "movement onset", "peak": "main action", "deceleration": "slowing phase", "settle": "final stabilization"}
-  }
+    "anchors": [{{"entity_id": "supplied entity ID", "point": "stable anchor location", "role": "what is fixed or connected"}}],
+    "relationships": [{{"source_entity_id": "supplied entity ID", "target_entity_id": "supplied entity ID", "relationship": "physical relationship", "behavior": "how target responds"}}],
+    "constraints": [{{"entity_id": "supplied entity ID", "rule": "supported axis, boundary, attachment or movement constraint"}}],
+    "forces_and_effects": [{{"entity_id": "supplied entity ID", "effect": "relevant effect", "description": "visible consequence supported by the scene"}}],
+    "collision_rules": [{{"entity_a": "supplied entity ID", "entity_b": "supplied entity ID", "response": "visible contact behavior"}}],
+    "motion_profile": {{"start": "initial hold or anticipation", "acceleration": "movement onset", "peak": "main action", "deceleration": "slowing phase", "settle": "final stabilization"}}
+  }}
 }}
 
 Rules:
-- JSON only; every value must be a string.
+- JSON only; the seven motion-description fields are strings and physical_constraints follows the structured object shown above.
 - The approved layout is fixed. Do not move the camera or subjects to a different composition.
 - Plan one dominant action, not a list of unrelated movements.
 - Motion must be deterministic and readable at 30 fps.
