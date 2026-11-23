@@ -652,7 +652,7 @@ Implement every missing helper now.""".strip()
                 "On-demand drawing helpers",
                 MAX_SHARED_SOURCE,
             )
-            validate_draw_helper_definitions(generated_helpers, missing_helpers)
+            validate_draw_helper_definitions(generated_helpers, missing_helpers, pass_specs)
             shared_js += "\n" + generated_helpers
             if len(shared_js) > MAX_SHARED_SOURCE:
                 raise ValueError("Shared drawing library exceeds the maximum source size")
