@@ -166,6 +166,23 @@ class DrawingHelperContractTests(unittest.TestCase):
             validate_draw_helper_definitions("function drawQuestion(g) {}", ["drawPaperQuestionMark"])
         with self.assertRaisesRegex(ValueError, "empty or incomplete"):
             validate_draw_helper_definitions("function drawPaperQuestionMark(g, x, y) {}", ["drawPaperQuestionMark"])
+        with self.assertRaisesRegex(ValueError, "no Canvas drawing operation"):
+            validate_draw_helper_definitions("function drawPaperQuestionMark(g, x, y) { const unused = 1; }", ["drawPaperQuestionMark"])
+        specification = {
+            "name": "drawPaperQuestionMark",
+            "signature": "function drawPaperQuestionMark(g, x, y)",
+        }
+        validate_draw_helper_definitions(
+            "function drawPaperQuestionMark(g, x, y) { g.fillRect(x, y, 4, 4); }",
+            ["drawPaperQuestionMark"],
+            [specification],
+        )
+        with self.assertRaisesRegex(ValueError, "does not match its specification"):
+            validate_draw_helper_definitions(
+                "function drawPaperQuestionMark(g, x) { g.fillRect(x, 0, 4, 4); }",
+                ["drawPaperQuestionMark"],
+                [specification],
+            )
 
 
 class MechanismKinematicsContextTests(unittest.TestCase):
