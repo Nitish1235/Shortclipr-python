@@ -46,7 +46,7 @@ Motion.scene({ draw(g, t, env) { drawShot_0(g, t, env, t); } });
         source = '''
 // drawMissingFromComment(g);
 const label = "drawMissingFromString(g)";
-const api = { drawMethod(g) {} };
+const api = {};
 function drawShot_0(g, t, env, absoluteTime) {
     api.drawMethod(g);
 }
