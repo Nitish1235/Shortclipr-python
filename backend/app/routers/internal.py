@@ -839,10 +839,10 @@ async def run_render(
                             "render lease was lost before regenerated animation persistence"
                         )
                     updated = await connection.fetchval(
-                        """UPDATE scene_plans SET program=$3::jsonb
+                        """UPDATE scene_plans SET program=$2::jsonb
                            WHERE project_id=$1 AND scene_index=0
                            RETURNING project_id""",
-                        project_id, 0, json.dumps(regenerated_program),
+                        project_id, json.dumps(regenerated_program),
                     )
                     if not updated:
                         raise RuntimeError("Regenerated animation could not be persisted to scene_plans")
