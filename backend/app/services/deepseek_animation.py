@@ -105,6 +105,95 @@ class DeepSeekAnimationCompiler:
             raise RuntimeError(f"DeepSeek returned a malformed code fence for {label}")
         return raw
 
+    async def _json_object_completion(
+        self, system_prompt: str, user_prompt: str, token_limit: int,
+        label: str,
+    ) -> dict[str, Any]:
+        """Request one constrained JSON object from DeepSeek; never retry or repair it."""
+        if self.client is None:
+            raise RuntimeError("DEEPSEEK_API_KEY is not configured")
+        request_started = asyncio.get_running_loop().time()
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+            max_tokens=token_limit,
+            reasoning_effort="none",
+            extra_body={"thinking": {"type": "disabled"}},
+        )
+        latency_ms = round((asyncio.get_running_loop().time() - request_started) * 1000)
+        choice = response.choices[0] if response.choices else None
+        message = choice.message if choice else None
+        raw = (message.content or "").strip() if message else ""
+        usage = response.usage
+        prompt_details = getattr(usage, "prompt_tokens_details", None)
+        finish_reason = getattr(choice, "finish_reason", None)
+        logger.info("deepseek.animation.json_response", extra={
+            "model": self.model, "label": label, "thinking_enabled": False,
+            "latency_ms": latency_ms, "finish_reason": finish_reason,
+            "prompt_tokens": getattr(usage, "prompt_tokens", None),
+            "prompt_cache_hit_tokens": getattr(prompt_details, "cached_tokens", None),
+            "completion_tokens": getattr(usage, "completion_tokens", None),
+            "total_tokens": getattr(usage, "total_tokens", None),
+            "content_chars": len(raw),
+        })
+        if not raw:
+            raise RuntimeError(f"DeepSeek returned empty JSON for {label}")
+        if finish_reason == "length":
+            raise RuntimeError(f"DeepSeek truncated JSON for {label}")
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError as error:
+            raise RuntimeError(
+                f"DeepSeek returned invalid structured JSON for {label}: "
+                f"{error.msg} at line {error.lineno}, column {error.colno}"
+            ) from error
+        if not isinstance(value, dict):
+            raise RuntimeError(f"DeepSeek returned a non-object JSON value for {label}")
+        return value
+
+    @staticmethod
+    def _validate_shot_layout(value: dict[str, Any], label: str) -> dict[str, Any]:
+        required = (
+            "composition", "camera", "focal_subject", "lighting",
+            "style_application", "continuity",
+        )
+        for field in required:
+            item = value.get(field)
+            if not isinstance(item, str) or not item.strip():
+                raise ValueError(f"{label} layout requires non-empty {field}")
+        layers = value.get("depth_layers")
+        if not isinstance(layers, list) or not 1 <= len(layers) <= 3:
+            raise ValueError(f"{label} layout must contain 1–3 depth layers")
+        seen: set[str] = set()
+        for layer in layers:
+            if not isinstance(layer, dict):
+                raise ValueError(f"{label} depth layers must be objects")
+            name = layer.get("layer")
+            if name not in {"background", "midground", "foreground"} or name in seen:
+                raise ValueError(f"{label} has an invalid or duplicate depth layer")
+            seen.add(name)
+            for field in ("content", "purpose"):
+                item = layer.get(field)
+                if not isinstance(item, str) or not item.strip():
+                    raise ValueError(f"{label} depth layer requires non-empty {field}")
+        return value
+
+    @staticmethod
+    def _validate_shot_motion(value: dict[str, Any], label: str) -> dict[str, Any]:
+        required = (
+            "initial_state", "primary_action", "final_state",
+            "timing", "secondary_motion", "camera_motion", "mechanism_motion",
+        )
+        for field in required:
+            item = value.get(field)
+            if not isinstance(item, str) or not item.strip():
+                raise ValueError(f"{label} motion specification requires non-empty {field}")
+        return value
+
     async def _validated_fragment(
         self, system_prompt: str, user_prompt: str, token_limit: int,
         field: str, label: str, max_chars: int, reasoning_effort: str = "none",
@@ -360,123 +449,170 @@ Return the complete shared JavaScript drawing library now.""".strip()
         # """.strip()
         # === END LEGACY SHOT GENERATION PROMPT ===
 
-            shot_prompt = f"""
-ROLE
-You are ShortClipr's 2D film director, layout artist and senior Canvas animator.
-Create the finished drawing program for this shot in an already designed film.
-The storyboard and visual bible are authoritative.
+            async with semaphore:
+                layout_prompt = f"""
+You are ShortClipr's senior 2D film composition designer.
 
-OUTPUT CONTRACT
-Return only complete raw JavaScript statements for drawShot_{scene["index"]}.
-No JSON wrapper, Markdown, prose, imports, exports or code fences. The body is inserted
-inside function drawShot_{scene["index"]}(g, t, env, absoluteTime).
+Design the visual composition for ONE shot. Do not write code and do not plan motion.
+Use only the characters, props and environment supplied below. Do not invent entities.
 
-RUNTIME CONTRACT
-- t is local shot time beginning at zero; absoluteTime is film time in seconds.
-- The compiler injects validated mechanismActions and mechanisms constants.
-- Use CanvasRenderingContext2D methods on g, local variables, standard Math, verified
-  shared draw helpers, and documented ShortcliprStyles and Ease APIs only.
-- For numeric interpolation, use Ease.lerp(a, b, progress). Never call bare mix();
-  it is not part of the Drawn-by-Code runtime API. Do not assume any undocumented
-  global helper exists.
-- Redraw the entire frame deterministically from t. No accumulated state or randomness.
-- Use g.save()/g.restore() around transforms and restore all context state you change.
-- Keep all marks within the logical canvas {logical[0]}x{logical[1]}.
-- No external assets, browser/Node globals, DOM, network, filesystem, timers, eval,
-  Function, Date, performance, WebGL, Three.js or 3D.
-- Do not render narration, subtitles or paragraphs. Short labels are permitted only
-  when they materially clarify a real object or relationship.
+Return one JSON object with exactly these keys:
+{{
+  "composition": "Specific spatial composition and visual hierarchy.",
+  "camera": "Shot scale, angle, perspective and framing.",
+  "focal_subject": "The exact supplied entity that dominates the frame and how it is staged.",
+  "depth_layers": [
+    {{"layer": "background", "content": "Recognizable supplied environment content", "purpose": "Why it supports the shot"}},
+    {{"layer": "midground", "content": "Recognizable supplied subject or prop content", "purpose": "Why it supports the shot"}},
+    {{"layer": "foreground", "content": "Recognizable supplied foreground content, or a deliberate framing element", "purpose": "Why it supports the shot"}}
+  ],
+  "lighting": "Light direction, contrast and focal treatment.",
+  "style_application": "How the binding art direction affects shapes, materials, edges and palette.",
+  "continuity": "Identity and continuity details that must remain consistent."
+}}
 
-SHOT DIRECTING
-- The visual_objective is the single idea the viewer must understand from this shot.
-  Make that idea legible without narration.
-- Stage an initial state, one dominant visible action and a resolved final state.
-  A static diagram with decorative movement is not an animated shot.
-- Make the focal_entity large and clear. Use surrounding objects, people or architecture
-  as scale references when useful.
-- Follow the requested composition, shot_scale, camera_position and ordered depth_layers.
-  Use actual spatial placement, overlap, occlusion, negative space and value contrast;
-  do not draw generic horizontal bands just to claim depth.
-- Every selected depth layer must contain recognizable scene content and contribute
-  to the story. Avoid clutter and objects that have no narrative purpose.
-- Maintain a consistent projection. Isometric components share one set of axes.
-- Apply the binding style to shapes, materials, lighting and line language, not just
-  the background color.
-- Avoid generic grids, repeated circles, floating icons, unexplained particles,
-  decorative geometry and repeated centered compositions.
-- This shot must add a new visual fact, reveal, viewpoint, scale or state unless the
-  storyboard explicitly calls for a sustained composition.
+Rules:
+- JSON only. Every value must be a JSON string except depth_layers, which is an array of objects.
+- Use only depth layers that materially improve this composition; one to three layers are allowed.
+- Every layer must contain recognizable visual content and a clear storytelling purpose.
+- Be spatially specific. Avoid generic bands, grids, floating icons, decorative clutter and default centered layouts.
+- Make the visual_objective immediately understandable without narration.
+- Preserve character and prop identity from the visual references.
+- Do not describe animation, timing or JavaScript.
 
-SHARED DRAWING HELPERS
-Verified shared helper names: {json.dumps(shared_helper_names)}
-Call only these shared helpers. Never define a drawX function inside this shot body.
-If a new reusable drawing function is needed, call it by its exact drawX name; the
-compiler will specify and generate it in the shared library before assembly. Do not
-invent unrelated helper names. Reuse shared helpers for recurring characters and props;
-do not redraw identity-defining features.
-
-MECHANISM RENDERING
-The validated mechanismActions and mechanisms arrays are authoritative. Never invent
-components, dimensions, joints, forces, physical laws or kinematics.
-For each action, locate the declared mechanism by mechanism_id. If it is missing,
-skip it. If no numeric kinematics exist, depict only the qualitative action described
-by its declared pattern; do not imply engineering simulation.
-When kinematics exist, compute normalized action progress once from this shot's local
-duration ({end_s-start_s:.3f}), action.start_progress, action.end_progress and easing.
-Use this exact deterministic calculation (the compiler/runtime provides Ease):
-const rawProgress = Ease.clamp(Ease.seg(t, 0, {end_s-start_s:.3f}));
-const easing = action.easing ?? "in_out";
-const easedProgress = easing === "linear" ? rawProgress : easing === "ease_in" ? rawProgress * rawProgress * rawProgress : easing === "ease_out" ? 1 - Math.pow(1 - rawProgress, 3) : Ease.inOut(rawProgress);
-const actionProgress = (action.start_progress ?? 0) + ((action.end_progress ?? 1) - (action.start_progress ?? 0)) * easedProgress;
-Use that identical progress for every connected component. For each kinematic spec,
-call ShortcliprStyles.mechanismPose(spec, actionProgress) exactly once and use its
-returned pose values; do not independently animate followers. Define a small local
-drawing function for each mechanism part. Its origin must match the declared part's
-local origin or joint anchor; all declared anchor coordinates and part geometry must
-use the same logical-canvas coordinate system. Apply transforms with g.save(),
-translate/rotate as specified, draw the part once, then g.restore().
-- pivot: rotate the declared part around pose.anchor by pose.angle_rad.
-- translation/slider: translate the part's local origin to pose.position.
-- gear: rotate driver_part around driver_anchor and the driven part around anchor
-  using returned angles; preserve mesh direction and pitch-radius ratio.
-- pulley: rotate pulley_part around its anchor and place the attached part at the
-  returned absolute pose.position.
-- cable: draw one continuous path through pose.points in order.
-- actuator: draw cylinder and rod along the returned base-to-tip axis.
-Give every component recognizable geometry based on its referenced prop design.
-Keep connected parts aligned at joints and draw each component only once per frame.
-
-MOTION AND VISUAL FINISH
-- Motion needs anticipation, a readable primary movement and restrained follow-through.
-- Make motion smooth, deterministic and large enough to read at final resolution.
-- Do not animate every object. Secondary motion must support the focal action.
-- Use camera movement only when motivated; avoid contradictory world and subject motion.
-- Prefer a few well-designed objects over many generic low-detail shapes.
-- Do not omit required subjects, spatial relationships or visible action to save tokens.
-
-STYLE: {style_id}
-
-BINDING ART DIRECTION:
+CANVAS: {logical[0]}x{logical[1]}
+ART DIRECTION:
 {art_direction_instructions}
-
-STYLE TOOLKIT REQUIREMENTS:
-- cinematic-editorial: layered depth, bold silhouette masses and one controlled focal light.
-- isometric-technical: consistent iso projection, separated components and legible joints.
-- layered-paper: overlapping paper shapes, consistent cast shadows and restrained parallax.
 
 SHOT VISUAL REFERENCES:
 {json.dumps(shot_visual_context, ensure_ascii=False, separators=(",", ":"))}
 
-STORYBOARD SHOT:
-{json.dumps(scene, ensure_ascii=False)}
+STORYBOARD:
+{json.dumps(scene, ensure_ascii=False, separators=(",", ":"))}
+""".strip()
+                layout = await self._json_object_completion(
+                    "Return exactly one valid JSON object. You are a precise 2D composition designer.",
+                    layout_prompt,
+                    min(self.max_output_tokens, 2200),
+                    label=f"Shot {scene['index'] + 1} visual composition",
+                )
+                self._validate_shot_layout(layout, f"Shot {scene['index'] + 1}")
 
-Return the complete JavaScript drawing body for this shot.""".strip()
-            async with semaphore:
+                mechanism_context = {
+                    "actions": scene.get("mechanism_actions", []),
+                    "definitions": shot_visual_context.get("mechanisms", []),
+                }
+                motion_prompt = f"""
+You are ShortClipr's senior 2D animation director.
+
+Plan the movement for this shot using the approved composition. Do not write code
+and do not redesign the composition. Return one JSON object with exactly these keys:
+{{
+  "initial_state": "What is visibly happening at the beginning.",
+  "primary_action": "One dominant, clearly visible action and how it changes the scene.",
+  "final_state": "The resolved visible state at the end.",
+  "timing": "When the action starts, accelerates, reaches its key moment and settles, within the shot duration.",
+  "secondary_motion": "Only supporting motion that improves readability; otherwise state none.",
+  "camera_motion": "Specific camera movement if motivated; otherwise state locked camera.",
+  "mechanism_motion": "How supplied mechanism data is depicted, or state no mechanism motion."
+}}
+
+Rules:
+- JSON only; every value must be a string.
+- The approved layout is fixed. Do not move the camera or subjects to a different composition.
+- Plan one dominant action, not a list of unrelated movements.
+- Motion must be deterministic and readable at 30 fps.
+- Never invent objects, joints, dimensions, forces, physics or kinematics.
+- If supplied mechanism definitions contain numeric kinematics, those values are authoritative.
+  If they do not, describe only the declared qualitative action; do not imply simulation.
+- Do not add motion to objects that do not support the primary action.
+
+SHOT DURATION: {end_s-start_s:.3f} seconds
+APPROVED VISUAL COMPOSITION:
+{json.dumps(layout, ensure_ascii=False, separators=(",", ":"))}
+
+VALIDATED MECHANISM DATA:
+{json.dumps(mechanism_context, ensure_ascii=False, separators=(",", ":"))}
+
+STORYBOARD:
+{json.dumps(scene, ensure_ascii=False, separators=(",", ":"))}
+""".strip()
+                motion = await self._json_object_completion(
+                    "Return exactly one valid JSON object. You are a precise 2D animation director.",
+                    motion_prompt,
+                    min(self.max_output_tokens, 1800),
+                    label=f"Shot {scene['index'] + 1} animation direction",
+                )
+                self._validate_shot_motion(motion, f"Shot {scene['index'] + 1}")
+
+                mechanism_rules = ""
+                if scene.get("mechanism_actions"):
+                    mechanism_rules = f"""
+MECHANISM IMPLEMENTATION
+- Use only the injected mechanismActions and mechanisms arrays; never invent data.
+- For each action, find its declared mechanism by mechanism_id. Skip if absent.
+- If kinematics exist, calculate progress once for the action using this shot's local
+  duration ({end_s-start_s:.3f}s, action start_progress/end_progress and easing:
+  const rawProgress = Ease.clamp(Ease.seg(t, 0, {end_s-start_s:.3f}));
+  const easing = action.easing ?? "in_out";
+  const easedProgress = easing === "linear" ? rawProgress : easing === "ease_in" ? rawProgress * rawProgress * rawProgress : easing === "ease_out" ? 1 - Math.pow(1 - rawProgress, 3) : Ease.inOut(rawProgress);
+  const actionProgress = (action.start_progress ?? 0) + ((action.end_progress ?? 1) - (action.start_progress ?? 0)) * easedProgress;
+- For each kinematic spec call ShortcliprStyles.mechanismPose(spec, actionProgress)
+  exactly once. Use the returned pose for the declared part: pivot/gear/pulley rotate
+  around returned anchors; translation uses returned position; cable follows returned
+  points; actuator follows returned base-to-tip. Keep connected parts aligned and draw
+  each component once. If kinematics are absent, depict only the qualitative action.
+- Draw mechanism parts using the supplied prop designs and verified shared helpers.
+"""
+
+                shot_prompt = f"""
+Implement one complete Canvas 2D animation shot from the approved visual and motion plans.
+
+OUTPUT
+Return only executable JavaScript statements for drawShot_{scene["index"]}.
+The body is inserted inside function drawShot_{scene["index"]}(g, t, env, absoluteTime).
+No JSON, Markdown, prose, code fences, imports or exports.
+
+FIXED DESIGN — DO NOT REINTERPRET
+VISUAL COMPOSITION:
+{json.dumps(layout, ensure_ascii=False, separators=(",", ":"))}
+
+ANIMATION DIRECTION:
+{json.dumps(motion, ensure_ascii=False, separators=(",", ":"))}
+
+IMPLEMENTATION CONTEXT
+Canvas: {logical[0]}x{logical[1]}. Local time t starts at zero; absoluteTime is film time.
+Shot duration: {end_s-start_s:.3f}s.
+Scene entities and their canonical designs:
+{json.dumps(shot_visual_context, ensure_ascii=False, separators=(",", ":"))}
+
+Verified shared helper names:
+{json.dumps(shared_helper_names)}
+
+RULES
+- Draw the actual supplied characters, props and environment. Preserve recurring identity.
+- Follow the approved composition, layer order, camera and action exactly.
+- Use only verified shared draw helpers, CanvasRenderingContext2D methods on g,
+  standard Math, and documented ShortcliprStyles/Ease APIs. Never call an unknown helper.
+- Redraw the full frame deterministically from t. No accumulated state or randomness.
+- Use Ease.lerp(a, b, progress) for numeric interpolation. Never call bare mix().
+- Use g.save()/g.restore() around transforms and restore every changed context property.
+- Keep all marks inside the logical canvas. Use meaningful silhouettes, overlap,
+  occlusion, material detail, lighting and shadows. Avoid placeholder geometry and
+  decorative particles.
+- No subtitles, narration, paragraphs, external assets, DOM, browser/Node globals,
+  network, filesystem, timers, eval, Function, Date, performance, WebGL or 3D.
+- Do not define new drawX helpers in this shot. Use the verified list above.
+{mechanism_rules}
+Return the complete JavaScript drawing body now.
+""".strip()
                 body = await self._validated_fragment(
                     "You are a senior Canvas 2D animation programmer. Return only executable JavaScript source.",
-                    shot_prompt + "\n\nWrite the complete draw_body now.",
-                    min(self.max_output_tokens, 12000), "draw_body",
-                    f"Shot {scene['index'] + 1}", MAX_SHOT_SOURCE,
+                    shot_prompt,
+                    min(self.max_output_tokens, 12000),
+                    "draw_body",
+                    f"Shot {scene['index'] + 1}",
+                    MAX_SHOT_SOURCE,
                 )
             return {
                 "index": scene["index"],
