@@ -293,6 +293,32 @@ class DeepSeekAnimationCompiler:
         persisted_registry = program.get("function_registry")
         if persisted_registry is not None and persisted_registry != registry:
             raise ValueError("Top-level function registry differs from the persisted repair bundle")
+        persisted_specs = program.get("function_specs")
+        if persisted_specs is not None and persisted_specs != function_specs:
+            raise ValueError("Top-level function specifications differ from the persisted repair bundle")
+        persisted_shot_count = program.get("shot_count")
+        if persisted_shot_count is not None and persisted_shot_count != len(shots):
+            raise ValueError("Top-level shot count differs from the persisted repair bundle")
+        if program.get("style") is not None and program.get("style") != style_id:
+            raise ValueError("Top-level visual style differs from the persisted repair bundle")
+        persisted_shot_manifest = program.get("shot_manifest")
+        if persisted_shot_manifest is not None:
+            expected_shot_manifest = [
+                {
+                    "index": shot["index"],
+                    "start_frame": shot["start_frame"],
+                    "end_frame": shot["end_frame"],
+                    "name": shot["name"],
+                    "mechanism_ids": sorted({
+                        action["mechanism_id"]
+                        for action in shot.get("mechanism_actions", [])
+                    }),
+                    "transition_out": shot.get("transition_out", "cut"),
+                }
+                for shot in shots
+            ]
+            if persisted_shot_manifest != expected_shot_manifest:
+                raise ValueError("Top-level shot manifest differs from the persisted repair bundle")
 
         expected_source = DeepSeekAnimationCompiler._assemble_film(
             shared_js, shots, duration, logical, style_id,
