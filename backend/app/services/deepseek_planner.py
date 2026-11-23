@@ -113,6 +113,17 @@ class DeepSeekStoryPlanner:
             if requested_style else
             "AUTO SELECTION: choose the best supported style_id for this topic."
         )
+        # Pass only content needed for film development. Never send user IDs,
+        # account metadata, voice credentials or other database-only fields.
+        project_context = {
+            "brief": project.get("brief", ""),
+            "clip_type": project.get("clip_type"),
+            "department": project.get("department"),
+            "language": project.get("language"),
+            "visual_style": project.get("visual_style"),
+            "duration_seconds": duration,
+            "aspect_ratio": project.get("aspect_ratio"),
+        }
 # === LEGACY DEEPSEEK STORY PROMPT (rollback reference; inactive) ===
 #         prompt = f"""
 # You are ShortClipr's senior story writer, factual researcher, narration writer and 2D
@@ -287,6 +298,14 @@ Keep screen direction, lighting, character scale and prop state coherent across 
 Use foreground/midground/background only when each plane contributes depth or story.
 Every shot must have a different visual reason to exist; vary camera distance and
 composition while preserving the same world and design language.
+
+USER PROJECT BRIEF — AUTHORITATIVE TOPIC
+{json.dumps(project_context, ensure_ascii=False, default=str)}
+
+The film must directly explain or tell the story requested in the brief. Do not
+substitute a generic sample topic. Respect the selected department, clip type,
+language, aspect ratio, duration and visual style. If the brief is ambiguous, make
+the most conservative useful interpretation without inventing personal facts.
 
 OUTPUT CONTRACT
 Return one JSON object only, with this structure:
