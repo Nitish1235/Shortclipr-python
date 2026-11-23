@@ -40,7 +40,12 @@ class DrawnByCodeRenderer:
 
     @staticmethod
     def _validate_generated_helpers(source: str) -> None:
-        self._validate_generated_helpers(source)
+        unresolved_helpers = find_unresolved_film_draw_helpers(source)
+        if unresolved_helpers:
+            raise NonRetryableRenderError(
+                "Generated animation references drawing helpers that are not defined "
+                "in the shared runtime scope: " + ", ".join(unresolved_helpers)
+            )
 
     @staticmethod
     async def _kill_and_wait(process: asyncio.subprocess.Process) -> None:
@@ -158,12 +163,7 @@ class DrawnByCodeRenderer:
         if not isinstance(source, str) or not source:
             raise NonRetryableRenderError("Missing DeepSeek-generated scene_js program")
 
-        unresolved_helpers = find_unresolved_film_draw_helpers(source)
-        if unresolved_helpers:
-            raise NonRetryableRenderError(
-                "Generated animation references drawing helpers that are not defined "
-                "in the shared runtime scope: " + ", ".join(unresolved_helpers)
-            )
+        self._validate_generated_helpers(source)
         if aspect not in self.widths:
             raise NonRetryableRenderError(f"Unsupported aspect ratio: {aspect}")
 
