@@ -193,7 +193,7 @@ class DrawingHelperContractTests(unittest.TestCase):
                 ["drawPaperQuestionMark"],
             )
         validate_draw_helper_definitions(
-            "// function drawFake(g) { g.fillRect(0, 0, 1, 1); }\\n"
+            "// function drawFake(g) { g.fillRect(0, 0, 1, 1); }\n"
             "function drawPaperQuestionMark(g, x, y) { g.fillRect(x, y, 4, 4); }",
             ["drawPaperQuestionMark"],
         )
