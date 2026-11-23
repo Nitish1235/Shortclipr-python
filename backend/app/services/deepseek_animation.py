@@ -257,8 +257,7 @@ a helper call and assume its implementation exists. Every custom drawX() call mu
 either be in the verified shared list above or have its complete function definition
 inside this draw_body. Reuse shared functions for recurring characters and props;
 do not redraw their defining features.
-Use only CanvasRenderingContext2D methods on g, local variables, standard Math and
-the shared helper functions. Redraw the full shot deterministically from t. No state
+Use CanvasRenderingContext2D methods on g, local variables, standard Math, verified shared drawing functions, and the explicitly documented ShortcliprStyles and Ease runtime APIs. Do not call any other globals. Redraw the full shot deterministically from t. No state
 accumulation, random numbers, DOM/browser globals, imports, exports, network, file access,
 Node APIs, timers, eval, Function, Date, performance, WebGL, Three.js or 3D.
 Keep all drawing within the logical canvas {logical[0]}x{logical[1]}.
