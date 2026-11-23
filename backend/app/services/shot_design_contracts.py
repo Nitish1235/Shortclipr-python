@@ -1,6 +1,7 @@
 """Shared visual continuity and physics-aware shot design contracts."""
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 
@@ -16,10 +17,10 @@ def build_visual_continuity_contract(visual_bible: dict[str, Any]) -> dict[str, 
             "style_id": visual_bible.get("style_id", ""),
             "style_notes": visual_bible.get("style_notes", ""),
         },
-        "characters": list(visual_bible.get("characters", [])),
-        "props": list(visual_bible.get("props", [])),
-        "environments": list(visual_bible.get("environments", [])),
-        "mechanisms": list(visual_bible.get("mechanisms", [])),
+        "characters": deepcopy(visual_bible.get("characters", [])),
+        "props": deepcopy(visual_bible.get("props", [])),
+        "environments": deepcopy(visual_bible.get("environments", [])),
+        "mechanisms": deepcopy(visual_bible.get("mechanisms", [])),
         "identity_invariants": [
             "Stable IDs identify the same entity throughout the entire film.",
             "Character silhouette, proportions, face, hair, clothing, palette and distinctive marks do not change between shots.",
@@ -95,7 +96,7 @@ def validate_physical_constraints(
         "rigid_body", "articulated", "ballistic", "fluid", "elastic",
         "mechanical", "camera", "mixed", "static",
     }
-    if motion_type not in allowed_motion_types:
+    if not isinstance(motion_type, str) or motion_type not in allowed_motion_types:
         raise ValueError(f"{label} physical_constraints has an unsupported motion_type")
 
     def text_field(container: dict[str, Any], key: str, field_label: str) -> str:
