@@ -118,7 +118,7 @@ class TargetedSharedHelperRepairTests(unittest.IsolatedAsyncioTestCase):
             "logical": [1080, 1920],
             "style_id": "cinematic-editorial",
             "shared_js": (
-                "function drawBridge(g, x) { g.fillRect(x, 0, 10, 10); }\\n"
+                "function drawBridge(g, x) { g.fillRect(x, 0, 10, 10); }\n"
                 "function drawTower(g, x) { g.fillRect(x, 0, 5, 20); }"
             ),
             "shots": [{
