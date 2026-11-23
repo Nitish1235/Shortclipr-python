@@ -22,7 +22,10 @@ COPY drawn_by_code/ /app/drawn_by_code/
 RUN node --check /app/drawn_by_code/engine/validate-scene.mjs \
     && printf '%s' 'function drawPropDeck(g, x) { g.fillRect(x, 0, 10, 2); } function drawShot_0(g, t, env, absoluteTime) { drawPropDeck(g, 0); } Motion.scene({draw(g, t, env) { drawShot_0(g, t, env, t); }});' > /tmp/linker-smoke-scene.js \
     && printf '%s' '{"schema_version":1,"functions":[{"name":"drawPropDeck","signature":"function drawPropDeck(g, x)","dependencies":[],"required_by_shots":[0]}],"shots":[{"index":0,"required_helpers":["drawPropDeck"]}]}' > /tmp/linker-smoke-manifest.json \
-    && node /app/drawn_by_code/engine/validate-scene.mjs /tmp/linker-smoke-scene.js /tmp/linker-smoke-manifest.json
+    && node /app/drawn_by_code/engine/validate-scene.mjs /tmp/linker-smoke-scene.js /tmp/linker-smoke-manifest.json \
+    && printf '%s' 'function drawShot_0(g, t, env, absoluteTime) { drawCharacter(g, 10, 20, 1, "idle", "neutral"); } Motion.scene({draw(g, t, env) { drawShot_0(g, 0, env, 0); }});' > /tmp/linker-unresolved-scene.js \
+    && printf '%s' '{"schema_version":1,"functions":[],"shots":[{"index":0,"required_helpers":[]}]}' > /tmp/linker-empty-manifest.json \
+    && if node /app/drawn_by_code/engine/validate-scene.mjs /tmp/linker-unresolved-scene.js /tmp/linker-empty-manifest.json > /tmp/linker-negative.log 2>&1; then echo 'Linker incorrectly accepted undefined drawCharacter helper' >&2; exit 1; else grep -q 'drawCharacter' /tmp/linker-negative.log; fi
 COPY app/ /app/app/
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
