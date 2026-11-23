@@ -25,7 +25,9 @@ RUN node --check /app/drawn_by_code/engine/validate-scene.mjs \
     && node /app/drawn_by_code/engine/validate-scene.mjs /tmp/linker-smoke-scene.js /tmp/linker-smoke-manifest.json \
     && printf '%s' 'function drawShot_0(g, t, env, absoluteTime) { drawCharacter(g, 10, 20, 1, "idle", "neutral"); } Motion.scene({draw(g, t, env) { drawShot_0(g, 0, env, 0); }});' > /tmp/linker-unresolved-scene.js \
     && printf '%s' '{"schema_version":1,"functions":[],"shots":[{"index":0,"required_helpers":[]}]}' > /tmp/linker-empty-manifest.json \
-    && if node /app/drawn_by_code/engine/validate-scene.mjs /tmp/linker-unresolved-scene.js /tmp/linker-empty-manifest.json > /tmp/linker-negative.log 2>&1; then echo 'Linker incorrectly accepted undefined drawCharacter helper' >&2; exit 1; else grep -q 'drawCharacter' /tmp/linker-negative.log; fi
+    && if node /app/drawn_by_code/engine/validate-scene.mjs /tmp/linker-unresolved-scene.js /tmp/linker-empty-manifest.json > /tmp/linker-negative.log 2>&1; then echo 'Linker incorrectly accepted undefined drawCharacter helper' >&2; exit 1; else grep -q 'drawCharacter' /tmp/linker-negative.log; fi \
+    && printf '%s' 'Motion.scene({draw(g, t, env) { g.fillRect(0, 0, 1, 1); }});' > /tmp/linker-missing-shot-scene.js \
+    && if node /app/drawn_by_code/engine/validate-scene.mjs /tmp/linker-missing-shot-scene.js /tmp/linker-empty-manifest.json > /tmp/linker-missing-shot.log 2>&1; then echo 'Linker incorrectly accepted a missing drawShot_0 implementation' >&2; exit 1; else grep -q 'Missing canonical shot implementations' /tmp/linker-missing-shot.log; fi
 COPY app/ /app/app/
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
