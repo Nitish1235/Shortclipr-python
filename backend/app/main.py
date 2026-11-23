@@ -111,7 +111,7 @@ async def ready():
     )
     try:
         rows = await app.state.db.fetch(
-            "SELECT name, to_regclass(name) IS NOT NULL AS present FROM unnest($1::text[]) AS name",
+            "SELECT name, to_regclass(name) IS NOT NULL AS present FROM unnest($1::text[]) AS required(name)",
             list(required_tables),
         )
         missing = [row["name"] for row in rows if not row["present"]]
@@ -123,19 +123,18 @@ async def ready():
         storage = getattr(app.state, "storage", None)
         if not storage or not storage.client or not settings.GCS_BUCKET_NAME:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="GCS storage is not configured")
-        bucket_exists = await asyncio.wait_for(
-            asyncio.to_thread(
-                storage.client.bucket(settings.GCS_BUCKET_NAME).exists,
-                timeout=8,
-            ),
-            timeout=10,
-        )
-        if not bucket_exists:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Configured GCS bucket is not accessible")
-        if settings.SERVICE_ROLE == "ffmpeg-worker":
+        await asyncio.wait_for(storage.health_check(), timeout=20)
+
+        provider_client = None
+        if settings.SERVICE_ROLE == "api-worker":
+            provider_client = getattr(getattr(app.state, "planner", None), "client", None)
+        elif settings.SERVICE_ROLE == "ffmpeg-worker":
+            provider_client = getattr(getattr(app.state, "visual_reviewer", None), "client", None)
             renderer = getattr(app.state, "renderer", None)
             if renderer is None:
                 raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Renderer is not initialised")
+        if provider_client is not None:
+            await asyncio.wait_for(provider_client.models.list(), timeout=12)
     except HTTPException:
         raise
     except Exception:
