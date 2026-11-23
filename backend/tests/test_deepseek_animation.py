@@ -102,7 +102,10 @@ class ShotStructuredResponseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, {"composition": "diagonal"})
         kwargs = compiler.client.chat.completions.create.await_args.kwargs
         self.assertEqual(kwargs["response_format"], {"type": "json_object"})
-        compiler.client.chat.completions.create.assert_awaited_once()
+        self.assertEqual(compiler.client.chat.completions.create.await_count, 2)
+        repair_prompt = compiler.client.chat.completions.create.await_args_list[1].kwargs["messages"][1]["content"]
+        self.assertIn("drawMissing", repair_prompt)
+        self.assertIn("REJECTED CANDIDATE", repair_prompt)
 
     async def test_invalid_structured_response_fails_without_retry(self):
         from types import SimpleNamespace
@@ -213,9 +216,10 @@ class TargetedSharedHelperRepairTests(unittest.IsolatedAsyncioTestCase):
         compiler = DeepSeekAnimationCompiler.__new__(DeepSeekAnimationCompiler)
         compiler.client = object()
         compiler.max_output_tokens = 12000
-        compiler._code_completion = AsyncMock(return_value=(
-            "function drawBridge(g, x) { g.fillStyle = '#222'; g.fillRect(x, 0, 20, 10); }"
-        ))
+        compiler._code_completion = AsyncMock(side_effect=[
+            "function drawBridge(g, x) { drawMissingDecoration(g, x); g.fillRect(x, 0, 20, 10); }",
+            "function drawBridge(g, x) { g.fillStyle = '#222'; g.fillRect(x, 0, 20, 10); }",
+        ])
         spec = {
             "name": "drawBridge",
             "category": "visual",
@@ -290,8 +294,13 @@ class TargetedSharedHelperRepairTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["repair_bundle"]["shots"][0]["draw_body"], original_body)
         self.assertEqual(result["repaired_function_names"], ["drawBridge"])
         self.assertEqual(result["repair_bundle"]["function_specs"][0]["version"], 2)
+        self.assertEqual(result["repair_bundle"]["helper_manifest"]["functions"][0]["version"], 2)
         self.assertEqual(result["repair_bundle"]["function_registry"][0]["version"], 2)
-        compiler._code_completion.assert_awaited_once()
+        self.assertEqual(result["helper_manifest"]["functions"][0]["version"], 2)
+        self.assertEqual(result["function_registry"][0]["version"], 2)
+        self.assertEqual(compiler._code_completion.await_count, 2)
+        repair_prompt = compiler._code_completion.await_args_list[1].args[1]
+        self.assertIn("drawMissingDecoration", repair_prompt)
 
 
 class TargetedShotRepairTests(unittest.IsolatedAsyncioTestCase):
@@ -301,23 +310,37 @@ class TargetedShotRepairTests(unittest.IsolatedAsyncioTestCase):
         from unittest.mock import AsyncMock
 
         compiler = DeepSeekAnimationCompiler.__new__(DeepSeekAnimationCompiler)
+        responses = [
+            SimpleNamespace(
+                choices=[SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="g.save(); drawMissing(g, 20, 20); g.restore();"
+                    ),
+                    finish_reason="stop",
+                )],
+                usage=SimpleNamespace(
+                    prompt_tokens=100, completion_tokens=50,
+                    prompt_tokens_details=None, completion_tokens_details=None,
+                    prompt_tokens_cache_hit=0, total_tokens=150,
+                ),
+            ),
+            SimpleNamespace(
+                choices=[SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="g.save(); drawBridge(g, 20, 20); g.restore();"
+                    ),
+                    finish_reason="stop",
+                )],
+                usage=SimpleNamespace(
+                    prompt_tokens=100, completion_tokens=50,
+                    prompt_tokens_details=None, completion_tokens_details=None,
+                    prompt_tokens_cache_hit=0, total_tokens=150,
+                ),
+            ),
+        ]
         compiler.client = SimpleNamespace(
             chat=SimpleNamespace(
-                completions=SimpleNamespace(
-                    create=AsyncMock(return_value=SimpleNamespace(
-                        choices=[SimpleNamespace(
-                            message=SimpleNamespace(content=json.dumps({
-                                "draw_body": "g.save(); drawBridge(g, 20, 20); g.restore();"
-                            })),
-                            finish_reason="stop",
-                        )],
-                        usage=SimpleNamespace(
-                            prompt_tokens=100, completion_tokens=50,
-                            prompt_tokens_details=None, completion_tokens_details=None,
-                            prompt_tokens_cache_hit=0, total_tokens=150,
-                        ),
-                    ))
-                )
+                completions=SimpleNamespace(create=AsyncMock(side_effect=responses))
             )
         )
         compiler.model = "deepseek-flash"
