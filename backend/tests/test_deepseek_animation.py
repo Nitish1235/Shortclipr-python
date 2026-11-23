@@ -102,10 +102,7 @@ class ShotStructuredResponseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, {"composition": "diagonal"})
         kwargs = compiler.client.chat.completions.create.await_args.kwargs
         self.assertEqual(kwargs["response_format"], {"type": "json_object"})
-        self.assertEqual(compiler.client.chat.completions.create.await_count, 2)
-        repair_prompt = compiler.client.chat.completions.create.await_args_list[1].kwargs["messages"][1]["content"]
-        self.assertIn("drawMissing", repair_prompt)
-        self.assertIn("REJECTED CANDIDATE", repair_prompt)
+        compiler.client.chat.completions.create.assert_awaited_once()
 
     async def test_invalid_structured_response_fails_without_retry(self):
         from types import SimpleNamespace
@@ -413,7 +410,10 @@ class TargetedShotRepairTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("drawShot_0", result["scene_js"])
         self.assertIn("drawShot_1", result["scene_js"])
         self.assertIn("drawShot_2", result["scene_js"])
-        compiler.client.chat.completions.create.assert_awaited_once()
+        self.assertEqual(compiler.client.chat.completions.create.await_count, 2)
+        repair_prompt = compiler.client.chat.completions.create.await_args_list[1].kwargs["messages"][1]["content"]
+        self.assertIn("drawMissing", repair_prompt)
+        self.assertIn("REJECTED CANDIDATE", repair_prompt)
 
 
 class DrawingHelperContractTests(unittest.TestCase):
