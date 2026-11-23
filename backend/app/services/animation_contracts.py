@@ -521,9 +521,10 @@ def validate_draw_helper_definitions(
     specifications: list[dict[str, Any]] | None = None,
 ) -> None:
     """Ensure generated helpers match their contracts and contain real drawing work."""
+    masked = _mask_js_comments_and_strings(source)
     declared = {
         name
-        for match in _DRAW_HELPER_DECL.finditer(source)
+        for match in _DRAW_HELPER_DECL.finditer(masked)
         for name in match.groups()
         if name
     }
@@ -536,11 +537,10 @@ def validate_draw_helper_definitions(
     for name in required_names:
         signature = re.search(
             rf"\bfunction\s+{re.escape(name)}\s*\(\s*g\s*(?:,|\))",
-            source,
+            masked,
         )
         if not signature:
             raise ValueError(f"Generated helper {name} must accept the Canvas context as its first argument")
-        masked = _mask_js_comments_and_strings(source)
         declaration = re.search(
             rf"\bfunction\s+{re.escape(name)}\s*\([^)]*\)\s*\{{",
             masked,
