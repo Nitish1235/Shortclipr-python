@@ -187,6 +187,16 @@ class DrawingHelperContractTests(unittest.TestCase):
             validate_draw_helper_definitions("function drawQuestion(g) {}", ["drawPaperQuestionMark"])
         with self.assertRaisesRegex(ValueError, "empty or incomplete"):
             validate_draw_helper_definitions("function drawPaperQuestionMark(g, x, y) {}", ["drawPaperQuestionMark"])
+        with self.assertRaisesRegex(ValueError, "recursively call itself"):
+            validate_draw_helper_definitions(
+                "function drawPaperQuestionMark(g, x, y) { drawPaperQuestionMark(g, x, y); }",
+                ["drawPaperQuestionMark"],
+            )
+        validate_draw_helper_definitions(
+            "// function drawFake(g) { g.fillRect(0, 0, 1, 1); }\\n"
+            "function drawPaperQuestionMark(g, x, y) { g.fillRect(x, y, 4, 4); }",
+            ["drawPaperQuestionMark"],
+        )
         with self.assertRaisesRegex(ValueError, "no Canvas drawing operation"):
             validate_draw_helper_definitions("function drawPaperQuestionMark(g, x, y) { const unused = 1; }", ["drawPaperQuestionMark"])
         specification = {
