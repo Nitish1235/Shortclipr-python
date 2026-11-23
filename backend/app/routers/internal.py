@@ -1051,6 +1051,9 @@ async def run_render(
                         repaired_program = dict(program)
                         repaired_program["scene_js"] = plan["scene_js"]
                         repaired_program["repair_bundle"] = plan["repair_bundle"]
+                        repaired_program["visual_qa_context"] = plan.get(
+                            "visual_qa_context", repaired_program.get("visual_qa_context", {}),
+                        )
                         await connection.execute(
                             "UPDATE scene_plans SET program=$2::jsonb WHERE project_id=$1 AND scene_index=0",
                             project_id, json.dumps(repaired_program),
