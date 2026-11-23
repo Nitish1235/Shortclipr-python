@@ -88,6 +88,40 @@ try {
         manifestShots.set(shot.index, shot);
     }
 
+    const expectedShotIndexes = [...manifestShots.keys()].sort((a, b) => a - b);
+    if (expectedShotIndexes.length === 0
+        || expectedShotIndexes.some((index, position) => index !== position)) {
+        fail('Canonical shot manifest must contain contiguous indices starting at zero');
+    }
+
+    // A shot body is not a free-standing model fragment: the compiler must
+    // assemble exactly one top-level drawShot_N declaration for every manifest
+    // entry, and no other shot entry. This catches missing/duplicate wrappers
+    // before Chromium can execute the film dispatcher.
+    const shotDefinitions = new Map();
+    for (const [name, variable] of globalScope.set.entries()) {
+        if (!/^drawShot_\\d+$/.test(name)) continue;
+        const index = Number(name.slice('drawShot_'.length));
+        const definitions = variable.defs.filter((definition) =>
+            definition.type === 'FunctionName' && definition.node?.type === 'FunctionDeclaration');
+        if (!manifestShots.has(index)) {
+            fail(\`Film declares unmanifested shot function \${name}\`);
+        }
+        if (definitions.length !== 1) {
+            fail(\`Shot function \${name} must be defined exactly once at top level\`);
+        }
+        const params = definitions[0].node.params.map((param) =>
+            param.type === 'Identifier' ? param.name : null);
+        if (JSON.stringify(params) !== JSON.stringify(['g', 't', 'env', 'absoluteTime'])) {
+            fail(\`Shot function \${name} does not match the canonical renderer signature\`);
+        }
+        shotDefinitions.set(index, definitions[0].node);
+    }
+    const missingShotDefinitions = expectedShotIndexes.filter((index) => !shotDefinitions.has(index));
+    if (missingShotDefinitions.length) {
+        fail('Missing canonical shot implementations: ' + missingShotDefinitions.join(', '));
+    }
+
     // Child-scope through lists also contain references that are resolved by
     // an enclosing scope. Only the global scope's through list represents names
     // that remain unresolved after the complete scope chain has been analyzed.
@@ -178,15 +212,29 @@ try {
     // Track direct calls by enclosing drawShot_N function, including calls nested in
     // blocks/closures, so a declaration alone cannot satisfy the usage contract.
     const callsByShot = new Map();
+    const shotCalls = new Map();
+    const allShotDeclarations = [];
     const walk = (node, currentShot = null) => {
         if (!node || typeof node !== 'object') return;
         let activeShot = currentShot;
         if (node.type === 'FunctionDeclaration' && node.id?.name
             && /^drawShot_\d+$/.test(node.id.name)) {
-            activeShot = Number(node.id.name.slice('drawShot_'.length));
+            const declaredIndex = Number(node.id.name.slice('drawShot_'.length));
+            allShotDeclarations.push(declaredIndex);
+            if (!manifestShots.has(declaredIndex)) {
+                fail(\`Film contains unmanifested shot declaration \${node.id.name}\`);
+            }
+            activeShot = declaredIndex;
         }
         if (node.type === 'CallExpression' && node.callee?.type === 'Identifier') {
             const calledName = node.callee.name;
+            if (/^drawShot_\\d+$/.test(calledName)) {
+                const calledIndex = Number(calledName.slice('drawShot_'.length));
+                if (!manifestShots.has(calledIndex)) {
+                    fail(\`Film calls unmanifested shot function \${calledName}\`);
+                }
+                shotCalls.set(calledIndex, (shotCalls.get(calledIndex) ?? 0) + 1);
+            }
             if (/^draw[A-Z][A-Za-z0-9_]*$/.test(calledName)
                 && !calledName.startsWith('drawShot_')
                 && !topLevelDrawingFunctions.has(calledName)) {
@@ -210,6 +258,19 @@ try {
         }
     };
     walk(ast);
+
+    const declarationCounts = new Map();
+    for (const index of allShotDeclarations) {
+        declarationCounts.set(index, (declarationCounts.get(index) ?? 0) + 1);
+    }
+    for (const shotIndex of expectedShotIndexes) {
+        if (declarationCounts.get(shotIndex) !== 1) {
+            fail(\`Shot function drawShot_\${shotIndex} must have exactly one declaration in the film\`);
+        }
+        if (!shotCalls.has(shotIndex)) {
+            fail(\`Shot function drawShot_\${shotIndex} is never called by the film dispatcher\`);
+        }
+    }
 
     for (const [shotIndex, shot] of manifestShots.entries()) {
         const used = callsByShot.get(shotIndex) ?? new Set();
