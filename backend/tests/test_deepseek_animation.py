@@ -970,5 +970,89 @@ class TemplateExpressionHelperValidationTests(unittest.TestCase):
         )
 
 
+
+class BoundedGenerationRepairTests(unittest.IsolatedAsyncioTestCase):
+    async def test_invalid_shared_or_shot_fragment_is_retried_with_exact_contract_error(self):
+        from unittest.mock import AsyncMock
+
+        compiler = DeepSeekAnimationCompiler.__new__(DeepSeekAnimationCompiler)
+        compiler._code_completion = AsyncMock(side_effect=[
+            "function drawScene(g) { drawCharacter(g); }",
+            "function drawScene(g) { g.fillRect(0, 0, 10, 10); }",
+        ])
+
+        def validate(source):
+            if "drawCharacter(" in source:
+                raise ValueError("Drawing helper drawCharacter is not declared in the shared API")
+
+        result = await compiler._validated_fragment(
+            "Return executable JavaScript.",
+            "Generate a scene body.",
+            2000,
+            "draw_body",
+            "Shot 1",
+            10000,
+            validator=validate,
+        )
+
+        self.assertIn("fillRect", result)
+        compiler._code_completion.assert_awaited twice()
+        repair_prompt = compiler._code_completion.await_args_list[1].args[1]
+        self.assertIn("drawCharacter is not declared", repair_prompt)
+        self.assertIn("REJECTED CANDIDATE", repair_prompt)
+        self.assertIn("drawCharacter(g)", repair_prompt)
+
+    async def test_fragment_generation_fails_closed_after_three_invalid_attempts(self):
+        from unittest.mock import AsyncMock
+
+        compiler = DeepSeekAnimationCompiler.__new__(DeepSeekAnimationCompiler)
+        compiler._code_completion = AsyncMock(return_value=(
+            "function drawScene(g) { drawUnknown(g); }"
+        ))
+
+        def reject(_source):
+            raise ValueError("drawUnknown is not in the verified helper library")
+
+        with self.assertRaisesRegex(ValueError, "after 3 generation attempts"):
+            await compiler._validated_fragment(
+                "Return executable JavaScript.",
+                "Generate a scene body.",
+                2000,
+                "draw_body",
+                "Shot 1",
+                10000,
+                validator=reject,
+            )
+        self.assertEqual(compiler._code_completion.await_count, 3)
+
+    async def test_invalid_layout_or_motion_json_is_retried_with_validation_feedback(self):
+        from unittest.mock import AsyncMock
+
+        compiler = DeepSeekAnimationCompiler.__new__(DeepSeekAnimationCompiler)
+        compiler._json_object_completion = AsyncMock(side_effect=[
+            {"composition": ""},
+            {"composition": "A clear diagonal bridge composition."},
+        ])
+
+        def validate(value):
+            if not value.get("composition", "").strip():
+                raise ValueError("composition must be non-empty")
+            return value
+
+        result = await compiler._validated_json_object_completion(
+            "Return JSON only.",
+            "Design a composition.",
+            1000,
+            "Shot 1 visual composition",
+            validate,
+        )
+
+        self.assertEqual(result["composition"], "A clear diagonal bridge composition.")
+        self.assertEqual(compiler._json_object_completion.await_count, 2)
+        repair_prompt = compiler._json_object_completion.await_args_list[1].args[1]
+        self.assertIn("composition must be non-empty", repair_prompt)
+        self.assertIn("REJECTED JSON CANDIDATE", repair_prompt)
+
+
 if __name__ == "__main__":
     unittest.main()
