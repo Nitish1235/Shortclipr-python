@@ -5,6 +5,7 @@ from app.services.animation_contracts import (
     find_unresolved_draw_helpers,
     validate_draw_helper_definitions,
     validate_draw_helper_specs,
+    validate_draw_helper_dependency_graph,
 )
 
 
@@ -157,6 +158,17 @@ class DrawingHelperContractTests(unittest.TestCase):
         shared = "function drawBridge(g) { drawMissingGear(g); }"
         self.assertEqual(find_unresolved_draw_helpers(shared, []), ["drawMissingGear"])
 
+    def test_ignores_helper_names_in_comments_and_strings(self):
+        shared = """
+        // drawCommentOnly(g);
+        function drawBridge(g) {
+            const label = "drawStringOnly(g)";
+            /* drawBlockCommentOnly(g); */
+            g.fillRect(0, 0, 10, 10);
+        }
+        """
+        self.assertEqual(find_unresolved_draw_helpers(shared, []), [])
+
     def test_requires_generator_to_define_each_requested_helper(self):
         validate_draw_helper_definitions(
             "function drawPaperQuestionMark(g, x, y) { g.beginPath(); g.arc(x, y, 4, 0, Math.PI * 2); g.fill(); }",
@@ -283,6 +295,21 @@ class MechanismAssemblyTests(unittest.TestCase):
         self.assertIn("const mechanisms = [{", source)
         self.assertIn('"type":"pivot"', source)
         self.assertIn("drawBridge(g);", source)
+
+
+class DrawingHelperDependencyGraphTests(unittest.TestCase):
+    def test_accepts_acyclic_dependencies(self):
+        validate_draw_helper_dependency_graph([
+            {"name": "drawBridge", "dependencies": ["drawTower"]},
+            {"name": "drawTower", "dependencies": []},
+        ])
+
+    def test_rejects_circular_dependencies(self):
+        with self.assertRaisesRegex(ValueError, "Circular drawing helper dependency"):
+            validate_draw_helper_dependency_graph([
+                {"name": "drawBridge", "dependencies": ["drawTower"]},
+                {"name": "drawTower", "dependencies": ["drawBridge"]},
+            ])
 
 
 class DrawingHelperSpecificationTests(unittest.TestCase):
