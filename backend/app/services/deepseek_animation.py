@@ -679,6 +679,7 @@ Return the complete JavaScript drawing body now.
                 "end_frame": scene["end_frame"],
                 "name": str(scene.get("purpose", f"Shot {scene['index'] + 1}"))[:80],
                 "draw_body": body,
+                "motion_spec": motion,
                 "mechanism_actions": scene.get("mechanism_actions", []),
                 "mechanisms": shot_visual_context.get("mechanisms", []),
                 "transition_out": str(scene.get("transition_out", "cut")).lower(),
@@ -1247,6 +1248,9 @@ Return the complete repaired function declarations now.""".strip()
         original_body = original_shot.get("draw_body")
         if not isinstance(original_body, str) or not original_body:
             raise ValueError("Target shot has no original drawing body")
+        original_motion_spec = original_shot.get("motion_spec", {})
+        if not isinstance(original_motion_spec, dict):
+            original_motion_spec = {}
         visual_bible = repair_bundle.get("visual_bible", {})
         continuity_contract = repair_bundle.get("visual_continuity_contract")
         if not isinstance(continuity_contract, dict):
@@ -1320,6 +1324,9 @@ VISUAL QA FINDINGS:
 
 ORIGINAL STORYBOARD:
 {json.dumps(scene, ensure_ascii=False)}
+
+APPROVED MOTION AND PHYSICAL CONSTRAINTS (preserve unless the finding directly requires a correction):
+{json.dumps(original_motion_spec, ensure_ascii=False)}
 
 VISUAL BIBLE REFERENCES:
 {json.dumps(shot_visual_context, ensure_ascii=False)}
