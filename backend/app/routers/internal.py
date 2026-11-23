@@ -1,6 +1,7 @@
 import asyncio
 import json
 import hashlib
+import os
 import shutil
 import tempfile
 import time as _time
@@ -328,6 +329,8 @@ async def run_planning(
             extra={
                 "clip_type": project["clip_type"],
                 "duration_s": project["duration_seconds"],
+                "service_role": os.getenv("SERVICE_ROLE", "unknown"),
+                "service_revision": os.getenv("K_REVISION", "unknown"),
                 "aspect_ratio": project["aspect_ratio"],
                 "voice_id": project["voice_id"],
             },
@@ -746,19 +749,13 @@ async def run_render(
         # closes the API -> scene_plans -> FFmpeg handoff instead of trusting
         # that the compiler's in-memory object is byte-for-byte what was stored.
         repair_bundle = program.get("repair_bundle")
-        if isinstance(repair_bundle, dict):
-            try:
-                DeepSeekAnimationCompiler.validate_compiled_program(program)
-            except (TypeError, ValueError, KeyError, IndexError) as validation_error:
-                raise NonRetryableRenderError(
-                    "Persisted animation program failed render-boundary integrity validation: "
-                    + str(validation_error)[:700]
-                ) from validation_error
-        else:
-            logger.warning(
-                "render.animation_program_missing_repair_bundle",
-                extra={"project_id": str(project_id), "legacy_compatibility": True},
-            )
+        try:
+            DeepSeekAnimationCompiler.validate_compiled_program(program)
+        except (TypeError, ValueError, KeyError, IndexError) as validation_error:
+            raise NonRetryableRenderError(
+                "Persisted animation program failed render-boundary integrity validation: "
+                + str(validation_error)[:700]
+            ) from validation_error
 
         logger.info(
             "render.animation_program_validated",
