@@ -20,6 +20,83 @@ class DeepSeekStoryPlanner:
         self.client = AsyncOpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com",
                                   timeout=90.0, max_retries=0) if settings.DEEPSEEK_API_KEY else None
 
+    @staticmethod
+    def _normalize_plan(
+        plan: Any,
+        total_frames: int,
+        minimum_scenes: int,
+        requested_style: str | None,
+    ) -> dict[str, Any]:
+        """Validate and normalize a complete planner response before it is cached."""
+        if not isinstance(plan, dict):
+            raise ValueError("DeepSeek story plan must be an object")
+        if not isinstance(plan.get("title"), str) or not plan["title"].strip():
+            raise ValueError("DeepSeek story plan is missing title")
+        if not isinstance(plan.get("narration"), str) or len(plan["narration"].strip()) < 40:
+            raise ValueError("DeepSeek story plan is missing usable narration")
+
+        bible = validate_visual_bible(plan.get("visual_bible"))
+        # Explicit UI selections are authoritative even if the model drifts.
+        bible = apply_visual_direction(bible, requested_style)
+        art_direction = build_art_direction(
+            bible["style_id"],
+            requested_style=requested_style,
+            style_notes=bible.get("style_notes", ""),
+        )
+
+        scenes = plan.get("scenes")
+        if (
+            not isinstance(scenes, list)
+            or not minimum_scenes <= len(scenes) <= 12
+        ):
+            raise ValueError(
+                f"DeepSeek must return between {minimum_scenes} and 12 storyboard shots"
+            )
+
+        weights = []
+        for scene in scenes:
+            if not isinstance(scene, dict):
+                raise ValueError("DeepSeek returned a malformed shot")
+            try:
+                weights.append(max(1, int(scene["end_frame"]) - int(scene["start_frame"])))
+            except (KeyError, TypeError, ValueError):
+                weights.append(1)
+
+        total_weight = sum(weights)
+        cumulative = 0
+        cursor = 0
+        for index, (scene, weight) in enumerate(zip(scenes, weights, strict=True)):
+            cumulative += weight
+            remaining = len(scenes) - index - 1
+            end = total_frames if remaining == 0 else round(total_frames * cumulative / total_weight)
+            end = max(cursor + 1, min(total_frames - remaining, end))
+            scene.update({"index": index, "start_frame": cursor, "end_frame": end})
+            scene.setdefault("purpose", f"Shot {index + 1}")
+            scene.setdefault("visual_description", scene["purpose"])
+            scene.setdefault("complexity", "medium")
+            scene.setdefault("characters", [])
+            scene.setdefault("props", [])
+            scene.setdefault("environment", "")
+            scene.setdefault("action", scene["visual_description"])
+            scene.setdefault("camera", "purposeful 2D framing")
+            scene.setdefault("transition_out", "cut")
+            cursor = end
+
+        scenes = validate_scene_plan(scenes, total_frames)
+        character_ids = {item["id"] for item in bible["characters"]}
+        prop_ids = {item["id"] for item in bible["props"]}
+        environment_ids = {item["id"] for item in bible["environments"]}
+        for scene in scenes:
+            if set(scene["characters"]) - character_ids or set(scene["props"]) - prop_ids:
+                raise ValueError("Shot references an undeclared character or prop ID")
+            if scene["environment"] and scene["environment"] not in environment_ids:
+                raise ValueError("Shot references an undeclared environment ID")
+
+        plan["visual_bible"] = bible
+        plan["art_direction"] = art_direction
+        plan["scenes"] = scenes
+        return plan
+
     async def plan(self, project: dict[str, Any]) -> dict[str, Any]:
         if self.client is None:
             raise RuntimeError("DEEPSEEK_API_KEY is not configured")
@@ -239,103 +316,106 @@ cover frame 0 through {total_frames}; end_frame is exclusive. Include at least
 action to read. Return JSON only, without Markdown or explanations.
 """.strip()
         effort = planning_effort(project, self.low_reasoning_effort, self.medium_reasoning_effort)
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role":"system","content":prompt},
-                      {"role":"user","content":"Create the story, visual bible and timed shot plan."}],
-            response_format={"type":"json_object"},
-            max_tokens=self.max_output_tokens,
-            reasoning_effort=effort,
-            extra_body={"thinking": {"type": "enabled"}},
-        )
-        import logging
-        logging.getLogger(__name__).info(
-            "deepseek.story.response",
-            extra={
-                "model": self.model,
-                "reasoning_effort": effort,
-                "finish_reason": getattr(response.choices[0], "finish_reason", None) if response.choices else None,
-                "completion_tokens": getattr(response.usage, "completion_tokens", None),
-            },
-        )
-        choice = response.choices[0] if response.choices else None
-        message = choice.message if choice else None
-        raw = (message.content or "").strip() if message else ""
-        usage = response.usage
-        usage_info = {
-            "prompt_tokens": getattr(usage, "prompt_tokens", None),
-            "completion_tokens": getattr(usage, "completion_tokens", None),
-            "reasoning_tokens": getattr(getattr(usage, "completion_tokens_details", None), "reasoning_tokens", None),
-        }
-        if not raw:
-            finish_reason = getattr(choice, "finish_reason", None)
-            raise RuntimeError(
-                f"DeepSeek returned empty story-plan JSON "
-                f"(finish_reason={finish_reason}, usage={usage_info}, response_id={getattr(response, 'id', None)})"
-            )
-        try:
-            plan = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(
-                f"DeepSeek returned invalid story-plan JSON "
-                f"(finish_reason={getattr(choice, 'finish_reason', None)}, content_chars={len(raw)}, usage={usage_info})"
-            ) from exc
-        if not isinstance(plan, dict):
-            raise RuntimeError("DeepSeek story plan must be an object")
-        if not isinstance(plan.get("title"), str) or not plan["title"].strip():
-            raise RuntimeError("DeepSeek story plan is missing title")
-        if not isinstance(plan.get("narration"), str) or len(plan["narration"].strip()) < 40:
-            raise RuntimeError("DeepSeek story plan is missing usable narration")
-        bible = validate_visual_bible(plan.get("visual_bible"))
-        # Explicit UI selections are authoritative even if the model drifts.
-        bible = apply_visual_direction(bible, requested_style)
-        art_direction = build_art_direction(
-            bible["style_id"],
-            requested_style=requested_style,
-            style_notes=bible.get("style_notes", ""),
-        )
-        scenes = plan.get("scenes")
-        if not isinstance(scenes, list) or len(scenes) < minimum_scenes:
-            raise RuntimeError(f"DeepSeek must return at least {minimum_scenes} shots")
+        attempt_prompt = prompt
+        last_error: Exception | None = None
+        rejected_response = ""
 
-        weights = []
-        for scene in scenes:
-            if not isinstance(scene, dict):
-                raise RuntimeError("DeepSeek returned a malformed shot")
+        # A malformed story plan must not be persisted or passed into animation
+        # generation. Give the planner the exact validation error and one bounded
+        # rejected response so it can correct IDs, scene timing and Visual Bible data.
+        for attempt in range(1, 4):
             try:
-                weights.append(max(1, int(scene["end_frame"]) - int(scene["start_frame"])))
-            except (KeyError, TypeError, ValueError):
-                weights.append(1)
-        total_weight = sum(weights)
-        cumulative = 0
-        cursor = 0
-        for index, (scene, weight) in enumerate(zip(scenes, weights, strict=True)):
-            cumulative += weight
-            remaining = len(scenes) - index - 1
-            end = total_frames if remaining == 0 else round(total_frames*cumulative/total_weight)
-            end = max(cursor + 1, min(total_frames - remaining, end))
-            scene.update({"index":index,"start_frame":cursor,"end_frame":end})
-            scene.setdefault("purpose",f"Shot {index+1}")
-            scene.setdefault("visual_description",scene["purpose"])
-            scene.setdefault("complexity","medium")
-            scene.setdefault("characters",[])
-            scene.setdefault("props",[])
-            scene.setdefault("environment","")
-            scene.setdefault("action",scene["visual_description"])
-            scene.setdefault("camera","purposeful 2D framing")
-            scene.setdefault("transition_out","cut")
-            cursor=end
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": attempt_prompt},
+                        {"role": "user", "content": "Create the story, visual bible and timed shot plan."},
+                    ],
+                    response_format={"type": "json_object"},
+                    max_tokens=self.max_output_tokens,
+                    reasoning_effort=effort,
+                    extra_body={"thinking": {"type": "enabled"}},
+                )
+                choice = response.choices[0] if response.choices else None
+                message = choice.message if choice else None
+                raw = (message.content or "").strip() if message else ""
+                usage = response.usage
+                usage_info = {
+                    "prompt_tokens": getattr(usage, "prompt_tokens", None),
+                    "completion_tokens": getattr(usage, "completion_tokens", None),
+                    "reasoning_tokens": getattr(
+                        getattr(usage, "completion_tokens_details", None),
+                        "reasoning_tokens", None,
+                    ),
+                }
+                finish_reason = getattr(choice, "finish_reason", None)
+                import logging
+                logging.getLogger(__name__).info(
+                    "deepseek.story.response",
+                    extra={
+                        "model": self.model,
+                        "reasoning_effort": effort,
+                        "attempt": attempt,
+                        "max_attempts": 3,
+                        "finish_reason": finish_reason,
+                        "completion_tokens": getattr(usage, "completion_tokens", None),
+                        "content_chars": len(raw),
+                    },
+                )
+                if not raw:
+                    raise ValueError(
+                        "DeepSeek returned an empty story plan "
+                        f"(finish_reason={finish_reason}, usage={usage_info}, "
+                        f"response_id={getattr(response, 'id', None)})"
+                    )
+                if finish_reason == "length":
+                    raise ValueError(
+                        f"DeepSeek truncated the story plan at the token limit "
+                        f"(content_chars={len(raw)}, usage={usage_info})"
+                    )
+                try:
+                    candidate = json.loads(raw)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(
+                        "DeepSeek returned invalid story-plan JSON "
+                        f"(finish_reason={finish_reason}, content_chars={len(raw)}, "
+                        f"usage={usage_info}): {exc.msg} at line {exc.lineno}, column {exc.colno}"
+                    ) from exc
 
-        scenes = validate_scene_plan(scenes,total_frames)
-        character_ids = {x["id"] for x in bible["characters"]}
-        prop_ids = {x["id"] for x in bible["props"]}
-        environment_ids = {x["id"] for x in bible["environments"]}
-        for scene in scenes:
-            if set(scene["characters"])-character_ids or set(scene["props"])-prop_ids:
-                raise RuntimeError("Shot references an undeclared character or prop ID")
-            if scene["environment"] and scene["environment"] not in environment_ids:
-                raise RuntimeError("Shot references an undeclared environment ID")
-        plan["visual_bible"] = bible
-        plan["art_direction"] = art_direction
-        plan["scenes"] = scenes
-        return plan
+                normalized = self._normalize_plan(
+                    candidate, total_frames, minimum_scenes, requested_style,
+                )
+                if attempt > 1:
+                    logging.getLogger(__name__).info(
+                        "deepseek.story.plan_repaired",
+                        extra={"attempt": attempt, "title": normalized.get("title", "")[:60]},
+                    )
+                return normalized
+            except (RuntimeError, TypeError, ValueError, KeyError, IndexError) as error:
+                if isinstance(error, RuntimeError) and "DEEPSEEK_API_KEY is not configured" in str(error):
+                    raise
+                last_error = error
+                logger = __import__("logging").getLogger(__name__)
+                logger.warning("deepseek.story.plan_rejected", extra={
+                    "attempt": attempt,
+                    "max_attempts": 3,
+                    "reason": str(error)[:900],
+                })
+                if attempt == 3:
+                    break
+                rejected_response = raw if "raw" in locals() and isinstance(raw, str) else ""
+                attempt_prompt = (
+                    prompt
+                    + "\n\nSTORY PLAN VALIDATION REPAIR REQUIRED\n"
+                    + f"The previous response failed validation: {str(error)[:1600]}\n"
+                    + "Return a complete corrected JSON object. Preserve the topic, story intent, "
+                      "factual caution, selected visual style and visual continuity. Fix every "
+                      "reported contract violation. Do not invent facts, IDs, dimensions or physics.\n"
+                    + "REJECTED RESPONSE (may be truncated):\n"
+                    + rejected_response[:16000]
+                )
+
+        raise RuntimeError(
+            "DeepSeek could not produce a valid story plan after 3 attempts: "
+            + (str(last_error)[:1000] if last_error else "unknown validation error")
+        ) from last_error
