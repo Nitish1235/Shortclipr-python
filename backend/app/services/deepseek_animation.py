@@ -28,6 +28,11 @@ from openai import AsyncOpenAI
 
 from ..core.config import Settings
 from .art_direction import build_art_direction, format_art_direction, validate_art_direction
+from .shot_design_contracts import (
+    build_visual_continuity_contract,
+    build_shot_continuity_context,
+    validate_physical_constraints,
+)
 from .animation_contracts import (
     ASPECT_LOGICAL,
     MAX_FILM_SOURCE,
@@ -183,7 +188,10 @@ class DeepSeekAnimationCompiler:
         return value
 
     @staticmethod
-    def _validate_shot_motion(value: dict[str, Any], label: str) -> dict[str, Any]:
+    def _validate_shot_motion(
+        value: dict[str, Any], label: str,
+        valid_entity_ids: set[str] | None = None,
+    ) -> dict[str, Any]:
         required = (
             "initial_state", "primary_action", "final_state",
             "timing", "secondary_motion", "camera_motion", "mechanism_motion",
@@ -192,6 +200,9 @@ class DeepSeekAnimationCompiler:
             item = value.get(field)
             if not isinstance(item, str) or not item.strip():
                 raise ValueError(f"{label} motion specification requires non-empty {field}")
+        value["physical_constraints"] = validate_physical_constraints(
+            value.get("physical_constraints"), label, valid_entity_ids or set(),
+        )
         return value
 
     async def _validated_fragment(
@@ -286,6 +297,7 @@ class DeepSeekAnimationCompiler:
             raise ValueError(f"Unsupported aspect ratio: {aspect}")
 
         visual_bible = validate_visual_bible(plan.get("visual_bible"))
+        visual_continuity_contract = build_visual_continuity_contract(visual_bible)
         scenes = validate_scene_plan(plan.get("scenes"), total_frames)
         mechanisms_by_id = {item["id"]: item for item in visual_bible.get("mechanisms", [])}
         for scene in scenes:
@@ -404,6 +416,15 @@ Return the complete shared JavaScript drawing library now.""".strip()
             start_s = scene["start_frame"] / 30
             end_s = scene["end_frame"] / 30
             shot_visual_context = self._shot_visual_context(visual_bible, scene)
+            shot_continuity_context = build_shot_continuity_context(
+                visual_continuity_contract, scene,
+            )
+            valid_motion_entity_ids = {
+                entity["id"]
+                for group in ("characters", "props", "environments", "mechanisms")
+                for entity in shot_continuity_context.get(group, [])
+                if isinstance(entity.get("id"), str)
+            }
         # === LEGACY SHOT GENERATION PROMPT (rollback reference; inactive) ===
         # shot_prompt = f"""
         # You are ShortClipr's 2D animation shot director and Canvas artist.
@@ -477,10 +498,14 @@ Rules:
 - Every layer must contain recognizable visual content and a clear storytelling purpose.
 - Be spatially specific. Avoid generic bands, grids, floating icons, decorative clutter and default centered layouts.
 - Make the visual_objective immediately understandable without narration.
-- Preserve character and prop identity from the visual references.
+- Preserve character, prop, mechanism and environment identity from the continuity contract.
+- Treat canonical design attributes as immutable. Only pose, expression, position, orientation
+  and other storyboard-required state may change; never silently redesign an entity.
 - Do not describe animation, timing or JavaScript.
 
 CANVAS: {logical[0]}x{logical[1]}
+VIDEO-WIDE VISUAL CONTINUITY CONTRACT (authoritative):
+{json.dumps(shot_continuity_context, ensure_ascii=False, separators=(",", ":"))}
 ART DIRECTION:
 {art_direction_instructions}
 
@@ -514,7 +539,16 @@ and do not redesign the composition. Return one JSON object with exactly these k
   "timing": "When the action starts, accelerates, reaches its key moment and settles, within the shot duration.",
   "secondary_motion": "Only supporting motion that improves readability; otherwise state none.",
   "camera_motion": "Specific camera movement if motivated; otherwise state locked camera.",
-  "mechanism_motion": "How supplied mechanism data is depicted, or state no mechanism motion."
+  "mechanism_motion": "How supplied mechanism data is depicted, or state no mechanism motion.",
+  "physical_constraints": {
+    "motion_type": "rigid_body, articulated, ballistic, fluid, elastic, mechanical, camera, mixed or static",
+    "anchors": [{"entity_id": "supplied entity ID", "point": "stable anchor location", "role": "what is fixed or connected"}],
+    "relationships": [{"source_entity_id": "supplied entity ID", "target_entity_id": "supplied entity ID", "relationship": "physical relationship", "behavior": "how target responds"}],
+    "constraints": [{"entity_id": "supplied entity ID", "rule": "supported axis, boundary, attachment or movement constraint"}],
+    "forces_and_effects": [{"entity_id": "supplied entity ID", "effect": "relevant effect", "description": "visible consequence supported by the scene"}],
+    "collision_rules": [{"entity_a": "supplied entity ID", "entity_b": "supplied entity ID", "response": "visible contact behavior"}],
+    "motion_profile": {"start": "initial hold or anticipation", "acceleration": "movement onset", "peak": "main action", "deceleration": "slowing phase", "settle": "final stabilization"}
+  }
 }}
 
 Rules:
@@ -522,10 +556,23 @@ Rules:
 - The approved layout is fixed. Do not move the camera or subjects to a different composition.
 - Plan one dominant action, not a list of unrelated movements.
 - Motion must be deterministic and readable at 30 fps.
+- Use only entity IDs present in the supplied continuity references. Every entity reference
+  in physical_constraints must resolve to one of those IDs; use empty arrays when a category
+  does not apply. Never invent an anchor, collision partner, joint or connected component.
+- Choose the motion_type that best describes this shot; use static when no meaningful motion occurs.
+- Describe physical relationships and visible consequences, not unsupported numerical simulation.
+- Apply gravity, inertia, drag, impact, buoyancy or collision only when relevant and supported.
+- Use motion_profile to describe anticipation/hold, acceleration, peak action, deceleration
+  and settling. A phase may explicitly say "none" when it does not apply.
 - Never invent objects, joints, dimensions, forces, physics or kinematics.
-- If supplied mechanism definitions contain numeric kinematics, those values are authoritative.
-  If they do not, describe only the declared qualitative action; do not imply simulation.
+- Supplied numeric mechanism kinematics are authoritative. Preserve their validated anchors,
+  part relationships and trajectories; do not generate competing motion assumptions.
+- Without numeric mechanism kinematics, describe only declared qualitative motion; do not
+  imply an engineering simulation.
 - Do not add motion to objects that do not support the primary action.
+
+VIDEO-WIDE VISUAL CONTINUITY CONTRACT:
+{json.dumps(shot_continuity_context, ensure_ascii=False, separators=(",", ":"))}
 
 SHOT DURATION: {end_s-start_s:.3f} seconds
 APPROVED VISUAL COMPOSITION:
@@ -540,10 +587,12 @@ STORYBOARD:
                 motion = await self._json_object_completion(
                     "Return exactly one valid JSON object. You are a precise 2D animation director.",
                     motion_prompt,
-                    min(self.max_output_tokens, 1800),
+                    min(self.max_output_tokens, 2600),
                     label=f"Shot {scene['index'] + 1} animation direction",
                 )
-                self._validate_shot_motion(motion, f"Shot {scene['index'] + 1}")
+                self._validate_shot_motion(
+                    motion, f"Shot {scene['index'] + 1}", valid_motion_entity_ids,
+                )
 
                 mechanism_rules = ""
                 if scene.get("mechanism_actions"):
@@ -580,6 +629,12 @@ VISUAL COMPOSITION:
 ANIMATION DIRECTION:
 {json.dumps(motion, ensure_ascii=False, separators=(",", ":"))}
 
+AUTHORITATIVE VISUAL CONTINUITY CONTRACT:
+{json.dumps(shot_continuity_context, ensure_ascii=False, separators=(",", ":"))}
+
+PHYSICAL MOTION CONTRACT:
+{json.dumps(motion["physical_constraints"], ensure_ascii=False, separators=(",", ":"))}
+
 IMPLEMENTATION CONTEXT
 Canvas: {logical[0]}x{logical[1]}. Local time t starts at zero; absoluteTime is film time.
 Shot duration: {end_s-start_s:.3f}s.
@@ -590,8 +645,12 @@ Verified shared helper names:
 {json.dumps(shared_helper_names)}
 
 RULES
-- Draw the actual supplied characters, props and environment. Preserve recurring identity.
+- Draw the actual supplied characters, props and environment. Preserve recurring identity
+  exactly as defined by the continuity contract; change only storyboard-required state.
 - Follow the approved composition, layer order, camera and action exactly.
+- Implement the approved physical anchors, relationships, constraints, collision rules and
+  motion profile. Do not invent extra joints, forces or connected-part behavior. Validated
+  mechanism kinematics remain authoritative.
 - Use only verified shared draw helpers, CanvasRenderingContext2D methods on g,
   standard Math, and documented ShortcliprStyles/Ease APIs. Never call an unknown helper.
 - Redraw the full frame deterministically from t. No accumulated state or randomness.
@@ -887,6 +946,7 @@ Implement every missing helper now.""".strip()
                 "art_direction": art_direction,
                 "art_direction_instructions": art_direction_instructions,
                 "visual_bible": visual_bible,
+                "visual_continuity_contract": visual_continuity_contract,
                 "scenes": scenes,
                 "shared_js": shared_js,
                 "function_specs": list(function_specs_by_name.values()),
@@ -1188,6 +1248,12 @@ Return the complete repaired function declarations now.""".strip()
         if not isinstance(original_body, str) or not original_body:
             raise ValueError("Target shot has no original drawing body")
         visual_bible = repair_bundle.get("visual_bible", {})
+        continuity_contract = repair_bundle.get("visual_continuity_contract")
+        if not isinstance(continuity_contract, dict):
+            continuity_contract = build_visual_continuity_contract(visual_bible)
+        shot_continuity_context = build_shot_continuity_context(
+            continuity_contract, scene,
+        )
         shot_visual_context = self._shot_visual_context(visual_bible, scene)
         shared_helper_names = sorted(set(re.findall(
             r"\bfunction\s+(draw[A-Z][A-Za-z0-9_]*)\s*\(", shared_js
@@ -1258,6 +1324,9 @@ ORIGINAL STORYBOARD:
 VISUAL BIBLE REFERENCES:
 {json.dumps(shot_visual_context, ensure_ascii=False)}
 
+AUTHORITATIVE VISUAL CONTINUITY CONTRACT:
+{json.dumps(shot_continuity_context, ensure_ascii=False)}
+
 BINDING ART DIRECTION:
 {repair_bundle.get("art_direction_instructions", "")}
 
@@ -1278,6 +1347,10 @@ REPAIR METHOD
 2. Fix only high-confidence, actionable defects. Do not invent problems.
 3. Preserve successful composition, identity, environment, focal objective, visual
    change, mechanism geometry and existing working animation.
+   Preserve canonical character/prop/environment identity from the continuity contract.
+   Only alter pose or state when required by the storyboard or accepted QA finding.
+   Preserve validated physical relationships and mechanism kinematics; do not introduce
+   unsupported forces, joints, collisions or movement.
 4. Make the smallest coherent changes. Prefer better scale, placement, silhouette,
    depth, contrast or timing over unrelated detail.
 5. If findings conflict, prioritize severe and high-confidence issues while retaining
