@@ -1344,19 +1344,33 @@ REPAIR RULES
 - The replacement must visibly implement the function, not return a stub or placeholder.
 
 Return the complete repaired function declarations now.""".strip()
-        generated = await self._code_completion(
+        def validate_shared_repair_candidate(candidate: str) -> None:
+            validate_draw_helper_definitions(candidate, helper_names, selected_specs)
+            candidate_shared = replace_shared_draw_helpers(
+                shared_js, candidate, helper_names,
+            )
+            if len(candidate_shared) > MAX_SHARED_SOURCE:
+                raise ValueError("Repaired shared drawing library exceeds the maximum source size")
+            unresolved = find_unresolved_draw_helpers(
+                candidate_shared, [shot["draw_body"] for shot in shots],
+            )
+            if unresolved:
+                raise ValueError(
+                    "Repaired shared library or existing shots contain unresolved helpers: "
+                    + ", ".join(unresolved)
+                )
+            validate_draw_helper_dependency_graph(specs)
+
+        generated = await self._validated_fragment(
             "You are a senior Canvas 2D JavaScript engineer. Return only executable function declarations.",
             prompt,
             min(self.max_output_tokens, 12000),
-            label="Visual-QA shared drawing helper repair",
+            "shared_js",
+            "Visual-QA shared drawing helper repair",
+            MAX_SHARED_SOURCE,
+            validator=validate_shared_repair_candidate,
         )
-        generated = validate_generated_fragment(
-            generated, "Visual-QA shared helper repair", MAX_SHARED_SOURCE,
-        )
-        validate_draw_helper_definitions(generated, helper_names, selected_specs)
         updated_shared = replace_shared_draw_helpers(shared_js, generated, helper_names)
-        if len(updated_shared) > MAX_SHARED_SOURCE:
-            raise ValueError("Repaired shared drawing library exceeds the maximum source size")
 
         updated_bundle = copy.deepcopy(repair_bundle)
         updated_bundle["shared_js"] = updated_shared
@@ -1609,13 +1623,44 @@ REPAIR METHOD
    depth, contrast or timing over unrelated detail.
 5. If findings conflict, prioritize severe and high-confidence issues while retaining
    the storyboard's intent.
-6. Use only available shared helpers or complete local functions. Never call undefined
-   helpers or add external assets.
+6. Use only the exact available shared helper names listed above. Do not define new
+   drawX functions inside this shot and do not call any helper outside that list.
+   Never add external assets or invent an API for missing visual elements.
 7. Keep deterministic Canvas 2D only. Save/restore context state and remain inside the
    original logical canvas.
 8. Still-frame QA cannot prove motion correctness or physical accuracy; do not claim
    to fix either based on unsupported evidence.
 9. Return the entire replacement drawing body, not a patch.""".strip()
+        helper_manifest = repair_bundle.get("helper_manifest", {})
+        manifest_shots = (
+            helper_manifest.get("shots") if isinstance(helper_manifest, dict) else None
+        )
+        manifest_entries = [
+            item for item in manifest_shots
+            if isinstance(item, dict) and item.get("index") == shot_index
+        ] if isinstance(manifest_shots, list) else []
+        if len(manifest_entries) != 1:
+            raise ValueError(
+                f"Shot {shot_index + 1} has no unique canonical helper-manifest entry"
+            )
+        required_helpers = manifest_entries[0].get("required_helpers")
+        if not isinstance(required_helpers, list):
+            raise ValueError(f"Shot {shot_index + 1} has an invalid required-helper manifest")
+
+        def validate_repaired_shot(candidate: str) -> None:
+            missing = find_missing_required_helper_usage(candidate, required_helpers)
+            if missing:
+                raise ValueError(
+                    "Repaired shot omitted required canonical drawing functions: "
+                    + ", ".join(missing)
+                )
+            unresolved = find_unresolved_draw_helpers(shared_js, [candidate])
+            if unresolved:
+                raise ValueError(
+                    "Repaired shot calls helpers outside the verified shared library: "
+                    + ", ".join(unresolved)
+                )
+
         replacement_body = await self._validated_fragment(
             "You are a senior Canvas 2D animation programmer. Return only executable JavaScript source.",
             prompt,
@@ -1623,6 +1668,7 @@ REPAIR METHOD
             "draw_body",
             f"Targeted repair for shot {shot_index + 1}",
             MAX_SHOT_SOURCE,
+            validator=validate_repaired_shot,
         )
         updated_bundle = copy.deepcopy(repair_bundle)
         updated_bundle["shots"][position]["draw_body"] = replacement_body
