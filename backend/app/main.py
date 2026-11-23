@@ -64,12 +64,10 @@ async def lifespan(app: FastAPI):
         app.state.emailer=ProjectReadyEmailer(settings, app.state.storage)
         app.state.renderer=DrawnByCodeRenderer()
         app.state.visual_reviewer=VisualQualityReviewer(settings)
-        # The render worker always needs the compiler available to upgrade
-        # persisted artifacts when the compiler/runtime contract changes.
-        # The optional Visual-QA repair feature remains independently gated.
-        app.state.animation_compiler=DeepSeekAnimationCompiler(settings)
+        # Model-assisted repair remains explicitly opt-in. The worker can
+        # still render strictly validated legacy artifacts without a model key.
         app.state.shot_repairer=(
-            app.state.animation_compiler
+            DeepSeekAnimationCompiler(settings)
             if settings.DEEPSEEK_ENABLE_SHOT_REPAIR else None
         )
         if settings.APP_ENV.lower() == "production":
