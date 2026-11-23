@@ -77,19 +77,20 @@ try {
         manifestShots.set(shot.index, shot);
     }
 
+    // Child-scope through lists also contain references that are resolved by
+    // an enclosing scope. Only the global scope's through list represents names
+    // that remain unresolved after the complete scope chain has been analyzed.
     const unresolved = new Map();
-    for (const scope of scopeManager.scopes) {
-        for (const ref of scope.through) {
-            const name = ref.identifier.name;
-            if (allowedGlobals.has(name)) continue;
-            const location = ref.identifier.loc?.start;
-            const entry = {
-                name,
-                line: location?.line ?? null,
-                column: location?.column ?? null,
-            };
-            unresolved.set(ref.identifier.start, entry);
-        }
+    for (const ref of globalScope.through) {
+        const name = ref.identifier.name;
+        if (allowedGlobals.has(name)) continue;
+        const location = ref.identifier.loc?.start;
+        const entry = {
+            name,
+            line: location?.line ?? null,
+            column: location?.column ?? null,
+        };
+        unresolved.set(ref.identifier.start, entry);
     }
     if (unresolved.size) {
         const details = [...unresolved.values()]
