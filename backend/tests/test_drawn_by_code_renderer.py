@@ -1,7 +1,6 @@
 import unittest
 
-from app.services.drawn_by_code_renderer import DrawnByCodeRenderer
-from app.services.animation_contracts import find_unresolved_film_draw_helpers
+from app.services.drawn_by_code_renderer import DrawnByCodeRenderer, NonRetryableRenderError
 
 
 class DrawnByCodeDiagnosticsTests(unittest.TestCase):
@@ -12,10 +11,8 @@ function drawShot_0(g, t, env, absoluteTime) {
 }
 Motion.scene({ draw(g, t, env) { drawShot_0(g, t, env, t); } });
 """
-        self.assertEqual(
-            find_unresolved_film_draw_helpers(source),
-            ["drawSkyHalftone"],
-        )
+        with self.assertRaisesRegex(NonRetryableRenderError, "drawSkyHalftone"):
+            DrawnByCodeRenderer._validate_generated_helpers(source)
 
     def test_renderer_preflight_accepts_top_level_shared_draw_helper(self):
         source = """
@@ -25,7 +22,7 @@ function drawShot_0(g, t, env, absoluteTime) {
 }
 Motion.scene({ draw(g, t, env) { drawShot_0(g, t, env, t); } });
 """
-        self.assertEqual(find_unresolved_film_draw_helpers(source), [])
+        DrawnByCodeRenderer._validate_generated_helpers(source)
 
     def test_renderer_preflight_rejects_helper_declared_inside_another_function(self):
         source = """
@@ -37,10 +34,8 @@ function drawShot_0(g, t, env, absoluteTime) {
 }
 Motion.scene({ draw(g, t, env) { drawShot_0(g, t, env, t); } });
 """
-        self.assertEqual(
-            find_unresolved_film_draw_helpers(source),
-            ["drawSkyHalftone"],
-        )
+        with self.assertRaisesRegex(NonRetryableRenderError, "drawSkyHalftone"):
+            DrawnByCodeRenderer._validate_generated_helpers(source)
 
     def test_renderer_preflight_ignores_comments_strings_and_object_methods(self):
         source = '''
@@ -52,7 +47,7 @@ function drawShot_0(g, t, env, absoluteTime) {
 }
 Motion.scene({ draw(g, t, env) { drawShot_0(g, t, env, t); } });
 '''
-        self.assertEqual(find_unresolved_film_draw_helpers(source), [])
+        DrawnByCodeRenderer._validate_generated_helpers(source)
 
     def test_output_tail_preserves_recent_lines(self):
         self.assertEqual(
