@@ -1,9 +1,59 @@
 import unittest
 
 from app.services.drawn_by_code_renderer import DrawnByCodeRenderer
+from app.services.animation_contracts import find_unresolved_film_draw_helpers
 
 
 class DrawnByCodeDiagnosticsTests(unittest.TestCase):
+    def test_renderer_preflight_rejects_missing_shared_draw_helper(self):
+        source = """
+function drawShot_0(g, t, env, absoluteTime) {
+    drawSkyHalftone(g, 0, 0, 900, 1600);
+}
+Motion.scene({ draw(g, t, env) { drawShot_0(g, t, env, t); } });
+"""
+        self.assertEqual(
+            find_unresolved_film_draw_helpers(source),
+            ["drawSkyHalftone"],
+        )
+
+    def test_renderer_preflight_accepts_top_level_shared_draw_helper(self):
+        source = """
+function drawSkyHalftone(g, x, y, w, h) {}
+function drawShot_0(g, t, env, absoluteTime) {
+    drawSkyHalftone(g, 0, 0, 900, 1600);
+}
+Motion.scene({ draw(g, t, env) { drawShot_0(g, t, env, t); } });
+"""
+        self.assertEqual(find_unresolved_film_draw_helpers(source), [])
+
+    def test_renderer_preflight_rejects_helper_declared_inside_another_function(self):
+        source = """
+function drawWrapper(g) {
+    function drawSkyHalftone(g, x, y, w, h) {}
+}
+function drawShot_0(g, t, env, absoluteTime) {
+    drawSkyHalftone(g, 0, 0, 900, 1600);
+}
+Motion.scene({ draw(g, t, env) { drawShot_0(g, t, env, t); } });
+"""
+        self.assertEqual(
+            find_unresolved_film_draw_helpers(source),
+            ["drawSkyHalftone"],
+        )
+
+    def test_renderer_preflight_ignores_comments_strings_and_object_methods(self):
+        source = '''
+// drawMissingFromComment(g);
+const label = "drawMissingFromString(g)";
+const api = { drawMethod(g) {} };
+function drawShot_0(g, t, env, absoluteTime) {
+    api.drawMethod(g);
+}
+Motion.scene({ draw(g, t, env) { drawShot_0(g, t, env, t); } });
+'''
+        self.assertEqual(find_unresolved_film_draw_helpers(source), [])
+
     def test_output_tail_preserves_recent_lines(self):
         self.assertEqual(
             DrawnByCodeRenderer._format_output_tail(["launching chromium", "page error: bad draw"]),
