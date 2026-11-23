@@ -36,6 +36,10 @@ from .animation_contracts import (
     validate_generated_fragment,
     find_unresolved_draw_helpers,
     validate_draw_helper_definitions,
+    validate_draw_helper_specs,
+    validate_draw_helper_dependency_graph,
+    extract_shared_draw_helpers,
+    replace_shared_draw_helpers,
     validate_scene_plan,
     validate_visual_bible,
     analyze_mechanism_motion,
@@ -148,7 +152,10 @@ class DeepSeekAnimationCompiler:
         }
 
     @staticmethod
-    def _visual_qa_context(visual_bible: dict[str, Any], scenes: list[dict[str, Any]]) -> dict[str, Any]:
+    def _visual_qa_context(
+        visual_bible: dict[str, Any], scenes: list[dict[str, Any]],
+        function_specs: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """Keep the visual review context aligned to the exact plan used to compile."""
         storyboard_fields = (
             "index", "start_frame", "end_frame", "purpose", "visual_objective",
@@ -156,11 +163,26 @@ class DeepSeekAnimationCompiler:
             "focal_entity", "visual_change", "continuity_note", "characters",
             "props", "environment", "mechanism_actions",
         )
+        specs = function_specs or []
         return {
             "visual_bible": visual_bible,
             "storyboard": [
                 {key: scene.get(key) for key in storyboard_fields if key in scene}
                 for scene in scenes
+            ],
+            "function_specs": specs,
+            "function_registry": [
+                {
+                    "name": spec["name"],
+                    "category": spec["category"],
+                    "signature": spec["signature"],
+                    "purpose": spec["purpose"],
+                    "visual_target": spec["visual_target"],
+                    "dependencies": spec["dependencies"],
+                    "required_by_shots": spec.get("required_by_shots", []),
+                    "version": spec.get("version", 1),
+                }
+                for spec in specs
             ],
         }
 
@@ -387,9 +409,11 @@ SHOT DIRECTING
 
 SHARED DRAWING HELPERS
 Verified shared helper names: {json.dumps(shared_helper_names)}
-Call only these shared helpers. A custom drawX function must be fully defined in this
-body before use. Never invent a helper. Reuse shared helpers for recurring characters
-and props; do not redraw identity-defining features.
+Call only these shared helpers. Never define a drawX function inside this shot body.
+If a new reusable drawing function is needed, call it by its exact drawX name; the
+compiler will specify and generate it in the shared library before assembly. Do not
+invent unrelated helper names. Reuse shared helpers for recurring characters and props;
+do not redraw identity-defining features.
 
 MECHANISM RENDERING
 The validated mechanismActions and mechanisms arrays are authoritative. Never invent
@@ -470,13 +494,108 @@ Return the complete JavaScript drawing body for this shot.""".strip()
         # A model may still reference a helper it forgot to define. Generate those
         # implementations explicitly, validate their declarations, and only then
         # assemble the film. Keep this bounded to avoid recursive code-generation loops.
-        for helper_pass in range(2):
-            missing_helpers = find_unresolved_draw_helpers(
+        function_specs_by_name: dict[str, dict[str, Any]] = {}
+        for helper_pass in range(4):
+            missing_set = set(find_unresolved_draw_helpers(
                 shared_js,
                 [shot["draw_body"] for shot in compiled],
-            )
+            ))
+            for existing_spec in function_specs_by_name.values():
+                missing_set.update(
+                    dependency for dependency in existing_spec["dependencies"]
+                    if dependency not in shared_helper_names
+                )
+            missing_helpers = sorted(missing_set)
             if not missing_helpers:
                 break
+            if len(function_specs_by_name) + len(missing_helpers) > 64:
+                raise ValueError("Generated drawing helper dependency graph exceeds 64 functions")
+
+            spec_prompt = f"""
+ROLE
+You are ShortClipr's visual-systems architect. Before implementation, define exact,
+testable contracts for the missing Canvas drawing functions.
+
+Return strict JSON only, with one object per requested name:
+{{
+  "functions": [{{
+    "name": "drawExample",
+    "category": "visual",
+    "purpose": "One precise responsibility",
+    "signature": "function drawExample(g, x, y, scale)",
+    "coordinate_system": "local_subject or logical_canvas, with units explained",
+    "origin": "Exact origin and scale convention",
+    "visual_target": "What must visibly appear, including shape, material and spatial role",
+    "style_requirements": "How it must follow this film's art direction",
+    "animation_behavior": "How time affects it, or explicitly state that it is static",
+    "dependencies": ["drawAnotherHelper"],
+    "acceptance_criteria": ["Observable criterion one", "Observable criterion two"]
+  }}]
+}}
+
+CONTRACT RULES
+- Include every requested name exactly once and no other names.
+- The category must be visual, animation or effect.
+- Every signature is an ordinary named function and starts with Canvas context g.
+- Specify concrete visual behavior, coordinate conventions and observable acceptance criteria.
+- Dependencies may name only drawX helpers; list only dependencies the implementation genuinely needs.
+- Do not specify undocumented runtime APIs or external assets.
+- These functions are required by actual shot call sites. Resolve their intent from those
+  call sites, the visual bible and existing shared functions; do not guess from names alone.
+- Keep each specification concise but precise.
+
+REQUESTED NAMES:
+{json.dumps(missing_helpers)}
+
+EXISTING SHARED FUNCTIONS:
+{json.dumps(shared_helper_names)}
+
+VISUAL BIBLE:
+{json.dumps(visual_bible, ensure_ascii=False)}
+
+BINDING ART DIRECTION:
+{art_direction_instructions}
+
+SHOT CALL SITES:
+{json.dumps([
+    {
+        "index": shot["index"],
+        "name": shot["name"],
+        "calls": [
+            {
+                "function": helper,
+                "context": shot["draw_body"][
+                    max(0, shot["draw_body"].find(helper) - 220):
+                    min(len(shot["draw_body"]), shot["draw_body"].find(helper) + 420)
+                ],
+            }
+            for helper in missing_helpers if helper in shot["draw_body"]
+        ],
+    }
+    for shot in compiled if any(helper in shot["draw_body"] for helper in missing_helpers)
+], ensure_ascii=False)}
+
+Return the JSON specification now.""".strip()
+            raw_specs = await self._code_completion(
+                "You are a precise visual-function contract designer. Return valid JSON only.",
+                spec_prompt,
+                min(self.max_output_tokens, 5000),
+                label=f"Drawing helper specifications pass {helper_pass + 1}",
+            )
+            try:
+                parsed_specs = json.loads(raw_specs)
+            except json.JSONDecodeError as error:
+                raise ValueError(
+                    f"DeepSeek returned invalid JSON for drawing helper specifications: {error.msg}"
+                ) from error
+            pass_specs = validate_draw_helper_specs(parsed_specs, missing_helpers)
+            for spec in pass_specs:
+                spec["required_by_shots"] = [
+                    shot["index"] for shot in compiled
+                    if re.search(rf"\b{re.escape(spec['name'])}\s*\(", shot["draw_body"])
+                ]
+                spec["version"] = 1
+                function_specs_by_name[spec["name"]] = spec
         # === LEGACY ON-DEMAND DRAWING HELPERS PROMPT (rollback reference; inactive) ===
         # helper_prompt = f"""
         # You are ShortClipr's reusable Canvas 2D drawing-function engineer.
@@ -517,6 +636,9 @@ once and accept Canvas context g as its first parameter.
 MISSING HELPERS:
 {json.dumps(missing_helpers)}
 
+AUTHORITATIVE FUNCTION SPECIFICATIONS:
+{json.dumps(pass_specs, ensure_ascii=False)}
+
 BINDING ART DIRECTION:
 {art_direction_instructions}
 
@@ -531,12 +653,21 @@ SHOT CONTEXT:
 
 RULES
 - Use Ease.lerp(a, b, progress) for numeric interpolation; never call bare mix().
-- Infer each helper's intended subject from its call sites and visual bible.
+- Treat the authoritative function specifications as implementation contracts, not suggestions.
+- Match each exact signature, purpose, coordinate system, origin, visual target, animation
+  behavior, dependencies and acceptance criteria.
 - Match existing shared helper proportions, palette, materials, lighting and local
   coordinate conventions. Do not introduce a different illustration style.
+- Implement declared dependencies when they are part of this requested batch; if another
+  drawX dependency is needed, define it completely in this fragment so the next bounded
+  dependency pass can specify and implement it.
 - Every helper must draw the actual named subject, not a placeholder, label or icon.
 - Use a stable local origin and scale convention consistent with related helpers.
-- Define all requested helpers completely. Do not leave TODOs or call undefined helpers.
+- Define every requested helper completely and match its exact specified signature.
+- Do not define any unrequested drawX function. If a helper needs another drawX dependency,
+  call that dependency by its exact name; the next bounded pass will specify and implement it.
+- Do not leave TODOs, empty bodies or placeholder implementations.
+- Use Canvas 2D, standard Math and documented ShortcliprStyles APIs only.
 - Use Canvas 2D, standard Math and documented ShortcliprStyles APIs only.
 - Save/restore context state; remain deterministic and side-effect free.
 - No DOM/browser globals, imports, exports, network, filesystem, Node APIs, timers,
@@ -556,7 +687,7 @@ Implement every missing helper now.""".strip()
                 "On-demand drawing helpers",
                 MAX_SHARED_SOURCE,
             )
-            validate_draw_helper_definitions(generated_helpers, missing_helpers)
+            validate_draw_helper_definitions(generated_helpers, missing_helpers, pass_specs)
             shared_js += "\n" + generated_helpers
             if len(shared_js) > MAX_SHARED_SOURCE:
                 raise ValueError("Shared drawing library exceeds the maximum source size")
@@ -566,11 +697,19 @@ Implement every missing helper now.""".strip()
             shared_js,
             [shot["draw_body"] for shot in compiled],
         )
+        missing_declared_dependencies = sorted({
+            dependency
+            for spec in function_specs_by_name.values()
+            for dependency in spec["dependencies"]
+            if dependency not in shared_helper_names
+        })
+        remaining_helpers = sorted(set(remaining_helpers) | set(missing_declared_dependencies))
         if remaining_helpers:
             raise ValueError(
                 "Unresolved generated drawing helpers after repair: "
                 + ", ".join(remaining_helpers)
             )
+        validate_draw_helper_dependency_graph(list(function_specs_by_name.values()))
 
         source = self._assemble_film(shared_js, compiled, duration, logical, style_id)
         if len(source) > MAX_FILM_SOURCE:
@@ -584,7 +723,24 @@ Implement every missing helper now.""".strip()
             "shared_source_chars": len(shared_js),
             "shot_source_chars": sum(len(x["draw_body"]) for x in compiled),
             "motion_diagnostics": motion_diagnostics,
-            "visual_qa_context": self._visual_qa_context(visual_bible, scenes),
+            "visual_qa_context": self._visual_qa_context(
+                visual_bible, scenes, list(function_specs_by_name.values()),
+            ),
+            "function_specs": list(function_specs_by_name.values()),
+            "function_registry": [
+                {
+                    "name": spec["name"],
+                    "category": spec["category"],
+                    "signature": spec["signature"],
+                    "dependencies": spec["dependencies"],
+                    "required_by_shots": spec["required_by_shots"],
+                    "version": spec["version"],
+                    "source_scope": "shared",
+                    "static_status": "implementation_validated",
+                    "runtime_status": "not_render_verified",
+                }
+                for spec in function_specs_by_name.values()
+            ],
             # Keep the exact compiled shot bodies and shared drawing library so a
             # later repair can replace one shot without regenerating other shots.
             "repair_bundle": {
@@ -597,6 +753,21 @@ Implement every missing helper now.""".strip()
                 "visual_bible": visual_bible,
                 "scenes": scenes,
                 "shared_js": shared_js,
+                "function_specs": list(function_specs_by_name.values()),
+                "function_registry": [
+                    {
+                        "name": spec["name"],
+                        "category": spec["category"],
+                        "signature": spec["signature"],
+                        "dependencies": spec["dependencies"],
+                        "required_by_shots": spec["required_by_shots"],
+                        "version": spec["version"],
+                        "source_scope": "shared",
+                        "static_status": "implementation_validated",
+                        "runtime_status": "not_render_verified",
+                    }
+                    for spec in function_specs_by_name.values()
+                ],
                 "shots": compiled,
             },
             "shot_manifest": [
@@ -613,6 +784,203 @@ Implement every missing helper now.""".strip()
                 }
                 for shot in compiled
             ],
+        }
+
+
+    async def repair_shared_helpers(
+        self,
+        repair_bundle: dict[str, Any],
+        helper_names: list[str],
+        findings: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Repair only identified shared drawing helpers, preserving all shot bodies."""
+        if self.client is None:
+            raise RuntimeError("DEEPSEEK_API_KEY is not configured")
+        if not isinstance(repair_bundle, dict) or repair_bundle.get("schema_version") != 1:
+            raise ValueError("Unsupported or missing shared-helper repair bundle")
+        if (not isinstance(helper_names, list) or not 1 <= len(helper_names) <= 3
+                or len(set(helper_names)) != len(helper_names)
+                or not all(isinstance(name, str) and re.fullmatch(r"draw[A-Z][A-Za-z0-9_]*", name)
+                           for name in helper_names)):
+            raise ValueError("Shared-helper repair requires 1–3 unique helper names")
+        if not isinstance(findings, list) or not findings:
+            raise ValueError("At least one visual QA finding is required")
+
+        shared_js = repair_bundle.get("shared_js")
+        shots = repair_bundle.get("shots")
+        specs = repair_bundle.get("function_specs")
+        if not isinstance(shared_js, str) or not isinstance(shots, list) or not isinstance(specs, list):
+            raise ValueError("Repair bundle lacks shared source, shots or function specifications")
+        specs_by_name = {
+            item.get("name"): item for item in specs
+            if isinstance(item, dict) and isinstance(item.get("name"), str)
+        }
+        if any(name not in specs_by_name for name in helper_names):
+            raise ValueError("A requested helper has no persisted visual specification")
+        selected_specs = [specs_by_name[name] for name in helper_names]
+        required_shots = {
+            name: set(specs_by_name[name].get("required_by_shots", []))
+            for name in helper_names
+        }
+
+        safe_findings = []
+        for item in findings[:8]:
+            if not isinstance(item, dict):
+                continue
+            shot_index = item.get("shot_index")
+            if isinstance(shot_index, bool) or not isinstance(shot_index, int):
+                continue
+            if not any(shot_index in required_shots[name] for name in helper_names):
+                continue
+            confidence = item.get("confidence")
+            if (item.get("severity") not in {"critical", "high"}
+                    or isinstance(confidence, bool)
+                    or not isinstance(confidence, (int, float))
+                    or confidence < 0.75):
+                continue
+            issue, recommendation = item.get("issue"), item.get("recommendation")
+            evidence = item.get("evidence_sample_indices")
+            if (not isinstance(issue, str) or not issue.strip()
+                    or not isinstance(recommendation, str) or not recommendation.strip()
+                    or not isinstance(evidence, list) or not evidence):
+                continue
+            safe_findings.append({
+                "shot_index": shot_index,
+                "category": str(item.get("category", "other"))[:60],
+                "severity": item["severity"],
+                "confidence": round(float(confidence), 2),
+                "evidence_sample_indices": [
+                    value for value in evidence[:3]
+                    if isinstance(value, int) and not isinstance(value, bool)
+                ],
+                "issue": issue[:500],
+                "recommendation": recommendation[:500],
+            })
+        if not safe_findings:
+            raise ValueError("No high-confidence findings map to the requested shared helpers")
+
+        original_helpers = extract_shared_draw_helpers(shared_js, helper_names)
+        call_sites = []
+        for shot in shots:
+            if not isinstance(shot, dict) or not isinstance(shot.get("draw_body"), str):
+                continue
+            body = shot["draw_body"]
+            selected_calls = []
+            for name in helper_names:
+                match = re.search(rf"\b{re.escape(name)}\s*\(", body)
+                if match:
+                    selected_calls.append({
+                        "function": name,
+                        "context": body[max(0, match.start() - 240):min(len(body), match.end() + 640)],
+                    })
+            if selected_calls:
+                call_sites.append({
+                    "shot_index": shot.get("index"),
+                    "name": shot.get("name", ""),
+                    "calls": selected_calls,
+                })
+
+        prompt = f"""
+ROLE
+You are ShortClipr's senior Canvas 2D visual-systems engineer. Repair existing shared
+drawing functions using evidence from the rendered film. This is a surgical repair,
+not a redesign or an opportunity to invent a new style.
+
+OUTPUT
+Return only complete ordinary JavaScript function declarations for the requested
+functions. No JSON, Markdown, prose or code fences.
+
+REQUESTED FUNCTION SPECIFICATIONS:
+{json.dumps(selected_specs, ensure_ascii=False)}
+
+VISUAL QA FINDINGS:
+{json.dumps(safe_findings, ensure_ascii=False)}
+
+EXISTING IMPLEMENTATIONS:
+{json.dumps(original_helpers, ensure_ascii=False)}
+
+ACTUAL SHOT CALL SITES:
+{json.dumps(call_sites, ensure_ascii=False)}
+
+VISUAL BIBLE AND ART DIRECTION:
+{json.dumps({
+    "visual_bible": repair_bundle.get("visual_bible", {}),
+    "art_direction": repair_bundle.get("art_direction", {}),
+    "art_direction_instructions": repair_bundle.get("art_direction_instructions", ""),
+}, ensure_ascii=False)}
+
+REPAIR RULES
+- Return every requested function exactly once, and no other function declarations.
+- Preserve each exact existing signature and every caller's argument contract.
+- Fix only defects supported by the visual QA evidence. Keep successful visual details.
+- Preserve recurring character identity, prop geometry, palette, material, lighting,
+  coordinate origin, scale convention and local composition.
+- Preserve deterministic time behavior; no random, Date, performance or external state.
+- Use Canvas 2D, standard Math, and documented ShortcliprStyles APIs only.
+- Existing dependencies may be called only if they are declared in the shared library.
+- Do not introduce new drawX dependencies, external assets, DOM, browser globals,
+  imports, exports, network, filesystem, Node APIs, timers, eval, Function, WebGL or 3D.
+- Save/restore context state where needed. Do not leak transforms, clips or styles.
+- Keep details readable at the final video resolution.
+- The replacement must visibly implement the function, not return a stub or placeholder.
+
+Return the complete repaired function declarations now.""".strip()
+        generated = await self._code_completion(
+            "You are a senior Canvas 2D JavaScript engineer. Return only executable function declarations.",
+            prompt,
+            min(self.max_output_tokens, 12000),
+            label="Visual-QA shared drawing helper repair",
+        )
+        generated = validate_generated_fragment(
+            generated, "Visual-QA shared helper repair", MAX_SHARED_SOURCE,
+        )
+        validate_draw_helper_definitions(generated, helper_names, selected_specs)
+        updated_shared = replace_shared_draw_helpers(shared_js, generated, helper_names)
+        if len(updated_shared) > MAX_SHARED_SOURCE:
+            raise ValueError("Repaired shared drawing library exceeds the maximum source size")
+
+        updated_bundle = copy.deepcopy(repair_bundle)
+        updated_bundle["shared_js"] = updated_shared
+        updated_specs = updated_bundle.get("function_specs", [])
+        if isinstance(updated_specs, list):
+            for spec in updated_specs:
+                if isinstance(spec, dict) and spec.get("name") in helper_names:
+                    spec["version"] = int(spec.get("version", 1)) + 1
+        registry = updated_bundle.get("function_registry", [])
+        if isinstance(registry, list):
+            for entry in registry:
+                if isinstance(entry, dict) and entry.get("name") in helper_names:
+                    entry["version"] = int(entry.get("version", 1)) + 1
+                    entry["static_status"] = "repair_candidate_validated"
+                    entry["runtime_status"] = "awaiting_render_qa"
+        remaining_helpers = find_unresolved_draw_helpers(
+            updated_shared,
+            [shot["draw_body"] for shot in shots],
+        )
+        if remaining_helpers:
+            raise ValueError(
+                "Shared-helper repair introduced unresolved dependencies: "
+                + ", ".join(remaining_helpers)
+            )
+        validate_draw_helper_dependency_graph(specs)
+        duration = repair_bundle.get("duration")
+        logical = repair_bundle.get("logical")
+        style_id = repair_bundle.get("style_id")
+        if (isinstance(duration, bool) or not isinstance(duration, int)
+                or not isinstance(logical, list) or len(logical) != 2
+                or not isinstance(style_id, str)):
+            raise ValueError("Repair bundle has invalid film render metadata")
+        source = self._assemble_film(updated_shared, shots, duration, logical, style_id)
+        if len(source) > MAX_FILM_SOURCE:
+            raise ValueError("Repaired animation program exceeds the maximum source size")
+        self.validate_source(source, duration, logical)
+        return {
+            "scene_js": source,
+            "repair_bundle": updated_bundle,
+            "repaired_function_names": helper_names,
+            "original_shared_source_chars": len(shared_js),
+            "repaired_shared_source_chars": len(updated_shared),
+            "unchanged_shot_indices": [shot.get("index") for shot in shots],
         }
 
 

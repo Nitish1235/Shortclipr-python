@@ -82,6 +82,71 @@ class VisualQualityReviewValidationTests(unittest.TestCase):
         self.assertEqual(queue[0]["shot_index"], 1)
         self.assertEqual(queue[0]["findings"][0]["severity"], "critical")
 
+    def test_function_attribution_is_restricted_to_registered_helpers_used_by_shot(self):
+        registry = [
+            {"name": "drawBridge", "required_by_shots": [0]},
+            {"name": "drawTower", "required_by_shots": [1]},
+        ]
+        result = VisualQualityReviewer.validate_review(
+            {
+                "overall_score": 70,
+                "findings": [{
+                    "severity": "high",
+                    "shot_index": 0,
+                    "evidence_sample_indices": [1],
+                    "issue": "Bridge deck is clipped.",
+                    "recommendation": "Reduce deck scale.",
+                    "confidence": 0.9,
+                    "function_names": ["drawBridge", "drawTower", "drawInvented"],
+                }],
+            },
+            {0, 1},
+            {1},
+            registry,
+        )
+        self.assertEqual(result["findings"][0]["function_names"], ["drawBridge"])
+
+    def test_helper_repair_queue_requires_high_confidence_and_known_shot_usage(self):
+        review = {
+            "status": "reviewed",
+            "findings": [{
+                "severity": "high",
+                "shot_index": 0,
+                "evidence_sample_indices": [1],
+                "issue": "Bridge deck is clipped.",
+                "recommendation": "Reduce deck scale.",
+                "confidence": 0.91,
+                "function_names": ["drawBridge"],
+            }],
+        }
+        queue = VisualQualityReviewer.build_helper_repair_queue(
+            review,
+            [{"name": "drawBridge", "required_by_shots": [0]}],
+        )
+        self.assertEqual(len(queue), 1)
+        self.assertEqual(queue[0]["function_name"], "drawBridge")
+        self.assertEqual(queue[0]["findings"][0]["shot_index"], 0)
+
+    def test_helper_repair_queue_ignores_unattributed_or_low_confidence_findings(self):
+        review = {
+            "status": "reviewed",
+            "findings": [{
+                "severity": "high",
+                "shot_index": 0,
+                "evidence_sample_indices": [1],
+                "issue": "Uncertain issue.",
+                "recommendation": "Inspect.",
+                "confidence": 0.6,
+                "function_names": ["drawBridge"],
+            }],
+        }
+        self.assertEqual(
+            VisualQualityReviewer.build_helper_repair_queue(
+                review, [{"name": "drawBridge", "required_by_shots": [0]}],
+            ),
+            [],
+        )
+
     def test_invalid_overall_score_is_rejected(self):
         for score in (True, -1, 101, "80"):
             with self.subTest(score=score):

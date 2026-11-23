@@ -13,6 +13,8 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from .animation_contracts import find_unresolved_film_draw_helpers
+
 logger = logging.getLogger("shortclipr.drawn_by_code")
 
 
@@ -35,6 +37,15 @@ class DrawnByCodeRenderer:
         """Return a bounded diagnostic tail without retaining the full subprocess log."""
         value = "\n".join(lines)[-max_chars:]
         return value or "no subprocess output"
+
+    @staticmethod
+    def _validate_generated_helpers(source: str) -> None:
+        unresolved_helpers = find_unresolved_film_draw_helpers(source)
+        if unresolved_helpers:
+            raise NonRetryableRenderError(
+                "Generated animation references drawing helpers that are not defined "
+                "in the shared runtime scope: " + ", ".join(unresolved_helpers)
+            )
 
     @staticmethod
     async def _kill_and_wait(process: asyncio.subprocess.Process) -> None:
@@ -151,6 +162,8 @@ class DrawnByCodeRenderer:
         aspect = plan.get("aspectRatio")
         if not isinstance(source, str) or not source:
             raise NonRetryableRenderError("Missing DeepSeek-generated scene_js program")
+
+        self._validate_generated_helpers(source)
         if aspect not in self.widths:
             raise NonRetryableRenderError(f"Unsupported aspect ratio: {aspect}")
 

@@ -406,50 +406,405 @@ _DRAW_HELPER_DECL = re.compile(
 )
 
 
-def find_unresolved_draw_helpers(shared_source: str, shot_sources: list[str]) -> list[str]:
-    """Return unqualified drawX() calls that have no shared or shot-local definition.
+def _mask_js_comments_and_strings(source: str) -> str:
+    """Blank comments and string/template literals while preserving source offsets."""
+    chars = list(source)
+    index = 0
+    length = len(source)
+    while index < length:
+        char = source[index]
+        next_char = source[index + 1] if index + 1 < length else ""
+        if char == "/" and next_char == "/":
+            end = source.find("\n", index + 2)
+            end = length if end < 0 else end
+            for pos in range(index, end):
+                chars[pos] = " "
+            index = end
+            continue
+        if char == "/" and next_char == "*":
+            end = source.find("*/", index + 2)
+            end = length if end < 0 else end + 2
+            for pos in range(index, end):
+                if chars[pos] != "\n":
+                    chars[pos] = " "
+            index = end
+            continue
+        if char in {"'", '"', chr(96)}:
+            quote = char
+            chars[index] = " "
+            index += 1
+            while index < length:
+                current = source[index]
+                if current != "\n":
+                    chars[index] = " "
+                if current == "\\":
+                    index += 1
+                    if index < length and source[index] != "\n":
+                        chars[index] = " "
+                elif current == quote:
+                    index += 1
+                    break
+                index += 1
+            continue
+        index += 1
+    return "".join(chars)
 
-    Only the project helper naming convention (draw + Uppercase) is checked. Canvas
-    methods such as g.drawImage are property calls and intentionally excluded.
+
+def find_unresolved_film_draw_helpers(source: str) -> list[str]:
+    """Find drawX calls not backed by a top-level shared helper in a film.
+
+    Generated film helpers belong in the shared library before drawShot_N
+    declarations. Shot-local or nested declarations are not visible to every shot
+    and must not satisfy the runtime contract.
     """
-    shared = {
+    masked = _mask_js_comments_and_strings(source)
+    first_shot = re.search(r"\bfunction\s+drawShot_\d+\s*\(", masked)
+    shared_source = masked[:first_shot.start()] if first_shot else masked
+
+    brace_depth = [0] * (len(shared_source) + 1)
+    depth = 0
+    for index, char in enumerate(shared_source):
+        brace_depth[index] = depth
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth = max(0, depth - 1)
+    declared = {
         name
         for match in _DRAW_HELPER_DECL.finditer(shared_source)
+        if brace_depth[match.start()] == 0
+        for name in match.groups()
+        if name
+    }
+
+    unresolved = {
+        name
+        for name in _DRAW_HELPER_CALL.findall(masked)
+        if not name.startswith("drawShot_") and name not in declared
+    }
+    return sorted(unresolved)
+
+
+def find_unresolved_draw_helpers(shared_source: str, shot_sources: list[str]) -> list[str]:
+    """Return drawX calls without a top-level shared declaration.
+
+    Shot-local declarations intentionally do not satisfy the contract: reusable
+    drawing functions must be available from the film's shared scope.
+    """
+    masked_shared = _mask_js_comments_and_strings(shared_source)
+    brace_depth: list[int] = [0] * (len(masked_shared) + 1)
+    depth = 0
+    for index, char in enumerate(masked_shared):
+        brace_depth[index] = depth
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth = max(0, depth - 1)
+    shared = {
+        name
+        for match in _DRAW_HELPER_DECL.finditer(masked_shared)
+        if brace_depth[match.start()] == 0
         for name in match.groups()
         if name
     }
     unresolved: set[str] = set()
     for source in [shared_source, *shot_sources]:
-        local = {
-            name
-            for match in _DRAW_HELPER_DECL.finditer(source)
-            for name in match.groups()
-            if name
-        }
-        for name in _DRAW_HELPER_CALL.findall(source):
-            if name not in shared and name not in local:
+        masked = _mask_js_comments_and_strings(source)
+        for name in _DRAW_HELPER_CALL.findall(masked):
+            if name not in shared:
                 unresolved.add(name)
     return sorted(unresolved)
 
-
-def validate_draw_helper_definitions(source: str, required_names: list[str]) -> None:
-    """Ensure a generated helper fragment actually defines every requested helper."""
+def validate_draw_helper_definitions(
+    source: str,
+    required_names: list[str],
+    specifications: list[dict[str, Any]] | None = None,
+) -> None:
+    """Ensure generated helpers match their contracts and contain real drawing work."""
+    masked = _mask_js_comments_and_strings(source)
     declared = {
         name
-        for match in _DRAW_HELPER_DECL.finditer(source)
+        for match in _DRAW_HELPER_DECL.finditer(masked)
         for name in match.groups()
         if name
     }
     missing = sorted(set(required_names) - declared)
     if missing:
         raise ValueError("Generated helper library did not define: " + ", ".join(missing))
+    unexpected = sorted(declared - set(required_names))
+    if unexpected:
+        raise ValueError("Generated helper library defined unrequested functions: " + ", ".join(unexpected))
     for name in required_names:
         signature = re.search(
             rf"\bfunction\s+{re.escape(name)}\s*\(\s*g\s*(?:,|\))",
-            source,
+            masked,
         )
         if not signature:
             raise ValueError(f"Generated helper {name} must accept the Canvas context as its first argument")
+        declaration = re.search(
+            rf"\bfunction\s+{re.escape(name)}\s*\([^)]*\)\s*\{{",
+            masked,
+        )
+        if not declaration:
+            raise ValueError(f"Generated helper {name} must be an ordinary function declaration")
+        depth = 1
+        body_start = declaration.end()
+        body_end = body_start
+        for position in range(body_start, len(masked)):
+            if masked[position] == "{":
+                depth += 1
+            elif masked[position] == "}":
+                depth -= 1
+                if depth == 0:
+                    body_end = position
+                    break
+        body = masked[body_start:body_end]
+        if depth != 0 or not body.strip():
+            raise ValueError(f"Generated helper {name} has an empty or incomplete implementation")
+        if re.search(r"\b(?:TODO|FIXME|placeholder|not\s+implemented)\b", body, re.IGNORECASE):
+            raise ValueError(f"Generated helper {name} contains placeholder implementation code")
+        if re.search(rf"(?<![\w$.]){re.escape(name)}\s*\(", body):
+            raise ValueError(f"Generated helper {name} must not recursively call itself")
+        drawing_work = re.search(
+            r"\bg\.(?:beginPath|closePath|moveTo|lineTo|bezierCurveTo|quadraticCurveTo|"
+            r"arc|ellipse|rect|roundRect|fillRect|strokeRect|clearRect|fill|stroke|"
+            r"fillText|strokeText|drawImage|clip|createLinearGradient|createRadialGradient)\s*\("
+            r"|\bShortcliprStyles\.[A-Za-z_$][\w$]*\s*\("
+            r"|\bdraw[A-Z][A-Za-z0-9_]*\s*\(",
+            body,
+        )
+        if not drawing_work:
+            raise ValueError(f"Generated helper {name} contains no Canvas drawing operation or helper delegation")
+        if specifications is not None:
+            spec = next((item for item in specifications if item.get("name") == name), None)
+            if spec is None:
+                raise ValueError(f"Generated helper {name} has no matching function specification")
+            expected = re.search(r"\(([^)]*)\)", str(spec.get("signature", "")))
+            actual = re.search(
+                rf"\bfunction\s+{re.escape(name)}\s*\(([^)]*)\)",
+                masked,
+            )
+            if not expected or not actual:
+                raise ValueError(f"Generated helper {name} has an invalid declared signature")
+            expected_params = [part.strip() for part in expected.group(1).split(",")]
+            actual_params = [part.strip() for part in actual.group(1).split(",")]
+            if actual_params != expected_params:
+                raise ValueError(
+                    f"Generated helper {name} signature does not match its specification: "
+                    f"expected ({', '.join(expected_params)})"
+                )
+
+
+_DRAW_HELPER_CATEGORIES = {"visual", "animation", "effect"}
+
+
+def validate_draw_helper_specs(value: Any, required_names: list[str]) -> list[dict[str, Any]]:
+    """Validate DeepSeek's visual implementation contracts against exact call-site names."""
+    if not isinstance(value, dict) or not isinstance(value.get("functions"), list):
+        raise ValueError("Drawing helper specification response must contain a functions array")
+    if not 1 <= len(required_names) <= 32:
+        raise ValueError("Drawing helper specification request must contain 1–32 names")
+
+    required = set(required_names)
+    normalized: dict[str, dict[str, Any]] = {}
+    for item in value["functions"]:
+        if not isinstance(item, dict):
+            raise ValueError("Drawing helper specifications must be objects")
+        name = item.get("name")
+        if not isinstance(name, str) or name not in required:
+            raise ValueError("Drawing helper specification contains an unexpected function name")
+        if name in normalized:
+            raise ValueError(f"Duplicate drawing helper specification: {name}")
+
+        category = item.get("category")
+        if not isinstance(category, str) or category not in _DRAW_HELPER_CATEGORIES:
+            raise ValueError(f"Drawing helper {name} has an unsupported category")
+
+        signature = item.get("signature")
+        if (not isinstance(signature, str)
+                or not re.fullmatch(
+                    rf"function\s+{re.escape(name)}\s*\(\s*g(?:\s*,[^)]*)?\)",
+                    signature.strip(),
+                )):
+            raise ValueError(f"Drawing helper {name} must specify a named function signature with g first")
+
+        text_fields = (
+            "purpose", "coordinate_system", "origin", "visual_target",
+            "style_requirements", "animation_behavior",
+        )
+        normalized_item: dict[str, Any] = {"name": name, "category": category, "signature": signature.strip()}
+        for field in text_fields:
+            field_value = item.get(field)
+            if not isinstance(field_value, str) or not field_value.strip():
+                raise ValueError(f"Drawing helper {name} requires {field}")
+            if len(field_value) > 1200:
+                raise ValueError(f"Drawing helper {name} {field} exceeds the length limit")
+            normalized_item[field] = field_value.strip()
+
+        dependencies = item.get("dependencies", [])
+        if (not isinstance(dependencies, list) or len(dependencies) > 16
+                or not all(
+                    isinstance(dep, str) and re.fullmatch(r"draw[A-Z][A-Za-z0-9_]*", dep)
+                    and dep != name for dep in dependencies
+                )):
+            raise ValueError(f"Drawing helper {name} has invalid dependencies")
+        normalized_item["dependencies"] = sorted(set(dependencies))
+
+        criteria = item.get("acceptance_criteria")
+        if (not isinstance(criteria, list) or not 2 <= len(criteria) <= 8
+                or not all(isinstance(entry, str) and entry.strip() and len(entry) <= 300 for entry in criteria)):
+            raise ValueError(f"Drawing helper {name} requires 2–8 concrete acceptance criteria")
+        normalized_item["acceptance_criteria"] = [entry.strip() for entry in criteria]
+        normalized[name] = normalized_item
+
+    missing = sorted(required - set(normalized))
+    if missing:
+        raise ValueError("Missing drawing helper specifications: " + ", ".join(missing))
+    return [normalized[name] for name in required_names]
+
+
+
+
+def extract_shared_draw_helpers(shared_source: str, helper_names: list[str]) -> dict[str, str]:
+    """Extract exact top-level helper declarations for targeted model context."""
+    masked = _mask_js_comments_and_strings(shared_source)
+    depth = 0
+    brace_depth = [0] * (len(masked) + 1)
+    for index, char in enumerate(masked):
+        brace_depth[index] = depth
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth = max(0, depth - 1)
+
+    result: dict[str, str] = {}
+    for name in helper_names:
+        matches = [
+            match for match in re.finditer(
+                rf"\bfunction\s+{re.escape(name)}\s*\([^)]*\)\s*\{{",
+                masked,
+            )
+            if brace_depth[match.start()] == 0
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                f"Expected exactly one top-level shared declaration for {name}; found {len(matches)}"
+            )
+        declaration = matches[0]
+        body_depth = 1
+        body_end = None
+        for position in range(declaration.end(), len(masked)):
+            if masked[position] == "{":
+                body_depth += 1
+            elif masked[position] == "}":
+                body_depth -= 1
+                if body_depth == 0:
+                    body_end = position + 1
+                    break
+        if body_end is None:
+            raise ValueError(f"Existing shared helper {name} has an incomplete body")
+        result[name] = shared_source[declaration.start():body_end]
+    return result
+
+def replace_shared_draw_helpers(
+    shared_source: str,
+    replacement_source: str,
+    helper_names: list[str],
+) -> str:
+    """Replace exact top-level named helper declarations without touching other code."""
+    original_mask = _mask_js_comments_and_strings(shared_source)
+    replacement_mask = _mask_js_comments_and_strings(replacement_source)
+    replacements: dict[str, str] = {}
+    for name in helper_names:
+        declaration = re.search(
+            rf"\bfunction\s+{re.escape(name)}\s*\([^)]*\)\s*\{{",
+            replacement_mask,
+        )
+        if not declaration:
+            raise ValueError(f"Replacement helper {name} is not a named function declaration")
+        depth = 1
+        body_end = None
+        for position in range(declaration.end(), len(replacement_mask)):
+            if replacement_mask[position] == "{":
+                depth += 1
+            elif replacement_mask[position] == "}":
+                depth -= 1
+                if depth == 0:
+                    body_end = position + 1
+                    break
+        if body_end is None:
+            raise ValueError(f"Replacement helper {name} has an incomplete body")
+        replacements[name] = replacement_source[declaration.start():body_end]
+
+    ranges: dict[str, tuple[int, int]] = {}
+    depth = 0
+    brace_depth = [0] * (len(original_mask) + 1)
+    for index, char in enumerate(original_mask):
+        brace_depth[index] = depth
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth = max(0, depth - 1)
+
+    for name in helper_names:
+        matches = [
+            match for match in re.finditer(
+                rf"\bfunction\s+{re.escape(name)}\s*\([^)]*\)\s*\{{",
+                original_mask,
+            )
+            if brace_depth[match.start()] == 0
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                f"Expected exactly one top-level shared declaration for {name}; found {len(matches)}"
+            )
+        declaration = matches[0]
+        depth = 1
+        body_end = None
+        for position in range(declaration.end(), len(original_mask)):
+            if original_mask[position] == "{":
+                depth += 1
+            elif original_mask[position] == "}":
+                depth -= 1
+                if depth == 0:
+                    body_end = position + 1
+                    break
+        if body_end is None:
+            raise ValueError(f"Existing shared helper {name} has an incomplete body")
+        ranges[name] = (declaration.start(), body_end)
+
+    updated = shared_source
+    for name, (start, end) in sorted(ranges.items(), key=lambda item: item[1][0], reverse=True):
+        updated = updated[:start] + replacements[name] + updated[end:]
+    return updated
+
+def validate_draw_helper_dependency_graph(specifications: list[dict[str, Any]]) -> None:
+    """Reject circular dependencies among generated shared drawing helpers."""
+    graph = {
+        item["name"]: [
+            dependency for dependency in item.get("dependencies", [])
+            if dependency in {spec.get("name") for spec in specifications}
+        ]
+        for item in specifications
+    }
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(name: str, path: list[str]) -> None:
+        if name in visiting:
+            cycle_start = path.index(name) if name in path else 0
+            cycle = path[cycle_start:] + [name]
+            raise ValueError("Circular drawing helper dependency: " + " -> ".join(cycle))
+        if name in visited:
+            return
+        visiting.add(name)
+        for dependency in graph.get(name, []):
+            visit(dependency, [*path, name])
+        visiting.remove(name)
+        visited.add(name)
+
+    for name in graph:
+        visit(name, [])
 
 def validate_generated_fragment(source: Any, label: str, max_chars: int) -> str:
     if not isinstance(source, str) or not 20 <= len(source) <= max_chars:

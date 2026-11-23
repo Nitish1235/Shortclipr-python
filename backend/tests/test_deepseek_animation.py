@@ -4,6 +4,10 @@ from app.services.deepseek_animation import DeepSeekAnimationCompiler
 from app.services.animation_contracts import (
     find_unresolved_draw_helpers,
     validate_draw_helper_definitions,
+    validate_draw_helper_specs,
+    validate_draw_helper_dependency_graph,
+    extract_shared_draw_helpers,
+    replace_shared_draw_helpers,
 )
 
 
@@ -60,6 +64,104 @@ class VisualQAContextTests(unittest.TestCase):
         self.assertEqual(len(context["storyboard"]), 1)
         self.assertEqual(context["storyboard"][0]["focal_entity"], "prop_hinge")
         self.assertNotIn("internal_debug_field", context["storyboard"][0])
+        self.assertEqual(context["function_registry"], [])
+        self.assertEqual(context["function_specs"], [])
+        helper_context = DeepSeekAnimationCompiler._visual_qa_context(
+            bible, scenes, [{
+                "name": "drawHinge",
+                "category": "visual",
+                "signature": "function drawHinge(g, x)",
+                "purpose": "Draw the hinge",
+                "visual_target": "A visible hinge",
+                "dependencies": [],
+                "required_by_shots": [0],
+                "version": 1,
+            }],
+        )
+        self.assertEqual(helper_context["function_registry"][0]["name"], "drawHinge")
+        self.assertEqual(helper_context["function_registry"][0]["required_by_shots"], [0])
+
+
+class TargetedSharedHelperRepairTests(unittest.IsolatedAsyncioTestCase):
+    async def test_repairs_only_registered_helper_and_preserves_shot_sources(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        compiler = DeepSeekAnimationCompiler.__new__(DeepSeekAnimationCompiler)
+        compiler.client = object()
+        compiler.max_output_tokens = 12000
+        compiler._code_completion = AsyncMock(return_value=(
+            "function drawBridge(g, x) { g.fillStyle = '#222'; g.fillRect(x, 0, 20, 10); }"
+        ))
+        spec = {
+            "name": "drawBridge",
+            "category": "visual",
+            "signature": "function drawBridge(g, x)",
+            "purpose": "Draw the bridge deck.",
+            "coordinate_system": "Logical canvas pixels.",
+            "origin": "The deck left edge.",
+            "visual_target": "A readable horizontal deck silhouette.",
+            "style_requirements": "Use the existing film palette.",
+            "animation_behavior": "Static.",
+            "dependencies": [],
+            "acceptance_criteria": [
+                "Deck is visible at the specified x coordinate.",
+                "Deck has a consistent 20 pixel width.",
+            ],
+            "required_by_shots": [0],
+            "version": 1,
+        }
+        original_body = "drawBridge(g, 30);"
+        bundle = {
+            "schema_version": 1,
+            "duration": 3,
+            "logical": [1080, 1920],
+            "style_id": "cinematic-editorial",
+            "shared_js": (
+                "function drawBridge(g, x) { g.fillRect(x, 0, 10, 10); }\n"
+                "function drawTower(g, x) { g.fillRect(x, 0, 5, 20); }"
+            ),
+            "shots": [{
+                "index": 0,
+                "name": "Bridge",
+                "start_frame": 0,
+                "end_frame": 90,
+                "draw_body": original_body,
+                "mechanism_actions": [],
+                "mechanisms": [],
+                "transition_out": "cut",
+            }],
+            "function_specs": [spec],
+            "function_registry": [{
+                "name": "drawBridge",
+                "category": "visual",
+                "signature": spec["signature"],
+                "dependencies": [],
+                "required_by_shots": [0],
+                "version": 1,
+            }],
+            "visual_bible": {},
+            "art_direction": {},
+            "art_direction_instructions": "Cinematic editorial.",
+        }
+        findings = [{
+            "shot_index": 0,
+            "severity": "high",
+            "confidence": 0.9,
+            "evidence_sample_indices": [0],
+            "issue": "The bridge deck appears too narrow.",
+            "recommendation": "Increase the deck's visible width.",
+        }]
+
+        result = await compiler.repair_shared_helpers(bundle, ["drawBridge"], findings)
+
+        self.assertIn("g.fillRect(x, 0, 20, 10)", result["repair_bundle"]["shared_js"])
+        self.assertIn("function drawTower(g, x)", result["repair_bundle"]["shared_js"])
+        self.assertEqual(result["repair_bundle"]["shots"][0]["draw_body"], original_body)
+        self.assertEqual(result["repaired_function_names"], ["drawBridge"])
+        self.assertEqual(result["repair_bundle"]["function_specs"][0]["version"], 2)
+        self.assertEqual(result["repair_bundle"]["function_registry"][0]["version"], 2)
+        compiler._code_completion.assert_awaited_once()
 
 
 class TargetedShotRepairTests(unittest.IsolatedAsyncioTestCase):
@@ -145,24 +247,73 @@ class DrawingHelperContractTests(unittest.TestCase):
             ["drawPaperQuestionMark"],
         )
 
-    def test_accepts_shared_and_shot_local_helpers(self):
-        shared = "function drawBridge(g) {}"
+    def test_requires_custom_helpers_in_shared_scope(self):
+        shared = "function drawBridge(g) { g.fillRect(0, 0, 10, 10); }"
         shots = [
-            "function drawLocalGear(g) {} drawBridge(g); drawLocalGear(g); g.drawImage(img, 0, 0);"
+            "function drawLocalGear(g) { g.fillRect(0, 0, 4, 4); } drawBridge(g); drawLocalGear(g); g.drawImage(img, 0, 0);"
         ]
-        self.assertEqual(find_unresolved_draw_helpers(shared, shots), [])
+        self.assertEqual(find_unresolved_draw_helpers(shared, shots), ["drawLocalGear"])
 
     def test_finds_missing_dependencies_inside_shared_helpers(self):
         shared = "function drawBridge(g) { drawMissingGear(g); }"
         self.assertEqual(find_unresolved_draw_helpers(shared, []), ["drawMissingGear"])
 
+    def test_ignores_helper_names_in_comments_and_strings(self):
+        shared = """
+        // drawCommentOnly(g);
+        function drawBridge(g) {
+            const label = "drawStringOnly(g)";
+            /* drawBlockCommentOnly(g); */
+            g.fillRect(0, 0, 10, 10);
+        }
+        """
+        self.assertEqual(find_unresolved_draw_helpers(shared, []), [])
+
+    def test_nested_shared_helper_is_not_a_global_definition(self):
+        shared = """
+        function drawWrapper(g) {
+            function drawNestedPart(g) { g.fillRect(0, 0, 10, 10); }
+            drawNestedPart(g);
+        }
+        """
+        self.assertEqual(find_unresolved_draw_helpers(shared, []), ["drawNestedPart"])
+
     def test_requires_generator_to_define_each_requested_helper(self):
         validate_draw_helper_definitions(
-            "function drawPaperQuestionMark(g, x, y) {}",
+            "function drawPaperQuestionMark(g, x, y) { g.beginPath(); g.arc(x, y, 4, 0, Math.PI * 2); g.fill(); }",
             ["drawPaperQuestionMark"],
         )
         with self.assertRaisesRegex(ValueError, "drawPaperQuestionMark"):
             validate_draw_helper_definitions("function drawQuestion(g) {}", ["drawPaperQuestionMark"])
+        with self.assertRaisesRegex(ValueError, "empty or incomplete"):
+            validate_draw_helper_definitions("function drawPaperQuestionMark(g, x, y) {}", ["drawPaperQuestionMark"])
+        with self.assertRaisesRegex(ValueError, "recursively call itself"):
+            validate_draw_helper_definitions(
+                "function drawPaperQuestionMark(g, x, y) { drawPaperQuestionMark(g, x, y); }",
+                ["drawPaperQuestionMark"],
+            )
+        validate_draw_helper_definitions(
+            "// function drawFake(g) { g.fillRect(0, 0, 1, 1); }\n"
+            "function drawPaperQuestionMark(g, x, y) { g.fillRect(x, y, 4, 4); }",
+            ["drawPaperQuestionMark"],
+        )
+        with self.assertRaisesRegex(ValueError, "no Canvas drawing operation"):
+            validate_draw_helper_definitions("function drawPaperQuestionMark(g, x, y) { const unused = 1; }", ["drawPaperQuestionMark"])
+        specification = {
+            "name": "drawPaperQuestionMark",
+            "signature": "function drawPaperQuestionMark(g, x, y)",
+        }
+        validate_draw_helper_definitions(
+            "function drawPaperQuestionMark(g, x, y) { g.fillRect(x, y, 4, 4); }",
+            ["drawPaperQuestionMark"],
+            [specification],
+        )
+        with self.assertRaisesRegex(ValueError, "does not match its specification"):
+            validate_draw_helper_definitions(
+                "function drawPaperQuestionMark(g, x) { g.fillRect(x, 0, 4, 4); }",
+                ["drawPaperQuestionMark"],
+                [specification],
+            )
 
 
 class MechanismKinematicsContextTests(unittest.TestCase):
@@ -263,6 +414,102 @@ class MechanismAssemblyTests(unittest.TestCase):
         self.assertIn("const mechanisms = [{", source)
         self.assertIn('"type":"pivot"', source)
         self.assertIn("drawBridge(g);", source)
+
+
+class SharedHelperReplacementTests(unittest.TestCase):
+    def test_replaces_only_requested_top_level_helper_and_preserves_other_source(self):
+        shared = """
+        const palette = { ink: "#111" };
+        function drawBridge(g, x) { g.fillRect(x, 0, 10, 10); }
+        function drawTower(g, x) { g.fillRect(x, 0, 5, 20); }
+        """
+        replacement = "function drawBridge(g, x) { g.fillRect(x, 0, 20, 10); }"
+        extracted = extract_shared_draw_helpers(shared, ["drawBridge"])
+        self.assertIn("g.fillRect(x, 0, 10, 10)", extracted["drawBridge"])
+        updated = replace_shared_draw_helpers(shared, replacement, ["drawBridge"])
+        self.assertIn('const palette = { ink: "#111" };', updated)
+        self.assertIn("g.fillRect(x, 0, 20, 10)", updated)
+        self.assertIn("function drawTower(g, x)", updated)
+        self.assertNotIn("g.fillRect(x, 0, 10, 10)", updated)
+
+    def test_rejects_missing_or_duplicate_top_level_declarations(self):
+        with self.assertRaisesRegex(ValueError, "found 0"):
+            extract_shared_draw_helpers("function drawTower(g) {}", ["drawBridge"])
+        duplicate = "function drawBridge(g) {} function drawBridge(g) {}"
+        with self.assertRaisesRegex(ValueError, "found 2"):
+            extract_shared_draw_helpers(duplicate, ["drawBridge"])
+
+
+class DrawingHelperDependencyGraphTests(unittest.TestCase):
+    def test_accepts_acyclic_dependencies(self):
+        validate_draw_helper_dependency_graph([
+            {"name": "drawBridge", "dependencies": ["drawTower"]},
+            {"name": "drawTower", "dependencies": []},
+        ])
+
+    def test_rejects_circular_dependencies(self):
+        with self.assertRaisesRegex(ValueError, "Circular drawing helper dependency"):
+            validate_draw_helper_dependency_graph([
+                {"name": "drawBridge", "dependencies": ["drawTower"]},
+                {"name": "drawTower", "dependencies": ["drawBridge"]},
+            ])
+
+
+class DrawingHelperSpecificationTests(unittest.TestCase):
+    @staticmethod
+    def _spec(name="drawSkyHalftone"):
+        return {
+            "name": name,
+            "category": "effect",
+            "purpose": "Render a restrained halftone texture over the sky region.",
+            "signature": f"function {name}(g, x, y, width, height, time)",
+            "coordinate_system": "logical_canvas coordinates in pixels",
+            "origin": "Top-left corner of the clipped sky region; scale is expressed by width and height.",
+            "visual_target": "Evenly spaced small dots with consistent density and low contrast.",
+            "style_requirements": "Use the film palette and restrained editorial texture.",
+            "animation_behavior": "Static texture; time is accepted for a stable shared signature and must not cause flicker.",
+            "dependencies": [],
+            "acceptance_criteria": [
+                "Dots are visibly rendered inside the requested sky region.",
+                "No dots appear outside the sky bounds and the effect does not obscure the focal subject.",
+            ],
+        }
+
+    def test_validates_exact_required_function_specs(self):
+        result = validate_draw_helper_specs(
+            {"functions": [self._spec()]},
+            ["drawSkyHalftone"],
+        )
+        self.assertEqual(result[0]["name"], "drawSkyHalftone")
+        self.assertEqual(result[0]["category"], "effect")
+        self.assertEqual(len(result[0]["acceptance_criteria"]), 2)
+
+    def test_rejects_missing_or_unexpected_function_specs(self):
+        with self.assertRaisesRegex(ValueError, "Missing drawing helper specifications"):
+            validate_draw_helper_specs({"functions": []}, ["drawSkyHalftone"])
+        with self.assertRaisesRegex(ValueError, "unexpected function name"):
+            validate_draw_helper_specs(
+                {"functions": [self._spec("drawOtherThing")]},
+                ["drawSkyHalftone"],
+            )
+
+    def test_rejects_invalid_signature_and_dependencies(self):
+        spec = self._spec()
+        spec["signature"] = "function drawSkyHalftone(x, g)"
+        with self.assertRaisesRegex(ValueError, "signature"):
+            validate_draw_helper_specs({"functions": [spec]}, ["drawSkyHalftone"])
+
+        spec = self._spec()
+        spec["dependencies"] = ["window"]
+        with self.assertRaisesRegex(ValueError, "dependencies"):
+            validate_draw_helper_specs({"functions": [spec]}, ["drawSkyHalftone"])
+
+    def test_rejects_duplicate_specs(self):
+        with self.assertRaisesRegex(ValueError, "Duplicate drawing helper"):
+            validate_draw_helper_specs(
+                {"functions": [self._spec(), self._spec()]},
+                ["drawSkyHalftone"],
+            )
 
 
 if __name__ == "__main__":

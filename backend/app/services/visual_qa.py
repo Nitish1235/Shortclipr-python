@@ -46,7 +46,10 @@ class VisualQualityReviewer:
         return value[:limit] if isinstance(value, str) else fallback
 
     @classmethod
-    def validate_review(cls, value: Any, valid_shot_ids: set[int], valid_sample_ids: set[int]) -> dict[str, Any]:
+    def validate_review(
+        cls, value: Any, valid_shot_ids: set[int], valid_sample_ids: set[int],
+        function_registry: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """Keep model output bounded and tied to known shots and captured samples."""
         if not isinstance(value, dict):
             raise ValueError("Visual QA response must be a JSON object")
@@ -54,6 +57,10 @@ class VisualQualityReviewer:
         if isinstance(score, bool) or not isinstance(score, (int, float)) or not 0 <= score <= 100:
             raise ValueError("Visual QA overall_score must be between 0 and 100")
 
+        registry_by_name = {
+            item.get("name"): item for item in (function_registry or [])
+            if isinstance(item, dict) and isinstance(item.get("name"), str)
+        }
         findings = []
         raw_findings = value.get("findings", [])
         if isinstance(raw_findings, list):
@@ -74,11 +81,25 @@ class VisualQualityReviewer:
                 ]
                 category = item.get("category")
                 severity = item.get("severity")
+                raw_function_names = item.get("function_names", [])
+                if not isinstance(raw_function_names, list):
+                    raw_function_names = []
+                allowed_for_shot = {
+                    name for name, entry in registry_by_name.items()
+                    if shot_index is not None
+                    and isinstance(entry.get("required_by_shots"), list)
+                    and shot_index in entry["required_by_shots"]
+                }
+                function_names = [
+                    name for name in raw_function_names[:4]
+                    if isinstance(name, str) and name in allowed_for_shot
+                ]
                 findings.append({
                     "category": category if isinstance(category, str) and category in CATEGORIES else "other",
                     "severity": severity if isinstance(severity, str) and severity in SEVERITIES else "low",
                     "shot_index": shot_index,
                     "evidence_sample_indices": sample_ids,
+                    "function_names": function_names,
                     "issue": cls._bounded_text(item.get("issue"), 500),
                     "recommendation": cls._bounded_text(item.get("recommendation"), 500),
                     "confidence": (
@@ -197,6 +218,87 @@ class VisualQualityReviewer:
             for shot_index, findings in ranked[:max_shots]
         ]
 
+
+    @staticmethod
+    def build_helper_repair_queue(
+        review: dict[str, Any],
+        function_registry: list[dict[str, Any]],
+        max_functions: int = 2,
+        min_confidence: float = 0.75,
+    ) -> list[dict[str, Any]]:
+        """Select high-confidence visual findings attributed to known shared helpers."""
+        if review.get("status") != "reviewed" or not isinstance(function_registry, list):
+            return []
+        if isinstance(max_functions, bool) or not isinstance(max_functions, int) or max_functions < 1:
+            return []
+        known = {
+            item.get("name"): item for item in function_registry
+            if isinstance(item, dict) and isinstance(item.get("name"), str)
+            and isinstance(item.get("required_by_shots"), list)
+        }
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        findings = review.get("findings", [])
+        if not isinstance(findings, list):
+            return []
+        for finding in findings:
+            if not isinstance(finding, dict):
+                continue
+            if finding.get("severity") not in {"critical", "high"}:
+                continue
+            confidence = finding.get("confidence")
+            if (isinstance(confidence, bool) or not isinstance(confidence, (int, float))
+                    or confidence < min_confidence):
+                continue
+            issue, recommendation = finding.get("issue"), finding.get("recommendation")
+            evidence = finding.get("evidence_sample_indices")
+            shot_index = finding.get("shot_index")
+            if (not isinstance(issue, str) or not issue.strip()
+                    or not isinstance(recommendation, str) or not recommendation.strip()
+                    or not isinstance(evidence, list) or not evidence
+                    or isinstance(shot_index, bool) or not isinstance(shot_index, int)):
+                continue
+            valid_evidence = [
+                value for value in evidence[:3]
+                if isinstance(value, int) and not isinstance(value, bool)
+            ]
+            if not valid_evidence:
+                continue
+            names = finding.get("function_names", [])
+            if not isinstance(names, list):
+                continue
+            for name in names[:4]:
+                registry_entry = known.get(name)
+                if not registry_entry or shot_index not in registry_entry["required_by_shots"]:
+                    continue
+                grouped.setdefault(name, []).append({
+                    "shot_index": shot_index,
+                    "category": finding.get("category", "other"),
+                    "severity": finding["severity"],
+                    "confidence": round(float(confidence), 2),
+                    "evidence_sample_indices": valid_evidence,
+                    "issue": issue[:500],
+                    "recommendation": recommendation[:500],
+                })
+        priority = {"critical": 0, "high": 1}
+        ranked = sorted(
+            grouped.items(),
+            key=lambda pair: (
+                min(priority[item["severity"]] for item in pair[1]),
+                -max(item["confidence"] for item in pair[1]),
+                pair[0],
+            ),
+        )
+        return [
+            {
+                "function_name": name,
+                "findings": sorted(
+                    findings,
+                    key=lambda item: (priority[item["severity"]], -item["confidence"]),
+                )[:6],
+            }
+            for name, findings in ranked[:max_functions]
+        ]
+
     async def review(
         self,
         contact_sheet_path: Path,
@@ -295,6 +397,15 @@ visual states, but still images cannot establish smooth motion, frame-rate behav
 audio synchronization, physical accuracy or events between sampled moments.
 Do not claim to verify anything the images cannot show.
 
+FUNCTION-LEVEL ATTRIBUTION
+The visual function registry below lists generated shared drawing functions, their
+visual responsibility and the shots that call them. When a visible defect is clearly
+localized to one or more registered functions, include their exact names in that
+finding's function_names array. Attribute a function only when its stated visual
+responsibility and the visible evidence support the connection. If uncertain, return
+an empty array. Never invent function names or blame a function merely because it is
+called by the shot.
+
 REVIEW DIMENSIONS
 1. Story clarity: can a viewer understand the intended idea from the visuals?
 2. Composition: focal hierarchy, subject scale, framing, negative space and balance.
@@ -349,6 +460,7 @@ Return one JSON object only, with this exact shape:
     "severity": "medium",
     "shot_index": 0,
     "evidence_sample_indices": [0],
+    "function_names": ["drawExample"],
     "issue": "specific visible defect and its effect",
     "recommendation": "specific correction the shot repair can implement",
     "confidence": 0.0
@@ -363,6 +475,12 @@ VISUAL BIBLE AND ART DIRECTION:
 
 STORYBOARD:
 {json.dumps(visual_context.get("storyboard", []), ensure_ascii=False, separators=(",", ":"))}
+
+GENERATED SHARED FUNCTION REGISTRY:
+{json.dumps(visual_context.get("function_registry", []), ensure_ascii=False, separators=(",", ":"))}
+
+FUNCTION SPECIFICATIONS:
+{json.dumps(visual_context.get("function_specs", []), ensure_ascii=False, separators=(",", ":"))}
 
 SAMPLE INDEX / SHOT / TIME MAPPING:
 {json.dumps(samples, ensure_ascii=False, separators=(",", ":"))}
@@ -399,7 +517,10 @@ Review the supplied frames now. Be candid, concise and evidence-specific.""".str
         raw = (message.content or "").strip() if message else ""
         if not raw:
             raise RuntimeError("DeepSeek visual QA returned an empty response")
-        result = self.validate_review(json.loads(raw), shot_ids, sample_ids)
+        result = self.validate_review(
+            json.loads(raw), shot_ids, sample_ids,
+            visual_context.get("function_registry", []),
+        )
         result["model"] = self.model
         usage = response.usage
         logger.info("visual_qa.review_complete", extra={

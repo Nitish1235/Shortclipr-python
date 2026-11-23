@@ -830,34 +830,71 @@ async def run_render(
                         and isinstance(repair_bundle, dict)
                         and quality.get("visual_qa", {}).get("status") == "reviewed"
                     ):
-                        repair_queue = visual_reviewer.build_repair_queue(
+                        helper_registry = plan.get("visual_qa_context", {}).get("function_registry", [])
+                        helper_queue = visual_reviewer.build_helper_repair_queue(
+                            quality["visual_qa"],
+                            helper_registry,
+                            max_functions=2,
+                        )
+                        shot_queue = visual_reviewer.build_repair_queue(
                             quality["visual_qa"],
                             plan.get("shot_manifest", []),
                             max_shots=1,
                         )
-                        if repair_queue:
-                            repair_item = repair_queue[0]
+                        repair_type = None
+                        repair_item = None
+                        if helper_queue:
+                            repair_type = "shared_helpers"
+                            repair_item = helper_queue[0]
+                            repair_summary["function_names"] = [repair_item["function_name"]]
+                        elif shot_queue:
+                            repair_type = "shot"
+                            repair_item = shot_queue[0]
+                            repair_summary["shot_index"] = repair_item["shot_index"]
+
+                        if repair_item is not None:
                             repair_summary.update({
                                 "status": "attempting",
                                 "attempted": 1,
-                                "shot_index": repair_item["shot_index"],
+                                "target_type": repair_type,
                             })
                             candidate_path = None
                             try:
-                                repaired = await shot_repairer.repair_shot(
-                                    repair_bundle,
-                                    repair_item["shot_index"],
-                                    repair_item["findings"],
-                                )
+                                if repair_type == "shared_helpers":
+                                    repaired = await shot_repairer.repair_shared_helpers(
+                                        repair_bundle,
+                                        [repair_item["function_name"]],
+                                        repair_item["findings"],
+                                    )
+                                else:
+                                    repaired = await shot_repairer.repair_shot(
+                                        repair_bundle,
+                                        repair_item["shot_index"],
+                                        repair_item["findings"],
+                                    )
                                 candidate_plan = dict(plan)
                                 candidate_plan["scene_js"] = repaired["scene_js"]
                                 candidate_plan["repair_bundle"] = repaired["repair_bundle"]
+                                if repair_type == "shared_helpers":
+                                    candidate_context = dict(plan.get("visual_qa_context", {}))
+                                    candidate_context["function_registry"] = repaired["repair_bundle"].get(
+                                        "function_registry", candidate_context.get("function_registry", [])
+                                    )
+                                    candidate_context["function_specs"] = repaired["repair_bundle"].get(
+                                        "function_specs", candidate_context.get("function_specs", [])
+                                    )
+                                    candidate_plan["visual_qa_context"] = candidate_context
                                 candidate_path = (
                                     Path(tempfile.mkdtemp(prefix="shortclipr-repair-"))
                                     / f"{project_id}-repair.mp4"
                                 )
                                 render_temp_dirs.append(candidate_path.parent)
-                                async with timed(logger, "render.targeted_shot_repair") as repair_ctx:
+                                repair_stage = (
+                                    "render.targeted_helper_repair"
+                                    if repair_type == "shared_helpers"
+                                    else "render.targeted_shot_repair"
+                                )
+                                async with timed(logger, repair_stage) as repair_ctx:
                                     _, candidate_motion_qa = await renderer.render(
                                         candidate_plan, candidate_path,
                                     )
@@ -882,11 +919,36 @@ async def run_render(
                                     )
                                     before_score = quality["visual_qa"].get("overall_score", 0)
                                     after_score = candidate_review.get("overall_score", 0)
-                                    target_has_blocker = any(
-                                        finding.get("shot_index") == repair_item["shot_index"]
-                                        and finding.get("severity") in {"critical", "high"}
-                                        for finding in candidate_review.get("findings", [])
-                                    ) if candidate_review.get("status") == "reviewed" else True
+                                    if candidate_review.get("status") != "reviewed":
+                                        target_has_blocker = True
+                                    elif repair_type == "shared_helpers":
+                                        repaired_names = set(repaired.get("repaired_function_names", []))
+                                        target_shots = {
+                                            item.get("shot_index") for item in repair_item["findings"]
+                                            if isinstance(item.get("shot_index"), int)
+                                            and not isinstance(item.get("shot_index"), bool)
+                                        }
+                                        target_categories = {
+                                            item.get("category") for item in repair_item["findings"]
+                                            if isinstance(item.get("category"), str)
+                                        }
+                                        target_has_blocker = any(
+                                            finding.get("severity") in {"critical", "high"}
+                                            and (
+                                                bool(repaired_names.intersection(finding.get("function_names", [])))
+                                                or (
+                                                    finding.get("shot_index") in target_shots
+                                                    and finding.get("category") in target_categories
+                                                )
+                                            )
+                                            for finding in candidate_review.get("findings", [])
+                                        )
+                                    else:
+                                        target_has_blocker = any(
+                                            finding.get("shot_index") == repair_item["shot_index"]
+                                            and finding.get("severity") in {"critical", "high"}
+                                            for finding in candidate_review.get("findings", [])
+                                        )
                                     accepted = (
                                         candidate_review.get("status") == "reviewed"
                                         and after_score > before_score
@@ -895,6 +957,7 @@ async def run_render(
                                     repair_ctx["before_score"] = before_score
                                     repair_ctx["candidate_score"] = after_score
                                     repair_ctx["accepted"] = accepted
+                                    repair_ctx["target_type"] = repair_type
                                     if accepted:
                                         candidate_qa_object = await storage.upload_file_private(
                                             candidate_sheet, "image/png",
@@ -933,14 +996,20 @@ async def run_render(
                             except asyncio.CancelledError:
                                 raise
                             except Exception as repair_error:
-                                logger.warning("render.targeted_shot_repair.failed", extra={
+                                logger.warning("render.targeted_visual_repair.failed", extra={
                                     "project_id": str(project_id),
-                                    "shot_index": repair_item["shot_index"],
+                                    "target_type": repair_type,
+                                    "target": (
+                                        repair_item.get("function_name")
+                                        if repair_type == "shared_helpers"
+                                        else repair_item.get("shot_index")
+                                    ),
                                     "error": str(repair_error)[:500],
                                 })
                                 repair_summary["status"] = "failed"
                                 repair_summary["reason"] = str(repair_error)[:300]
-                    quality["shot_repair"] = repair_summary
+                    quality["visual_repair"] = repair_summary
+                    quality["shot_repair"] = repair_summary  # Backward-compatible field name.
                 except asyncio.CancelledError:
                     raise
                 except Exception as error:
@@ -998,6 +1067,9 @@ async def run_render(
                         repaired_program = dict(program)
                         repaired_program["scene_js"] = plan["scene_js"]
                         repaired_program["repair_bundle"] = plan["repair_bundle"]
+                        repaired_program["visual_qa_context"] = plan.get(
+                            "visual_qa_context", repaired_program.get("visual_qa_context", {}),
+                        )
                         await connection.execute(
                             "UPDATE scene_plans SET program=$2::jsonb WHERE project_id=$1 AND scene_index=0",
                             project_id, json.dumps(repaired_program),
