@@ -731,7 +731,7 @@ def validate_draw_helper_dependencies(
         actual = sorted(
             dependency for dependency in names
             if dependency != name and re.search(
-                rf"(?<![\w$.]){re.escape(dependency)}\s*(?:\?\.)?\s*\(",
+                rf"(?<![\w$.]){re.escape(dependency)}(?![\w$])",
                 body,
             )
         )
