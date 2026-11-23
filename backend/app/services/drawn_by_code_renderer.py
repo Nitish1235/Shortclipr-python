@@ -27,6 +27,7 @@ class DrawnByCodeRenderer:
         self.root = Path(os.getenv("DRAWN_BY_CODE_ROOT", "/app/drawn_by_code"))
         self.node = os.getenv("NODE_BINARY", shutil.which("node") or "node")
         self.ffmpeg = os.getenv("FFMPEG_PATH", shutil.which("ffmpeg") or "ffmpeg")
+        self.ffprobe = os.getenv("FFPROBE_PATH", shutil.which("ffprobe") or "ffprobe")
         self.chrome = os.getenv("CHROME_PATH", shutil.which("chromium") or "chromium")
         self.timeout = max(60, int(os.getenv("DRAWN_BY_CODE_RENDER_TIMEOUT", "1100")))
         self.syntax_timeout = max(5, int(os.getenv("DRAWN_BY_CODE_SYNTAX_TIMEOUT", "30")))
@@ -73,6 +74,30 @@ class DrawnByCodeRenderer:
         except ProcessLookupError:
             pass
 
+    async def _preflight_command(
+        self, label: str, *command: str, cwd: Path | None = None,
+        env: dict[str, str] | None = None, timeout: int = 15,
+    ) -> str:
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            cwd=str(cwd) if cwd else None,
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            start_new_session=(os.name == "posix"),
+        )
+        try:
+            output, _ = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            await self._kill_and_wait(process)
+            raise
+        if process.returncode != 0:
+            raise RuntimeError(
+                f"Drawn-by-Code startup smoke test failed ({label}): "
+                + output.decode(errors="replace")[-1200:]
+            )
+        return output.decode(errors="replace").strip().splitlines()[0][:240] if output else "ok"
+
     async def preflight(self) -> dict[str, str]:
         required = [
             self.root / "engine" / "render.mjs",
@@ -82,13 +107,58 @@ class DrawnByCodeRenderer:
             self.root / "node_modules" / "playwright-core",
         ]
         missing = [str(path) for path in required if not path.exists()]
-        for label, binary in (("node", self.node), ("chromium", self.chrome), ("ffmpeg", self.ffmpeg)):
-            resolved = binary if Path(binary).is_absolute() else shutil.which(binary)
-            if not resolved or not Path(resolved).is_file():
+        binaries = (
+            ("node", self.node), ("chromium", self.chrome),
+            ("ffmpeg", self.ffmpeg), ("ffprobe", self.ffprobe),
+        )
+        resolved: dict[str, str] = {}
+        for label, binary in binaries:
+            path = binary if Path(binary).is_absolute() else shutil.which(binary)
+            if not path or not Path(path).is_file():
                 missing.append(f"{label}: {binary} (not found or not a file)")
+            else:
+                resolved[label] = path
         if missing:
             raise RuntimeError("Drawn-by-Code preflight failed: " + ", ".join(missing))
-        return {"engine_root": str(self.root), "node": self.node, "chromium": self.chrome, "ffmpeg": self.ffmpeg}
+
+        env = os.environ.copy()
+        env.update({
+            "CHROME_PATH": resolved["chromium"],
+            "FFMPEG_PATH": resolved["ffmpeg"],
+            "FFPROBE_PATH": resolved["ffprobe"],
+        })
+        versions = {
+            "node": await self._preflight_command("Node", resolved["node"], "--version", timeout=10),
+            "chromium": await self._preflight_command("Chromium", resolved["chromium"], "--version", timeout=10),
+            "ffmpeg": await self._preflight_command("FFmpeg", resolved["ffmpeg"], "-version", timeout=10),
+            "ffprobe": await self._preflight_command("ffprobe", resolved["ffprobe"], "-version", timeout=10),
+        }
+        browser_smoke = (
+            "import { chromium } from 'playwright-core';"
+            "const browser = await chromium.launch({headless:true,"
+            "executablePath:process.env.CHROME_PATH,"
+            "args:['--no-sandbox','--disable-dev-shm-usage']});"
+            "const page = await browser.newPage();"
+            "await page.setContent('<!doctype html><title>shortclipr-preflight</title>');"
+            "if (await page.title() !== 'shortclipr-preflight') throw new Error('page smoke test failed');"
+            "await browser.close();"
+        )
+        await self._preflight_command(
+            "Playwright/Chromium launch", resolved["node"], "--input-type=module", "-e",
+            browser_smoke, cwd=self.root, env=env, timeout=25,
+        )
+        return {
+            "engine_root": str(self.root),
+            "node": resolved["node"],
+            "chromium": resolved["chromium"],
+            "ffmpeg": resolved["ffmpeg"],
+            "ffprobe": resolved["ffprobe"],
+            "node_version": versions["node"],
+            "chromium_version": versions["chromium"],
+            "ffmpeg_version": versions["ffmpeg"],
+            "ffprobe_version": versions["ffprobe"],
+            "browser_smoke": "passed",
+        }
 
     @staticmethod
     def _motion_qa_samples(shot_manifest: Any) -> list[dict[str, Any]]:
