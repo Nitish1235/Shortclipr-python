@@ -84,7 +84,9 @@ class DeepSeekAnimationCompiler:
 
         bundle = program.get("repair_bundle")
         if not isinstance(bundle, dict):
-            return
+            raise ValueError(
+                "Animation program is missing its required repair_bundle; regenerate this artifact"
+            )
         shared_js = bundle.get("shared_js")
         shots = bundle.get("shots")
         duration = bundle.get("duration")

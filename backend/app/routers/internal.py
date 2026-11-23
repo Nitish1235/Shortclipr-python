@@ -1,5 +1,7 @@
 import asyncio
 import json
+import hashlib
+import os
 import shutil
 import tempfile
 import time as _time
@@ -327,6 +329,8 @@ async def run_planning(
             extra={
                 "clip_type": project["clip_type"],
                 "duration_s": project["duration_seconds"],
+                "service_role": os.getenv("SERVICE_ROLE", "unknown"),
+                "service_revision": os.getenv("K_REVISION", "unknown"),
                 "aspect_ratio": project["aspect_ratio"],
                 "voice_id": project["voice_id"],
             },
@@ -377,7 +381,14 @@ async def run_planning(
                             },
                         )
                     else:
-                        logger.info("planning.artifact_reused", extra={"artifact":"animation_program"})
+                        logger.info(
+                            "planning.artifact_reused",
+                            extra={
+                                "artifact": "animation_program",
+                                "scene_js_sha256": hashlib.sha256(cached["scene_js"].encode("utf-8")).hexdigest(),
+                                "repair_bundle_schema_version": cached["repair_bundle"].get("schema_version"),
+                            },
+                        )
                         return cached
                 async with timed(logger, "planning.deepseek_animation") as stage:
                     result = await compiler.compile(dict(project), plan)
@@ -388,7 +399,15 @@ async def run_planning(
                     pool, project_id, attempt_id, lease_token,
                     animation_program=json.dumps(result),
                 )
-                logger.info("planning.artifact_saved", extra={"artifact":"animation_program"})
+                logger.info(
+                    "planning.artifact_saved",
+                    extra={
+                        "artifact": "animation_program",
+                        "scene_js_sha256": hashlib.sha256(result["scene_js"].encode("utf-8")).hexdigest(),
+                        "repair_bundle_schema_version": result["repair_bundle"].get("schema_version"),
+                        "shot_count": result.get("shot_count"),
+                    },
+                )
                 return result
 
             async def synthesize_narration():
@@ -732,6 +751,8 @@ async def run_render(
                 "scene_count": len(scenes),
                 "aspect_ratio": project["aspect_ratio"],
                 "duration_s": project["duration_seconds"],
+                "service_role": os.getenv("SERVICE_ROLE", "unknown"),
+                "service_revision": os.getenv("K_REVISION", "unknown"),
                 "has_audio": bool(project["audio_object"]),
             },
         )
@@ -740,6 +761,33 @@ async def run_render(
         scene_js = program.get("scene_js")
         if not isinstance(scene_js, str) or not scene_js:
             raise NonRetryableRenderError("Persisted Drawn-by-Code animation program is missing scene_js")
+
+        # Revalidate the exact JSONB artifact read by the render worker. This
+        # closes the API -> scene_plans -> FFmpeg handoff instead of trusting
+        # that the compiler's in-memory object is byte-for-byte what was stored.
+        repair_bundle = program.get("repair_bundle")
+        try:
+            DeepSeekAnimationCompiler.validate_compiled_program(program)
+        except (TypeError, ValueError, KeyError, IndexError) as validation_error:
+            raise NonRetryableRenderError(
+                "Persisted animation program failed render-boundary integrity validation: "
+                + str(validation_error)[:700]
+            ) from validation_error
+
+        logger.info(
+            "render.animation_program_validated",
+            extra={
+                "scene_js_sha256": hashlib.sha256(scene_js.encode("utf-8")).hexdigest(),
+                "repair_bundle_schema_version": (
+                    repair_bundle.get("schema_version") if isinstance(repair_bundle, dict) else None
+                ),
+                "shot_count": (
+                    len(repair_bundle.get("shots", []))
+                    if isinstance(repair_bundle, dict) and isinstance(repair_bundle.get("shots"), list)
+                    else None
+                ),
+            },
+        )
         plan = {
             "projectId": str(project_id), "title": project["title"],
             "narration": project["narration_script"] or "",

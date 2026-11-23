@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 
@@ -95,7 +96,13 @@ else:
 
 @app.get("/health",tags=["health"])
 async def health():
-    return {"status":"ok","service":f"shortclipr-{settings.SERVICE_ROLE}","database":bool(app.state.db)}
+    return {
+        "status": "ok",
+        "service": f"shortclipr-{settings.SERVICE_ROLE}",
+        "service_name": os.getenv("K_SERVICE", "local"),
+        "revision": os.getenv("K_REVISION", "local"),
+        "database": bool(app.state.db),
+    }
 
 
 @app.get("/ready", tags=["health"])

@@ -399,7 +399,7 @@ def validate_scene_plan(scenes: Any, total_frames: int) -> list[dict[str, Any]]:
     return normalized
 
 
-_DRAW_HELPER_CALL = re.compile(r"(?<![\w$.])\b(draw[A-Z][A-Za-z0-9_]*)\s*\(")
+_DRAW_HELPER_CALL = re.compile(r"(?<![\w$.])\b(draw[A-Z][A-Za-z0-9_]*)\s*(?:\?\.)?\s*\(")
 _DRAW_HELPER_DECL = re.compile(
     r"\bfunction\s+(draw[A-Z][A-Za-z0-9_]*)\s*\(|"
     r"\b(?:const|let|var)\s+(draw[A-Z][A-Za-z0-9_]*)\s*=\s*(?:function\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)"
@@ -407,48 +407,105 @@ _DRAW_HELPER_DECL = re.compile(
 
 
 def _mask_js_comments_and_strings(source: str) -> str:
-    """Blank comments and string/template literals while preserving source offsets."""
+    """Mask JS comments and literal text while retaining executable template expressions.
+
+    Template literal text is not executable JavaScript, but expressions inside
+    `${...}` are. Preserve those expressions so helper-reference validation sees
+    the same calls that the JavaScript runtime will execute.
+    """
     chars = list(source)
     index = 0
     length = len(source)
+    state = "code"
+    escaped = False
+    template_expression_depths: list[int] = []
+
     while index < length:
         char = source[index]
         next_char = source[index + 1] if index + 1 < length else ""
+
+        if state in {"single", "double"}:
+            if char != "\n":
+                chars[index] = " "
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif (state == "single" and char == "'") or (state == "double" and char == '"'):
+                state = "code"
+            index += 1
+            continue
+
+        if state == "template":
+            if char == "\\":
+                chars[index] = " "
+                if index + 1 < length:
+                    if source[index + 1] != "\n":
+                        chars[index + 1] = " "
+                    index += 2
+                else:
+                    index += 1
+                continue
+            if char == "`":
+                chars[index] = " "
+                state = "code"
+                index += 1
+                continue
+            if char == "$" and next_char == "{":
+                chars[index] = " "
+                template_expression_depths.append(1)
+                state = "code"
+                index += 2
+                continue
+            if char != "\n":
+                chars[index] = " "
+            index += 1
+            continue
+
         if char == "/" and next_char == "/":
-            end = source.find("\n", index + 2)
-            end = length if end < 0 else end
-            for pos in range(index, end):
+            comment_end = source.find("\n", index + 2)
+            comment_end = length if comment_end < 0 else comment_end
+            for pos in range(index, comment_end):
                 chars[pos] = " "
-            index = end
+            index = comment_end
             continue
         if char == "/" and next_char == "*":
-            end = source.find("*/", index + 2)
-            end = length if end < 0 else end + 2
-            for pos in range(index, end):
+            comment_end = source.find("*/", index + 2)
+            comment_end = length if comment_end < 0 else comment_end + 2
+            for pos in range(index, comment_end):
                 if chars[pos] != "\n":
                     chars[pos] = " "
-            index = end
+            index = comment_end
             continue
-        if char in {"'", '"', chr(96)}:
-            quote = char
+        if char == "'":
             chars[index] = " "
+            state = "single"
+            escaped = False
             index += 1
-            while index < length:
-                current = source[index]
-                if current != "\n":
-                    chars[index] = " "
-                if current == "\\":
-                    index += 1
-                    if index < length and source[index] != "\n":
-                        chars[index] = " "
-                elif current == quote:
-                    index += 1
-                    break
-                index += 1
             continue
-        index += 1
-    return "".join(chars)
+        if char == '"':
+            chars[index] = " "
+            state = "double"
+            escaped = False
+            index += 1
+            continue
+        if char == "`":
+            chars[index] = " "
+            state = "template"
+            index += 1
+            continue
 
+        if template_expression_depths:
+            if char == "{":
+                template_expression_depths[-1] += 1
+            elif char == "}":
+                template_expression_depths[-1] -= 1
+                if template_expression_depths[-1] == 0:
+                    template_expression_depths.pop()
+                    state = "template"
+        index += 1
+
+    return "".join(chars)
 
 def find_unresolved_film_draw_helpers(source: str) -> list[str]:
     """Find drawX calls not backed by a top-level shared helper in a film.

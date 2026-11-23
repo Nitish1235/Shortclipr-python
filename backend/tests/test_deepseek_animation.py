@@ -3,6 +3,7 @@ import unittest
 from app.services.deepseek_animation import DeepSeekAnimationCompiler
 from app.services.animation_contracts import (
     find_unresolved_draw_helpers,
+    find_unresolved_film_draw_helpers,
     validate_draw_helper_definitions,
     validate_draw_helper_specs,
     validate_draw_helper_dependency_graph,
@@ -872,6 +873,39 @@ class SharedHelperScopeRegressionTests(unittest.TestCase):
                 "scene_js": different_source,
                 "repair_bundle": bundle,
             })
+
+
+class TemplateExpressionHelperValidationTests(unittest.TestCase):
+    def test_compiled_program_requires_repair_bundle(self):
+        with self.assertRaisesRegex(ValueError, "required repair_bundle"):
+            DeepSeekAnimationCompiler.validate_compiled_program({
+                "scene_js": "function drawShot_0(g,t,e,a) { g.fillRect(0,0,1,1); }",
+            })
+
+    def test_finds_unresolved_helpers_inside_template_expressions(self):
+        source = """
+        function drawShot_0(g, t, env, absoluteTime) {
+            const label = `Wheel: ${drawProp_wheel(g, 10, 20)}`;
+            g.fillText(label, 0, 0);
+        }
+        """
+        self.assertEqual(
+            find_unresolved_film_draw_helpers(source),
+            ["drawProp_wheel"],
+        )
+
+    def test_ignores_helper_names_in_template_text_but_checks_interpolations(self):
+        source = """
+        function drawWheel(g) { g.fillRect(0, 0, 10, 10); }
+        function drawShot_0(g, t, env, absoluteTime) {
+            const label = `drawMissing(g) is only documentation`;
+            const visual = `${drawWheel?.(g)} ${drawMissing(g)}`;
+        }
+        """
+        self.assertEqual(
+            find_unresolved_film_draw_helpers(source),
+            ["drawMissing"],
+        )
 
 
 if __name__ == "__main__":
