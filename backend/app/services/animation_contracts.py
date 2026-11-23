@@ -529,6 +529,28 @@ def validate_draw_helper_definitions(source: str, required_names: list[str]) -> 
         )
         if not signature:
             raise ValueError(f"Generated helper {name} must accept the Canvas context as its first argument")
+        masked = _mask_js_comments_and_strings(source)
+        declaration = re.search(
+            rf"\bfunction\s+{re.escape(name)}\s*\([^)]*\)\s*\{{",
+            masked,
+        )
+        if not declaration:
+            raise ValueError(f"Generated helper {name} must be an ordinary function declaration")
+        depth = 1
+        body_start = declaration.end()
+        body_end = body_start
+        for position in range(body_start, len(masked)):
+            if masked[position] == "{":
+                depth += 1
+            elif masked[position] == "}":
+                depth -= 1
+                if depth == 0:
+                    body_end = position
+                    break
+        if depth != 0 or not masked[body_start:body_end].strip():
+            raise ValueError(f"Generated helper {name} has an empty or incomplete implementation")
+        if re.search(r"\b(?:TODO|FIXME|placeholder|not\s+implemented)\b", masked[body_start:body_end], re.IGNORECASE):
+            raise ValueError(f"Generated helper {name} contains placeholder implementation code")
 
 
 _DRAW_HELPER_CATEGORIES = {"visual", "animation", "effect"}
