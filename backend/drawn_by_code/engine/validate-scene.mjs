@@ -3,7 +3,9 @@
 // This runs in the FFmpeg-worker image before Chromium/FFmpeg starts.
 import fs from 'node:fs';
 import { parse } from 'acorn';
-import eslintScope from 'eslint-scope';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const eslintScope = require('eslint-scope');
 
 const [sourcePath, manifestPath] = process.argv.slice(2);
 if (!sourcePath || !manifestPath) {
