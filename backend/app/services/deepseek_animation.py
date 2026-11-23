@@ -55,8 +55,11 @@ class DeepSeekAnimationCompiler:
             if settings.DEEPSEEK_API_KEY else None
         )
 
-    async def _json_completion(self, system_prompt: str, user_prompt: str, token_limit: int, reasoning_effort: str = "none", label: str = "animation fragment") -> dict[str, Any]:
-        """Make one fast, non-thinking JSON/code generation request."""
+    async def _code_completion(
+        self, system_prompt: str, user_prompt: str, token_limit: int,
+        label: str = "animation fragment",
+    ) -> str:
+        """Generate raw JavaScript; do not serialize code inside a JSON string."""
         if self.client is None:
             raise RuntimeError("DEEPSEEK_API_KEY is not configured")
         request_started = asyncio.get_running_loop().time()
@@ -66,7 +69,6 @@ class DeepSeekAnimationCompiler:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            response_format={"type": "json_object"},
             max_tokens=token_limit,
             reasoning_effort="none",
             extra_body={"thinking": {"type": "disabled"}},
@@ -77,56 +79,35 @@ class DeepSeekAnimationCompiler:
         raw = (message.content or "").strip() if message else ""
         usage = response.usage
         prompt_details = getattr(usage, "prompt_tokens_details", None)
+        finish_reason = getattr(choice, "finish_reason", None)
         logger.info("deepseek.animation.response", extra={
             "model": self.model, "label": label, "thinking_enabled": False,
-            "latency_ms": latency_ms,
-            "finish_reason": getattr(choice, "finish_reason", None),
+            "latency_ms": latency_ms, "finish_reason": finish_reason,
             "prompt_tokens": getattr(usage, "prompt_tokens", None),
             "prompt_cache_hit_tokens": getattr(prompt_details, "cached_tokens", None),
-            "prompt_cache_miss_tokens": getattr(usage, "prompt_cache_miss_tokens", None),
             "completion_tokens": getattr(usage, "completion_tokens", None),
-            "reasoning_tokens": getattr(getattr(usage, "completion_tokens_details", None), "reasoning_tokens", None),
             "total_tokens": getattr(usage, "total_tokens", None),
             "content_chars": len(raw),
         })
         if not raw:
-            raise RuntimeError("DeepSeek returned empty animation JSON")
-        try:
-            value = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            # Keep enough escaped context to diagnose malformed JSON without
-            # dumping the full generated source into production logs.
-            logger.error("deepseek.animation.invalid_json", extra={
-                "model": self.model,
-                "label": label,
-                "response_id": getattr(response, "id", None),
-                "finish_reason": getattr(choice, "finish_reason", None),
-                "prompt_tokens": getattr(usage, "prompt_tokens", None),
-                "completion_tokens": getattr(usage, "completion_tokens", None),
-                "content_chars": len(raw),
-                "json_error": exc.msg,
-                "json_error_pos": exc.pos,
-                "json_error_line": exc.lineno,
-                "json_error_column": exc.colno,
-                "response_prefix": repr(raw[:180]),
-                "response_suffix": repr(raw[-180:]),
-            })
-            raise RuntimeError(
-                f"DeepSeek returned invalid JSON for {label} "
-                f"(chars={len(raw)}, error={exc.msg} at line {exc.lineno}, "
-                f"column {exc.colno})"
-            ) from exc
-        if not isinstance(value, dict):
-            raise RuntimeError("DeepSeek animation response must be a JSON object")
-        return value
+            raise RuntimeError(f"DeepSeek returned empty JavaScript for {label}")
+        if finish_reason == "length":
+            raise RuntimeError(f"DeepSeek truncated JavaScript for {label}")
+        # Permit one complete code fence, but never salvage code from prose.
+        fenced = re.fullmatch(r"```(?:javascript|js)?\s*([\s\S]*?)\s*```", raw, re.IGNORECASE)
+        if fenced:
+            raw = fenced.group(1).strip()
+        elif raw.startswith("```") or raw.endswith("```"):
+            raise RuntimeError(f"DeepSeek returned a malformed code fence for {label}")
+        return raw
 
     async def _validated_fragment(
         self, system_prompt: str, user_prompt: str, token_limit: int,
         field: str, label: str, max_chars: int, reasoning_effort: str = "none",
     ) -> str:
         """Generate once and apply only basic deterministic checks."""
-        result = await self._json_completion(system_prompt, user_prompt, token_limit, label=label)
-        return validate_generated_fragment(result.get(field), label, max_chars)
+        source = await self._code_completion(system_prompt, user_prompt, token_limit, label=label)
+        return validate_generated_fragment(source, label, max_chars)
 
     @staticmethod
     def _shot_visual_context(visual_bible: dict[str, Any], scene: dict[str, Any]) -> dict[str, Any]:
@@ -218,8 +199,8 @@ class DeepSeekAnimationCompiler:
 
         shared_prompt = f"""
 You are ShortClipr's senior 2D character and illustration systems artist.
-Create a compact reusable JavaScript drawing library for a {style_id} Canvas 2D film.\nFollow this binding art-direction contract:\n{art_direction_instructions}\nAim for at most 1,800 output tokens.
-Return JSON only: {{"shared_js":"JavaScript source"}}.
+Create a compact reusable JavaScript drawing library for a {style_id} Canvas 2D film.\nFollow this binding art-direction contract:\n{art_direction_instructions}\nUse enough code to make every recurring subject visually distinctive; prefer compact implementations over omitted visual detail.
+Return raw JavaScript source only. Do not wrap it in JSON or Markdown.
 The source is evaluated in the same script as the film and may define ordinary named
 functions and constants. It must not call Motion.scene. Use only the supplied Canvas
 2D context in functions. Never reference browser-global identifiers such as window,
@@ -246,9 +227,9 @@ Visual bible:
 {json.dumps(visual_bible, ensure_ascii=False)}
 """.strip()
         shared_js = await self._validated_fragment(
-            "You are a senior Canvas 2D JavaScript systems programmer. Return strict JSON only.",
+            "You are a senior Canvas 2D JavaScript systems programmer. Return only executable JavaScript source.",
             shared_prompt + "\n\nReturn only the required JSON object.",
-            min(self.max_output_tokens, 12000), "shared_js", "Shared drawing library",
+            min(self.max_output_tokens, 16000), "shared_js", "Shared drawing library",
             MAX_SHARED_SOURCE,
         )
 
@@ -263,8 +244,7 @@ Visual bible:
             shot_visual_context = self._shot_visual_context(visual_bible, scene)
             shot_prompt = f"""
 You are ShortClipr's 2D animation shot director and Canvas artist.
-Generate only the drawing body for one shot. Return JSON only:
-{{"draw_body":"JavaScript statements"}}.
+Generate only the drawing body for one shot. Return raw JavaScript statements, with no JSON wrapper or Markdown.
 The body is inserted inside:
 function drawShot_{scene["index"]}(g, t, env, absoluteTime) {{ ... }}
 Here t is local shot time starting at zero; absoluteTime is film time in seconds.
@@ -288,7 +268,7 @@ const easing = action.easing ?? "in_out";
 const easedProgress = easing === "linear" ? rawProgress : easing === "ease_in" ? rawProgress * rawProgress * rawProgress : easing === "ease_out" ? 1 - Math.pow(1 - rawProgress, 3) : Ease.inOut(rawProgress);
 const actionProgress = (action.start_progress ?? 0) + ((action.end_progress ?? 1) - (action.start_progress ?? 0)) * easedProgress;
 Iterate with `for (const spec of mechanism.kinematics)`. For each spec, run `const pose = ShortcliprStyles.mechanismPose(spec, actionProgress)` and apply that pose to the component identified by `pose.part`. For pivot results, rotate pose.part around pose.anchor by pose.angle_rad. For translation/slider results, place pose.part origin at pose.position. For gear results, rotate pose.driver_part around pose.driver_anchor by pose.driver_angle_rad and pose.part around pose.anchor by pose.angle_rad; preserve the declared pitch-radius ratio and external/internal mesh direction. For pulley results, rotate pose.pulley_part around pose.anchor by pose.pulley_angle_rad and place pose.part at the returned absolute pose.position. For cable results, draw pose.part as a continuous polyline through pose.points in order. For actuator results, draw the cylinder and rod along pose.base-to-pose.tip using pose.length and pose.angle_rad. Apply the same actionProgress to all kinematic parts in this action. Do not invent geometry or constraints. When kinematics is absent, use qualitative motion only and do not present it as engineering-solved.
-Make one clear animated action with simple easing and follow-through. Use only the composition layers needed for this shot. Keep code concise: aim for at most 900 output tokens; no comments, repeated character drawings or unnecessary decorative loops. Reuse shared helpers for all recurring entities. Do not render narration or subtitles.
+Make one clear animated action with simple easing and follow-through. Use only the composition layers needed for this shot. Keep code concise: keep code efficient, but do not omit required subjects, spatial layers, or visible motion to meet an arbitrary token target; no comments, repeated character drawings or unnecessary decorative loops. Reuse shared helpers for all recurring entities. Do not render narration or subtitles.
 STYLE: {style_id}
 BINDING ART DIRECTION:
 {art_direction_instructions}
@@ -305,9 +285,9 @@ SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s
 """.strip()
             async with semaphore:
                 body = await self._validated_fragment(
-                    "You are a senior Canvas 2D animation programmer. Return strict JSON only.",
+                    "You are a senior Canvas 2D animation programmer. Return only executable JavaScript source.",
                     shot_prompt + "\n\nWrite the complete draw_body now.",
-                    min(self.max_output_tokens, 10000), "draw_body",
+                    min(self.max_output_tokens, 12000), "draw_body",
                     f"Shot {scene['index'] + 1}", MAX_SHOT_SOURCE,
                 )
             return {
@@ -336,7 +316,7 @@ SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s
             helper_prompt = f"""
 You are ShortClipr's reusable Canvas 2D drawing-function engineer.
 Implement every missing helper listed below as ordinary named JavaScript function
-declarations. Return JSON only: {{"helpers_js":"JavaScript source"}}.
+declarations. Return raw JavaScript function declarations only. Do not wrap them in JSON or Markdown.
 MISSING HELPERS: {json.dumps(missing_helpers)}
 STYLE: {style_id}
 BINDING ART DIRECTION: {art_direction_instructions}
@@ -357,14 +337,14 @@ Rules:
 - Keep implementations deterministic, self-contained and visually consistent with
   the selected style. Return compact code, no markdown fences.
 """.strip()
-            helper_result = await self._json_completion(
+            generated_helpers = await self._code_completion(
                 "You are a senior Canvas 2D JavaScript systems programmer. Return strict JSON only.",
                 helper_prompt,
                 min(self.max_output_tokens, 10000),
                 label=f"On-demand drawing helpers pass {helper_pass + 1}",
             )
             generated_helpers = validate_generated_fragment(
-                helper_result.get("helpers_js"),
+                generated_helpers,
                 "On-demand drawing helpers",
                 MAX_SHARED_SOURCE,
             )
@@ -502,7 +482,7 @@ Rules:
         )))
         prompt = f"""
 You are ShortClipr's senior 2D animation repair artist. Repair ONLY shot {shot_index}.
-Return JSON only: {{"draw_body":"complete replacement JavaScript drawing body"}}.
+Return only the complete replacement JavaScript drawing body. Do not wrap it in JSON or Markdown.
 
 The replacement body is inserted into the existing drawShot_{shot_index}(g,t,env,absoluteTime)
 function. The compiler will preserve the existing validated mechanismActions and
