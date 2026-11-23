@@ -4,6 +4,7 @@ from app.services.deepseek_animation import DeepSeekAnimationCompiler
 from app.services.animation_contracts import (
     find_unresolved_draw_helpers,
     validate_draw_helper_definitions,
+    validate_draw_helper_specs,
 )
 
 
@@ -263,6 +264,63 @@ class MechanismAssemblyTests(unittest.TestCase):
         self.assertIn("const mechanisms = [{", source)
         self.assertIn('"type":"pivot"', source)
         self.assertIn("drawBridge(g);", source)
+
+
+class DrawingHelperSpecificationTests(unittest.TestCase):
+    @staticmethod
+    def _spec(name="drawSkyHalftone"):
+        return {
+            "name": name,
+            "category": "effect",
+            "purpose": "Render a restrained halftone texture over the sky region.",
+            "signature": f"function {name}(g, x, y, width, height, time)",
+            "coordinate_system": "logical_canvas coordinates in pixels",
+            "origin": "Top-left corner of the clipped sky region; scale is expressed by width and height.",
+            "visual_target": "Evenly spaced small dots with consistent density and low contrast.",
+            "style_requirements": "Use the film palette and restrained editorial texture.",
+            "animation_behavior": "Static texture; time is accepted for a stable shared signature and must not cause flicker.",
+            "dependencies": [],
+            "acceptance_criteria": [
+                "Dots are visibly rendered inside the requested sky region.",
+                "No dots appear outside the sky bounds and the effect does not obscure the focal subject.",
+            ],
+        }
+
+    def test_validates_exact_required_function_specs(self):
+        result = validate_draw_helper_specs(
+            {"functions": [self._spec()]},
+            ["drawSkyHalftone"],
+        )
+        self.assertEqual(result[0]["name"], "drawSkyHalftone")
+        self.assertEqual(result[0]["category"], "effect")
+        self.assertEqual(len(result[0]["acceptance_criteria"]), 2)
+
+    def test_rejects_missing_or_unexpected_function_specs(self):
+        with self.assertRaisesRegex(ValueError, "Missing drawing helper specifications"):
+            validate_draw_helper_specs({"functions": []}, ["drawSkyHalftone"])
+        with self.assertRaisesRegex(ValueError, "unexpected function name"):
+            validate_draw_helper_specs(
+                {"functions": [self._spec("drawOtherThing")]},
+                ["drawSkyHalftone"],
+            )
+
+    def test_rejects_invalid_signature_and_dependencies(self):
+        spec = self._spec()
+        spec["signature"] = "function drawSkyHalftone(x, g)"
+        with self.assertRaisesRegex(ValueError, "signature"):
+            validate_draw_helper_specs({"functions": [spec]}, ["drawSkyHalftone"])
+
+        spec = self._spec()
+        spec["dependencies"] = ["window"]
+        with self.assertRaisesRegex(ValueError, "dependencies"):
+            validate_draw_helper_specs({"functions": [spec]}, ["drawSkyHalftone"])
+
+    def test_rejects_duplicate_specs(self):
+        with self.assertRaisesRegex(ValueError, "Duplicate drawing helper"):
+            validate_draw_helper_specs(
+                {"functions": [self._spec(), self._spec()]},
+                ["drawSkyHalftone"],
+            )
 
 
 if __name__ == "__main__":
