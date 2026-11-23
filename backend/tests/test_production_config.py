@@ -52,7 +52,7 @@ def test_planning_worker_requires_planning_secrets_not_payment_secrets():
     settings = Settings(
         APP_ENV="production", SERVICE_ROLE="api-worker", FRONTEND_URL="https://shortclipr.com",
         SUPABASE_DB_URL="postgresql://user:password@host:5432/database",
-        OPENAI_API_KEY="sk-test", UNREALSPEECH_API_KEY="unreal-test",
+        OPENAI_API_KEY="sk-test", DEEPSEEK_API_KEY="deepseek-test", UNREALSPEECH_API_KEY="unreal-test",
         GCS_BUCKET_NAME="shortclipr-private", INTERNAL_TASK_SECRET="i" * 32,
     )
     assert settings.production_errors == []
