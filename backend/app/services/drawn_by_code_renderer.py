@@ -138,10 +138,10 @@ class DrawnByCodeRenderer:
             "const browser = await chromium.launch({headless:true,"
             "executablePath:process.env.CHROME_PATH,"
             "args:['--no-sandbox','--disable-dev-shm-usage']});"
-            "const page = await browser.newPage();"
+            "try { const page = await browser.newPage();"
             "await page.setContent('<!doctype html><title>shortclipr-preflight</title>');"
             "if (await page.title() !== 'shortclipr-preflight') throw new Error('page smoke test failed');"
-            "await browser.close();"
+            "} finally { await browser.close(); }"
         )
         await self._preflight_command(
             "Playwright/Chromium launch", resolved["node"], "--input-type=module", "-e",
