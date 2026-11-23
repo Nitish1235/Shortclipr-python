@@ -105,15 +105,15 @@ try {
         const definitions = variable.defs.filter((definition) =>
             definition.type === 'FunctionName' && definition.node?.type === 'FunctionDeclaration');
         if (!manifestShots.has(index)) {
-            fail(\`Film declares unmanifested shot function \${name}\`);
+            fail(`Film declares unmanifested shot function ${name}`);
         }
         if (definitions.length !== 1) {
-            fail(\`Shot function \${name} must be defined exactly once at top level\`);
+            fail(`Shot function ${name} must be defined exactly once at top level`);
         }
         const params = definitions[0].node.params.map((param) =>
             param.type === 'Identifier' ? param.name : null);
         if (JSON.stringify(params) !== JSON.stringify(['g', 't', 'env', 'absoluteTime'])) {
-            fail(\`Shot function \${name} does not match the canonical renderer signature\`);
+            fail(`Shot function ${name} does not match the canonical renderer signature`);
         }
         shotDefinitions.set(index, definitions[0].node);
     }
@@ -222,7 +222,7 @@ try {
             const declaredIndex = Number(node.id.name.slice('drawShot_'.length));
             allShotDeclarations.push(declaredIndex);
             if (!manifestShots.has(declaredIndex)) {
-                fail(\`Film contains unmanifested shot declaration \${node.id.name}\`);
+                fail(`Film contains unmanifested shot declaration ${node.id.name}`);
             }
             activeShot = declaredIndex;
         }
@@ -231,7 +231,7 @@ try {
             if (/^drawShot_[0-9]+$/.test(calledName)) {
                 const calledIndex = Number(calledName.slice('drawShot_'.length));
                 if (!manifestShots.has(calledIndex)) {
-                    fail(\`Film calls unmanifested shot function \${calledName}\`);
+                    fail(`Film calls unmanifested shot function ${calledName}`);
                 }
                 shotCalls.set(calledIndex, (shotCalls.get(calledIndex) ?? 0) + 1);
             }
@@ -310,10 +310,10 @@ try {
     }
     for (const shotIndex of expectedShotIndexes) {
         if (declarationCounts.get(shotIndex) !== 1) {
-            fail(\`Shot function drawShot_\${shotIndex} must have exactly one declaration in the film\`);
+            fail(`Shot function drawShot_${shotIndex} must have exactly one declaration in the film`);
         }
         if (!shotCalls.has(shotIndex)) {
-            fail(\`Shot function drawShot_\${shotIndex} is never called by the film dispatcher\`);
+            fail(`Shot function drawShot_${shotIndex} is never called by the film dispatcher`);
         }
     }
 
