@@ -226,7 +226,7 @@ class DeepSeekAnimationCompiler:
         # Do not use external assets. Do not redefine ShortcliprStyles.
         # Visual bible:
         # {json.dumps(visual_bible, ensure_ascii=False)}
-        # """.strip(
+        # """.strip()
         # === END LEGACY SHARED DRAWING LIBRARY PROMPT ===
 
         shared_prompt = f"""
@@ -275,7 +275,7 @@ BINDING ART DIRECTION:
 VISUAL BIBLE:
 {json.dumps(visual_bible, ensure_ascii=False)}
 
-Return the complete shared JavaScript drawing library now.""".strip())
+Return the complete shared JavaScript drawing library now.""".strip()
         shared_js = await self._validated_fragment(
             "You are a senior Canvas 2D JavaScript systems programmer. Return only executable JavaScript source.",
             shared_prompt + "\n\nReturn only the complete JavaScript library source.",
@@ -334,7 +334,7 @@ Return the complete shared JavaScript drawing library now.""".strip())
         # SHOT:
         # {json.dumps(scene, ensure_ascii=False)}
         # SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s.\nAvoid repeating the previous shot composition unless the storyboard explicitly calls for a sustained view.
-        # """.strip(
+        # """.strip()
         # === END LEGACY SHOT GENERATION PROMPT ===
 
             shot_prompt = f"""
@@ -433,7 +433,7 @@ SHOT VISUAL REFERENCES:
 STORYBOARD SHOT:
 {json.dumps(scene, ensure_ascii=False)}
 
-Return the complete JavaScript drawing body for this shot.""".strip())
+Return the complete JavaScript drawing body for this shot.""".strip()
             async with semaphore:
                 body = await self._validated_fragment(
                     "You are a senior Canvas 2D animation programmer. Return only executable JavaScript source.",
@@ -488,7 +488,7 @@ Return the complete JavaScript drawing body for this shot.""".strip())
         #   eval, Function, Date, performance, random numbers, WebGL or 3D.
         # - Keep implementations deterministic, self-contained and visually consistent with
         #   the selected style. Return compact code, no markdown fences.
-        # """.strip(
+        # """.strip()
         # === END LEGACY ON-DEMAND DRAWING HELPERS PROMPT ===
 
             helper_prompt = f"""
@@ -530,7 +530,7 @@ RULES
 - Do not redefine existing helpers or create duplicate names.
 - Keep detail purposeful and readable at final video resolution.
 
-Implement every missing helper now.""".strip())
+Implement every missing helper now.""".strip()
             generated_helpers = await self._code_completion(
                 "You are a senior Canvas 2D JavaScript systems programmer. Return only executable JavaScript source.",
                 helper_prompt,
@@ -714,7 +714,7 @@ Implement every missing helper now.""".strip())
         # - Keep mechanism actions and kinematics coherent. Use the supplied validated mechanism
         #   arrays as-is; do not invent physics or claim engineering accuracy for qualitative motion.
         # - Return the full replacement draw_body, not a diff or patch.
-        # """.strip(
+        # """.strip()
         # === END LEGACY VISUAL SHOT REPAIR PROMPT ===
 
         prompt = f"""
@@ -765,7 +765,7 @@ REPAIR METHOD
    original logical canvas.
 8. Still-frame QA cannot prove motion correctness or physical accuracy; do not claim
    to fix either based on unsupported evidence.
-9. Return the entire replacement drawing body, not a patch.""".strip())
+9. Return the entire replacement drawing body, not a patch.""".strip()
         replacement_body = await self._validated_fragment(
             "You are a senior Canvas 2D animation programmer. Return only executable JavaScript source.",
             prompt,
