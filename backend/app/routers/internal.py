@@ -1008,7 +1008,8 @@ async def run_render(
                                 })
                                 repair_summary["status"] = "failed"
                                 repair_summary["reason"] = str(repair_error)[:300]
-                    quality["shot_repair"] = repair_summary
+                    quality["visual_repair"] = repair_summary
+                    quality["shot_repair"] = repair_summary  # Backward-compatible field name.
                 except asyncio.CancelledError:
                     raise
                 except Exception as error:
