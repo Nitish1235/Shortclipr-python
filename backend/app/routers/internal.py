@@ -778,12 +778,12 @@ async def run_render(
             await set_render_progress(pool, project_id, attempt_id, lease_token, mapped)
 
         await set_render_progress(pool, project_id, attempt_id, lease_token, 55)
-        require_render_budget("initial Chromium render", reserve_seconds=120)
+        require_render_budget("initial Chromium render", reserve_seconds=180)
         motion_qa = None
         async with timed(logger, "render.subprocess") as ctx:
             _, motion_qa = await renderer.render(
                 plan, output_path, progress_callback=update_visual_progress,
-                deadline=render_deadline,
+                deadline=render_deadline - 180,
             )
             if output_path.exists():
                 ctx["output_size_mb"] = round(output_path.stat().st_size / 1_048_576, 2)
@@ -920,7 +920,7 @@ async def run_render(
                                 async with timed(logger, repair_stage) as repair_ctx:
                                     _, candidate_motion_qa = await renderer.render(
                                         candidate_plan, candidate_path,
-                                        deadline=render_deadline,
+                                        deadline=render_deadline - 120,
                                     )
                                     require_render_budget("candidate mux and visual review", reserve_seconds=90)
                                     await mux_narration(
