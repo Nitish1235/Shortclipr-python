@@ -458,10 +458,11 @@ class DeepSeekAnimationCompiler:
         last_error: Exception | None = None
         rejected_source = ""
         for attempt in range(1, 4):
-            source = await self._code_completion(
-                system_prompt, prompt, token_limit, label=label,
-            )
+            source = ""
             try:
+                source = await self._code_completion(
+                    system_prompt, prompt, token_limit, label=label,
+                )
                 source = validate_generated_fragment(source, label, max_chars)
                 if validator is not None:
                     validator(source)
@@ -470,7 +471,9 @@ class DeepSeekAnimationCompiler:
                         "label": label, "attempt": attempt,
                     })
                 return source
-            except (TypeError, ValueError, KeyError, IndexError) as error:
+            except (RuntimeError, TypeError, ValueError, KeyError, IndexError) as error:
+                if isinstance(error, RuntimeError) and "DEEPSEEK_API_KEY is not configured" in str(error):
+                    raise
                 last_error = error
                 rejected_source = source
                 logger.warning("deepseek.animation.fragment_rejected", extra={
