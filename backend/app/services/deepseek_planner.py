@@ -159,6 +159,17 @@ Create a reusable visual bible that makes the film drawable and consistent.
   Coordinates are logical Canvas coordinates for the selected aspect ratio. Every
   referenced part must be declared. If geometry is unknown, omit kinematics and
   describe qualitative movement honestly.
+  Mechanism object contract:
+  {{"id":"mechanism_bridge","name":"Drawbridge","principle":"Counterweight and cable assist deck rotation",
+   "components":[{{"part":"deck","prop_id":"prop_deck","role":"moving bridge deck"}},{{"part":"counterweight","prop_id":"prop_weight","role":"follower"}}],
+   "joints":[{{"type":"pivot","anchor":"hinge","between":["deck","support"]}}],
+   "motion_constraints":["The deck rotates around the fixed hinge."],
+   "action_patterns":[{{"id":"raise_deck","description":"Raise deck from closed to open","driver":"deck","followers":["counterweight"],"relationship":"Counterweight moves as the deck rotates."}}],
+   "kinematics":[{{"type":"pivot","part":"deck","anchor":{{"x":450,"y":700}},"start_angle_deg":0,"end_angle_deg":65}}]}}
+  Every component prop_id must reference a declared prop; part names are unique.
+  Every joint requires type, anchor and exactly two part names in between.
+  Each action pattern requires id, description, driver, followers and relationship.
+  Kinematics is optional and must follow one supported type contract.
 
 SHOT-BY-SHOT STORYBOARD
 For every shot provide ALL of these fields with specific, non-generic direction:
