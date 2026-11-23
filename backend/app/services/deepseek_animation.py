@@ -484,12 +484,12 @@ class DeepSeekAnimationCompiler:
                     break
                 prompt = (
                     user_prompt
-                    + "\\n\\nCOMPILER REPAIR REQUIRED\\n"
-                    + f"Your previous candidate failed validation: {str(error)[:1400]}\\n"
+                    + "\n\nCOMPILER REPAIR REQUIRED\n"
+                    + f"Your previous candidate failed validation: {str(error)[:1400]}\n"
                     + "Correct every listed violation. Preserve the requested design and "
                       "return the complete replacement source, not a patch. Do not omit "
-                      "required functions or weaken the contract.\\n"
-                    + "REJECTED CANDIDATE (may be truncated):\\n"
+                      "required functions or weaken the contract.\n"
+                    + "REJECTED CANDIDATE (may be truncated):\n"
                     + rejected_source[:18000]
                 )
         raise ValueError(
@@ -530,11 +530,11 @@ class DeepSeekAnimationCompiler:
                 rejected_value = value if isinstance(value, dict) else None
                 prompt = (
                     user_prompt
-                    + "\\n\\nSTRUCTURED OUTPUT REPAIR REQUIRED\\n"
-                    + f"Your previous response failed validation: {str(error)[:1200]}\\n"
+                    + "\n\nSTRUCTURED OUTPUT REPAIR REQUIRED\n"
+                    + f"Your previous response failed validation: {str(error)[:1200]}\n"
                     + "Return a complete corrected JSON object that satisfies the original "
-                      "schema and every rule. Do not add keys or explanatory prose.\\n"
-                    + "REJECTED JSON CANDIDATE:\\n"
+                      "schema and every rule. Do not add keys or explanatory prose.\n"
+                    + "REJECTED JSON CANDIDATE:\n"
                     + json.dumps(rejected_value, ensure_ascii=False)[:10000]
                 )
         raise ValueError(
