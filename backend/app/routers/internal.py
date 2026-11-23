@@ -937,6 +937,7 @@ async def run_render(
                                     )
                                     if not candidate_sheet or not candidate_sheet.is_file():
                                         raise RuntimeError("Repaired render did not produce a review contact sheet")
+                                    require_render_budget("candidate visual review", reserve_seconds=150)
                                     candidate_review = await visual_reviewer.review(
                                         candidate_sheet,
                                         candidate_plan.get("visual_qa_context", {}),
