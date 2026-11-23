@@ -227,6 +227,7 @@ class DrawnByCodeRenderer:
         plan: dict[str, Any],
         output_path: Path,
         progress_callback: Callable[[int], Awaitable[None]] | None = None,
+        deadline: float | None = None,
     ) -> tuple[Path, dict[str, Any] | None]:
         source = plan.get("scene_js")
         aspect = plan.get("aspectRatio")
@@ -292,11 +293,15 @@ class DrawnByCodeRenderer:
                 stderr=asyncio.subprocess.STDOUT,
                 start_new_session=True,
             )
-            deadline = asyncio.get_running_loop().time() + self.timeout
+            render_deadline = asyncio.get_running_loop().time() + self.timeout
+            if deadline is not None:
+                render_deadline = min(render_deadline, deadline)
+            if render_deadline <= asyncio.get_running_loop().time():
+                raise RuntimeError("Render stage deadline expired before Chromium launch")
             try:
                 assert proc.stdout is not None
                 while True:
-                    remaining = deadline - asyncio.get_running_loop().time()
+                    remaining = render_deadline - asyncio.get_running_loop().time()
                     if remaining <= 0:
                         raise asyncio.TimeoutError
                     line = await asyncio.wait_for(proc.stdout.readline(), timeout=remaining)
@@ -327,7 +332,7 @@ class DrawnByCodeRenderer:
                         except Exception:
                             logger.exception("drawn_by_code.progress_callback_failed")
 
-                remaining = deadline - asyncio.get_running_loop().time()
+                remaining = render_deadline - asyncio.get_running_loop().time()
                 if remaining <= 0:
                     raise asyncio.TimeoutError
                 code = await asyncio.wait_for(proc.wait(), timeout=remaining)
