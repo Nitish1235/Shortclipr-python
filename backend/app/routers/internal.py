@@ -366,8 +366,19 @@ async def run_planning(
                 if isinstance(cached, str):
                     cached = json.loads(cached)
                 if isinstance(cached, dict) and isinstance(cached.get("scene_js"), str):
-                    logger.info("planning.artifact_reused", extra={"artifact":"animation_program"})
-                    return cached
+                    try:
+                        compiler.validate_compiled_program(cached)
+                    except (TypeError, ValueError) as validation_error:
+                        logger.warning(
+                            "planning.cached_animation_invalidated",
+                            extra={
+                                "artifact": "animation_program",
+                                "reason": str(validation_error)[:500],
+                            },
+                        )
+                    else:
+                        logger.info("planning.artifact_reused", extra={"artifact":"animation_program"})
+                        return cached
                 async with timed(logger, "planning.deepseek_animation") as stage:
                     result = await compiler.compile(dict(project), plan)
                     await assert_worker_lease(pool, project_id, attempt_id, lease_token, "api")
