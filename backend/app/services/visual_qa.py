@@ -218,6 +218,87 @@ class VisualQualityReviewer:
             for shot_index, findings in ranked[:max_shots]
         ]
 
+
+    @staticmethod
+    def build_helper_repair_queue(
+        review: dict[str, Any],
+        function_registry: list[dict[str, Any]],
+        max_functions: int = 2,
+        min_confidence: float = 0.75,
+    ) -> list[dict[str, Any]]:
+        """Select high-confidence visual findings attributed to known shared helpers."""
+        if review.get("status") != "reviewed" or not isinstance(function_registry, list):
+            return []
+        if isinstance(max_functions, bool) or not isinstance(max_functions, int) or max_functions < 1:
+            return []
+        known = {
+            item.get("name"): item for item in function_registry
+            if isinstance(item, dict) and isinstance(item.get("name"), str)
+            and isinstance(item.get("required_by_shots"), list)
+        }
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        findings = review.get("findings", [])
+        if not isinstance(findings, list):
+            return []
+        for finding in findings:
+            if not isinstance(finding, dict):
+                continue
+            if finding.get("severity") not in {"critical", "high"}:
+                continue
+            confidence = finding.get("confidence")
+            if (isinstance(confidence, bool) or not isinstance(confidence, (int, float))
+                    or confidence < min_confidence):
+                continue
+            issue, recommendation = finding.get("issue"), finding.get("recommendation")
+            evidence = finding.get("evidence_sample_indices")
+            shot_index = finding.get("shot_index")
+            if (not isinstance(issue, str) or not issue.strip()
+                    or not isinstance(recommendation, str) or not recommendation.strip()
+                    or not isinstance(evidence, list) or not evidence
+                    or isinstance(shot_index, bool) or not isinstance(shot_index, int)):
+                continue
+            valid_evidence = [
+                value for value in evidence[:3]
+                if isinstance(value, int) and not isinstance(value, bool)
+            ]
+            if not valid_evidence:
+                continue
+            names = finding.get("function_names", [])
+            if not isinstance(names, list):
+                continue
+            for name in names[:4]:
+                registry_entry = known.get(name)
+                if not registry_entry or shot_index not in registry_entry["required_by_shots"]:
+                    continue
+                grouped.setdefault(name, []).append({
+                    "shot_index": shot_index,
+                    "category": finding.get("category", "other"),
+                    "severity": finding["severity"],
+                    "confidence": round(float(confidence), 2),
+                    "evidence_sample_indices": valid_evidence,
+                    "issue": issue[:500],
+                    "recommendation": recommendation[:500],
+                })
+        priority = {"critical": 0, "high": 1}
+        ranked = sorted(
+            grouped.items(),
+            key=lambda pair: (
+                min(priority[item["severity"]] for item in pair[1]),
+                -max(item["confidence"] for item in pair[1]),
+                pair[0],
+            ),
+        )
+        return [
+            {
+                "function_name": name,
+                "findings": sorted(
+                    findings,
+                    key=lambda item: (priority[item["severity"]], -item["confidence"]),
+                )[:6],
+            }
+            for name, findings in ranked[:max_functions]
+        ]
+
     async def review(
         self,
         contact_sheet_path: Path,
