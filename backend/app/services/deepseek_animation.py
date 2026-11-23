@@ -941,6 +941,11 @@ Return the complete repaired function declarations now.""".strip()
 
         updated_bundle = copy.deepcopy(repair_bundle)
         updated_bundle["shared_js"] = updated_shared
+        updated_specs = updated_bundle.get("function_specs", [])
+        if isinstance(updated_specs, list):
+            for spec in updated_specs:
+                if isinstance(spec, dict) and spec.get("name") in helper_names:
+                    spec["version"] = int(spec.get("version", 1)) + 1
         registry = updated_bundle.get("function_registry", [])
         if isinstance(registry, list):
             for entry in registry:
