@@ -515,23 +515,54 @@ def find_unresolved_draw_helpers(shared_source: str, shot_sources: list[str]) ->
                 unresolved.add(name)
     return sorted(unresolved)
 
+def top_level_draw_helper_names(source: str) -> list[str]:
+    """Return unique drawX declarations available in the shared lexical scope."""
+    masked = _mask_js_comments_and_strings(source)
+    depth = 0
+    brace_depth = [0] * (len(masked) + 1)
+    for index, char in enumerate(masked):
+        brace_depth[index] = depth
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth = max(0, depth - 1)
+    return sorted({
+        name
+        for match in _DRAW_HELPER_DECL.finditer(masked)
+        if brace_depth[match.start()] == 0
+        for name in match.groups()
+        if name
+    })
+
+
 def validate_draw_helper_definitions(
     source: str,
     required_names: list[str],
     specifications: list[dict[str, Any]] | None = None,
 ) -> None:
-    """Ensure generated helpers match their contracts and contain real drawing work."""
+    """Ensure every requested helper is a unique top-level implementation."""
     masked = _mask_js_comments_and_strings(source)
-    declared = {
+    all_declarations = [
         name
         for match in _DRAW_HELPER_DECL.finditer(masked)
         for name in match.groups()
         if name
-    }
-    missing = sorted(set(required_names) - declared)
+    ]
+    top_level = set(top_level_draw_helper_names(source))
+    required = set(required_names)
+    missing = sorted(required - top_level)
     if missing:
-        raise ValueError("Generated helper library did not define: " + ", ".join(missing))
-    unexpected = sorted(declared - set(required_names))
+        raise ValueError(
+            "Generated helper library did not define top-level functions: "
+            + ", ".join(missing)
+        )
+    duplicates = sorted(name for name in required if all_declarations.count(name) != 1)
+    if duplicates:
+        raise ValueError(
+            "Generated helper library must define each requested helper exactly once: "
+            + ", ".join(duplicates)
+        )
+    unexpected = sorted(set(all_declarations) - required)
     if unexpected:
         raise ValueError("Generated helper library defined unrequested functions: " + ", ".join(unexpected))
     for name in required_names:

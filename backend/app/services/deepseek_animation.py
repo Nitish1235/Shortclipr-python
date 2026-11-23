@@ -40,6 +40,8 @@ from .animation_contracts import (
     MAX_SHOT_SOURCE,
     validate_generated_fragment,
     find_unresolved_draw_helpers,
+    find_unresolved_film_draw_helpers,
+    top_level_draw_helper_names,
     validate_draw_helper_definitions,
     validate_draw_helper_specs,
     validate_draw_helper_dependency_graph,
@@ -63,6 +65,73 @@ class DeepSeekAnimationCompiler:
                         timeout=90.0, max_retries=0)
             if settings.DEEPSEEK_API_KEY else None
         )
+
+    @staticmethod
+    def validate_compiled_program(program: dict[str, Any]) -> None:
+        """Validate cached and freshly compiled programs against their exact shared runtime."""
+        if not isinstance(program, dict):
+            raise ValueError("Animation program must be an object")
+        source = program.get("scene_js")
+        if not isinstance(source, str) or not source:
+            raise ValueError("Animation program is missing scene_js")
+
+        unresolved = find_unresolved_film_draw_helpers(source)
+        if unresolved:
+            raise ValueError(
+                "Animation program has unresolved shared drawing helpers: "
+                + ", ".join(unresolved)
+            )
+
+        bundle = program.get("repair_bundle")
+        if not isinstance(bundle, dict):
+            return
+        shared_js = bundle.get("shared_js")
+        shots = bundle.get("shots")
+        duration = bundle.get("duration")
+        logical = bundle.get("logical")
+        style_id = bundle.get("style_id")
+        if (
+            not isinstance(shared_js, str)
+            or not isinstance(shots, list)
+            or not isinstance(duration, int)
+            or isinstance(duration, bool)
+            or not isinstance(logical, list)
+            or len(logical) != 2
+            or not all(isinstance(value, int) and not isinstance(value, bool) for value in logical)
+            or not isinstance(style_id, str)
+        ):
+            raise ValueError("Animation repair bundle is incomplete or malformed")
+
+        required_shot_fields = ("index", "start_frame", "end_frame", "name", "draw_body")
+        for shot in shots:
+            if (
+                not isinstance(shot, dict)
+                or any(field not in shot for field in required_shot_fields)
+                or isinstance(shot.get("index"), bool)
+                or not isinstance(shot.get("index"), int)
+                or isinstance(shot.get("start_frame"), bool)
+                or not isinstance(shot.get("start_frame"), int)
+                or isinstance(shot.get("end_frame"), bool)
+                or not isinstance(shot.get("end_frame"), int)
+                or not isinstance(shot.get("name"), str)
+                or not isinstance(shot.get("draw_body"), str)
+            ):
+                raise ValueError("Animation repair bundle contains an invalid shot")
+        shot_bodies = [shot["draw_body"] for shot in shots]
+        bundle_unresolved = find_unresolved_draw_helpers(shared_js, shot_bodies)
+        if bundle_unresolved:
+            raise ValueError(
+                "Animation repair bundle has unresolved shared drawing helpers: "
+                + ", ".join(bundle_unresolved)
+            )
+
+        expected_source = DeepSeekAnimationCompiler._assemble_film(
+            shared_js, shots, duration, logical, style_id,
+        )
+        if expected_source != source:
+            raise ValueError(
+                "Animation scene_js does not match its persisted shared library and shot bodies"
+            )
 
     async def _code_completion(
         self, system_prompt: str, user_prompt: str, token_limit: int,
@@ -407,9 +476,7 @@ Return the complete shared JavaScript drawing library now.""".strip()
             MAX_SHARED_SOURCE,
         )
 
-        shared_helper_names = sorted(set(re.findall(
-            r"\bfunction\s+(draw[A-Z][A-Za-z0-9_]*)\s*\(", shared_js
-        )))
+        shared_helper_names = top_level_draw_helper_names(shared_js)
         semaphore = asyncio.Semaphore(self.max_parallel_shots)
 
         async def compile_one(scene: dict[str, Any]) -> dict[str, Any]:
@@ -691,7 +758,7 @@ Return the complete JavaScript drawing body now.
         # implementations explicitly, validate their declarations, and only then
         # assemble the film. Keep this bounded to avoid recursive code-generation loops.
         function_specs_by_name: dict[str, dict[str, Any]] = {}
-        for helper_pass in range(4):
+        for helper_pass in range(12):
             missing_set = set(find_unresolved_draw_helpers(
                 shared_js,
                 [shot["draw_body"] for shot in compiled],
@@ -706,6 +773,10 @@ Return the complete JavaScript drawing body now.
                 break
             if len(function_specs_by_name) + len(missing_helpers) > 64:
                 raise ValueError("Generated drawing helper dependency graph exceeds 64 functions")
+            # The spec contract accepts at most 32 names per request. Process a
+            # deterministic batch; later passes resolve the remaining names and
+            # recursively discovered dependencies.
+            missing_helpers = missing_helpers[:32]
 
             spec_prompt = f"""
 ROLE
@@ -911,7 +982,13 @@ Implement every missing helper now.""".strip()
         if len(source) > MAX_FILM_SOURCE:
             raise ValueError("Assembled animation program exceeds the maximum source size")
         self.validate_source(source, duration, logical)
-        return {
+        final_unresolved_helpers = find_unresolved_film_draw_helpers(source)
+        if final_unresolved_helpers:
+            raise ValueError(
+                "Assembled animation has unresolved shared drawing helpers: "
+                + ", ".join(final_unresolved_helpers)
+            )
+        result = {
             "scene_js": source,
             "style": style_id,
             "model": self.model,
@@ -982,6 +1059,8 @@ Implement every missing helper now.""".strip()
                 for shot in compiled
             ],
         }
+        self.validate_compiled_program(result)
+        return result
 
 
     async def repair_shared_helpers(
@@ -1171,9 +1250,10 @@ Return the complete repaired function declarations now.""".strip()
         if len(source) > MAX_FILM_SOURCE:
             raise ValueError("Repaired animation program exceeds the maximum source size")
         self.validate_source(source, duration, logical)
+        repaired_program = {"scene_js": source, "repair_bundle": updated_bundle}
+        self.validate_compiled_program(repaired_program)
         return {
-            "scene_js": source,
-            "repair_bundle": updated_bundle,
+            **repaired_program,
             "repaired_function_names": helper_names,
             "original_shared_source_chars": len(shared_js),
             "repaired_shared_source_chars": len(updated_shared),
@@ -1259,9 +1339,7 @@ Return the complete repaired function declarations now.""".strip()
             continuity_contract, scene,
         )
         shot_visual_context = self._shot_visual_context(visual_bible, scene)
-        shared_helper_names = sorted(set(re.findall(
-            r"\bfunction\s+(draw[A-Z][A-Za-z0-9_]*)\s*\(", shared_js
-        )))
+        shared_helper_names = top_level_draw_helper_names(shared_js)
         # === LEGACY VISUAL SHOT REPAIR PROMPT (rollback reference; inactive) ===
         #         prompt = f"""
         # You are ShortClipr's senior 2D animation repair artist. Repair ONLY shot {shot_index}.
@@ -1398,9 +1476,10 @@ REPAIR METHOD
         if len(source) > MAX_FILM_SOURCE:
             raise ValueError("Repaired animation program exceeds the maximum source size")
         self.validate_source(source, duration, logical)
+        repaired_program = {"scene_js": source, "repair_bundle": updated_bundle}
+        self.validate_compiled_program(repaired_program)
         return {
-            "scene_js": source,
-            "repair_bundle": updated_bundle,
+            **repaired_program,
             "repaired_shot_index": shot_index,
             "original_body_chars": len(original_body),
             "replacement_body_chars": len(replacement_body),
