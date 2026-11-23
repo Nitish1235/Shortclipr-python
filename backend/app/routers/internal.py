@@ -824,7 +824,7 @@ async def run_render(
                     })
                     quality["motion_qa"]["contact_sheet_upload_error"] = str(error)[:300]
                 try:
-                    if require_render_budget("visual QA", reserve_seconds=150) > 150:
+                    if render_deadline - asyncio.get_running_loop().time() > 150:
                         async with timed(logger, "render.visual_qa") as ctx:
                             visual_review = await visual_reviewer.review(
                                 contact_sheet,
@@ -875,9 +875,7 @@ async def run_render(
                             repair_item = shot_queue[0]
                             repair_summary["shot_index"] = repair_item["shot_index"]
 
-                        if repair_item is not None and require_render_budget(
-                            "targeted repair", reserve_seconds=360,
-                        ) > 360:
+                        if repair_item is not None and render_deadline - asyncio.get_running_loop().time() > 360:
                             repair_summary.update({
                                 "status": "attempting",
                                 "attempted": 1,
@@ -924,6 +922,7 @@ async def run_render(
                                         candidate_plan, candidate_path,
                                         deadline=render_deadline,
                                     )
+                                    require_render_budget("candidate mux and visual review", reserve_seconds=90)
                                     await mux_narration(
                                         candidate_path, audio_path, project["duration_seconds"],
                                     )
