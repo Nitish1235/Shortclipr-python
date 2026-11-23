@@ -1238,9 +1238,10 @@ Return the complete repaired function declarations now.""".strip()
         if len(source) > MAX_FILM_SOURCE:
             raise ValueError("Repaired animation program exceeds the maximum source size")
         self.validate_source(source, duration, logical)
+        repaired_program = {"scene_js": source, "repair_bundle": updated_bundle}
+        self.validate_compiled_program(repaired_program)
         return {
-            "scene_js": source,
-            "repair_bundle": updated_bundle,
+            **repaired_program,
             "repaired_function_names": helper_names,
             "original_shared_source_chars": len(shared_js),
             "repaired_shared_source_chars": len(updated_shared),
@@ -1465,9 +1466,10 @@ REPAIR METHOD
         if len(source) > MAX_FILM_SOURCE:
             raise ValueError("Repaired animation program exceeds the maximum source size")
         self.validate_source(source, duration, logical)
+        repaired_program = {"scene_js": source, "repair_bundle": updated_bundle}
+        self.validate_compiled_program(repaired_program)
         return {
-            "scene_js": source,
-            "repair_bundle": updated_bundle,
+            **repaired_program,
             "repaired_shot_index": shot_index,
             "original_body_chars": len(original_body),
             "replacement_body_chars": len(replacement_body),
