@@ -100,7 +100,7 @@ try {
     // before Chromium can execute the film dispatcher.
     const shotDefinitions = new Map();
     for (const [name, variable] of globalScope.set.entries()) {
-        if (!/^drawShot_\\d+$/.test(name)) continue;
+        if (!/^drawShot_[0-9]+$/.test(name)) continue;
         const index = Number(name.slice('drawShot_'.length));
         const definitions = variable.defs.filter((definition) =>
             definition.type === 'FunctionName' && definition.node?.type === 'FunctionDeclaration');
@@ -228,7 +228,7 @@ try {
         }
         if (node.type === 'CallExpression' && node.callee?.type === 'Identifier') {
             const calledName = node.callee.name;
-            if (/^drawShot_\\d+$/.test(calledName)) {
+            if (/^drawShot_[0-9]+$/.test(calledName)) {
                 const calledIndex = Number(calledName.slice('drawShot_'.length));
                 if (!manifestShots.has(calledIndex)) {
                     fail(\`Film calls unmanifested shot function \${calledName}\`);
