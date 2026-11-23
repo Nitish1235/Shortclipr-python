@@ -37,6 +37,7 @@ from .animation_contracts import (
     find_unresolved_draw_helpers,
     validate_draw_helper_definitions,
     validate_draw_helper_specs,
+    validate_draw_helper_dependency_graph,
     validate_scene_plan,
     validate_visual_bible,
     analyze_mechanism_motion,
@@ -473,10 +474,16 @@ Return the complete JavaScript drawing body for this shot.""".strip()
         # assemble the film. Keep this bounded to avoid recursive code-generation loops.
         function_specs_by_name: dict[str, dict[str, Any]] = {}
         for helper_pass in range(4):
-            missing_helpers = find_unresolved_draw_helpers(
+            missing_set = set(find_unresolved_draw_helpers(
                 shared_js,
                 [shot["draw_body"] for shot in compiled],
-            )
+            ))
+            for existing_spec in function_specs_by_name.values():
+                missing_set.update(
+                    dependency for dependency in existing_spec["dependencies"]
+                    if dependency not in shared_helper_names
+                )
+            missing_helpers = sorted(missing_set)
             if not missing_helpers:
                 break
             if len(function_specs_by_name) + len(missing_helpers) > 64:
@@ -668,11 +675,19 @@ Implement every missing helper now.""".strip()
             shared_js,
             [shot["draw_body"] for shot in compiled],
         )
+        missing_declared_dependencies = sorted({
+            dependency
+            for spec in function_specs_by_name.values()
+            for dependency in spec["dependencies"]
+            if dependency not in shared_helper_names
+        })
+        remaining_helpers = sorted(set(remaining_helpers) | set(missing_declared_dependencies))
         if remaining_helpers:
             raise ValueError(
                 "Unresolved generated drawing helpers after repair: "
                 + ", ".join(remaining_helpers)
             )
+        validate_draw_helper_dependency_graph(list(function_specs_by_name.values()))
 
         source = self._assemble_film(shared_js, compiled, duration, logical, style_id)
         if len(source) > MAX_FILM_SOURCE:
