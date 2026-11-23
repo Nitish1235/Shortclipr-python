@@ -996,7 +996,7 @@ class BoundedGenerationRepairTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertIn("fillRect", result)
-        compiler._code_completion.assert_awaited twice()
+        self.assertEqual(compiler._code_completion.await_count, 2)
         repair_prompt = compiler._code_completion.await_args_list[1].args[1]
         self.assertIn("drawCharacter is not declared", repair_prompt)
         self.assertIn("REJECTED CANDIDATE", repair_prompt)
