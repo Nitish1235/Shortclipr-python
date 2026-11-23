@@ -406,6 +406,85 @@ _DRAW_HELPER_DECL = re.compile(
 )
 
 
+def _mask_js_comments_and_strings(source: str) -> str:
+    """Blank comments and string/template literals while preserving source offsets."""
+    chars = list(source)
+    index = 0
+    length = len(source)
+    while index < length:
+        char = source[index]
+        next_char = source[index + 1] if index + 1 < length else ""
+        if char == "/" and next_char == "/":
+            end = source.find("\n", index + 2)
+            end = length if end < 0 else end
+            for pos in range(index, end):
+                chars[pos] = " "
+            index = end
+            continue
+        if char == "/" and next_char == "*":
+            end = source.find("*/", index + 2)
+            end = length if end < 0 else end + 2
+            for pos in range(index, end):
+                if chars[pos] != "\n":
+                    chars[pos] = " "
+            index = end
+            continue
+        if char in {"'", '"', chr(96)}:
+            quote = char
+            chars[index] = " "
+            index += 1
+            while index < length:
+                current = source[index]
+                if current != "\n":
+                    chars[index] = " "
+                if current == "\\":
+                    index += 1
+                    if index < length and source[index] != "\n":
+                        chars[index] = " "
+                elif current == quote:
+                    index += 1
+                    break
+                index += 1
+            continue
+        index += 1
+    return "".join(chars)
+
+
+def find_unresolved_film_draw_helpers(source: str) -> list[str]:
+    """Find drawX calls not backed by a top-level shared helper in a film.
+
+    Generated film helpers belong in the shared library before drawShot_N
+    declarations. Shot-local or nested declarations are not visible to every shot
+    and must not satisfy the runtime contract.
+    """
+    masked = _mask_js_comments_and_strings(source)
+    first_shot = re.search(r"\bfunction\s+drawShot_\d+\s*\(", masked)
+    shared_source = masked[:first_shot.start()] if first_shot else masked
+
+    brace_depth = [0] * (len(shared_source) + 1)
+    depth = 0
+    for index, char in enumerate(shared_source):
+        brace_depth[index] = depth
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth = max(0, depth - 1)
+    declared = {
+        name
+        for match in _DRAW_HELPER_DECL.finditer(shared_source)
+        if brace_depth[match.start()] == 0
+        for name in match.groups()
+        if name
+    }
+
+    unresolved = {
+        name
+        for name in _DRAW_HELPER_CALL.findall(masked)
+        if not name.startswith("drawShot_") and name not in declared
+    }
+    return sorted(unresolved)
+
+
 def find_unresolved_draw_helpers(shared_source: str, shot_sources: list[str]) -> list[str]:
     """Return unqualified drawX() calls that have no shared or shot-local definition.
 
