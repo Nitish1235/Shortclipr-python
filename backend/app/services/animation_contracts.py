@@ -710,7 +710,7 @@ def validate_draw_helper_dependencies(
             raise ValueError(f"Drawing helper {name} has an invalid dependency manifest")
 
         declaration = re.search(
-            rf"\\bfunction\\s+{re.escape(name)}\\s*\\([^)]*\\)\\s*\\{{",
+            rf"\bfunction\s+{re.escape(name)}\s*\([^)]*\)\s*\{{",
             masked,
         )
         if not declaration:
@@ -731,7 +731,7 @@ def validate_draw_helper_dependencies(
         actual = sorted(
             dependency for dependency in names
             if dependency != name and re.search(
-                rf"(?<![\\w$.]){re.escape(dependency)}\\s*(?:\\?\\.)?\\s*\\(",
+                rf"(?<![\w$.]){re.escape(dependency)}\s*(?:\?\.)?\s*\(",
                 body,
             )
         )
