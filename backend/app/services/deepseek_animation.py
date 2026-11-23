@@ -40,6 +40,7 @@ from .animation_contracts import (
     MAX_SHOT_SOURCE,
     validate_generated_fragment,
     find_unresolved_draw_helpers,
+    find_unresolved_film_draw_helpers,
     validate_draw_helper_definitions,
     validate_draw_helper_specs,
     validate_draw_helper_dependency_graph,
@@ -63,6 +64,64 @@ class DeepSeekAnimationCompiler:
                         timeout=90.0, max_retries=0)
             if settings.DEEPSEEK_API_KEY else None
         )
+
+    @staticmethod
+    def validate_compiled_program(program: dict[str, Any]) -> None:
+        """Validate cached and freshly compiled programs against their exact shared runtime."""
+        if not isinstance(program, dict):
+            raise ValueError("Animation program must be an object")
+        source = program.get("scene_js")
+        if not isinstance(source, str) or not source:
+            raise ValueError("Animation program is missing scene_js")
+
+        unresolved = find_unresolved_film_draw_helpers(source)
+        if unresolved:
+            raise ValueError(
+                "Animation program has unresolved shared drawing helpers: "
+                + ", ".join(unresolved)
+            )
+
+        bundle = program.get("repair_bundle")
+        if not isinstance(bundle, dict):
+            return
+        shared_js = bundle.get("shared_js")
+        shots = bundle.get("shots")
+        duration = bundle.get("duration")
+        logical = bundle.get("logical")
+        style_id = bundle.get("style_id")
+        if (
+            not isinstance(shared_js, str)
+            or not isinstance(shots, list)
+            or not isinstance(duration, int)
+            or isinstance(duration, bool)
+            or not isinstance(logical, list)
+            or len(logical) != 2
+            or not all(isinstance(value, int) and not isinstance(value, bool) for value in logical)
+            or not isinstance(style_id, str)
+        ):
+            raise ValueError("Animation repair bundle is incomplete or malformed")
+
+        shot_bodies = [
+            shot.get("draw_body")
+            for shot in shots
+            if isinstance(shot, dict) and isinstance(shot.get("draw_body"), str)
+        ]
+        if len(shot_bodies) != len(shots):
+            raise ValueError("Animation repair bundle contains an invalid shot body")
+        bundle_unresolved = find_unresolved_draw_helpers(shared_js, shot_bodies)
+        if bundle_unresolved:
+            raise ValueError(
+                "Animation repair bundle has unresolved shared drawing helpers: "
+                + ", ".join(bundle_unresolved)
+            )
+
+        expected_source = DeepSeekAnimationCompiler._assemble_film(
+            shared_js, shots, duration, logical, style_id,
+        )
+        if expected_source != source:
+            raise ValueError(
+                "Animation scene_js does not match its persisted shared library and shot bodies"
+            )
 
     async def _code_completion(
         self, system_prompt: str, user_prompt: str, token_limit: int,
@@ -911,7 +970,13 @@ Implement every missing helper now.""".strip()
         if len(source) > MAX_FILM_SOURCE:
             raise ValueError("Assembled animation program exceeds the maximum source size")
         self.validate_source(source, duration, logical)
-        return {
+        final_unresolved_helpers = find_unresolved_film_draw_helpers(source)
+        if final_unresolved_helpers:
+            raise ValueError(
+                "Assembled animation has unresolved shared drawing helpers: "
+                + ", ".join(final_unresolved_helpers)
+            )
+        result = {
             "scene_js": source,
             "style": style_id,
             "model": self.model,
@@ -982,6 +1047,8 @@ Implement every missing helper now.""".strip()
                 for shot in compiled
             ],
         }
+        self.validate_compiled_program(result)
+        return result
 
 
     async def repair_shared_helpers(
