@@ -241,9 +241,9 @@ class TargetedSharedHelperRepairTests(unittest.IsolatedAsyncioTestCase):
             "version": 1,
         }
         paint_tower_spec = {
-            "name": "paintTower",
+            "name": "drawTower",
             "category": "visual",
-            "signature": "function paintTower(g, x)",
+            "signature": "function drawTower(g, x)",
             "purpose": "Draw the reusable tower component.",
             "coordinate_system": "Logical canvas pixels.",
             "origin": "The tower base.",
@@ -263,7 +263,7 @@ class TargetedSharedHelperRepairTests(unittest.IsolatedAsyncioTestCase):
             "style_id": "cinematic-editorial",
             "shared_js": (
                 "function drawBridge(g, x) { g.fillRect(x, 0, 10, 10); }\n"
-                "function paintTower(g, x) { g.fillRect(x, 0, 5, 20); }"
+                "function drawTower(g, x) { g.fillRect(x, 0, 5, 20); }"
             ),
             "shots": [{
                 "index": 0,
@@ -293,7 +293,7 @@ class TargetedSharedHelperRepairTests(unittest.IsolatedAsyncioTestCase):
                     "version": 1,
                 },
                 {
-                    "name": "paintTower",
+                    "name": "drawTower",
                     "category": "visual",
                     "signature": paint_tower_spec["signature"],
                     "dependencies": [],
@@ -317,7 +317,7 @@ class TargetedSharedHelperRepairTests(unittest.IsolatedAsyncioTestCase):
         result = await compiler.repair_shared_helpers(bundle, ["drawBridge"], findings)
 
         self.assertIn("g.fillRect(x, 0, 20, 10)", result["repair_bundle"]["shared_js"])
-        self.assertIn("function paintTower(g, x)", result["repair_bundle"]["shared_js"])
+        self.assertIn("function drawTower(g, x)", result["repair_bundle"]["shared_js"])
         self.assertEqual(result["repair_bundle"]["shots"][0]["draw_body"], original_body)
         self.assertEqual(result["repaired_function_names"], ["drawBridge"])
         self.assertEqual(result["repair_bundle"]["function_specs"][0]["version"], 2)
@@ -575,7 +575,7 @@ class MechanismKinematicsContextTests(unittest.TestCase):
         source = styles_path.read_text(encoding="utf-8")
         self.assertRegex(source, r"function mechanismPose\(spec,progress\)")
         self.assertIn("return {type:'pivot',part:spec.part,anchor,angle_rad:angle}", source)
-        self.assertIn("return {type:'translation',part:spec.part,position:", source)
+        self.assertIn("return {type:spec.type,part:spec.part,position:", source)
         self.assertIn("return {type:'actuator',part:spec.part,base,tip:", source)
         self.assertIn("return {type:'gear',part:spec.part,driver_part:spec.driver_part", source)
         self.assertIn("return {type:'pulley',part:spec.part,pulley_part:spec.pulley_part", source)
@@ -629,7 +629,7 @@ class SharedHelperReplacementTests(unittest.TestCase):
         shared = """
         const palette = { ink: "#111" };
         function drawBridge(g, x) { g.fillRect(x, 0, 10, 10); }
-        function paintTower(g, x) { g.fillRect(x, 0, 5, 20); }
+        function drawTower(g, x) { g.fillRect(x, 0, 5, 20); }
         """
         replacement = "function drawBridge(g, x) { g.fillRect(x, 0, 20, 10); }"
         extracted = extract_shared_draw_helpers(shared, ["drawBridge"])
@@ -637,12 +637,12 @@ class SharedHelperReplacementTests(unittest.TestCase):
         updated = replace_shared_draw_helpers(shared, replacement, ["drawBridge"])
         self.assertIn('const palette = { ink: "#111" };', updated)
         self.assertIn("g.fillRect(x, 0, 20, 10)", updated)
-        self.assertIn("function paintTower(g, x)", updated)
+        self.assertIn("function drawTower(g, x)", updated)
         self.assertNotIn("g.fillRect(x, 0, 10, 10)", updated)
 
     def test_rejects_missing_or_duplicate_top_level_declarations(self):
         with self.assertRaisesRegex(ValueError, "found 0"):
-            extract_shared_draw_helpers("function paintTower(g) {}", ["drawBridge"])
+            extract_shared_draw_helpers("function drawTower(g) {}", ["drawBridge"])
         duplicate = "function drawBridge(g) {} function drawBridge(g) {}"
         with self.assertRaisesRegex(ValueError, "found 2"):
             extract_shared_draw_helpers(duplicate, ["drawBridge"])
@@ -706,15 +706,15 @@ class DrawingHelperImplementationDependencyTests(unittest.TestCase):
 class DrawingHelperDependencyGraphTests(unittest.TestCase):
     def test_accepts_acyclic_dependencies(self):
         validate_draw_helper_dependency_graph([
-            {"name": "drawBridge", "dependencies": ["paintTower"]},
-            {"name": "paintTower", "dependencies": []},
+            {"name": "drawBridge", "dependencies": ["drawTower"]},
+            {"name": "drawTower", "dependencies": []},
         ])
 
     def test_rejects_circular_dependencies(self):
         with self.assertRaisesRegex(ValueError, "Circular drawing helper dependency"):
             validate_draw_helper_dependency_graph([
-                {"name": "drawBridge", "dependencies": ["paintTower"]},
-                {"name": "paintTower", "dependencies": ["drawBridge"]},
+                {"name": "drawBridge", "dependencies": ["drawTower"]},
+                {"name": "drawTower", "dependencies": ["drawBridge"]},
             ])
 
 
