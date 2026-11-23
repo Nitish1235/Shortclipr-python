@@ -159,11 +159,13 @@ class DrawingHelperContractTests(unittest.TestCase):
 
     def test_requires_generator_to_define_each_requested_helper(self):
         validate_draw_helper_definitions(
-            "function drawPaperQuestionMark(g, x, y) {}",
+            "function drawPaperQuestionMark(g, x, y) { g.beginPath(); g.arc(x, y, 4, 0, Math.PI * 2); g.fill(); }",
             ["drawPaperQuestionMark"],
         )
         with self.assertRaisesRegex(ValueError, "drawPaperQuestionMark"):
             validate_draw_helper_definitions("function drawQuestion(g) {}", ["drawPaperQuestionMark"])
+        with self.assertRaisesRegex(ValueError, "empty or incomplete"):
+            validate_draw_helper_definitions("function drawPaperQuestionMark(g, x, y) {}", ["drawPaperQuestionMark"])
 
 
 class MechanismKinematicsContextTests(unittest.TestCase):
