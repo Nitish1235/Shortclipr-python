@@ -119,6 +119,13 @@ Motion.scene({ draw(g, t, env) { drawShot_0(g, t, env, t); } });
         self.assertIn("validate-scene.mjs", renderer)
         self.assertIn("helper-manifest.json", renderer)
         self.assertIn("canonical function/scope linking", renderer)
+        linker_source = linker.read_text(encoding="utf-8")
+        self.assertIn("expectedShotIndexes", linker_source)
+        self.assertIn("Missing canonical shot implementations", linker_source)
+        self.assertIn("Shot function drawShot_", linker_source)
+        dockerfile = (backend / "Dockerfile.ffmpeg-worker").read_text(encoding="utf-8")
+        self.assertIn("linker-unresolved-scene.js", dockerfile)
+        self.assertIn("linker-missing-shot-scene.js", dockerfile)
 
 
 if __name__ == "__main__":
