@@ -36,6 +36,7 @@ from .animation_contracts import (
     validate_generated_fragment,
     find_unresolved_draw_helpers,
     validate_draw_helper_definitions,
+    validate_draw_helper_specs,
     validate_scene_plan,
     validate_visual_bible,
     analyze_mechanism_motion,
@@ -470,13 +471,100 @@ Return the complete JavaScript drawing body for this shot.""".strip()
         # A model may still reference a helper it forgot to define. Generate those
         # implementations explicitly, validate their declarations, and only then
         # assemble the film. Keep this bounded to avoid recursive code-generation loops.
-        for helper_pass in range(2):
+        function_specs_by_name: dict[str, dict[str, Any]] = {}
+        for helper_pass in range(4):
             missing_helpers = find_unresolved_draw_helpers(
                 shared_js,
                 [shot["draw_body"] for shot in compiled],
             )
             if not missing_helpers:
                 break
+
+            spec_prompt = f"""
+ROLE
+You are ShortClipr's visual-systems architect. Before implementation, define exact,
+testable contracts for the missing Canvas drawing functions.
+
+Return strict JSON only, with one object per requested name:
+{{
+  "functions": [{{
+    "name": "drawExample",
+    "category": "visual",
+    "purpose": "One precise responsibility",
+    "signature": "function drawExample(g, x, y, scale)",
+    "coordinate_system": "local_subject or logical_canvas, with units explained",
+    "origin": "Exact origin and scale convention",
+    "visual_target": "What must visibly appear, including shape, material and spatial role",
+    "style_requirements": "How it must follow this film's art direction",
+    "animation_behavior": "How time affects it, or explicitly state that it is static",
+    "dependencies": ["drawAnotherHelper"],
+    "acceptance_criteria": ["Observable criterion one", "Observable criterion two"]
+  }}]
+}}
+
+CONTRACT RULES
+- Include every requested name exactly once and no other names.
+- The category must be visual, animation or effect.
+- Every signature is an ordinary named function and starts with Canvas context g.
+- Specify concrete visual behavior, coordinate conventions and observable acceptance criteria.
+- Dependencies may name only drawX helpers; list only dependencies the implementation genuinely needs.
+- Do not specify undocumented runtime APIs or external assets.
+- These functions are required by actual shot call sites. Resolve their intent from those
+  call sites, the visual bible and existing shared functions; do not guess from names alone.
+- Keep each specification concise but precise.
+
+REQUESTED NAMES:
+{json.dumps(missing_helpers)}
+
+EXISTING SHARED FUNCTIONS:
+{json.dumps(shared_helper_names)}
+
+VISUAL BIBLE:
+{json.dumps(visual_bible, ensure_ascii=False)}
+
+BINDING ART DIRECTION:
+{art_direction_instructions}
+
+SHOT CALL SITES:
+{json.dumps([
+    {
+        "index": shot["index"],
+        "name": shot["name"],
+        "calls": [
+            {
+                "function": helper,
+                "context": shot["draw_body"][
+                    max(0, shot["draw_body"].find(helper) - 220):
+                    min(len(shot["draw_body"]), shot["draw_body"].find(helper) + 420)
+                ],
+            }
+            for helper in missing_helpers if helper in shot["draw_body"]
+        ],
+    }
+    for shot in compiled if any(helper in shot["draw_body"] for helper in missing_helpers)
+], ensure_ascii=False)}
+
+Return the JSON specification now.""".strip()
+            raw_specs = await self._code_completion(
+                "You are a precise visual-function contract designer. Return valid JSON only.",
+                spec_prompt,
+                min(self.max_output_tokens, 5000),
+                label=f"Drawing helper specifications pass {helper_pass + 1}",
+            )
+            try:
+                parsed_specs = json.loads(raw_specs)
+            except json.JSONDecodeError as error:
+                raise ValueError(
+                    f"DeepSeek returned invalid JSON for drawing helper specifications: {error.msg}"
+                ) from error
+            pass_specs = validate_draw_helper_specs(parsed_specs, missing_helpers)
+            for spec in pass_specs:
+                spec["required_by_shots"] = [
+                    shot["index"] for shot in compiled
+                    if re.search(rf"(?<![\\w$.]){re.escape(spec['name'])}\\s*\\(", shot["draw_body"])
+                ]
+                spec["version"] = 1
+                function_specs_by_name[spec["name"]] = spec
         # === LEGACY ON-DEMAND DRAWING HELPERS PROMPT (rollback reference; inactive) ===
         # helper_prompt = f"""
         # You are ShortClipr's reusable Canvas 2D drawing-function engineer.
@@ -517,6 +605,9 @@ once and accept Canvas context g as its first parameter.
 MISSING HELPERS:
 {json.dumps(missing_helpers)}
 
+AUTHORITATIVE FUNCTION SPECIFICATIONS:
+{json.dumps(pass_specs, ensure_ascii=False)}
+
 BINDING ART DIRECTION:
 {art_direction_instructions}
 
@@ -531,9 +622,14 @@ SHOT CONTEXT:
 
 RULES
 - Use Ease.lerp(a, b, progress) for numeric interpolation; never call bare mix().
-- Infer each helper's intended subject from its call sites and visual bible.
+- Treat the authoritative function specifications as implementation contracts, not suggestions.
+- Match each exact signature, purpose, coordinate system, origin, visual target, animation
+  behavior, dependencies and acceptance criteria.
 - Match existing shared helper proportions, palette, materials, lighting and local
   coordinate conventions. Do not introduce a different illustration style.
+- Implement declared dependencies when they are part of this requested batch; if another
+  drawX dependency is needed, define it completely in this fragment so the next bounded
+  dependency pass can specify and implement it.
 - Every helper must draw the actual named subject, not a placeholder, label or icon.
 - Use a stable local origin and scale convention consistent with related helpers.
 - Define all requested helpers completely. Do not leave TODOs or call undefined helpers.
@@ -585,6 +681,21 @@ Implement every missing helper now.""".strip()
             "shot_source_chars": sum(len(x["draw_body"]) for x in compiled),
             "motion_diagnostics": motion_diagnostics,
             "visual_qa_context": self._visual_qa_context(visual_bible, scenes),
+            "function_specs": list(function_specs_by_name.values()),
+            "function_registry": [
+                {
+                    "name": spec["name"],
+                    "category": spec["category"],
+                    "signature": spec["signature"],
+                    "dependencies": spec["dependencies"],
+                    "required_by_shots": spec["required_by_shots"],
+                    "version": spec["version"],
+                    "source_scope": "shared",
+                    "static_status": "declaration_validated",
+                    "runtime_status": "not_render_verified",
+                }
+                for spec in function_specs_by_name.values()
+            ],
             # Keep the exact compiled shot bodies and shared drawing library so a
             # later repair can replace one shot without regenerating other shots.
             "repair_bundle": {
@@ -597,6 +708,21 @@ Implement every missing helper now.""".strip()
                 "visual_bible": visual_bible,
                 "scenes": scenes,
                 "shared_js": shared_js,
+                "function_specs": list(function_specs_by_name.values()),
+                "function_registry": [
+                    {
+                        "name": spec["name"],
+                        "category": spec["category"],
+                        "signature": spec["signature"],
+                        "dependencies": spec["dependencies"],
+                        "required_by_shots": spec["required_by_shots"],
+                        "version": spec["version"],
+                        "source_scope": "shared",
+                        "static_status": "declaration_validated",
+                        "runtime_status": "not_render_verified",
+                    }
+                    for spec in function_specs_by_name.values()
+                ],
                 "shots": compiled,
             },
             "shot_manifest": [
