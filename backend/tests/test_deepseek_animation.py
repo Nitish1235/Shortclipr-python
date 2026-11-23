@@ -634,10 +634,6 @@ class DrawingHelperSpecificationTests(unittest.TestCase):
             )
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class VisualContinuityContractTests(unittest.TestCase):
     def test_contract_reuses_canonical_visual_bible_entities_without_mutation(self):
         from app.services.shot_design_contracts import build_visual_continuity_contract
@@ -801,3 +797,7 @@ class PhysicalMotionContractTests(unittest.TestCase):
             DeepSeekAnimationCompiler._validate_shot_motion(
                 invalid, "Shot 1", {"prop_deck", "prop_counterweight"},
             )
+
+
+if __name__ == "__main__":
+    unittest.main()
