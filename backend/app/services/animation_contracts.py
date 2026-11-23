@@ -686,6 +686,63 @@ def validate_draw_helper_definitions(
 _DRAW_HELPER_CATEGORIES = {"visual", "animation", "effect"}
 
 
+def validate_draw_helper_dependencies(
+    source: str,
+    specifications: list[dict[str, Any]],
+) -> None:
+    """Match each helper's declared dependencies to its actual shared-scope calls."""
+    masked = _mask_js_comments_and_strings(source)
+    names = {
+        item.get("name") for item in specifications
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+    if len(names) != len(specifications):
+        raise ValueError("Drawing helper dependency specifications contain invalid or duplicate names")
+
+    for spec in specifications:
+        name = spec["name"]
+        expected = spec.get("dependencies")
+        if (
+            not isinstance(expected, list)
+            or len(expected) != len(set(expected))
+            or any(not isinstance(dep, str) or dep not in names or dep == name for dep in expected)
+        ):
+            raise ValueError(f"Drawing helper {name} has an invalid dependency manifest")
+
+        declaration = re.search(
+            rf"\\bfunction\\s+{re.escape(name)}\\s*\\([^)]*\\)\\s*\\{{",
+            masked,
+        )
+        if not declaration:
+            raise ValueError(f"Drawing helper {name} has no ordinary function implementation")
+        depth = 1
+        body_end = None
+        for position in range(declaration.end(), len(masked)):
+            if masked[position] == "{":
+                depth += 1
+            elif masked[position] == "}":
+                depth -= 1
+                if depth == 0:
+                    body_end = position
+                    break
+        if body_end is None:
+            raise ValueError(f"Drawing helper {name} has an incomplete implementation")
+        body = masked[declaration.end():body_end]
+        actual = sorted(
+            dependency for dependency in names
+            if dependency != name and re.search(
+                rf"(?<![\\w$.]){re.escape(dependency)}\\s*(?:\\?\\.)?\\s*\\(",
+                body,
+            )
+        )
+        expected_sorted = sorted(expected)
+        if actual != expected_sorted:
+            raise ValueError(
+                f"Drawing helper {name} dependency manifest does not match its implementation; "
+                f"expected [{', '.join(expected_sorted)}], found [{', '.join(actual)}]"
+            )
+
+
 def validate_draw_helper_specs(value: Any, required_names: list[str]) -> list[dict[str, Any]]:
     """Validate DeepSeek's visual implementation contracts against exact call-site names."""
     if not isinstance(value, dict) or not isinstance(value.get("functions"), list):
