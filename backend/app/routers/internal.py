@@ -923,9 +923,24 @@ async def run_render(
                                         target_has_blocker = True
                                     elif repair_type == "shared_helpers":
                                         repaired_names = set(repaired.get("repaired_function_names", []))
+                                        target_shots = {
+                                            item.get("shot_index") for item in repair_item["findings"]
+                                            if isinstance(item.get("shot_index"), int)
+                                            and not isinstance(item.get("shot_index"), bool)
+                                        }
+                                        target_categories = {
+                                            item.get("category") for item in repair_item["findings"]
+                                            if isinstance(item.get("category"), str)
+                                        }
                                         target_has_blocker = any(
                                             finding.get("severity") in {"critical", "high"}
-                                            and repaired_names.intersection(finding.get("function_names", []))
+                                            and (
+                                                bool(repaired_names.intersection(finding.get("function_names", [])))
+                                                or (
+                                                    finding.get("shot_index") in target_shots
+                                                    and finding.get("category") in target_categories
+                                                )
+                                            )
                                             for finding in candidate_review.get("findings", [])
                                         )
                                     else:
