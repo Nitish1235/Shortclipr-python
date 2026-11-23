@@ -197,35 +197,57 @@ class DeepSeekAnimationCompiler:
             art_direction = validate_art_direction(art_direction_value, style_id)
         art_direction_instructions = format_art_direction(art_direction)
 
-        shared_prompt = f"""
-You are ShortClipr's senior 2D character and illustration systems artist.
-Create a compact reusable JavaScript drawing library for a {style_id} Canvas 2D film.\nFollow this binding art-direction contract:\n{art_direction_instructions}\nUse enough code to make every recurring subject visually distinctive; prefer compact implementations over omitted visual detail.
-Return raw JavaScript source only. Do not wrap it in JSON or Markdown.
-The source is evaluated in the same script as the film and may define ordinary named
-functions and constants. It must not call Motion.scene. Use only the supplied Canvas
-2D context in functions. Never reference browser-global identifiers such as window,
-document, self, top, parent or frames. No DOM, browser globals, imports, exports, network, filesystem,
-Node APIs, timers, eval, Function, Date, performance, Math.random, WebGL or 3D.
-A trusted runtime script ShortcliprStyles is loaded before this library. Use
-ShortcliprStyles.palette("{style_id}"), ShortcliprStyles.paperBackground(g, "{style_id}", env),
-ShortcliprStyles.paperShadow(g, x, y, blur, color), ShortcliprStyles.halftone(g, x, y, w, h, spacing, color),
-ShortcliprStyles.camera(g, env, {{cx, cy, zoom, rotation}}) inside g.save()/g.restore(), and
-ShortcliprStyles.pixelSnap(value, pixelSize) where appropriate.
-For cinematic-editorial use ShortcliprStyles.editorialShape(g, points, opts) for layered
-graphic silhouettes and editorialLight(g,x,y,r,color) for restrained focal light.
-For isometric-technical use isoProject(x,y,z,scale,origin), isoBox(g,x,y,z,w,d,h,scale,colors),
-and isoLine(g,a,b,color,width); keep all components on the same projected axes.
-For layered-paper use paperPolygon(g,points,opts), paperEllipse(g,x,y,rx,ry,opts),
-paperLayer(g,draw,opts), and paperParallax(g,offset,layers); separate depth planes and
-keep light direction/shadow offsets consistent. These are deterministic Canvas 2D helpers.
-Use restrained texture details rather than full-canvas particle loops. Create reusable helpers for every recurring
-character, prop and environment in the visual bible. Character functions must preserve
-silhouette, proportions, face, clothing, colours and distinctive marks across all shots.
-Prefer short named functions such as drawExplorer(g,x,y,s,pose,expression). Implement only helpers needed by this visual bible. Avoid duplicate helpers, verbose comments and decorative details that do not support the scenes. Keep code deterministic and compact.
-Do not use external assets. Do not redefine ShortcliprStyles.
-Visual bible:
-{json.dumps(visual_bible, ensure_ascii=False)}
-""".strip()
+        # === LEGACY SHARED DRAWING LIBRARY PROMPT (rollback reference; inactive) ===
+# shared_# === LEGACY VISUAL SHOT REPAIR PROMPT (rollback reference; inactive) ===
+# prompt = f"""
+ROLE
+You are ShortClipr's senior 2D animation repair artist and visual continuity supervisor.
+Repair only shot {shot_index}; this is a targeted correction, not a redesign of the film.
+
+OUTPUT
+Return only the complete replacement JavaScript draw body. No JSON wrapper, Markdown,
+explanation, diff, imports, exports or code fences.
+
+IMMUTABLE CONTEXT
+The replacement is inserted into drawShot_{shot_index}(g,t,env,absoluteTime).
+The compiler preserves the validated mechanismActions and mechanisms constants.
+Do not change other shots, timing, transitions, the shared library, the art direction,
+the selected visual style, character identity or declared mechanism data.
+
+VISUAL QA FINDINGS
+{json.dumps(safe_findings, ensure_ascii=False)}
+
+ORIGINAL STORYBOARD DIRECTION
+{json.dumps(scene, ensure_ascii=False)}
+
+VISUAL BIBLE REFERENCES
+{json.dumps(shot_visual_context, ensure_ascii=False)}
+
+BINDING ART DIRECTION
+{repair_bundle.get("art_direction_instructions", "")}
+
+AVAILABLE SHARED HELPERS
+{json.dumps(shared_helper_names)}
+
+ORIGINAL SHOT BODY
+{original_body}
+
+REPAIR METHOD
+1. Identify the specific visible defect in each finding and the evidence samples that
+   support it. Do not fix issues that the contact sheet cannot establish.
+2. Make the smallest set of changes that resolves the high-confidence findings.
+3. Preserve successful composition, character design, environment, focal objective,
+   visual change, mechanism geometry and existing working animation.
+4. Improve clarity through scale, placement, silhouette, depth, contrast or timing,
+   not by adding unrelated decoration or text.
+5. If findings conflict, prioritize severe, high-confidence defects and preserve the
+   original storyboard intent.
+6. Use only available shared helpers or fully defined local functions. Never call an
+   undefined helper or invent a new external asset.
+7. Keep deterministic Canvas 2D only. Save/restore context state and keep all drawing
+   within the original logical canvas.
+8. Do not claim to fix motion or physical correctness based only on still-frame QA.
+9. Return the entire replacement body, not a patch.""".strip()))
         shared_js = await self._validated_fragment(
             "You are a senior Canvas 2D JavaScript systems programmer. Return only executable JavaScript source.",
             shared_prompt + "\n\nReturn only the complete JavaScript library source.",
@@ -242,46 +264,118 @@ Visual bible:
             start_s = scene["start_frame"] / 30
             end_s = scene["end_frame"] / 30
             shot_visual_context = self._shot_visual_context(visual_bible, scene)
-            shot_prompt = f"""
-You are ShortClipr's 2D animation shot director and Canvas artist.
-Generate only the drawing body for one shot. Return raw JavaScript statements, with no JSON wrapper or Markdown.
-The body is inserted inside:
-function drawShot_{scene["index"]}(g, t, env, absoluteTime) {{ ... }}
-Here t is local shot time starting at zero; absoluteTime is film time in seconds.
-The compiler injects validated local constants `mechanismActions` and `mechanisms` before the drawing body.
-Use these runtime arrays directly; never invent or reconstruct mechanism data.
-VERIFIED SHARED DRAW HELPERS (exact names): {json.dumps(shared_helper_names)}
-You may call only these shared helpers. If this shot needs another reusable drawing
-function, define that function inside this draw_body before calling it. Never invent
-a helper call and assume its implementation exists. Every custom drawX() call must
-either be in the verified shared list above or have its complete function definition
-inside this draw_body. Reuse shared functions for recurring characters and props;
-do not redraw their defining features.
-Use CanvasRenderingContext2D methods on g, local variables, standard Math, verified shared drawing functions, and the explicitly documented ShortcliprStyles and Ease runtime APIs. Do not call any other globals. Redraw the full shot deterministically from t. No state
-accumulation, random numbers, DOM/browser globals, imports, exports, network, file access,
-Node APIs, timers, eval, Function, Date, performance, WebGL, Three.js or 3D.
-Keep all drawing within the logical canvas {logical[0]}x{logical[1]}.
-Honor the storyboard visual_objective, composition, shot_scale, camera_position, ordered depth_layers, focal_entity, visual_change and continuity_note. Build a readable foreground/midground/background rather than a flat repeated grid. Make the focal subject materially and spatially specific; use scale references and environment geometry. Iterate with `for (const action of mechanismActions)`. For each action, find `const mechanism = mechanisms.find(item => item.id === action.mechanism_id)`. The backend has already validated that the mechanism and action pattern exist. If the mechanism is missing defensively skip it; if it has no kinematics, depict the named action qualitatively without claiming deterministic engineering motion. Only calculate normalized local progress when a kinematics array exists; use this shot's local duration ({end_s-start_s:.3f} seconds):
-const rawProgress = Ease.clamp(Ease.seg(t, 0, {end_s-start_s:.3f}));
-const easing = action.easing ?? "in_out";
-const easedProgress = easing === "linear" ? rawProgress : easing === "ease_in" ? rawProgress * rawProgress * rawProgress : easing === "ease_out" ? 1 - Math.pow(1 - rawProgress, 3) : Ease.inOut(rawProgress);
-const actionProgress = (action.start_progress ?? 0) + ((action.end_progress ?? 1) - (action.start_progress ?? 0)) * easedProgress;
-Iterate with `for (const spec of mechanism.kinematics)`. For each spec, run `const pose = ShortcliprStyles.mechanismPose(spec, actionProgress)` and apply that pose to the component identified by `pose.part`. For pivot results, rotate pose.part around pose.anchor by pose.angle_rad. For translation/slider results, place pose.part origin at pose.position. For gear results, rotate pose.driver_part around pose.driver_anchor by pose.driver_angle_rad and pose.part around pose.anchor by pose.angle_rad; preserve the declared pitch-radius ratio and external/internal mesh direction. For pulley results, rotate pose.pulley_part around pose.anchor by pose.pulley_angle_rad and place pose.part at the returned absolute pose.position. For cable results, draw pose.part as a continuous polyline through pose.points in order. For actuator results, draw the cylinder and rod along pose.base-to-pose.tip using pose.length and pose.angle_rad. Apply the same actionProgress to all kinematic parts in this action. Do not invent geometry or constraints. When kinematics is absent, use qualitative motion only and do not present it as engineering-solved.
-Establish one primary readable visual action with clear anticipation, movement and a resolved end state. If multiple mechanism actions are supplied, render each coherently but keep the storyboard focal action dominant. Use only composition layers needed for this shot. Keep code concise: keep code efficient, but do not omit required subjects, spatial layers, or visible motion to meet an arbitrary token target; no comments, repeated character drawings or unnecessary decorative loops. Reuse shared helpers for all recurring entities. Do not render narration or subtitles.
-STYLE: {style_id}
+            # === LEGACY SHOT GENERATION PROMPT (rollback reference; inactive) ===
+# shot_prompt = f"""
+ROLE
+You are ShortClipr's 2D film director, layout artist and senior Canvas animator.
+Create the finished drawing program for this one shot in an already designed film.
+The storyboard and visual bible are authoritative. Make the frame visually specific,
+readable and cinematic within the selected illustration style.
+
+OUTPUT
+Return only complete raw JavaScript statements for the body of drawShot_{scene["index"]}.
+No JSON wrapper, Markdown, prose, imports, exports or code fences. The body is inserted
+inside function drawShot_{scene["index"]}(g, t, env, absoluteTime).
+
+RUNTIME CONTRACT
+- t is local shot time beginning at zero; absoluteTime is film time in seconds.
+- The compiler injects validated mechanismActions and mechanisms constants.
+- Use only CanvasRenderingContext2D methods on g, local variables, standard Math,
+  verified shared draw helpers, and the documented ShortcliprStyles and Ease APIs.
+- Redraw the complete frame deterministically from t. No accumulated state, random
+  numbers, external assets, browser/Node globals, DOM, network, filesystem, timers,
+  eval, Function, Date, performance, WebGL, Three.js or 3D.
+- Keep every mark inside the logical canvas {logical[0]}x{logical[1]}.
+- Use g.save()/g.restore() around every local transform and restore all changed context
+  state. Do not let alpha, clipping, transforms, line width or compositing leak.
+- Do not render narration, subtitles or paragraphs. Text is allowed only when it is
+  a purposeful, short visual label that materially helps explain the subject.
+
+SHOT DIRECTING
+- First understand the single visual objective and focal entity. The viewer should
+  understand the idea from the picture even with narration muted.
+- Stage a clear initial state, one dominant readable action, and a resolved final state.
+  The action must visibly progress over this shot's duration; do not create a static
+  illustration with decorative movement.
+- Make the focal entity large enough to read. Establish scale with surrounding objects,
+  architecture, people or environmental references where useful.
+- Follow the specified composition and camera position. Use real spatial placement,
+  overlap, foreground framing, negative space and value contrast; do not merely draw
+  three horizontal bands to satisfy depth-layer instructions.
+- Use only the depth layers that help the story, but make each selected layer contain
+  identifiable scene content. Place layers in the requested back-to-front order.
+- Use perspective consistently with the selected style. Isometric subjects must share
+  one projection system; do not mix flat front views with isometric components.
+- Respect the art direction's materials, silhouette language, lighting and palette.
+  The style must affect the actual shapes and rendering, not just background color.
+- Avoid generic grids, repeated circles, floating icons, unexplained particles,
+  excessive labels and decorative geometry that does not explain the subject.
+- Do not reuse a previous shot's composition unless continuity explicitly requires it.
+  This shot should add a new visual fact, reveal, scale, viewpoint or state.
+
+SHARED DRAWING HELPERS
+Verified shared helpers (exact names): {json.dumps(shared_helper_names)}
+Call only these shared helpers. A custom drawX function must be completely declared
+inside this body before use. Never invent a helper or assume it exists. Reuse shared
+helpers for recurring characters and props; do not redraw identity-defining details.
+If a recurring entity is visible, use its shared helper rather than approximating it
+with a generic silhouette.
+
+MECHANISM RENDERING
+The validated arrays are authoritative: mechanismActions and mechanisms. Do not
+invent components, dimensions, joints, forces, physical laws or kinematics.
+For each action, find its declared mechanism by action.mechanism_id. If absent, skip it.
+If mechanism.kinematics is absent, depict only the qualitative action described by the
+declared pattern; never present it as a solved physical simulation.
+When kinematics exists, compute one normalized progress value for the action using
+this shot's local duration ({end_s-start_s:.3f}) and the supplied start_progress,
+end_progress and easing. Use that exact progress for every connected component.
+For each spec call ShortcliprStyles.mechanismPose(spec, actionProgress) exactly once.
+Use the returned pose values; never calculate a separate transform for a follower.
+- pivot: rotate the declared part around pose.anchor by pose.angle_rad.
+- translation/slider: translate the part from its declared local origin to pose.position.
+- gear: rotate driver_part around driver_anchor and the driven part around anchor using
+  the returned angles; preserve the supplied mesh direction and pitch-radius ratio.
+- pulley: rotate pulley_part around its anchor and position the attached part at the
+  returned absolute pose.position.
+- cable: draw one continuous path through pose.points in their supplied order.
+- actuator: draw the cylinder and rod on the returned base-to-tip axis using pose.length
+  and pose.angle_rad.
+Give each declared component a recognizable shape based on its referenced prop design.
+Keep connected parts aligned at their joints. Draw each part once per frame; do not
+draw an independent duplicate for every kinematics specification.
+
+VISUAL DETAIL AND MOTION
+- Use a clear silhouette and strong value separation before adding surface detail.
+- Include meaningful contact, overlap, attachment and occlusion so objects feel related.
+- Motion should have anticipation, a readable main movement and restrained follow-through.
+  Use smooth deterministic easing; no jitter or random oscillation.
+- Keep motion amplitude appropriate to the shot and respect the supplied time window.
+- Use camera movement only when requested or clearly motivated. Do not move the whole
+  world and the subject independently in contradictory directions.
+- Prefer fewer well-designed objects over many low-detail shapes.
+
+STYLE
+{style_id}
+
 BINDING ART DIRECTION:
 {art_direction_instructions}
+
 STYLE TOOLKIT REQUIREMENTS:
-- cinematic-editorial: construct foreground/midground/background layers, bold silhouette masses and one clear focal-light treatment.
-- isometric-technical: use the shared isoProject/isoBox projection helpers consistently for all related components; show component separation and mechanical relationships.
-- layered-paper: use separate paperPolygon/paperEllipse/paperLayer shapes with visible overlap and consistent cast shadows; add parallax only when it clarifies depth.
+- cinematic-editorial: layered depth, bold silhouette masses and one controlled focal light.
+- isometric-technical: consistent iso projection, separated components and legible joints.
+- layered-paper: overlapping paper shapes, consistent cast shadows and restrained parallax.
+
 SHOT VISUAL REFERENCES:
 {json.dumps(shot_visual_context, ensure_ascii=False, separators=(",", ":"))}
-DETERMINISTIC KINEMATICS: numeric specs are authoritative. Evaluate the same normalized progress for every connected part and reuse the returned transform; do not independently animate connected components.
-SHOT:
+
+STORYBOARD SHOT:
 {json.dumps(scene, ensure_ascii=False)}
-SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s.\nAvoid repeating the previous shot composition unless the storyboard explicitly calls for a sustained view.
-""".strip()
+
+VERIFIED SHARED HELPERS:
+{json.dumps(shared_helper_names)}
+
+Return the complete draw body for this shot.""".strip())
             async with semaphore:
                 body = await self._validated_fragment(
                     "You are a senior Canvas 2D animation programmer. Return only executable JavaScript source.",
@@ -312,30 +406,49 @@ SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s
             )
             if not missing_helpers:
                 break
-            helper_prompt = f"""
-You are ShortClipr's reusable Canvas 2D drawing-function engineer.
-Implement every missing helper listed below as ordinary named JavaScript function
-declarations. Return raw JavaScript function declarations only. Do not wrap them in JSON or Markdown.
-MISSING HELPERS: {json.dumps(missing_helpers)}
-STYLE: {style_id}
-BINDING ART DIRECTION: {art_direction_instructions}
-VISUAL BIBLE: {json.dumps(visual_bible, ensure_ascii=False)}
-SHOT CONTEXT: {json.dumps([
+            # === LEGACY ON-DEMAND DRAWING HELPERS PROMPT (rollback reference; inactive) ===
+# helper_prompt = f"""
+ROLE
+You are ShortClipr's reusable Canvas 2D drawing-function engineer. Other generated
+shots called these names but the shared library does not yet define them. Implement
+the missing functions as real visual assets, consistent with the existing film.
+
+OUTPUT
+Return only ordinary named JavaScript function declarations. No JSON, Markdown,
+prose, imports, exports or code fences. Every requested function name must appear
+exactly once and accept g as its first argument.
+
+MISSING HELPERS:
+{json.dumps(missing_helpers)}
+
+BINDING ART DIRECTION:
+{art_direction_instructions}
+
+VISUAL BIBLE:
+{json.dumps(visual_bible, ensure_ascii=False)}
+
+SHOT CONTEXT:
+{json.dumps([
     {"index": shot["index"], "name": shot["name"], "body": shot["draw_body"]}
     for shot in compiled
-    if any(name in shot["draw_body"] for name in missing_helpers)
 ], ensure_ascii=False)}
-EXISTING SHARED HELPERS: {json.dumps(shared_helper_names)}
-Rules:
-- Define every requested helper with exactly its requested name.
-- Use Canvas 2D only; function signature must start with (g, ...).
-- Do not call any helper unless it is listed as existing or defined in this same fragment.
-- Do not redefine existing helpers.
-- No browser globals, DOM, imports, exports, network, filesystem, Node APIs, timers,
+
+RULES
+- Match the visual language, proportions, materials, palette and lighting of existing
+  shared helpers and the supplied visual bible. Do not invent a different style.
+- Infer the intended subject from the named call sites and visual bible. If intent is
+  ambiguous, implement a restrained but recognizable form rather than a generic icon.
+- Use a stable local origin and scale convention consistent with related helpers.
+- Define each requested helper completely; do not leave TODOs, placeholders or calls
+  to undefined drawX functions.
+- Use only Canvas 2D, standard Math and explicitly documented ShortcliprStyles APIs.
+  No DOM/browser globals, imports, exports, network, filesystem, Node APIs, timers,
   eval, Function, Date, performance, random numbers, WebGL or 3D.
-- Keep implementations deterministic, self-contained and visually consistent with
-  the selected style. Return only complete JavaScript source. No prose, Markdown, or code fences.
-""".strip()
+- Keep drawing deterministic and self-contained. Save and restore context state.
+- Do not redefine existing helpers or create duplicate helper names.
+- Favor readable silhouettes and purposeful details over complexity for its own sake.
+
+Implement every missing helper now.""".strip())
             generated_helpers = await self._code_completion(
                 "You are a senior Canvas 2D JavaScript systems programmer. Return only executable JavaScript source.",
                 helper_prompt,
