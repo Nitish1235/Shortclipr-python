@@ -6,6 +6,7 @@ from app.services.animation_contracts import (
     find_unresolved_film_draw_helpers,
     validate_draw_helper_definitions,
     validate_draw_helper_specs,
+    validate_draw_helper_dependencies,
     validate_draw_helper_dependency_graph,
     extract_shared_draw_helpers,
     replace_shared_draw_helpers,
@@ -616,6 +617,49 @@ class SharedHelperReplacementTests(unittest.TestCase):
         duplicate = "function drawBridge(g) {} function drawBridge(g) {}"
         with self.assertRaisesRegex(ValueError, "found 2"):
             extract_shared_draw_helpers(duplicate, ["drawBridge"])
+
+
+class DrawingHelperImplementationDependencyTests(unittest.TestCase):
+    def test_declared_dependencies_must_match_calls_in_shared_implementations(self):
+        source = """
+        function drawPropGear(g) { g.fillRect(0, 0, 8, 8); }
+        function drawCharacterEngineer(g) {
+            drawPropGear(g);
+            g.fillRect(10, 10, 20, 30);
+        }
+        """
+        specs = [
+            {"name": "drawPropGear", "dependencies": []},
+            {"name": "drawCharacterEngineer", "dependencies": ["drawPropGear"]},
+        ]
+        validate_draw_helper_dependencies(source, specs)
+
+    def test_missing_dependency_declaration_is_rejected_before_shot_generation(self):
+        source = """
+        function drawPropGear(g) { g.fillRect(0, 0, 8, 8); }
+        function drawCharacterEngineer(g) {
+            drawPropGear(g);
+            g.fillRect(10, 10, 20, 30);
+        }
+        """
+        specs = [
+            {"name": "drawPropGear", "dependencies": []},
+            {"name": "drawCharacterEngineer", "dependencies": []},
+        ]
+        with self.assertRaisesRegex(ValueError, "dependency manifest does not match"):
+            validate_draw_helper_dependencies(source, specs)
+
+    def test_declared_but_unused_dependency_is_rejected(self):
+        source = """
+        function drawPropGear(g) { g.fillRect(0, 0, 8, 8); }
+        function drawCharacterEngineer(g) { g.fillRect(10, 10, 20, 30); }
+        """
+        specs = [
+            {"name": "drawPropGear", "dependencies": []},
+            {"name": "drawCharacterEngineer", "dependencies": ["drawPropGear"]},
+        ]
+        with self.assertRaisesRegex(ValueError, "dependency manifest does not match"):
+            validate_draw_helper_dependencies(source, specs)
 
 
 class DrawingHelperDependencyGraphTests(unittest.TestCase):
