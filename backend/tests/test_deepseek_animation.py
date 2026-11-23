@@ -169,6 +169,15 @@ class DrawingHelperContractTests(unittest.TestCase):
         """
         self.assertEqual(find_unresolved_draw_helpers(shared, []), [])
 
+    def test_nested_shared_helper_is_not_a_global_definition(self):
+        shared = """
+        function drawWrapper(g) {
+            function drawNestedPart(g) { g.fillRect(0, 0, 10, 10); }
+            drawNestedPart(g);
+        }
+        """
+        self.assertEqual(find_unresolved_draw_helpers(shared, []), ["drawNestedPart"])
+
     def test_requires_generator_to_define_each_requested_helper(self):
         validate_draw_helper_definitions(
             "function drawPaperQuestionMark(g, x, y) { g.beginPath(); g.arc(x, y, 4, 0, Math.PI * 2); g.fill(); }",
