@@ -1,6 +1,7 @@
 """DeepSeek story, narration, visual-bible and timed-shot planner."""
 from __future__ import annotations
 import json
+import logging
 from typing import Any
 from openai import AsyncOpenAI
 from ..core.config import Settings
@@ -8,6 +9,8 @@ from .animation_contracts import STYLE_IDS, validate_scene_plan, validate_visual
 from .generation_policy import planning_effort
 from .style_registry import apply_visual_direction, resolve_visual_style
 from .art_direction import build_art_direction
+
+logger = logging.getLogger(__name__)
 
 
 class DeepSeekStoryPlanner:
@@ -324,6 +327,7 @@ action to read. Return JSON only, without Markdown or explanations.
         # generation. Give the planner the exact validation error and one bounded
         # rejected response so it can correct IDs, scene timing and Visual Bible data.
         for attempt in range(1, 4):
+            raw = ""
             try:
                 response = await self.client.chat.completions.create(
                     model=self.model,
@@ -349,8 +353,7 @@ action to read. Return JSON only, without Markdown or explanations.
                     ),
                 }
                 finish_reason = getattr(choice, "finish_reason", None)
-                import logging
-                logging.getLogger(__name__).info(
+                logger.info(
                     "deepseek.story.response",
                     extra={
                         "model": self.model,
@@ -386,7 +389,7 @@ action to read. Return JSON only, without Markdown or explanations.
                     candidate, total_frames, minimum_scenes, requested_style,
                 )
                 if attempt > 1:
-                    logging.getLogger(__name__).info(
+                    logger.info(
                         "deepseek.story.plan_repaired",
                         extra={"attempt": attempt, "title": normalized.get("title", "")[:60]},
                     )
@@ -395,7 +398,6 @@ action to read. Return JSON only, without Markdown or explanations.
                 if isinstance(error, RuntimeError) and "DEEPSEEK_API_KEY is not configured" in str(error):
                     raise
                 last_error = error
-                logger = __import__("logging").getLogger(__name__)
                 logger.warning("deepseek.story.plan_rejected", extra={
                     "attempt": attempt,
                     "max_attempts": 3,
@@ -403,7 +405,7 @@ action to read. Return JSON only, without Markdown or explanations.
                 })
                 if attempt == 3:
                     break
-                rejected_response = raw if "raw" in locals() and isinstance(raw, str) else ""
+                rejected_response = raw
                 attempt_prompt = (
                     prompt
                     + "\n\nSTORY PLAN VALIDATION REPAIR REQUIRED\n"
