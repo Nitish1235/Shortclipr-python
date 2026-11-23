@@ -765,8 +765,6 @@ async def run_render(
 
         program = decode_json_object(scenes[0]["program"])
         scene_js = program.get("scene_js")
-        if not isinstance(scene_js, str) or not scene_js:
-            raise NonRetryableRenderError("Persisted Drawn-by-Code animation program is missing scene_js")
 
         # Revalidate the exact JSONB artifact read by the render worker. This
         # closes the API -> scene_plans -> FFmpeg handoff instead of trusting
@@ -861,6 +859,11 @@ async def run_render(
                 "shot_count": program.get("shot_count"),
                 "scene_js_sha256": hashlib.sha256(scene_js.encode("utf-8")).hexdigest(),
             })
+
+        if not isinstance(scene_js, str) or not scene_js:
+            raise NonRetryableRenderError(
+                "Persisted Drawn-by-Code animation program is missing scene_js after regeneration"
+            )
 
         logger.info(
             "render.animation_program_validated",
