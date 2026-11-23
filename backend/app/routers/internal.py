@@ -381,7 +381,14 @@ async def run_planning(
                             },
                         )
                     else:
-                        logger.info("planning.artifact_reused", extra={"artifact":"animation_program"})
+                        logger.info(
+                            "planning.artifact_reused",
+                            extra={
+                                "artifact": "animation_program",
+                                "scene_js_sha256": hashlib.sha256(cached["scene_js"].encode("utf-8")).hexdigest(),
+                                "repair_bundle_schema_version": cached["repair_bundle"].get("schema_version"),
+                            },
+                        )
                         return cached
                 async with timed(logger, "planning.deepseek_animation") as stage:
                     result = await compiler.compile(dict(project), plan)
@@ -392,7 +399,15 @@ async def run_planning(
                     pool, project_id, attempt_id, lease_token,
                     animation_program=json.dumps(result),
                 )
-                logger.info("planning.artifact_saved", extra={"artifact":"animation_program"})
+                logger.info(
+                    "planning.artifact_saved",
+                    extra={
+                        "artifact": "animation_program",
+                        "scene_js_sha256": hashlib.sha256(result["scene_js"].encode("utf-8")).hexdigest(),
+                        "repair_bundle_schema_version": result["repair_bundle"].get("schema_version"),
+                        "shot_count": result.get("shot_count"),
+                    },
+                )
                 return result
 
             async def synthesize_narration():
