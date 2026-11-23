@@ -499,7 +499,7 @@ def find_unresolved_draw_helpers(shared_source: str, shot_sources: list[str]) ->
         if name
     }
     unresolved: set[str] = set()
-    for source in shot_sources:
+    for source in [shared_source, *shot_sources]:
         masked = _mask_js_comments_and_strings(source)
         for name in _DRAW_HELPER_CALL.findall(masked):
             if name not in shared:
