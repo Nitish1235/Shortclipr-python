@@ -563,6 +563,8 @@ def validate_draw_helper_definitions(
             raise ValueError(f"Generated helper {name} has an empty or incomplete implementation")
         if re.search(r"\b(?:TODO|FIXME|placeholder|not\s+implemented)\b", body, re.IGNORECASE):
             raise ValueError(f"Generated helper {name} contains placeholder implementation code")
+        if re.search(rf"(?<![\w$.]){re.escape(name)}\s*\(", body):
+            raise ValueError(f"Generated helper {name} must not recursively call itself")
         drawing_work = re.search(
             r"\bg\.(?:beginPath|closePath|moveTo|lineTo|bezierCurveTo|quadraticCurveTo|"
             r"arc|ellipse|rect|roundRect|fillRect|strokeRect|clearRect|fill|stroke|"
