@@ -530,6 +530,74 @@ def validate_draw_helper_definitions(source: str, required_names: list[str]) -> 
         if not signature:
             raise ValueError(f"Generated helper {name} must accept the Canvas context as its first argument")
 
+
+_DRAW_HELPER_CATEGORIES = {"visual", "animation", "effect"}
+
+
+def validate_draw_helper_specs(value: Any, required_names: list[str]) -> list[dict[str, Any]]:
+    """Validate DeepSeek's visual implementation contracts against exact call-site names."""
+    if not isinstance(value, dict) or not isinstance(value.get("functions"), list):
+        raise ValueError("Drawing helper specification response must contain a functions array")
+    if not 1 <= len(required_names) <= 32:
+        raise ValueError("Drawing helper specification request must contain 1–32 names")
+
+    required = set(required_names)
+    normalized: dict[str, dict[str, Any]] = {}
+    for item in value["functions"]:
+        if not isinstance(item, dict):
+            raise ValueError("Drawing helper specifications must be objects")
+        name = item.get("name")
+        if not isinstance(name, str) or name not in required:
+            raise ValueError("Drawing helper specification contains an unexpected function name")
+        if name in normalized:
+            raise ValueError(f"Duplicate drawing helper specification: {name}")
+
+        category = item.get("category")
+        if category not in _DRAW_HELPER_CATEGORIES:
+            raise ValueError(f"Drawing helper {name} has an unsupported category")
+
+        signature = item.get("signature")
+        if (not isinstance(signature, str)
+                or not re.fullmatch(
+                    rf"function\s+{re.escape(name)}\s*\(\s*g(?:\s*,[^)]*)?\)",
+                    signature.strip(),
+                )):
+            raise ValueError(f"Drawing helper {name} must specify a named function signature with g first")
+
+        text_fields = (
+            "purpose", "coordinate_system", "origin", "visual_target",
+            "style_requirements", "animation_behavior",
+        )
+        normalized_item: dict[str, Any] = {"name": name, "category": category, "signature": signature.strip()}
+        for field in text_fields:
+            field_value = item.get(field)
+            if not isinstance(field_value, str) or not field_value.strip():
+                raise ValueError(f"Drawing helper {name} requires {field}")
+            if len(field_value) > 1200:
+                raise ValueError(f"Drawing helper {name} {field} exceeds the length limit")
+            normalized_item[field] = field_value.strip()
+
+        dependencies = item.get("dependencies", [])
+        if (not isinstance(dependencies, list) or len(dependencies) > 16
+                or not all(
+                    isinstance(dep, str) and re.fullmatch(r"draw[A-Z][A-Za-z0-9_]*", dep)
+                    and dep != name for dep in dependencies
+                )):
+            raise ValueError(f"Drawing helper {name} has invalid dependencies")
+        normalized_item["dependencies"] = sorted(set(dependencies))
+
+        criteria = item.get("acceptance_criteria")
+        if (not isinstance(criteria, list) or not 2 <= len(criteria) <= 8
+                or not all(isinstance(entry, str) and entry.strip() and len(entry) <= 300 for entry in criteria)):
+            raise ValueError(f"Drawing helper {name} requires 2–8 concrete acceptance criteria")
+        normalized_item["acceptance_criteria"] = [entry.strip() for entry in criteria]
+        normalized[name] = normalized_item
+
+    missing = sorted(required - set(normalized))
+    if missing:
+        raise ValueError("Missing drawing helper specifications: " + ", ".join(missing))
+    return [normalized[name] for name in required_names]
+
 def validate_generated_fragment(source: Any, label: str, max_chars: int) -> str:
     if not isinstance(source, str) or not 20 <= len(source) <= max_chars:
         raise ValueError(f"{label} source length is outside allowed bounds")
