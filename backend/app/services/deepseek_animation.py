@@ -258,8 +258,9 @@ IMPLEMENTATION CONTRACT
   the visual bible defines them; do not collapse a mechanism into one icon.
 - Environments must supply reusable elements for foreground, midground and background
   staging. Do not create one monolithic backdrop that prevents camera changes.
-- Use the documented Canvas 2D and ShortcliprStyles toolkit only. Never assume an
-  undocumented helper exists. Do not redefine ShortcliprStyles.
+- Use the documented Canvas 2D, ShortcliprStyles and Ease toolkit only. For numeric
+  interpolation call Ease.lerp(a, b, progress); never call bare mix(). No undocumented
+  globals or helpers may be assumed. Do not redefine ShortcliprStyles.
 - Save/restore context state around transforms, clipping and compositing. Helpers must
   be deterministic and side-effect free.
 - No browser or Node globals, DOM, network, filesystem, timers, imports, exports, eval,
@@ -353,6 +354,9 @@ RUNTIME CONTRACT
 - The compiler injects validated mechanismActions and mechanisms constants.
 - Use CanvasRenderingContext2D methods on g, local variables, standard Math, verified
   shared draw helpers, and documented ShortcliprStyles and Ease APIs only.
+- For numeric interpolation, use Ease.lerp(a, b, progress). Never call bare mix();
+  it is not part of the Drawn-by-Code runtime API. Do not assume any undocumented
+  global helper exists.
 - Redraw the entire frame deterministically from t. No accumulated state or randomness.
 - Use g.save()/g.restore() around transforms and restore all context state you change.
 - Keep all marks within the logical canvas {logical[0]}x{logical[1]}.
@@ -526,6 +530,7 @@ SHOT CONTEXT:
 ], ensure_ascii=False)}
 
 RULES
+- Use Ease.lerp(a, b, progress) for numeric interpolation; never call bare mix().
 - Infer each helper's intended subject from its call sites and visual bible.
 - Match existing shared helper proportions, palette, materials, lighting and local
   coordinate conventions. Do not introduce a different illustration style.
@@ -758,6 +763,11 @@ AVAILABLE SHARED HELPERS:
 ORIGINAL SHOT BODY:
 {original_body}
 
+RUNTIME CONTRACT
+- Use only documented Canvas 2D, ShortcliprStyles and Ease APIs plus the listed shared
+  helpers. For numeric interpolation use Ease.lerp(a, b, progress); never call bare mix().
+- Do not assume any undocumented global helper exists.
+
 REPAIR METHOD
 1. Identify the visible defect described by each finding and use cited sample indices
    as evidence. Do not infer motion or hidden facts from still frames.
@@ -848,7 +858,8 @@ REPAIR METHOD
         function_source = "\n".join(functions)
         return (
             "// ShortClipr shot-based Drawn-by-Code film. Generated code is untrusted input.\n"
-            f"// Visual style: {style_id}\n{shared_js}\n{function_source}\n"
+            f"// Visual style: {style_id}\n"
+            f"{shared_js}\n{function_source}\n"
             "Motion.scene({\n  uses: ['styles/shortclipr.js'],\n  fps: 30,\n"
             f"  duration: {duration},\n  logical: {json.dumps(logical)},\n"
             f"  shots: [{','.join(ranges)}],\n"
@@ -869,4 +880,11 @@ REPAIR METHOD
         compact = re.sub(r"\s+", "", source)
         if f"logical:{json.dumps(logical, separators=(',', ':'))}" not in compact:
             raise ValueError("Animation canvas does not match project aspect ratio")
+        # Catch the known unsupported helper before Chromium starts rendering. This
+        # intentionally targets bare calls only; object properties such as obj.mix()
+        # are not part of this global-helper check.
+        if re.search(r"(?<![\w$.])mix\s*\(", source):
+            raise ValueError(
+                "Generated animation calls unsupported bare mix(); use Ease.lerp(a, b, progress)"
+            )
         validate_generated_fragment(source, "Assembled animation", MAX_FILM_SOURCE)
