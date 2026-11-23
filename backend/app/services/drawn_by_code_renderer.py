@@ -13,6 +13,8 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from .animation_contracts import find_unresolved_film_draw_helpers
+
 logger = logging.getLogger("shortclipr.drawn_by_code")
 
 
@@ -151,6 +153,13 @@ class DrawnByCodeRenderer:
         aspect = plan.get("aspectRatio")
         if not isinstance(source, str) or not source:
             raise NonRetryableRenderError("Missing DeepSeek-generated scene_js program")
+
+        unresolved_helpers = find_unresolved_film_draw_helpers(source)
+        if unresolved_helpers:
+            raise NonRetryableRenderError(
+                "Generated animation references drawing helpers that are not defined "
+                "in the shared runtime scope: " + ", ".join(unresolved_helpers)
+            )
         if aspect not in self.widths:
             raise NonRetryableRenderError(f"Unsupported aspect ratio: {aspect}")
 
