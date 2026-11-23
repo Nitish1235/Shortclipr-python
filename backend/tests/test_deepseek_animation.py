@@ -1,6 +1,10 @@
 import unittest
 
-from app.services.deepseek_animation import DeepSeekAnimationCompiler
+from app.services.deepseek_animation import (
+    COMPILER_VERSION,
+    RUNTIME_CONTRACT_VERSION,
+    DeepSeekAnimationCompiler,
+)
 from app.services.animation_contracts import (
     find_unresolved_draw_helpers,
     find_unresolved_film_draw_helpers,
@@ -975,6 +979,8 @@ class SharedHelperScopeRegressionTests(unittest.TestCase):
             valid_bundle["shared_js"], valid_bundle["shots"], 1, [1600, 900], "line",
         )
         DeepSeekAnimationCompiler.validate_compiled_program({
+            "compiler_version": COMPILER_VERSION,
+            "runtime_contract_version": RUNTIME_CONTRACT_VERSION,
             "scene_js": source,
             "repair_bundle": valid_bundle,
         })
@@ -982,8 +988,19 @@ class SharedHelperScopeRegressionTests(unittest.TestCase):
         invalid_source = source.replace("drawBridge(g);", "drawMissingWheel(g);")
         with self.assertRaisesRegex(ValueError, "drawMissingWheel"):
             DeepSeekAnimationCompiler.validate_compiled_program({
+                "compiler_version": COMPILER_VERSION,
+                "runtime_contract_version": RUNTIME_CONTRACT_VERSION,
                 "scene_js": invalid_source,
                 "repair_bundle": valid_bundle,
+            })
+
+    def test_compiled_program_rejects_artifacts_from_previous_contract_version(self):
+        with self.assertRaisesRegex(ValueError, "obsolete compiler version"):
+            DeepSeekAnimationCompiler.validate_compiled_program({
+                "compiler_version": "function-first-v1",
+                "runtime_contract_version": 1,
+                "scene_js": "function drawShot_0(g,t,e,a) { g.fillRect(0,0,1,1); }",
+                "repair_bundle": {},
             })
 
     def test_compiled_program_rejects_scene_and_repair_bundle_drift(self):
@@ -1024,6 +1041,8 @@ class SharedHelperScopeRegressionTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "does not match"):
             DeepSeekAnimationCompiler.validate_compiled_program({
+                "compiler_version": COMPILER_VERSION,
+                "runtime_contract_version": RUNTIME_CONTRACT_VERSION,
                 "scene_js": different_source,
                 "repair_bundle": bundle,
             })
