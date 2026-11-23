@@ -54,6 +54,17 @@ try {
     const globalScope = scopeManager.scopes.find((scope) => scope.type === 'global');
     if (!globalScope) fail('JavaScript global scope could not be constructed');
 
+    // Build the set of actual top-level drawing function declarations. Do not
+    // rely only on eslint-scope's unresolved-reference list: generated drawing
+    // calls have a stricter contract than arbitrary browser globals.
+    const topLevelDrawingFunctions = new Set();
+    for (const [name, variable] of globalScope.set.entries()) {
+        if (!/^draw[A-Z][A-Za-z0-9_]*$/.test(name) || name.startsWith('drawShot_')) continue;
+        const definitions = variable.defs.filter((definition) =>
+            definition.type === 'FunctionName' && definition.node?.type === 'FunctionDeclaration');
+        if (definitions.length === 1) topLevelDrawingFunctions.add(name);
+    }
+
     const required = new Map();
     for (const item of manifest.functions) {
         if (!item || typeof item.name !== 'string'
@@ -174,10 +185,18 @@ try {
             && /^drawShot_\d+$/.test(node.id.name)) {
             activeShot = Number(node.id.name.slice('drawShot_'.length));
         }
-        if (node.type === 'CallExpression' && node.callee?.type === 'Identifier'
-            && required.has(node.callee.name) && activeShot !== null) {
-            if (!callsByShot.has(activeShot)) callsByShot.set(activeShot, new Set());
-            callsByShot.get(activeShot).add(node.callee.name);
+        if (node.type === 'CallExpression' && node.callee?.type === 'Identifier') {
+            const calledName = node.callee.name;
+            if (/^draw[A-Z][A-Za-z0-9_]*$/.test(calledName)
+                && !calledName.startsWith('drawShot_')
+                && !topLevelDrawingFunctions.has(calledName)) {
+                const shotLabel = activeShot === null ? 'outside a shot' : `in shot ${activeShot + 1}`;
+                fail(`Drawing helper ${calledName} is called ${shotLabel} but has no top-level function declaration`);
+            }
+            if (required.has(calledName) && activeShot !== null) {
+                if (!callsByShot.has(activeShot)) callsByShot.set(activeShot, new Set());
+                callsByShot.get(activeShot).add(calledName);
+            }
         }
         for (const [key, value] of Object.entries(node)) {
             if (key === 'parent' || key === 'loc' || key === 'start' || key === 'end') continue;
