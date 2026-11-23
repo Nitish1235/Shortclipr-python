@@ -736,6 +736,8 @@ async def run_render(
                 "scene_count": len(scenes),
                 "aspect_ratio": project["aspect_ratio"],
                 "duration_s": project["duration_seconds"],
+                "service_role": os.getenv("SERVICE_ROLE", "unknown"),
+                "service_revision": os.getenv("K_REVISION", "unknown"),
                 "has_audio": bool(project["audio_object"]),
             },
         )
