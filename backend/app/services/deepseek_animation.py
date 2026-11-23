@@ -101,13 +101,33 @@ class DeepSeekAnimationCompiler:
             or not isinstance(shots, list)
             or not isinstance(duration, int)
             or isinstance(duration, bool)
+            or duration < 1
             or not isinstance(logical, list)
             or len(logical) != 2
-            or not all(isinstance(value, int) and not isinstance(value, bool) for value in logical)
+            or not all(
+                isinstance(value, int) and not isinstance(value, bool) and value > 0
+                for value in logical
+            )
             or not isinstance(style_id, str)
+            or not style_id
+            or not 1 <= len(shots) <= 12
         ):
             raise ValueError("Animation repair bundle is incomplete or malformed")
 
+        expected_shot_indices = list(range(len(shots)))
+        actual_shot_indices = [
+            shot.get("index") if isinstance(shot, dict) else None for shot in shots
+        ]
+        if actual_shot_indices != expected_shot_indices:
+            raise ValueError(
+                "Animation program must contain exactly one ordered drawShot_N for every "
+                "contiguous storyboard index starting at zero"
+            )
+
+        # Every shot must occupy one contiguous, non-overlapping part of the film.
+        # This also prevents a manifest-complete but empty/partial film reaching render.
+        expected_start = 0
+        total_frames = duration * 30
         required_shot_fields = ("index", "start_frame", "end_frame", "name", "draw_body")
         for shot in shots:
             if (
@@ -123,6 +143,14 @@ class DeepSeekAnimationCompiler:
                 or not isinstance(shot.get("draw_body"), str)
             ):
                 raise ValueError("Animation repair bundle contains an invalid shot")
+            start_frame, end_frame = shot["start_frame"], shot["end_frame"]
+            if start_frame != expected_start or end_frame <= start_frame or end_frame > total_frames:
+                raise ValueError(
+                    f"Shot {shot['index'] + 1} has a gap, overlap or invalid frame range"
+                )
+            expected_start = end_frame
+        if expected_start != total_frames:
+            raise ValueError("Animation shots do not cover the complete film duration")
         shot_bodies = [shot["draw_body"] for shot in shots]
         bundle_unresolved = find_unresolved_draw_helpers(shared_js, shot_bodies)
         if bundle_unresolved:
@@ -138,6 +166,14 @@ class DeepSeekAnimationCompiler:
         manifest_shots = helper_manifest.get("shots")
         if not isinstance(manifest_functions, list) or not isinstance(manifest_shots, list):
             raise ValueError("Animation helper manifest is malformed")
+        manifest_shot_indices = [
+            item.get("index") if isinstance(item, dict) else None
+            for item in manifest_shots
+        ]
+        if manifest_shot_indices != expected_shot_indices:
+            raise ValueError(
+                "Canonical helper manifest must cover every ordered storyboard shot exactly once"
+            )
         required_names = [
             item.get("name") for item in manifest_functions if isinstance(item, dict)
         ]
@@ -203,8 +239,23 @@ class DeepSeekAnimationCompiler:
         registry_names = {
             item.get("name") for item in registry if isinstance(item, dict)
         } if isinstance(registry, list) else set()
-        if registry_names != set(required_names):
+        if registry_names != set(required_names) or (
+            isinstance(registry, list) and len(registry) != len(required_names)
+        ):
             raise ValueError("Persisted function registry does not match the canonical helper manifest")
+        registry_by_name = {
+            item["name"]: item for item in registry
+            if isinstance(item, dict) and isinstance(item.get("name"), str)
+        } if isinstance(registry, list) else {}
+        for spec in manifest_functions:
+            entry = registry_by_name.get(spec["name"])
+            if not isinstance(entry, dict):
+                raise ValueError(f"Persisted function registry is missing {spec['name']}")
+            for field in ("signature", "dependencies", "required_by_shots", "version"):
+                if entry.get(field) != spec.get(field):
+                    raise ValueError(
+                        f"Persisted function registry metadata drift for {spec['name']}: {field}"
+                    )
         persisted_manifest = program.get("helper_manifest")
         if persisted_manifest is not None and persisted_manifest != helper_manifest:
             raise ValueError("Top-level helper manifest differs from the persisted repair bundle")
