@@ -1057,14 +1057,61 @@ class SharedHelperScopeRegressionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Top-level shot manifest"):
             DeepSeekAnimationCompiler.validate_compiled_program(program)
 
-    def test_compiled_program_rejects_artifacts_from_previous_contract_version(self):
-        with self.assertRaisesRegex(ValueError, "obsolete compiler version"):
+    def test_compiled_program_rejects_unknown_compiler_contract_versions(self):
+        with self.assertRaisesRegex(ValueError, "unsupported compiler version"):
             DeepSeekAnimationCompiler.validate_compiled_program({
-                "compiler_version": "function-first-v1",
-                "runtime_contract_version": 1,
+                "compiler_version": "function-first-v0",
+                "runtime_contract_version": 0,
                 "scene_js": "function drawShot_0(g,t,e,a) { g.fillRect(0,0,1,1); }",
                 "repair_bundle": {},
             })
+
+    def test_strictly_valid_legacy_function_first_v1_program_remains_renderable(self):
+        bridge_spec = {
+            "name": "drawBridge", "category": "visual",
+            "signature": "function drawBridge(g)",
+            "purpose": "Draw the bridge.", "coordinate_system": "local",
+            "origin": "left", "visual_target": "Bridge deck",
+            "style_requirements": "Line", "animation_behavior": "Static",
+            "dependencies": [], "acceptance_criteria": ["Visible", "Consistent"],
+            "required_by_shots": [0], "version": 1,
+        }
+        shot = {
+            "index": 0, "start_frame": 0, "end_frame": 30, "name": "Bridge",
+            "draw_body": "drawBridge(g);", "required_helpers": ["drawBridge"],
+            "mechanism_actions": [], "mechanisms": [],
+        }
+        bundle = {
+            "shared_js": "function drawBridge(g) { g.fillRect(0, 0, 10, 10); }",
+            "shots": [shot],
+            "helper_manifest": {
+                "schema_version": 1, "functions": [bridge_spec],
+                "shots": [{"index": 0, "required_helpers": ["drawBridge"], "required_entities": []}],
+            },
+            "function_specs": [bridge_spec],
+            "function_registry": [{
+                "name": "drawBridge", "category": "visual",
+                "signature": bridge_spec["signature"], "dependencies": [],
+                "required_by_shots": [0], "version": 1,
+            }],
+            "duration": 1, "logical": [1600, 900], "style_id": "line",
+        }
+        source = DeepSeekAnimationCompiler._assemble_film(
+            bundle["shared_js"], [shot], 1, [1600, 900], "line",
+        )
+        legacy_program = {
+            "compiler_version": "function-first-v1",
+            "runtime_contract_version": 1,
+            "scene_js": source,
+            "repair_bundle": bundle,
+        }
+        DeepSeekAnimationCompiler.validate_compiled_program(legacy_program)
+
+        # Some older scene_plans wrappers did not copy version fields to the
+        # outer object. They still pass only after every current integrity check.
+        legacy_program.pop("compiler_version")
+        legacy_program.pop("runtime_contract_version")
+        DeepSeekAnimationCompiler.validate_compiled_program(legacy_program)
 
     def test_compiled_program_rejects_scene_and_repair_bundle_drift(self):
         bridge_spec = {
