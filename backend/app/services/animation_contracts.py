@@ -526,6 +526,9 @@ def validate_draw_helper_definitions(
     missing = sorted(set(required_names) - declared)
     if missing:
         raise ValueError("Generated helper library did not define: " + ", ".join(missing))
+    unexpected = sorted(declared - set(required_names))
+    if unexpected:
+        raise ValueError("Generated helper library defined unrequested functions: " + ", ".join(unexpected))
     for name in required_names:
         signature = re.search(
             rf"\bfunction\s+{re.escape(name)}\s*\(\s*g\s*(?:,|\))",
@@ -608,7 +611,7 @@ def validate_draw_helper_specs(value: Any, required_names: list[str]) -> list[di
             raise ValueError(f"Duplicate drawing helper specification: {name}")
 
         category = item.get("category")
-        if category not in _DRAW_HELPER_CATEGORIES:
+        if not isinstance(category, str) or category not in _DRAW_HELPER_CATEGORIES:
             raise ValueError(f"Drawing helper {name} has an unsupported category")
 
         signature = item.get("signature")
