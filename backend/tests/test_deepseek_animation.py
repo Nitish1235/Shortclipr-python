@@ -994,6 +994,57 @@ class SharedHelperScopeRegressionTests(unittest.TestCase):
                 "repair_bundle": valid_bundle,
             })
 
+    def test_compiled_program_rejects_top_level_shot_manifest_drift(self):
+        bridge_spec = {
+            "name": "drawBridge", "category": "visual",
+            "signature": "function drawBridge(g)",
+            "purpose": "Draw the bridge.", "coordinate_system": "local",
+            "origin": "left", "visual_target": "Bridge deck",
+            "style_requirements": "Line", "animation_behavior": "Static",
+            "dependencies": [], "acceptance_criteria": ["Visible", "Consistent"],
+            "required_by_shots": [0], "version": 1,
+        }
+        shot = {
+            "index": 0, "start_frame": 0, "end_frame": 30, "name": "Bridge",
+            "draw_body": "drawBridge(g);", "required_helpers": ["drawBridge"],
+            "mechanism_actions": [], "mechanisms": [],
+        }
+        bundle = {
+            "shared_js": "function drawBridge(g) { g.fillRect(0, 0, 10, 10); }",
+            "shots": [shot],
+            "helper_manifest": {
+                "schema_version": 1, "functions": [bridge_spec],
+                "shots": [{"index": 0, "required_helpers": ["drawBridge"], "required_entities": []}],
+            },
+            "function_specs": [bridge_spec],
+            "function_registry": [{
+                "name": "drawBridge", "category": "visual",
+                "signature": bridge_spec["signature"], "dependencies": [],
+                "required_by_shots": [0], "version": 1,
+            }],
+            "duration": 1, "logical": [1600, 900], "style_id": "line",
+        }
+        source = DeepSeekAnimationCompiler._assemble_film(
+            bundle["shared_js"], [shot], 1, [1600, 900], "line",
+        )
+        program = {
+            "compiler_version": COMPILER_VERSION,
+            "runtime_contract_version": RUNTIME_CONTRACT_VERSION,
+            "scene_js": source, "repair_bundle": bundle,
+            "helper_manifest": bundle["helper_manifest"],
+            "function_specs": bundle["function_specs"],
+            "function_registry": bundle["function_registry"],
+            "shot_count": 1, "style": "line",
+            "shot_manifest": [{
+                "index": 0, "start_frame": 0, "end_frame": 30,
+                "name": "Bridge", "mechanism_ids": [], "transition_out": "cut",
+            }],
+        }
+        DeepSeekAnimationCompiler.validate_compiled_program(program)
+        program["shot_manifest"][0]["name"] = "Different"
+        with self.assertRaisesRegex(ValueError, "Top-level shot manifest"):
+            DeepSeekAnimationCompiler.validate_compiled_program(program)
+
     def test_compiled_program_rejects_artifacts_from_previous_contract_version(self):
         with self.assertRaisesRegex(ValueError, "obsolete compiler version"):
             DeepSeekAnimationCompiler.validate_compiled_program({
