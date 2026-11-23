@@ -469,6 +469,7 @@ class DeepSeekAnimationCompiler:
         last_error: Exception | None = None
         rejected_value: dict[str, Any] | None = None
         for attempt in range(1, 4):
+            value: dict[str, Any] | None = None
             try:
                 value = await self._json_object_completion(
                     system_prompt, prompt, token_limit, label,
@@ -489,7 +490,7 @@ class DeepSeekAnimationCompiler:
                 })
                 if attempt == 3:
                     break
-                rejected_value = value if "value" in locals() and isinstance(value, dict) else None
+                rejected_value = value if isinstance(value, dict) else None
                 prompt = (
                     user_prompt
                     + "\\n\\nSTRUCTURED OUTPUT REPAIR REQUIRED\\n"
