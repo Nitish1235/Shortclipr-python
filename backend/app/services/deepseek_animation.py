@@ -561,7 +561,7 @@ Return the JSON specification now.""".strip()
             for spec in pass_specs:
                 spec["required_by_shots"] = [
                     shot["index"] for shot in compiled
-                    if re.search(rf"(?<![\\w$.]){re.escape(spec['name'])}\\s*\\(", shot["draw_body"])
+                    if re.search(rf"\b{re.escape(spec['name'])}\s*\(", shot["draw_body"])
                 ]
                 spec["version"] = 1
                 function_specs_by_name[spec["name"]] = spec
