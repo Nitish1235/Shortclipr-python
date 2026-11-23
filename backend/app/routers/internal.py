@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import shutil
 import tempfile
 import time as _time
@@ -638,6 +639,18 @@ async def run_render(
     shot_repairer: DeepSeekAnimationCompiler | None = None,
 ):
     t0_total = _time.monotonic()
+    render_budget_seconds = max(60, int(os.getenv("RENDER_STAGE_DEADLINE_SECONDS", "1320")))
+    render_deadline = asyncio.get_running_loop().time() + render_budget_seconds
+
+    def require_render_budget(stage: str, reserve_seconds: float = 0) -> float:
+        remaining = render_deadline - asyncio.get_running_loop().time()
+        if remaining <= reserve_seconds:
+            raise RuntimeError(
+                f"Render stage deadline budget exhausted before {stage} "
+                f"({max(0, int(remaining))}s remaining)"
+            )
+        return remaining
+
     bind(
         project_id=str(project_id),
         attempt_id=str(attempt_id) if attempt_id else "",
@@ -765,10 +778,12 @@ async def run_render(
             await set_render_progress(pool, project_id, attempt_id, lease_token, mapped)
 
         await set_render_progress(pool, project_id, attempt_id, lease_token, 55)
+        require_render_budget("initial Chromium render", reserve_seconds=120)
         motion_qa = None
         async with timed(logger, "render.subprocess") as ctx:
             _, motion_qa = await renderer.render(
                 plan, output_path, progress_callback=update_visual_progress,
+                deadline=render_deadline,
             )
             if output_path.exists():
                 ctx["output_size_mb"] = round(output_path.stat().st_size / 1_048_576, 2)
@@ -778,11 +793,13 @@ async def run_render(
         await set_render_progress(pool, project_id, attempt_id, lease_token, 82)
 
         # ── Mux narration after visuals ──────────────────────────────────
+        require_render_budget("narration mux", reserve_seconds=90)
         async with timed(logger, "render.mux_audio") as ctx:
             ctx.update(await mux_narration(output_path, audio_path, project["duration_seconds"]))
         await set_render_progress(pool, project_id, attempt_id, lease_token, 86)
 
         # ── Quality validation ────────────────────────────────────────────
+        require_render_budget("final media validation", reserve_seconds=60)
         async with timed(logger, "render.quality") as ctx:
             quality = await validate_final(output_path, project["aspect_ratio"], project["duration_seconds"])
             ctx.update(quality)
@@ -807,16 +824,22 @@ async def run_render(
                     })
                     quality["motion_qa"]["contact_sheet_upload_error"] = str(error)[:300]
                 try:
-                    async with timed(logger, "render.visual_qa") as ctx:
-                        visual_review = await visual_reviewer.review(
-                            contact_sheet,
-                            plan.get("visual_qa_context", {}),
-                            motion_qa.get("samples", []),
-                        )
-                        quality["visual_qa"] = visual_review
-                        ctx["status"] = visual_review.get("status")
-                        ctx["finding_count"] = len(visual_review.get("findings", []))
-                        ctx["overall_score"] = visual_review.get("overall_score")
+                    if require_render_budget("visual QA", reserve_seconds=150) > 150:
+                        async with timed(logger, "render.visual_qa") as ctx:
+                            visual_review = await visual_reviewer.review(
+                                contact_sheet,
+                                plan.get("visual_qa_context", {}),
+                                motion_qa.get("samples", []),
+                            )
+                            quality["visual_qa"] = visual_review
+                            ctx["status"] = visual_review.get("status")
+                            ctx["finding_count"] = len(visual_review.get("findings", []))
+                            ctx["overall_score"] = visual_review.get("overall_score")
+                    else:
+                        quality["visual_qa"] = {
+                            "status": "skipped",
+                            "reason": "render_stage_time_budget_low",
+                        }
                     repair_summary = {
                         "status": "disabled" if shot_repairer is None else "not_needed",
                         "attempted": 0,
@@ -852,7 +875,9 @@ async def run_render(
                             repair_item = shot_queue[0]
                             repair_summary["shot_index"] = repair_item["shot_index"]
 
-                        if repair_item is not None:
+                        if repair_item is not None and require_render_budget(
+                            "targeted repair", reserve_seconds=360,
+                        ) > 360:
                             repair_summary.update({
                                 "status": "attempting",
                                 "attempted": 1,
@@ -897,6 +922,7 @@ async def run_render(
                                 async with timed(logger, repair_stage) as repair_ctx:
                                     _, candidate_motion_qa = await renderer.render(
                                         candidate_plan, candidate_path,
+                                        deadline=render_deadline,
                                     )
                                     await mux_narration(
                                         candidate_path, audio_path, project["duration_seconds"],
@@ -1008,6 +1034,9 @@ async def run_render(
                                 })
                                 repair_summary["status"] = "failed"
                                 repair_summary["reason"] = str(repair_error)[:300]
+                        elif repair_item is not None:
+                            repair_summary["status"] = "skipped"
+                            repair_summary["reason"] = "insufficient_render_stage_time_budget"
                     quality["visual_repair"] = repair_summary
                     quality["shot_repair"] = repair_summary  # Backward-compatible field name.
                 except asyncio.CancelledError:
@@ -1031,6 +1060,7 @@ async def run_render(
         await set_render_progress(pool, project_id, attempt_id, lease_token, 90)
 
         # ── Upload final MP4 to GCS ───────────────────────────────────────
+        require_render_budget("final upload and settlement", reserve_seconds=30)
         async with timed(logger, "render.upload") as ctx:
             output_object = await storage.upload_file_private(
                 output_path, "video/mp4",
