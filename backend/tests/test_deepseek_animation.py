@@ -46,6 +46,18 @@ class ShotGenerationStageTests(unittest.TestCase):
             "secondary_motion": "Water continues flowing.",
             "camera_motion": "Locked camera.",
             "mechanism_motion": "Use the declared pivot kinematics.",
+            "physical_constraints": {
+                "motion_type": "static",
+                "anchors": [],
+                "relationships": [],
+                "constraints": [],
+                "forces_and_effects": [],
+                "collision_rules": [],
+                "motion_profile": {
+                    "start": "none", "acceleration": "none", "peak": "none",
+                    "deceleration": "none", "settle": "holds steady",
+                },
+            },
         }
         self.assertEqual(
             DeepSeekAnimationCompiler._validate_shot_motion(motion, "Shot 1"),
