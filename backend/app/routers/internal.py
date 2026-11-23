@@ -944,6 +944,20 @@ async def run_render(
                                 candidate_plan = dict(plan)
                                 candidate_plan["scene_js"] = repaired["scene_js"]
                                 candidate_plan["repair_bundle"] = repaired["repair_bundle"]
+                                candidate_plan["helper_manifest"] = repaired.get(
+                                    "helper_manifest",
+                                    repaired["repair_bundle"].get(
+                                        "helper_manifest", candidate_plan.get("helper_manifest", {}),
+                                    ),
+                                )
+                                candidate_plan["function_registry"] = repaired.get(
+                                    "function_registry",
+                                    repaired["repair_bundle"].get("function_registry", []),
+                                )
+                                candidate_plan["function_specs"] = repaired.get(
+                                    "function_specs",
+                                    repaired["repair_bundle"].get("function_specs", []),
+                                )
                                 if repair_type == "shared_helpers":
                                     candidate_context = dict(plan.get("visual_qa_context", {}))
                                     candidate_context["function_registry"] = repaired["repair_bundle"].get(
@@ -1136,6 +1150,18 @@ async def run_render(
                         repaired_program = dict(program)
                         repaired_program["scene_js"] = plan["scene_js"]
                         repaired_program["repair_bundle"] = plan["repair_bundle"]
+                        repaired_program["helper_manifest"] = plan.get(
+                            "helper_manifest",
+                            plan["repair_bundle"].get("helper_manifest", repaired_program.get("helper_manifest")),
+                        )
+                        repaired_program["function_registry"] = plan.get(
+                            "function_registry",
+                            plan["repair_bundle"].get("function_registry", repaired_program.get("function_registry", [])),
+                        )
+                        repaired_program["function_specs"] = plan.get(
+                            "function_specs",
+                            plan["repair_bundle"].get("function_specs", repaired_program.get("function_specs", [])),
+                        )
                         repaired_program["visual_qa_context"] = plan.get(
                             "visual_qa_context", repaired_program.get("visual_qa_context", {}),
                         )
