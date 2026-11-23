@@ -152,7 +152,10 @@ class DeepSeekAnimationCompiler:
         }
 
     @staticmethod
-    def _visual_qa_context(visual_bible: dict[str, Any], scenes: list[dict[str, Any]]) -> dict[str, Any]:
+    def _visual_qa_context(
+        visual_bible: dict[str, Any], scenes: list[dict[str, Any]],
+        function_specs: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """Keep the visual review context aligned to the exact plan used to compile."""
         storyboard_fields = (
             "index", "start_frame", "end_frame", "purpose", "visual_objective",
@@ -160,11 +163,26 @@ class DeepSeekAnimationCompiler:
             "focal_entity", "visual_change", "continuity_note", "characters",
             "props", "environment", "mechanism_actions",
         )
+        specs = function_specs or []
         return {
             "visual_bible": visual_bible,
             "storyboard": [
                 {key: scene.get(key) for key in storyboard_fields if key in scene}
                 for scene in scenes
+            ],
+            "function_specs": specs,
+            "function_registry": [
+                {
+                    "name": spec["name"],
+                    "category": spec["category"],
+                    "signature": spec["signature"],
+                    "purpose": spec["purpose"],
+                    "visual_target": spec["visual_target"],
+                    "dependencies": spec["dependencies"],
+                    "required_by_shots": spec.get("required_by_shots", []),
+                    "version": spec.get("version", 1),
+                }
+                for spec in specs
             ],
         }
 
@@ -705,7 +723,9 @@ Implement every missing helper now.""".strip()
             "shared_source_chars": len(shared_js),
             "shot_source_chars": sum(len(x["draw_body"]) for x in compiled),
             "motion_diagnostics": motion_diagnostics,
-            "visual_qa_context": self._visual_qa_context(visual_bible, scenes),
+            "visual_qa_context": self._visual_qa_context(
+                visual_bible, scenes, list(function_specs_by_name.values()),
+            ),
             "function_specs": list(function_specs_by_name.values()),
             "function_registry": [
                 {
