@@ -88,7 +88,7 @@ class DeepSeekStoryPlanner:
 # Maintain exact character appearance across shots. Include composition, depth layers, camera,
 # action and motivated transition. Strictly 2D Canvas/SVG; no Three.js, WebGL, meshes or 3D.
 # Do not request subtitles; narration is muxed separately. Return JSON only.
-# """.strip(
+# """.strip()
 # === END LEGACY STORY PROMPT ===
 
         prompt = f"""
@@ -221,7 +221,7 @@ Use exactly 30 FPS. Frame ranges are integers, contiguous, non-overlapping and
 cover frame 0 through {total_frames}; end_frame is exclusive. Include at least
 {minimum_scenes} distinct shots. Keep shot durations long enough for their visible
 action to read. Return JSON only, without Markdown or explanations.
-""".strip())
+""".strip()
         effort = planning_effort(project, self.low_reasoning_effort, self.medium_reasoning_effort)
         response = await self.client.chat.completions.create(
             model=self.model,
