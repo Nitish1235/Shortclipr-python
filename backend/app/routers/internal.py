@@ -775,10 +775,92 @@ async def run_render(
         try:
             DeepSeekAnimationCompiler.validate_compiled_program(program)
         except (TypeError, ValueError, KeyError, IndexError) as validation_error:
-            raise NonRetryableRenderError(
-                "Persisted animation program failed render-boundary integrity validation: "
-                + str(validation_error)[:700]
-            ) from validation_error
+            # A render job may already be queued when the compiler contract is
+            # deployed. Rebuild the program from the persisted Visual Bible and
+            # storyboard instead of attempting to execute a stale/partially
+            # validated artifact. No narration is regenerated or recharged.
+            can_recompile = (
+                shot_repairer is not None
+                and isinstance(repair_bundle, dict)
+                and isinstance(repair_bundle.get("visual_bible"), dict)
+                and isinstance(repair_bundle.get("scenes"), list)
+            )
+            if not can_recompile:
+                raise NonRetryableRenderError(
+                    "Persisted animation program failed render-boundary integrity validation "
+                    "and has no complete source plan for regeneration: "
+                    + str(validation_error)[:700]
+                ) from validation_error
+            logger.warning("render.animation_program_recompile_required", extra={
+                "project_id": str(project_id),
+                "old_compiler_version": program.get("compiler_version"),
+                "old_runtime_contract_version": program.get("runtime_contract_version"),
+                "reason": str(validation_error)[:500],
+                "shot_count": len(repair_bundle.get("scenes", [])),
+            })
+            try:
+                regenerated_program = await shot_repairer.compile(
+                    dict(project),
+                    {
+                        "visual_bible": repair_bundle["visual_bible"],
+                        "scenes": repair_bundle["scenes"],
+                        "art_direction": repair_bundle.get("art_direction"),
+                    },
+                )
+                shot_repairer.validate_compiled_program(regenerated_program)
+            except asyncio.CancelledError:
+                raise
+            except Exception as regeneration_error:
+                raise NonRetryableRenderError(
+                    "Persisted animation program could not be regenerated under the current "
+                    "compiler contract: " + str(regeneration_error)[:700]
+                ) from regeneration_error
+
+            # Persist under the active render lease so subsequent deliveries
+            # read the upgraded artifact rather than repeatedly compiling it.
+            async with pool.acquire() as connection:
+                async with connection.transaction():
+                    locked_project = await connection.fetchrow(
+                        "SELECT status FROM projects WHERE id=$1 FOR UPDATE", project_id,
+                    )
+                    current_attempt = await connection.fetchrow(
+                        """SELECT id FROM job_attempts
+                           WHERE id=$1 AND project_id=$2 AND job_class='render'
+                             AND lease_token=$3 AND status='running' AND lease_expires_at>now()
+                           FOR UPDATE""",
+                        attempt_id, project_id, lease_token,
+                    )
+                    if (
+                        not locked_project
+                        or locked_project["status"] != "rendering"
+                        or not current_attempt
+                    ):
+                        raise asyncio.CancelledError(
+                            "render lease was lost before regenerated animation persistence"
+                        )
+                    updated = await connection.fetchval(
+                        """UPDATE scene_plans SET program=$3::jsonb
+                           WHERE project_id=$1 AND scene_index=0
+                           RETURNING project_id""",
+                        project_id, 0, json.dumps(regenerated_program),
+                    )
+                    if not updated:
+                        raise RuntimeError("Regenerated animation could not be persisted to scene_plans")
+                    await connection.execute(
+                        """UPDATE project_pipeline_artifacts SET animation_program=$2::jsonb
+                           WHERE project_id=$1""",
+                        project_id, json.dumps(regenerated_program),
+                    )
+            program = regenerated_program
+            scene_js = program["scene_js"]
+            repair_bundle = program["repair_bundle"]
+            logger.info("render.animation_program_recompiled", extra={
+                "project_id": str(project_id),
+                "compiler_version": program.get("compiler_version"),
+                "runtime_contract_version": program.get("runtime_contract_version"),
+                "shot_count": program.get("shot_count"),
+                "scene_js_sha256": hashlib.sha256(scene_js.encode("utf-8")).hexdigest(),
+            })
 
         logger.info(
             "render.animation_program_validated",
