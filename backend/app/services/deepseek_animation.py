@@ -41,6 +41,7 @@ from .animation_contracts import (
     validate_generated_fragment,
     find_unresolved_draw_helpers,
     find_unresolved_film_draw_helpers,
+    top_level_draw_helper_names,
     validate_draw_helper_definitions,
     validate_draw_helper_specs,
     validate_draw_helper_dependency_graph,
@@ -466,9 +467,7 @@ Return the complete shared JavaScript drawing library now.""".strip()
             MAX_SHARED_SOURCE,
         )
 
-        shared_helper_names = sorted(set(re.findall(
-            r"\bfunction\s+(draw[A-Z][A-Za-z0-9_]*)\s*\(", shared_js
-        )))
+        shared_helper_names = top_level_draw_helper_names(shared_js)
         semaphore = asyncio.Semaphore(self.max_parallel_shots)
 
         async def compile_one(scene: dict[str, Any]) -> dict[str, Any]:
@@ -750,7 +749,7 @@ Return the complete JavaScript drawing body now.
         # implementations explicitly, validate their declarations, and only then
         # assemble the film. Keep this bounded to avoid recursive code-generation loops.
         function_specs_by_name: dict[str, dict[str, Any]] = {}
-        for helper_pass in range(4):
+        for helper_pass in range(12):
             missing_set = set(find_unresolved_draw_helpers(
                 shared_js,
                 [shot["draw_body"] for shot in compiled],
@@ -765,6 +764,10 @@ Return the complete JavaScript drawing body now.
                 break
             if len(function_specs_by_name) + len(missing_helpers) > 64:
                 raise ValueError("Generated drawing helper dependency graph exceeds 64 functions")
+            # The spec contract accepts at most 32 names per request. Process a
+            # deterministic batch; later passes resolve the remaining names and
+            # recursively discovered dependencies.
+            missing_helpers = missing_helpers[:32]
 
             spec_prompt = f"""
 ROLE
@@ -1327,9 +1330,7 @@ Return the complete repaired function declarations now.""".strip()
             continuity_contract, scene,
         )
         shot_visual_context = self._shot_visual_context(visual_bible, scene)
-        shared_helper_names = sorted(set(re.findall(
-            r"\bfunction\s+(draw[A-Z][A-Za-z0-9_]*)\s*\(", shared_js
-        )))
+        shared_helper_names = top_level_draw_helper_names(shared_js)
         # === LEGACY VISUAL SHOT REPAIR PROMPT (rollback reference; inactive) ===
         #         prompt = f"""
         # You are ShortClipr's senior 2D animation repair artist. Repair ONLY shot {shot_index}.
