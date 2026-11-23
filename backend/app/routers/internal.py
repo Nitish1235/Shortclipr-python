@@ -672,7 +672,6 @@ async def run_render(
     emailer: ProjectReadyEmailer,
     visual_reviewer: VisualQualityReviewer,
     shot_repairer: DeepSeekAnimationCompiler | None = None,
-    animation_compiler: DeepSeekAnimationCompiler | None = None,
 ):
     t0_total = _time.monotonic()
     bind(
@@ -778,7 +777,7 @@ async def run_render(
             # deployed. Rebuild the program from the persisted Visual Bible and
             # storyboard instead of attempting to execute a stale/partially
             # validated artifact. No narration is regenerated or recharged.
-            compiler_for_recompile = animation_compiler or shot_repairer
+            compiler_for_recompile = shot_repairer
             can_recompile = (
                 compiler_for_recompile is not None
                 and isinstance(repair_bundle, dict)
@@ -1433,6 +1432,5 @@ async def render_stage(payload: InternalRunRequest, request: Request, pool: asyn
             pool, request.app.state.renderer, request.app.state.storage, request.app.state.emailer,
             request.app.state.visual_reviewer,
             request.app.state.shot_repairer,
-            request.app.state.animation_compiler,
         )
     return {"completed": True, "projectId": str(payload.project_id), "renderer": "drawn-by-code"}
