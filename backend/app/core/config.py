@@ -147,8 +147,8 @@ class Settings(BaseSettings):
                 missing.append("GOOGLE_CLIENT_ID (must be a Google Web client ID)")
         if self.DB_POOL_MIN_SIZE < 1 or self.DB_POOL_MAX_SIZE < self.DB_POOL_MIN_SIZE:
             missing.append("DB pool sizing")
-        if self.SERVICE_ROLE == "ffmpeg-worker" and self.DEEPSEEK_ENABLE_SHOT_REPAIR and not self.DEEPSEEK_API_KEY:
-            missing.append("DEEPSEEK_API_KEY (required when shot repair is enabled)")
+        if self.SERVICE_ROLE == "ffmpeg-worker" and self.DEEPSEEK_ENABLE_VISUAL_QA and not self.DEEPSEEK_API_KEY:
+            missing.append("DEEPSEEK_API_KEY (required when visual QA is enabled)")
         if self.SERVICE_ROLE == "ffmpeg-worker" and self.DEEPSEEK_ENABLE_SHOT_REPAIR and not self.DEEPSEEK_ENABLE_VISUAL_QA:
             missing.append("DEEPSEEK_ENABLE_VISUAL_QA (must be true when shot repair is enabled)")
         if self.MAX_LANDING_MEDIA_BYTES < 1:
