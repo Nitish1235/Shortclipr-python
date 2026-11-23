@@ -860,9 +860,12 @@ class SharedHelperScopeRegressionTests(unittest.TestCase):
             "logical": [1600, 900],
             "style_id": "line",
         }
+        different_shots = [{
+            **bundle["shots"][0],
+            "draw_body": "drawBridge(g); g.fillRect(1, 1, 2, 2);",
+        }]
         different_source = DeepSeekAnimationCompiler._assemble_film(
-            "function drawOtherBridge(g) { g.fillRect(0, 0, 10, 10); }",
-            bundle["shots"], 1, [1600, 900], "line",
+            bundle["shared_js"], different_shots, 1, [1600, 900], "line",
         )
         with self.assertRaisesRegex(ValueError, "does not match"):
             DeepSeekAnimationCompiler.validate_compiled_program({
