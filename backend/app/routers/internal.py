@@ -672,6 +672,7 @@ async def run_render(
     emailer: ProjectReadyEmailer,
     visual_reviewer: VisualQualityReviewer,
     shot_repairer: DeepSeekAnimationCompiler | None = None,
+    animation_compiler: DeepSeekAnimationCompiler | None = None,
 ):
     t0_total = _time.monotonic()
     bind(
@@ -777,8 +778,9 @@ async def run_render(
             # deployed. Rebuild the program from the persisted Visual Bible and
             # storyboard instead of attempting to execute a stale/partially
             # validated artifact. No narration is regenerated or recharged.
+            compiler_for_recompile = animation_compiler or shot_repairer
             can_recompile = (
-                shot_repairer is not None
+                compiler_for_recompile is not None
                 and isinstance(repair_bundle, dict)
                 and isinstance(repair_bundle.get("visual_bible"), dict)
                 and isinstance(repair_bundle.get("scenes"), list)
@@ -797,7 +799,7 @@ async def run_render(
                 "shot_count": len(repair_bundle.get("scenes", [])),
             })
             try:
-                regenerated_program = await shot_repairer.compile(
+                regenerated_program = await compiler_for_recompile.compile(
                     dict(project),
                     {
                         "visual_bible": repair_bundle["visual_bible"],
@@ -805,7 +807,7 @@ async def run_render(
                         "art_direction": repair_bundle.get("art_direction"),
                     },
                 )
-                shot_repairer.validate_compiled_program(regenerated_program)
+                compiler_for_recompile.validate_compiled_program(regenerated_program)
             except asyncio.CancelledError:
                 raise
             except Exception as regeneration_error:
@@ -1431,5 +1433,6 @@ async def render_stage(payload: InternalRunRequest, request: Request, pool: asyn
             pool, request.app.state.renderer, request.app.state.storage, request.app.state.emailer,
             request.app.state.visual_reviewer,
             request.app.state.shot_repairer,
+            request.app.state.animation_compiler,
         )
     return {"completed": True, "projectId": str(payload.project_id), "renderer": "drawn-by-code"}
