@@ -655,11 +655,34 @@ VISUAL BIBLE:
 {json.dumps(visual_bible, ensure_ascii=False)}
 
 Return the complete shared JavaScript drawing library now.""".strip()
+        def validate_shared_candidate(candidate: str) -> None:
+            validate_draw_helper_definitions(
+                candidate, required_helper_names, helper_manifest["functions"],
+            )
+            candidate_names = set(top_level_draw_helper_names(candidate))
+            expected_names = set(required_helper_names)
+            missing = sorted(expected_names - candidate_names)
+            unexpected = sorted(candidate_names - expected_names)
+            if missing or unexpected:
+                raise ValueError(
+                    "Shared library manifest mismatch; missing: "
+                    + (", ".join(missing) or "none")
+                    + "; unexpected: "
+                    + (", ".join(unexpected) or "none")
+                )
+            unresolved = find_unresolved_draw_helpers(candidate, [])
+            if unresolved:
+                raise ValueError(
+                    "Shared library calls undeclared drawing helpers: "
+                    + ", ".join(unresolved)
+                )
+            validate_draw_helper_dependency_graph(helper_manifest["functions"])
+
         shared_js = await self._validated_fragment(
             "You are a senior Canvas 2D JavaScript systems programmer. Return only executable JavaScript source.",
             shared_prompt + "\n\nReturn only the complete JavaScript library source.",
             min(self.max_output_tokens, 24000), "shared_js", "Shared drawing library",
-            MAX_SHARED_SOURCE,
+            MAX_SHARED_SOURCE, validator=validate_shared_candidate,
         )
 
         # Lock the shared API before shot generation. A missing or extra custom drawing
@@ -789,13 +812,15 @@ SHOT VISUAL REFERENCES:
 STORYBOARD:
 {json.dumps(scene, ensure_ascii=False, separators=(",", ":"))}
 """.strip()
-                layout = await self._json_object_completion(
+                layout = await self._validated_json_object_completion(
                     "Return exactly one valid JSON object. You are a precise 2D composition designer.",
                     layout_prompt,
                     min(self.max_output_tokens, 2200),
                     label=f"Shot {scene['index'] + 1} visual composition",
+                    validator=lambda value: self._validate_shot_layout(
+                        value, f"Shot {scene['index'] + 1}",
+                    ),
                 )
-                self._validate_shot_layout(layout, f"Shot {scene['index'] + 1}")
 
                 mechanism_context = {
                     "actions": scene.get("mechanism_actions", []),
@@ -858,14 +883,14 @@ VALIDATED MECHANISM DATA:
 STORYBOARD:
 {json.dumps(scene, ensure_ascii=False, separators=(",", ":"))}
 """.strip()
-                motion = await self._json_object_completion(
+                motion = await self._validated_json_object_completion(
                     "Return exactly one valid JSON object. You are a precise 2D animation director.",
                     motion_prompt,
                     min(self.max_output_tokens, 2600),
                     label=f"Shot {scene['index'] + 1} animation direction",
-                )
-                self._validate_shot_motion(
-                    motion, f"Shot {scene['index'] + 1}", valid_motion_entity_ids,
+                    validator=lambda value: self._validate_shot_motion(
+                        value, f"Shot {scene['index'] + 1}", valid_motion_entity_ids,
+                    ),
                 )
 
                 mechanism_rules = ""
@@ -944,6 +969,22 @@ RULES
 {mechanism_rules}
 Return the complete JavaScript drawing body now.
 """.strip()
+                def validate_shot_candidate(candidate: str) -> None:
+                    missing = find_missing_required_helper_usage(
+                        candidate, shot_required_helpers,
+                    )
+                    if missing:
+                        raise ValueError(
+                            "Shot is missing required canonical drawing calls: "
+                            + ", ".join(missing)
+                        )
+                    unresolved = find_unresolved_draw_helpers(shared_js, [candidate])
+                    if unresolved:
+                        raise ValueError(
+                            "Shot calls drawing helpers outside the locked shared library: "
+                            + ", ".join(unresolved)
+                        )
+
                 body = await self._validated_fragment(
                     "You are a senior Canvas 2D animation programmer. Return only executable JavaScript source.",
                     shot_prompt,
@@ -951,6 +992,7 @@ Return the complete JavaScript drawing body now.
                     "draw_body",
                     f"Shot {scene['index'] + 1}",
                     MAX_SHOT_SOURCE,
+                    validator=validate_shot_candidate,
                 )
                 missing_usage = find_missing_required_helper_usage(body, shot_required_helpers)
                 if missing_usage:
