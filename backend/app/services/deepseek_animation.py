@@ -353,6 +353,8 @@ RUNTIME CONTRACT
 - The compiler injects validated mechanismActions and mechanisms constants.
 - Use CanvasRenderingContext2D methods on g, local variables, standard Math, verified
   shared draw helpers, and documented ShortcliprStyles and Ease APIs only.
+- For numeric interpolation, use Ease.lerp(a, b, progress). Do not call bare mix();
+  it is not part of the Drawn-by-Code runtime API.
 - Redraw the entire frame deterministically from t. No accumulated state or randomness.
 - Use g.save()/g.restore() around transforms and restore all context state you change.
 - Keep all marks within the logical canvas {logical[0]}x{logical[1]}.
@@ -848,7 +850,10 @@ REPAIR METHOD
         function_source = "\n".join(functions)
         return (
             "// ShortClipr shot-based Drawn-by-Code film. Generated code is untrusted input.\n"
-            f"// Visual style: {style_id}\n{shared_js}\n{function_source}\n"
+            f"// Visual style: {style_id}\n"
+            "// Compatibility alias for interpolation emitted by older generated fragments.\n"
+            "const mix = (a, b, progress) => Ease.lerp(a, b, progress);\n"
+            f"{shared_js}\n{function_source}\n"
             "Motion.scene({\n  uses: ['styles/shortclipr.js'],\n  fps: 30,\n"
             f"  duration: {duration},\n  logical: {json.dumps(logical)},\n"
             f"  shots: [{','.join(ranges)}],\n"
