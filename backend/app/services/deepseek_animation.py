@@ -675,34 +675,45 @@ Implement every missing helper now.""".strip())
             r"\bfunction\s+(draw[A-Z][A-Za-z0-9_]*)\s*\(", shared_js
         )))
         # === LEGACY VISUAL SHOT REPAIR PROMPT (rollback reference; inactive) ===
-        # prompt = f"""
-        # You are ShortClipr's senior 2D character and illustration systems artist.
-        # Create a compact reusable JavaScript drawing library for a {style_id} Canvas 2D film.\nFollow this binding art-direction contract:\n{art_direction_instructions}\nAim for at most 1,800 output tokens.
-        # Return JSON only: {{"shared_js":"JavaScript source"}}.
-        # The source is evaluated in the same script as the film and may define ordinary named
-        # functions and constants. It must not call Motion.scene. Use only the supplied Canvas
-        # 2D context in functions. Never reference browser-global identifiers such as window,
-        # document, self, top, parent or frames. No DOM, browser globals, imports, exports, network, filesystem,
-        # Node APIs, timers, eval, Function, Date, performance, Math.random, WebGL or 3D.
-        # A trusted runtime script ShortcliprStyles is loaded before this library. Use
-        # ShortcliprStyles.palette("{style_id}"), ShortcliprStyles.paperBackground(g, "{style_id}", env),
-        # ShortcliprStyles.paperShadow(g, x, y, blur, color), ShortcliprStyles.halftone(g, x, y, w, h, spacing, color),
-        # ShortcliprStyles.camera(g, env, {{cx, cy, zoom, rotation}}) inside g.save()/g.restore(), and
-        # ShortcliprStyles.pixelSnap(value, pixelSize) where appropriate.
-        # For cinematic-editorial use ShortcliprStyles.editorialShape(g, points, opts) for layered
-        # graphic silhouettes and editorialLight(g,x,y,r,color) for restrained focal light.
-        # For isometric-technical use isoProject(x,y,z,scale,origin), isoBox(g,x,y,z,w,d,h,scale,colors),
-        # and isoLine(g,a,b,color,width); keep all components on the same projected axes.
-        # For layered-paper use paperPolygon(g,points,opts), paperEllipse(g,x,y,rx,ry,opts),
-        # paperLayer(g,draw,opts), and paperParallax(g,offset,layers); separate depth planes and
-        # keep light direction/shadow offsets consistent. These are deterministic Canvas 2D helpers.
-        # Use restrained texture details rather than full-canvas particle loops. Create reusable helpers for every recurring
-        # character, prop and environment in the visual bible. Character functions must preserve
-        # silhouette, proportions, face, clothing, colours and distinctive marks across all shots.
-        # Prefer short named functions such as drawExplorer(g,x,y,s,pose,expression). Implement only helpers needed by this visual bible. Avoid duplicate helpers, verbose comments and decorative details that do not support the scenes. Keep code deterministic and compact.
-        # Do not use external assets. Do not redefine ShortcliprStyles.
-        # Visual bible:
-        # {json.dumps(visual_bible, ensure_ascii=False)}
+        #         prompt = f"""
+        # You are ShortClipr's senior 2D animation repair artist. Repair ONLY shot {shot_index}.
+        # Return JSON only: {{"draw_body":"complete replacement JavaScript drawing body"}}.
+        # 
+        # The replacement body is inserted into the existing drawShot_{shot_index}(g,t,env,absoluteTime)
+        # function. The compiler will preserve the existing validated mechanismActions and
+        # mechanisms constants. Do not modify them, other shots, shot timing, transitions,
+        # the shared drawing library, or the selected visual style.
+        # 
+        # VISUAL QA FINDINGS TO FIX:
+        # {json.dumps(safe_findings, ensure_ascii=False)}
+        # 
+        # ORIGINAL SHOT DIRECTION:
+        # {json.dumps(scene, ensure_ascii=False)}
+        # 
+        # VISUAL REFERENCES:
+        # {json.dumps(shot_visual_context, ensure_ascii=False)}
+        # 
+        # BINDING ART DIRECTION:
+        # {repair_bundle.get("art_direction_instructions", "")}
+        # 
+        # EXISTING SHARED DRAW HELPERS (only these may be called):
+        # {json.dumps(shared_helper_names)}
+        # 
+        # ORIGINAL SHOT BODY:
+        # {original_body}
+        # 
+        # Rules:
+        # - Fix the listed visible problems, not unrelated aspects of the shot.
+        # - Preserve all named recurring characters, props, environment identity and relative scale.
+        # - Preserve the shot's purpose, focal entity, visual objective, composition intent,
+        #   visual change, continuity note and transition compatibility.
+        # - Use existing shared helpers only; do not add helpers or call undefined drawX functions.
+        # - Keep all drawing inside the original logical canvas.
+        # - Keep deterministic Canvas 2D only. No DOM, browser globals, network, filesystem,
+        #   imports, exports, Node APIs, timers, eval, Function, random numbers, WebGL or 3D.
+        # - Keep mechanism actions and kinematics coherent. Use the supplied validated mechanism
+        #   arrays as-is; do not invent physics or claim engineering accuracy for qualitative motion.
+        # - Return the full replacement draw_body, not a diff or patch.
         # """.strip(
         # === END LEGACY VISUAL SHOT REPAIR PROMPT ===
 
