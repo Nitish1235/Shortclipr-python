@@ -6,6 +6,8 @@ from app.services.animation_contracts import (
     validate_draw_helper_definitions,
     validate_draw_helper_specs,
     validate_draw_helper_dependency_graph,
+    extract_shared_draw_helpers,
+    replace_shared_draw_helpers,
 )
 
 
@@ -314,6 +316,30 @@ class MechanismAssemblyTests(unittest.TestCase):
         self.assertIn("const mechanisms = [{", source)
         self.assertIn('"type":"pivot"', source)
         self.assertIn("drawBridge(g);", source)
+
+
+class SharedHelperReplacementTests(unittest.TestCase):
+    def test_replaces_only_requested_top_level_helper_and_preserves_other_source(self):
+        shared = """
+        const palette = { ink: "#111" };
+        function drawBridge(g, x) { g.fillRect(x, 0, 10, 10); }
+        function drawTower(g, x) { g.fillRect(x, 0, 5, 20); }
+        """
+        replacement = "function drawBridge(g, x) { g.fillRect(x, 0, 20, 10); }"
+        extracted = extract_shared_draw_helpers(shared, ["drawBridge"])
+        self.assertIn("g.fillRect(x, 0, 10, 10)", extracted["drawBridge"])
+        updated = replace_shared_draw_helpers(shared, replacement, ["drawBridge"])
+        self.assertIn('const palette = { ink: "#111" };', updated)
+        self.assertIn("g.fillRect(x, 0, 20, 10)", updated)
+        self.assertIn("function drawTower(g, x)", updated)
+        self.assertNotIn("g.fillRect(x, 0, 10, 10)", updated)
+
+    def test_rejects_missing_or_duplicate_top_level_declarations(self):
+        with self.assertRaisesRegex(ValueError, "found 0"):
+            extract_shared_draw_helpers("function drawTower(g) {}", ["drawBridge"])
+        duplicate = "function drawBridge(g) {} function drawBridge(g) {}"
+        with self.assertRaisesRegex(ValueError, "found 2"):
+            extract_shared_draw_helpers(duplicate, ["drawBridge"])
 
 
 class DrawingHelperDependencyGraphTests(unittest.TestCase):
