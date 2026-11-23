@@ -663,6 +663,79 @@ def validate_draw_helper_specs(value: Any, required_names: list[str]) -> list[di
     return [normalized[name] for name in required_names]
 
 
+
+def replace_shared_draw_helpers(
+    shared_source: str,
+    replacement_source: str,
+    helper_names: list[str],
+) -> str:
+    """Replace exact top-level named helper declarations without touching other code."""
+    original_mask = _mask_js_comments_and_strings(shared_source)
+    replacement_mask = _mask_js_comments_and_strings(replacement_source)
+    replacements: dict[str, str] = {}
+    for name in helper_names:
+        declaration = re.search(
+            rf"\bfunction\s+{re.escape(name)}\s*\([^)]*\)\s*\{{",
+            replacement_mask,
+        )
+        if not declaration:
+            raise ValueError(f"Replacement helper {name} is not a named function declaration")
+        depth = 1
+        body_end = None
+        for position in range(declaration.end(), len(replacement_mask)):
+            if replacement_mask[position] == "{":
+                depth += 1
+            elif replacement_mask[position] == "}":
+                depth -= 1
+                if depth == 0:
+                    body_end = position + 1
+                    break
+        if body_end is None:
+            raise ValueError(f"Replacement helper {name} has an incomplete body")
+        replacements[name] = replacement_source[declaration.start():body_end]
+
+    ranges: dict[str, tuple[int, int]] = {}
+    depth = 0
+    brace_depth = [0] * (len(original_mask) + 1)
+    for index, char in enumerate(original_mask):
+        brace_depth[index] = depth
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth = max(0, depth - 1)
+
+    for name in helper_names:
+        matches = [
+            match for match in re.finditer(
+                rf"\bfunction\s+{re.escape(name)}\s*\([^)]*\)\s*\{{",
+                original_mask,
+            )
+            if brace_depth[match.start()] == 0
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                f"Expected exactly one top-level shared declaration for {name}; found {len(matches)}"
+            )
+        declaration = matches[0]
+        depth = 1
+        body_end = None
+        for position in range(declaration.end(), len(original_mask)):
+            if original_mask[position] == "{":
+                depth += 1
+            elif original_mask[position] == "}":
+                depth -= 1
+                if depth == 0:
+                    body_end = position + 1
+                    break
+        if body_end is None:
+            raise ValueError(f"Existing shared helper {name} has an incomplete body")
+        ranges[name] = (declaration.start(), body_end)
+
+    updated = shared_source
+    for name, (start, end) in sorted(ranges.items(), key=lambda item: item[1][0], reverse=True):
+        updated = updated[:start] + replacements[name] + updated[end:]
+    return updated
+
 def validate_draw_helper_dependency_graph(specifications: list[dict[str, Any]]) -> None:
     """Reject circular dependencies among generated shared drawing helpers."""
     graph = {
