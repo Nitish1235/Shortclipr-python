@@ -876,6 +876,12 @@ class SharedHelperScopeRegressionTests(unittest.TestCase):
 
 
 class TemplateExpressionHelperValidationTests(unittest.TestCase):
+    def test_compiled_program_requires_repair_bundle(self):
+        with self.assertRaisesRegex(ValueError, "required repair_bundle"):
+            DeepSeekAnimationCompiler.validate_compiled_program({
+                "scene_js": "function drawShot_0(g,t,e,a) { g.fillRect(0,0,1,1); }",
+            })
+
     def test_finds_unresolved_helpers_inside_template_expressions(self):
         source = """
         function drawShot_0(g, t, env, absoluteTime) {
