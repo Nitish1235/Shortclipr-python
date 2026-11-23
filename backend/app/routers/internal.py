@@ -368,7 +368,7 @@ async def run_planning(
                 if isinstance(cached, dict) and isinstance(cached.get("scene_js"), str):
                     try:
                         compiler.validate_compiled_program(cached)
-                    except (TypeError, ValueError) as validation_error:
+                    except (TypeError, ValueError, KeyError, IndexError) as validation_error:
                         logger.warning(
                             "planning.cached_animation_invalidated",
                             extra={
