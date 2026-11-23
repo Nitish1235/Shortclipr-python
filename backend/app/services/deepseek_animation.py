@@ -389,9 +389,11 @@ SHOT DIRECTING
 
 SHARED DRAWING HELPERS
 Verified shared helper names: {json.dumps(shared_helper_names)}
-Call only these shared helpers. A custom drawX function must be fully defined in this
-body before use. Never invent a helper. Reuse shared helpers for recurring characters
-and props; do not redraw identity-defining features.
+Call only these shared helpers. Never define a drawX function inside this shot body.
+If a new reusable drawing function is needed, call it by its exact drawX name; the
+compiler will specify and generate it in the shared library before assembly. Do not
+invent unrelated helper names. Reuse shared helpers for recurring characters and props;
+do not redraw identity-defining features.
 
 MECHANISM RENDERING
 The validated mechanismActions and mechanisms arrays are authoritative. Never invent
