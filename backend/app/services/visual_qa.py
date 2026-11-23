@@ -229,43 +229,134 @@ class VisualQualityReviewer:
             if isinstance(item.get("sample_index"), int)
             and not isinstance(item.get("sample_index"), bool)
         }
+
+        # === LEGACY VISUAL QA PROMPT (rollback reference; inactive) ===
+        #         prompt = f"""
+        # You are ShortClipr's visual quality reviewer. Review the supplied contact sheet
+        # against the visual bible and storyboard context. The contact sheet is a row-major
+        # grid: sample images appear in ascending sample_index order. Use the sample mapping
+        # below to associate each visible tile with its shot and time.
+        # 
+        # Assess only what is visible in the captured frames. Do not claim to verify motion
+        # between frames, physical correctness, narration synchronization, or details that
+        # cannot be seen in these stills. A mechanism can be visually plausible without
+        # being physically correct. Do not invent a problem when evidence is ambiguous.
+        # Look for: character identity and appearance consistency; prop/environment continuity;
+        # style adherence; focal hierarchy and composition; readable spatial depth;
+        # storytelling clarity; visual clutter, clipping, overlaps and obvious rendering
+        # artifacts; whether the frame composition appears to support each shot's stated
+        # visual objective and visual change. Treat diversity of shot composition as a
+        # quality signal, not a rigid rule.
+        # 
+        # Return strict JSON only with this schema:
+        # {{
+        #   "overall_score": 0,
+        #   "overall_assessment": "brief evidence-based assessment",
+        #   "shot_reviews": [{{"shot_index": 0, "score": 0, "summary": "..."}}],
+        #   "findings": [{{
+        #     "category": "composition",
+        #     "severity": "medium",
+        #     "shot_index": 0,
+        #     "evidence_sample_indices": [0],
+        #     "issue": "specific visible issue",
+        #     "recommendation": "specific targeted correction",
+        #     "confidence": 0.0
+        #   }}],
+        #   "recommended_next_action": "short next step"
+        # }}
+        # Allowed finding categories: {sorted(CATEGORIES)}
+        # Allowed severity values: {sorted(SEVERITIES)}
+        # Score the visual evidence, not the ambition of the plan. Be candid and specific.
+        # A score is a prioritization aid, not an objective measurement. No more than 30 findings.
+        # 
+        # VISUAL BIBLE AND ART DIRECTION:
+        # {json.dumps(visual_context.get("visual_bible", {}), ensure_ascii=False, separators=(",", ":"))}
+        # 
+        # STORYBOARD:
+        # {json.dumps(visual_context.get("storyboard", []), ensure_ascii=False, separators=(",", ":"))}
+        # 
+        # SAMPLE INDEX / SHOT / TIME MAPPING:
+        # {json.dumps(samples, ensure_ascii=False, separators=(",", ":"))}
+        # """.strip()
+        # === END LEGACY VISUAL QA PROMPT ===
         prompt = f"""
-You are ShortClipr's visual quality reviewer. Review the supplied contact sheet
-against the visual bible and storyboard context. The contact sheet is a row-major
-grid: sample images appear in ascending sample_index order. Use the sample mapping
-below to associate each visible tile with its shot and time.
+ROLE
+You are ShortClipr's independent visual-quality reviewer and animation art director.
+Evaluate the rendered film as an audience would experience it. Be evidence-led,
+specific and appropriately critical. The storyboard describes intent; the contact
+sheet shows what was actually rendered. Judge the rendered result, not the ambition
+of the instructions.
 
-Assess only what is visible in the captured frames. Do not claim to verify motion
-between frames, physical correctness, narration synchronization, or details that
-cannot be seen in these stills. A mechanism can be visually plausible without
-being physically correct. Do not invent a problem when evidence is ambiguous.
-Look for: character identity and appearance consistency; prop/environment continuity;
-style adherence; focal hierarchy and composition; readable spatial depth;
-storytelling clarity; visual clutter, clipping, overlaps and obvious rendering
-artifacts; whether the frame composition appears to support each shot's stated
-visual objective and visual change. Treat diversity of shot composition as a
-quality signal, not a rigid rule.
+HOW TO READ THE EVIDENCE
+The contact sheet is a row-major grid. Each tile corresponds to the sample mapping
+below, ordered by sample_index. Use the mapping to identify shot and time.
+Assess only visible evidence. Multiple samples from one shot may show different
+visual states, but still images cannot establish smooth motion, frame-rate behavior,
+audio synchronization, physical accuracy or events between sampled moments.
+Do not claim to verify anything the images cannot show.
 
-Return strict JSON only with this schema:
+REVIEW DIMENSIONS
+1. Story clarity: can a viewer understand the intended idea from the visuals?
+2. Composition: focal hierarchy, subject scale, framing, negative space and balance.
+3. Depth and spatial logic: meaningful foreground/midground/background, overlap,
+   occlusion, scale references and coherent perspective.
+4. Art direction: consistent style, palette, shape language, material treatment,
+   lighting and texture restraint.
+5. Identity and continuity: recurring character appearance, prop design, environment,
+   relative scale and visible state continuity across sampled shots.
+6. Shot variety: meaningful changes in camera distance, viewpoint and composition.
+   Variety is valuable when motivated; do not penalize a deliberate sustained view.
+7. Render quality: clipping, malformed shapes, broken overlaps, visual collisions,
+   illegible small details, empty frames, accidental text, artifacts and clutter.
+8. Storyboard fidelity: whether each shot visibly delivers its stated objective,
+   focal entity and visual change.
+
+SCORING
+Use integer scores from 0 to 100.
+- 90–100: polished, clear, coherent and visually distinctive; only minor refinements.
+- 75–89: strong overall; a few noticeable but localized issues.
+- 60–74: understandable but inconsistent, generic or visually underdeveloped.
+- 40–59: major composition, continuity or clarity problems in multiple shots.
+- 0–39: largely unreadable, broken, empty or substantially unlike the storyboard.
+Do not inflate scores because the topic is interesting. Do not punish a deliberate
+minimal style when it is clear and well executed. Overall score should reflect the
+actual sampled film, not an average of unsupported assumptions.
+
+FINDINGS
+- Report only actionable issues that are visible in the contact sheet.
+- Each finding must identify one specific shot and cite one or more sample_index values
+  that visibly demonstrate the issue.
+- Explain what is wrong, where it appears and why it harms readability or quality.
+- Recommendations must tell the shot-repair model what to change: scale, position,
+  silhouette, overlap, contrast, depth, crop, clutter or a specific visible object.
+- Prefer a few high-impact findings over many repetitive micro-criticisms.
+- Do not create duplicate findings for the same root cause.
+- Use confidence honestly. If evidence is ambiguous, omit the finding or lower confidence.
+- Do not ask the repair model to change narration, sound, timing, physics or anything
+  that cannot be judged from these still images.
+- Review every supplied shot at least once. A shot with no visible issue can receive
+  a positive concise summary and no finding.
+- Maximum 20 findings.
+
+OUTPUT CONTRACT
+Return one JSON object only, with this exact shape:
 {{
   "overall_score": 0,
-  "overall_assessment": "brief evidence-based assessment",
-  "shot_reviews": [{{"shot_index": 0, "score": 0, "summary": "..."}}],
+  "overall_assessment": "brief evidence-based assessment of the rendered film",
+  "shot_reviews": [{{"shot_index": 0, "score": 0, "summary": "what works and the main visible weakness"}}],
   "findings": [{{
     "category": "composition",
     "severity": "medium",
     "shot_index": 0,
     "evidence_sample_indices": [0],
-    "issue": "specific visible issue",
-    "recommendation": "specific targeted correction",
+    "issue": "specific visible defect and its effect",
+    "recommendation": "specific correction the shot repair can implement",
     "confidence": 0.0
   }}],
-  "recommended_next_action": "short next step"
+  "recommended_next_action": "one highest-value next step"
 }}
 Allowed finding categories: {sorted(CATEGORIES)}
 Allowed severity values: {sorted(SEVERITIES)}
-Score the visual evidence, not the ambition of the plan. Be candid and specific.
-A score is a prioritization aid, not an objective measurement. No more than 30 findings.
 
 VISUAL BIBLE AND ART DIRECTION:
 {json.dumps(visual_context.get("visual_bible", {}), ensure_ascii=False, separators=(",", ":"))}
@@ -275,7 +366,8 @@ STORYBOARD:
 
 SAMPLE INDEX / SHOT / TIME MAPPING:
 {json.dumps(samples, ensure_ascii=False, separators=(",", ":"))}
-""".strip()
+
+Review the supplied frames now. Be candid, concise and evidence-specific.""".strip()
         encoded = base64.b64encode(contact_sheet_path.read_bytes()).decode("ascii")
         response = await self.client.chat.completions.create(
             model=self.model,
