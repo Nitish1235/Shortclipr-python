@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "playwright-core": "1.55.0"
+    "playwright-core": "1.55.0",
+    "acorn": "8.15.0",
+    "eslint-scope": "8.4.0"
   }
 }

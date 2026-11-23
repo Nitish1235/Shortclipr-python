@@ -197,6 +197,48 @@ class DrawnByCodeRenderer:
                     + syntax_error.decode(errors="replace")[-1200:]
                 )
 
+            helper_manifest = plan.get("helper_manifest")
+            if not isinstance(helper_manifest, dict):
+                raise NonRetryableRenderError(
+                    "Compiled animation is missing its canonical required-function manifest"
+                )
+            manifest_file = scene_dir / "helper-manifest.json"
+            manifest_file.write_text(
+                json.dumps(helper_manifest, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            linker = await asyncio.create_subprocess_exec(
+                self.node,
+                str(self.root / "engine" / "validate-scene.mjs"),
+                str(scene_file),
+                str(manifest_file),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                start_new_session=(os.name == "posix"),
+            )
+            try:
+                linker_stdout, linker_stderr = await asyncio.wait_for(
+                    linker.communicate(), timeout=self.syntax_timeout,
+                )
+            except asyncio.TimeoutError as error:
+                await self._kill_and_wait(linker)
+                raise NonRetryableRenderError(
+                    f"Generated animation linker exceeded {self.syntax_timeout}s"
+                ) from error
+            except asyncio.CancelledError:
+                await self._kill_and_wait(linker)
+                raise
+            linker_output = (linker_stdout or b"") + (linker_stderr or b"")
+            if linker.returncode != 0:
+                raise NonRetryableRenderError(
+                    "Generated animation failed canonical function/scope linking: "
+                    + linker_output.decode(errors="replace")[-1800:]
+                )
+            logger.info(
+                "drawn_by_code.linker.passed",
+                extra={"linker_output": linker_output.decode(errors="replace")[-1000:]},
+            )
+
             (scene_dir / "drawn-by-code.json").write_text(
                 json.dumps({"version": 1, "generator": "shortclipr"}), encoding="utf-8",
             )
@@ -303,9 +345,15 @@ class DrawnByCodeRenderer:
                 output_path.unlink(missing_ok=True)
                 detail = f"Drawn-by-Code exited with code {code}; last subprocess output:\n{tail}"
                 lowered_tail = tail.lower()
-                if "[page error]" in lowered_tail or "error(s) in the page" in lowered_tail:
+                if (
+                    "[page error]" in lowered_tail
+                    or "error(s) in the page" in lowered_tail
+                    or "drawn_by_code.runtime_error" in lowered_tail
+                    or "drawn_by_code.linker.failed" in lowered_tail
+                ):
                     raise NonRetryableRenderError(
-                        "Generated animation triggered a deterministic browser error: " + detail[-1800:]
+                        "Generated animation failed deterministic runtime/linker validation: "
+                        + detail[-1800:]
                     )
                 raise RuntimeError(detail)
 
