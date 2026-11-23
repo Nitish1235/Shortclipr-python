@@ -39,6 +39,10 @@ class DrawnByCodeRenderer:
         return value or "no subprocess output"
 
     @staticmethod
+    def _validate_generated_helpers(source: str) -> None:
+        self._validate_generated_helpers(source)
+
+    @staticmethod
     async def _kill_and_wait(process: asyncio.subprocess.Process) -> None:
         # start_new_session=True makes pid the process-group ID. Kill the
         # whole group even if Node already exited, because FFmpeg/Chromium
