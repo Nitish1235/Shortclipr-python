@@ -100,6 +100,28 @@ class ObjectStorage:
         )
         return object_name
 
+    async def health_check(self) -> None:
+        """Verify this service can write, read, and delete a private GCS object."""
+        if not self.client or not self.settings.GCS_BUCKET_NAME:
+            raise RuntimeError("GCS_BUCKET_NAME is not configured")
+        object_name = f"_health/worker-probe/{uuid4().hex}"
+        blob = self.client.bucket(self.settings.GCS_BUCKET_NAME).blob(object_name)
+        payload = b"shortclipr-storage-readiness-v1"
+
+        def check() -> None:
+            uploaded = False
+            try:
+                blob.upload_from_string(payload, content_type="application/octet-stream", timeout=8)
+                uploaded = True
+                actual = blob.download_as_bytes(timeout=8)
+                if actual != payload:
+                    raise RuntimeError("GCS readiness object content did not match")
+            finally:
+                if uploaded:
+                    blob.delete(timeout=8)
+
+        await self._run_blocking(check)
+
     async def private_object_info(self, object_name: str) -> tuple[str, int | None]:
         if not self.client or not self.settings.GCS_BUCKET_NAME:
             raise RuntimeError("GCS_BUCKET_NAME is not configured")
