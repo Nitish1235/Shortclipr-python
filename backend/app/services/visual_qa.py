@@ -377,13 +377,7 @@ class VisualQualityReviewer:
         # STORYBOARD:
         # {json.dumps(visual_context.get("storyboard", []), ensure_ascii=False, separators=(",", ":"))}
         # 
-        # GENERATED SHARED FUNCTION REGISTRY:
-{json.dumps(visual_context.get('function_registry', []), ensure_ascii=False, separators=(',', ':'))}
-
-FUNCTION SPECIFICATIONS:
-{json.dumps(visual_context.get('function_specs', []), ensure_ascii=False, separators=(',', ':'))}
-
-SAMPLE INDEX / SHOT / TIME MAPPING:
+        # SAMPLE INDEX / SHOT / TIME MAPPING:
         # {json.dumps(samples, ensure_ascii=False, separators=(",", ":"))}
         # """.strip()
         # === END LEGACY VISUAL QA PROMPT ===
@@ -481,6 +475,12 @@ VISUAL BIBLE AND ART DIRECTION:
 
 STORYBOARD:
 {json.dumps(visual_context.get("storyboard", []), ensure_ascii=False, separators=(",", ":"))}
+
+GENERATED SHARED FUNCTION REGISTRY:
+{json.dumps(visual_context.get("function_registry", []), ensure_ascii=False, separators=(",", ":"))}
+
+FUNCTION SPECIFICATIONS:
+{json.dumps(visual_context.get("function_specs", []), ensure_ascii=False, separators=(",", ":"))}
 
 SAMPLE INDEX / SHOT / TIME MAPPING:
 {json.dumps(samples, ensure_ascii=False, separators=(",", ":"))}
