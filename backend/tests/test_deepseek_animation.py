@@ -678,6 +678,18 @@ class DrawingHelperImplementationDependencyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "dependency manifest does not match"):
             validate_draw_helper_dependencies(source, specs)
 
+    def test_rejects_non_string_or_unhashable_dependency_entries(self):
+        source = """
+        function drawPropGear(g) { g.fillRect(0, 0, 8, 8); }
+        function drawCharacterEngineer(g) { g.fillRect(10, 10, 20, 30); }
+        """
+        specs = [
+            {"name": "drawPropGear", "dependencies": []},
+            {"name": "drawCharacterEngineer", "dependencies": [["drawPropGear"]]},
+        ]
+        with self.assertRaisesRegex(ValueError, "invalid dependency manifest"):
+            validate_draw_helper_dependencies(source, specs)
+
     def test_declared_but_unused_dependency_is_rejected(self):
         source = """
         function drawPropGear(g) { g.fillRect(0, 0, 8, 8); }
