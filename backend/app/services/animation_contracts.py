@@ -492,9 +492,18 @@ def find_unresolved_draw_helpers(shared_source: str, shot_sources: list[str]) ->
     drawing functions must be available from the film's shared scope.
     """
     masked_shared = _mask_js_comments_and_strings(shared_source)
+    brace_depth: list[int] = [0] * (len(masked_shared) + 1)
+    depth = 0
+    for index, char in enumerate(masked_shared):
+        brace_depth[index] = depth
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth = max(0, depth - 1)
     shared = {
         name
         for match in _DRAW_HELPER_DECL.finditer(masked_shared)
+        if brace_depth[match.start()] == 0
         for name in match.groups()
         if name
     }
