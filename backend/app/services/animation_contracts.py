@@ -653,6 +653,35 @@ def validate_draw_helper_specs(value: Any, required_names: list[str]) -> list[di
         raise ValueError("Missing drawing helper specifications: " + ", ".join(missing))
     return [normalized[name] for name in required_names]
 
+
+def validate_draw_helper_dependency_graph(specifications: list[dict[str, Any]]) -> None:
+    """Reject circular dependencies among generated shared drawing helpers."""
+    graph = {
+        item["name"]: [
+            dependency for dependency in item.get("dependencies", [])
+            if dependency in {spec.get("name") for spec in specifications}
+        ]
+        for item in specifications
+    }
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(name: str, path: list[str]) -> None:
+        if name in visiting:
+            cycle_start = path.index(name) if name in path else 0
+            cycle = path[cycle_start:] + [name]
+            raise ValueError("Circular drawing helper dependency: " + " -> ".join(cycle))
+        if name in visited:
+            return
+        visiting.add(name)
+        for dependency in graph.get(name, []):
+            visit(dependency, [*path, name])
+        visiting.remove(name)
+        visited.add(name)
+
+    for name in graph:
+        visit(name, [])
+
 def validate_generated_fragment(source: Any, label: str, max_chars: int) -> str:
     if not isinstance(source, str) or not 20 <= len(source) <= max_chars:
         raise ValueError(f"{label} source length is outside allowed bounds")
