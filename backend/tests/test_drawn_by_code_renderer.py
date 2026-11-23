@@ -97,6 +97,28 @@ Motion.scene({ draw(g, t, env) { drawShot_0(g, t, env, t); } });
         self.assertIn("opt['qa-at']", source)
         self.assertIn("opt['qa-out']", source)
         self.assertIn("drawn_by_code.motion_qa.captured", source)
+        self.assertIn("runtime_preflight", source)
+        self.assertIn("drawn_by_code.runtime_error", source)
+        # Runtime frame exceptions must not be swallowed by the optional QA PNG writer.
+        self.assertNotIn("motion_qa.capture_failed", source)
+
+    def test_renderer_runs_ast_linker_with_persisted_manifest(self):
+        from pathlib import Path
+        import json
+
+        backend = Path(__file__).resolve().parents[1]
+        linker = backend / "drawn_by_code" / "engine" / "validate-scene.mjs"
+        package = json.loads(
+            (backend / "drawn_by_code" / "package.json").read_text(encoding="utf-8")
+        )
+        renderer = (backend / "app" / "services" / "drawn_by_code_renderer.py").read_text(encoding="utf-8")
+
+        self.assertTrue(linker.is_file())
+        self.assertIn("acorn", package["dependencies"])
+        self.assertIn("eslint-scope", package["dependencies"])
+        self.assertIn("validate-scene.mjs", renderer)
+        self.assertIn("helper-manifest.json", renderer)
+        self.assertIn("canonical function/scope linking", renderer)
 
 
 if __name__ == "__main__":

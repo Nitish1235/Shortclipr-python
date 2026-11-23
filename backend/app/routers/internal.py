@@ -786,6 +786,12 @@ async def run_render(
                     if isinstance(repair_bundle, dict) and isinstance(repair_bundle.get("shots"), list)
                     else None
                 ),
+                "compiler_version": program.get("compiler_version"),
+                "runtime_contract_version": program.get("runtime_contract_version"),
+                "required_helper_count": len(
+                    program.get("helper_manifest", {}).get("functions", [])
+                    if isinstance(program.get("helper_manifest"), dict) else []
+                ),
             },
         )
         plan = {
@@ -795,6 +801,10 @@ async def run_render(
             "durationSeconds": project["duration_seconds"],
             "scene_js": scene_js, "style": program.get("style", "paper-cutout"),
             "shot_manifest": program.get("shot_manifest", []),
+            "helper_manifest": program.get(
+                "helper_manifest",
+                repair_bundle.get("helper_manifest", {}) if isinstance(repair_bundle, dict) else {},
+            ),
             "motion_diagnostics": program.get("motion_diagnostics", []),
             "visual_qa_context": program.get("visual_qa_context", {}),
             "repair_bundle": program.get("repair_bundle"),

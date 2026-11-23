@@ -32,13 +32,34 @@ const assertNoPageErrors = () => {
         throw new Error('[page error] ' + errors.slice(-8).join('\n'));
     }
 };
-const grab = async (i, type) => {
-    const data = await page.evaluate(([i, type]) => {
-        window.renderFrame(i);
-        return document.getElementById('c').toDataURL(type, 0.95).split(',')[1];
-    }, [i, type]);
-    // Do not spend the remaining frame budget when a deterministic scene error
-    // has already been reported by Chromium.
+const grab = async (i, type, phase = 'video_render') => {
+    let data;
+    try {
+        data = await page.evaluate(([i, type]) => {
+            window.renderFrame(i);
+            return document.getElementById('c').toDataURL(type, 0.95).split(',')[1];
+        }, [i, type]);
+    } catch (error) {
+        const timeSeconds = i / fps;
+        const shotIndex = Array.isArray(info.shots)
+            ? info.shots.findIndex(([start, end]) => i >= start && i < end)
+            : -1;
+        const message = String(error?.message || error);
+        const typed = /^(ReferenceError|TypeError|SyntaxError|RangeError):/.exec(message);
+        console.error(JSON.stringify({
+            event: 'drawn_by_code.runtime_error',
+            error_type: typed?.[1] || error?.name || 'Error',
+            message: message.slice(0, 1200),
+            frame: i,
+            time_seconds: Number(timeSeconds.toFixed(6)),
+            shot_index: shotIndex >= 0 ? shotIndex : null,
+            shot_name: shotIndex >= 0 ? info.shots[shotIndex]?.[2] ?? null : null,
+            phase,
+        }));
+        throw new Error(`Generated scene runtime failure during ${phase} at frame ${i} (${timeSeconds.toFixed(3)}s): ${message}`);
+    }
+    // Do not spend the remaining frame budget when Chromium reports an uncaught
+    // browser error in addition to the directly captured frame exception.
     assertNoPageErrors();
     return data;
 };
@@ -48,26 +69,48 @@ try {
     // shot without opening a second Chromium session or changing MP4 rendering.
     if (opt['qa-at']) {
         const out = opt['qa-out'] ?? path.join(outBase, 'motion-qa');
+        const times = [...new Set(String(opt['qa-at']).split(',').map(Number))]
+            .filter((value) => Number.isFinite(value) && value >= 0);
+        let canWriteFrames = true;
         try {
             fs.mkdirSync(out, { recursive: true });
-            const times = [...new Set(String(opt['qa-at']).split(',').map(Number))]
-                .filter((value) => Number.isFinite(value) && value >= 0);
-            for (const [index, seconds] of times.entries()) {
-                const frame = Math.min(total - 1, Math.max(0, Math.round(seconds * fps)));
-                const file = path.join(out, `q_${String(index).padStart(3, '0')}.png`);
-                fs.writeFileSync(file, Buffer.from(await grab(frame, 'image/png'), 'base64'));
+        } catch (error) {
+            canWriteFrames = false;
+            console.warn(JSON.stringify({
+                event: 'drawn_by_code.motion_qa.capture_storage_failed',
+                error: String(error).slice(0, 500),
+            }));
+        }
+
+        for (const [index, seconds] of times.entries()) {
+            const frame = Math.min(total - 1, Math.max(0, Math.round(seconds * fps)));
+            // Frame execution is the runtime preflight and is always fatal on error.
+            // Only the optional PNG write is allowed to fail without aborting render.
+            const imageData = await grab(frame, 'image/png', 'runtime_preflight');
+            if (!canWriteFrames) continue;
+            const file = path.join(out, `q_${String(index).padStart(3, '0')}.png`);
+            try {
+                fs.writeFileSync(file, Buffer.from(imageData, 'base64'));
+            } catch (error) {
+                canWriteFrames = false;
+                console.warn(JSON.stringify({
+                    event: 'drawn_by_code.motion_qa.capture_storage_failed',
+                    error: String(error).slice(0, 500),
+                }));
             }
+        }
+
+        if (canWriteFrames) {
             console.log(JSON.stringify({
                 event: 'drawn_by_code.motion_qa.captured',
                 frame_count: times.length,
                 output: out,
             }));
-        } catch (error) {
-            // QA file-system failures should not prevent delivery of an otherwise
-            // valid MP4. Actual Chromium page errors are still fatal at final check.
+        } else {
             console.warn(JSON.stringify({
-                event: 'drawn_by_code.motion_qa.capture_failed',
-                error: String(error).slice(0, 500),
+                event: 'drawn_by_code.motion_qa.capture_incomplete',
+                frame_count: times.length,
+                reason: 'optional_frame_storage_failed',
             }));
         }
     }

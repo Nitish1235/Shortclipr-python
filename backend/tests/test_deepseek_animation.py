@@ -242,7 +242,7 @@ class TargetedSharedHelperRepairTests(unittest.IsolatedAsyncioTestCase):
             "style_id": "cinematic-editorial",
             "shared_js": (
                 "function drawBridge(g, x) { g.fillRect(x, 0, 10, 10); }\n"
-                "function drawTower(g, x) { g.fillRect(x, 0, 5, 20); }"
+                "function paintTower(g, x) { g.fillRect(x, 0, 5, 20); }"
             ),
             "shots": [{
                 "index": 0,
@@ -250,10 +250,17 @@ class TargetedSharedHelperRepairTests(unittest.IsolatedAsyncioTestCase):
                 "start_frame": 0,
                 "end_frame": 90,
                 "draw_body": original_body,
+                "required_helpers": ["drawBridge"],
+                "used_helpers": ["drawBridge"],
                 "mechanism_actions": [],
                 "mechanisms": [],
                 "transition_out": "cut",
             }],
+            "helper_manifest": {
+                "schema_version": 1,
+                "functions": [spec],
+                "shots": [{"index": 0, "required_helpers": ["drawBridge"], "required_entities": []}],
+            },
             "function_specs": [spec],
             "function_registry": [{
                 "name": "drawBridge",
@@ -279,7 +286,7 @@ class TargetedSharedHelperRepairTests(unittest.IsolatedAsyncioTestCase):
         result = await compiler.repair_shared_helpers(bundle, ["drawBridge"], findings)
 
         self.assertIn("g.fillRect(x, 0, 20, 10)", result["repair_bundle"]["shared_js"])
-        self.assertIn("function drawTower(g, x)", result["repair_bundle"]["shared_js"])
+        self.assertIn("function paintTower(g, x)", result["repair_bundle"]["shared_js"])
         self.assertEqual(result["repair_bundle"]["shots"][0]["draw_body"], original_body)
         self.assertEqual(result["repaired_function_names"], ["drawBridge"])
         self.assertEqual(result["repair_bundle"]["function_specs"][0]["version"], 2)
@@ -320,10 +327,28 @@ class TargetedShotRepairTests(unittest.IsolatedAsyncioTestCase):
             {
                 "index": index, "start_frame": index * 30, "end_frame": (index + 1) * 30,
                 "name": f"Shot {index}", "draw_body": original_body,
+                "required_helpers": ["drawBridge"], "used_helpers": ["drawBridge"],
                 "mechanism_actions": [], "mechanisms": [], "transition_out": "cut",
             }
             for index in range(3)
         ]
+        bridge_spec = {
+            "name": "drawBridge", "category": "visual",
+            "signature": "function drawBridge(g, x, y)",
+            "purpose": "Draw the bridge.", "coordinate_system": "local",
+            "origin": "left", "visual_target": "Bridge deck",
+            "style_requirements": "Editorial", "animation_behavior": "Static",
+            "dependencies": [], "acceptance_criteria": ["Visible", "Consistent"],
+            "required_by_shots": [0, 1, 2], "version": 1,
+        }
+        helper_manifest = {
+            "schema_version": 1,
+            "functions": [bridge_spec],
+            "shots": [
+                {"index": index, "required_helpers": ["drawBridge"], "required_entities": []}
+                for index in range(3)
+            ],
+        }
         bundle = {
             "schema_version": 1, "duration": 3, "logical": [1600, 900],
             "style_id": "cinematic-editorial", "art_direction": {},
@@ -337,6 +362,13 @@ class TargetedShotRepairTests(unittest.IsolatedAsyncioTestCase):
                 for index in range(3)
             ],
             "shared_js": "function drawBridge(g,x,y){ g.beginPath(); g.moveTo(x,y); g.lineTo(x+2,y+2); g.stroke(); }",
+            "helper_manifest": helper_manifest,
+            "function_specs": [bridge_spec],
+            "function_registry": [{
+                "name": "drawBridge", "category": "visual",
+                "signature": bridge_spec["signature"], "dependencies": [],
+                "required_by_shots": [0, 1, 2], "version": 1,
+            }],
             "shots": shots,
         }
         result = await compiler.repair_shot(
@@ -544,7 +576,7 @@ class SharedHelperReplacementTests(unittest.TestCase):
         shared = """
         const palette = { ink: "#111" };
         function drawBridge(g, x) { g.fillRect(x, 0, 10, 10); }
-        function drawTower(g, x) { g.fillRect(x, 0, 5, 20); }
+        function paintTower(g, x) { g.fillRect(x, 0, 5, 20); }
         """
         replacement = "function drawBridge(g, x) { g.fillRect(x, 0, 20, 10); }"
         extracted = extract_shared_draw_helpers(shared, ["drawBridge"])
@@ -552,12 +584,12 @@ class SharedHelperReplacementTests(unittest.TestCase):
         updated = replace_shared_draw_helpers(shared, replacement, ["drawBridge"])
         self.assertIn('const palette = { ink: "#111" };', updated)
         self.assertIn("g.fillRect(x, 0, 20, 10)", updated)
-        self.assertIn("function drawTower(g, x)", updated)
+        self.assertIn("function paintTower(g, x)", updated)
         self.assertNotIn("g.fillRect(x, 0, 10, 10)", updated)
 
     def test_rejects_missing_or_duplicate_top_level_declarations(self):
         with self.assertRaisesRegex(ValueError, "found 0"):
-            extract_shared_draw_helpers("function drawTower(g) {}", ["drawBridge"])
+            extract_shared_draw_helpers("function paintTower(g) {}", ["drawBridge"])
         duplicate = "function drawBridge(g) {} function drawBridge(g) {}"
         with self.assertRaisesRegex(ValueError, "found 2"):
             extract_shared_draw_helpers(duplicate, ["drawBridge"])
@@ -566,15 +598,15 @@ class SharedHelperReplacementTests(unittest.TestCase):
 class DrawingHelperDependencyGraphTests(unittest.TestCase):
     def test_accepts_acyclic_dependencies(self):
         validate_draw_helper_dependency_graph([
-            {"name": "drawBridge", "dependencies": ["drawTower"]},
-            {"name": "drawTower", "dependencies": []},
+            {"name": "drawBridge", "dependencies": ["paintTower"]},
+            {"name": "paintTower", "dependencies": []},
         ])
 
     def test_rejects_circular_dependencies(self):
         with self.assertRaisesRegex(ValueError, "Circular drawing helper dependency"):
             validate_draw_helper_dependency_graph([
-                {"name": "drawBridge", "dependencies": ["drawTower"]},
-                {"name": "drawTower", "dependencies": ["drawBridge"]},
+                {"name": "drawBridge", "dependencies": ["paintTower"]},
+                {"name": "paintTower", "dependencies": ["drawBridge"]},
             ])
 
 
@@ -819,18 +851,33 @@ class SharedHelperScopeRegressionTests(unittest.TestCase):
             validate_draw_helper_definitions(duplicate, ["drawRequested"])
 
     def test_compiled_program_rejects_unresolved_helpers_before_render(self):
+        bridge_spec = {
+            "name": "drawBridge", "category": "visual",
+            "signature": "function drawBridge(g)",
+            "purpose": "Draw the bridge.", "coordinate_system": "local",
+            "origin": "left", "visual_target": "Bridge deck",
+            "style_requirements": "Line", "animation_behavior": "Static",
+            "dependencies": [], "acceptance_criteria": ["Visible", "Consistent"],
+            "required_by_shots": [0], "version": 1,
+        }
         valid_bundle = {
             "shared_js": "function drawBridge(g) { g.fillRect(0, 0, 10, 10); }",
             "shots": [{
-                "index": 0,
-                "start_frame": 0,
-                "end_frame": 30,
-                "name": "Bridge",
+                "index": 0, "start_frame": 0, "end_frame": 30, "name": "Bridge",
                 "draw_body": "drawBridge(g);",
+                "required_helpers": ["drawBridge"], "used_helpers": ["drawBridge"],
             }],
-            "duration": 1,
-            "logical": [1600, 900],
-            "style_id": "line",
+            "helper_manifest": {
+                "schema_version": 1, "functions": [bridge_spec],
+                "shots": [{"index": 0, "required_helpers": ["drawBridge"], "required_entities": []}],
+            },
+            "function_specs": [bridge_spec],
+            "function_registry": [{
+                "name": "drawBridge", "category": "visual",
+                "signature": bridge_spec["signature"], "dependencies": [],
+                "required_by_shots": [0], "version": 1,
+            }],
+            "duration": 1, "logical": [1600, 900], "style_id": "line",
         }
         source = DeepSeekAnimationCompiler._assemble_film(
             valid_bundle["shared_js"], valid_bundle["shots"], 1, [1600, 900], "line",
@@ -848,18 +895,33 @@ class SharedHelperScopeRegressionTests(unittest.TestCase):
             })
 
     def test_compiled_program_rejects_scene_and_repair_bundle_drift(self):
+        bridge_spec = {
+            "name": "drawBridge", "category": "visual",
+            "signature": "function drawBridge(g)",
+            "purpose": "Draw the bridge.", "coordinate_system": "local",
+            "origin": "left", "visual_target": "Bridge deck",
+            "style_requirements": "Line", "animation_behavior": "Static",
+            "dependencies": [], "acceptance_criteria": ["Visible", "Consistent"],
+            "required_by_shots": [0], "version": 1,
+        }
         bundle = {
             "shared_js": "function drawBridge(g) { g.fillRect(0, 0, 10, 10); }",
             "shots": [{
-                "index": 0,
-                "start_frame": 0,
-                "end_frame": 30,
-                "name": "Bridge",
+                "index": 0, "start_frame": 0, "end_frame": 30, "name": "Bridge",
                 "draw_body": "drawBridge(g);",
+                "required_helpers": ["drawBridge"], "used_helpers": ["drawBridge"],
             }],
-            "duration": 1,
-            "logical": [1600, 900],
-            "style_id": "line",
+            "helper_manifest": {
+                "schema_version": 1, "functions": [bridge_spec],
+                "shots": [{"index": 0, "required_helpers": ["drawBridge"], "required_entities": []}],
+            },
+            "function_specs": [bridge_spec],
+            "function_registry": [{
+                "name": "drawBridge", "category": "visual",
+                "signature": bridge_spec["signature"], "dependencies": [],
+                "required_by_shots": [0], "version": 1,
+            }],
+            "duration": 1, "logical": [1600, 900], "style_id": "line",
         }
         different_shots = [{
             **bundle["shots"][0],
