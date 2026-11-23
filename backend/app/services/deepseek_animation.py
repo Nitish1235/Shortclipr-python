@@ -883,7 +883,7 @@ REPAIR METHOD
         # Catch the known unsupported helper before Chromium starts rendering. This
         # intentionally targets bare calls only; object properties such as obj.mix()
         # are not part of this global-helper check.
-        if re.search(r"(?<![\\w$.])mix\\s*\\(", source):
+        if re.search(r"(?<![\w$.])mix\s*\(", source):
             raise ValueError(
                 "Generated animation calls unsupported bare mix(); use Ease.lerp(a, b, progress)"
             )
