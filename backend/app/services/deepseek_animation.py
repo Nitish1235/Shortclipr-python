@@ -1371,9 +1371,20 @@ Return the complete repaired function declarations now.""".strip()
         )
         if not isinstance(updated_manifest_functions, list):
             raise ValueError("Shared-helper repair bundle has no canonical function manifest")
+        updated_specs_by_name = {
+            spec.get("name"): spec for spec in updated_specs
+            if isinstance(spec, dict) and isinstance(spec.get("name"), str)
+        } if isinstance(updated_specs, list) else {}
         for spec in updated_manifest_functions:
             if isinstance(spec, dict) and spec.get("name") in helper_names:
-                spec["version"] = int(spec.get("version", 1)) + 1
+                replacement_spec = updated_specs_by_name.get(spec["name"])
+                if not isinstance(replacement_spec, dict):
+                    raise ValueError(
+                        f"Shared-helper repair lost function specification {spec['name']}"
+                    )
+                # Manifest functions and function_specs may alias the same dict.
+                # Copy the single incremented version instead of incrementing twice.
+                spec["version"] = replacement_spec["version"]
         registry = updated_bundle.get("function_registry", [])
         if isinstance(registry, list):
             for entry in registry:
