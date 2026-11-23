@@ -43,6 +43,7 @@ from .animation_contracts import (
     find_unresolved_film_draw_helpers,
     top_level_draw_helper_names,
     validate_draw_helper_definitions,
+    validate_draw_helper_dependencies,
     validate_draw_helper_specs,
     validate_draw_helper_dependency_graph,
     extract_shared_draw_helpers,
@@ -187,6 +188,7 @@ class DeepSeekAnimationCompiler:
         ):
             raise ValueError("Animation helper manifest contains invalid or duplicate names")
         validate_draw_helper_definitions(shared_js, required_names, manifest_functions)
+        validate_draw_helper_dependencies(shared_js, manifest_functions)
         function_specs = bundle.get("function_specs")
         if not isinstance(function_specs, list) or len(function_specs) != len(manifest_functions):
             raise ValueError("Persisted function specifications do not match the canonical helper manifest")
@@ -732,6 +734,7 @@ Return the complete shared JavaScript drawing library now.""".strip()
             validate_draw_helper_definitions(
                 candidate, required_helper_names, helper_manifest["functions"],
             )
+            validate_draw_helper_dependencies(candidate, helper_manifest["functions"])
             candidate_names = set(top_level_draw_helper_names(candidate))
             expected_names = set(required_helper_names)
             missing = sorted(expected_names - candidate_names)
@@ -1359,6 +1362,7 @@ Return the complete repaired function declarations now.""".strip()
                     "Repaired shared library or existing shots contain unresolved helpers: "
                     + ", ".join(unresolved)
                 )
+            validate_draw_helper_dependencies(candidate_shared, specs)
             validate_draw_helper_dependency_graph(specs)
 
         generated = await self._validated_fragment(
