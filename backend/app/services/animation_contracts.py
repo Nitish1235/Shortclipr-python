@@ -511,8 +511,12 @@ def find_unresolved_draw_helpers(shared_source: str, shot_sources: list[str]) ->
     return sorted(unresolved)
 
 
-def validate_draw_helper_definitions(source: str, required_names: list[str]) -> None:
-    """Ensure a generated helper fragment actually defines every requested helper."""
+def validate_draw_helper_definitions(
+    source: str,
+    required_names: list[str],
+    specifications: list[dict[str, Any]] | None = None,
+) -> None:
+    """Ensure generated helpers match their contracts and contain real drawing work."""
     declared = {
         name
         for match in _DRAW_HELPER_DECL.finditer(source)
@@ -547,10 +551,39 @@ def validate_draw_helper_definitions(source: str, required_names: list[str]) -> 
                 if depth == 0:
                     body_end = position
                     break
-        if depth != 0 or not masked[body_start:body_end].strip():
+        body = masked[body_start:body_end]
+        if depth != 0 or not body.strip():
             raise ValueError(f"Generated helper {name} has an empty or incomplete implementation")
-        if re.search(r"\b(?:TODO|FIXME|placeholder|not\s+implemented)\b", masked[body_start:body_end], re.IGNORECASE):
+        if re.search(r"\b(?:TODO|FIXME|placeholder|not\s+implemented)\b", body, re.IGNORECASE):
             raise ValueError(f"Generated helper {name} contains placeholder implementation code")
+        drawing_work = re.search(
+            r"\bg\.(?:beginPath|closePath|moveTo|lineTo|bezierCurveTo|quadraticCurveTo|"
+            r"arc|ellipse|rect|roundRect|fillRect|strokeRect|clearRect|fill|stroke|"
+            r"fillText|strokeText|drawImage|clip|createLinearGradient|createRadialGradient)\s*\("
+            r"|\bShortcliprStyles\.[A-Za-z_$][\w$]*\s*\("
+            r"|\bdraw[A-Z][A-Za-z0-9_]*\s*\(",
+            body,
+        )
+        if not drawing_work:
+            raise ValueError(f"Generated helper {name} contains no Canvas drawing operation or helper delegation")
+        if specifications is not None:
+            spec = next((item for item in specifications if item.get("name") == name), None)
+            if spec is None:
+                raise ValueError(f"Generated helper {name} has no matching function specification")
+            expected = re.search(r"\(([^)]*)\)", str(spec.get("signature", "")))
+            actual = re.search(
+                rf"\bfunction\s+{re.escape(name)}\s*\(([^)]*)\)",
+                masked,
+            )
+            if not expected or not actual:
+                raise ValueError(f"Generated helper {name} has an invalid declared signature")
+            expected_params = [part.strip() for part in expected.group(1).split(",")]
+            actual_params = [part.strip() for part in actual.group(1).split(",")]
+            if actual_params != expected_params:
+                raise ValueError(
+                    f"Generated helper {name} signature does not match its specification: "
+                    f"expected ({', '.join(expected_params)})"
+                )
 
 
 _DRAW_HELPER_CATEGORIES = {"visual", "animation", "effect"}
