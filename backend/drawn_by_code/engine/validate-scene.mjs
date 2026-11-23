@@ -259,6 +259,51 @@ try {
     };
     walk(ast);
 
+    // Prove that every shot is reachable from the actual Motion.scene draw
+    // dispatcher, not merely referenced recursively by another shot/helper.
+    const sceneStatement = ast.body.find((node) =>
+        node.type === 'ExpressionStatement'
+        && node.expression?.type === 'CallExpression'
+        && node.expression.callee?.type === 'MemberExpression'
+        && node.expression.callee.object?.type === 'Identifier'
+        && node.expression.callee.object.name === 'Motion'
+        && node.expression.callee.property?.name === 'scene');
+    const sceneOptions = sceneStatement?.expression?.arguments?.[0];
+    if (sceneOptions?.type !== 'ObjectExpression') {
+        fail('Film must declare Motion.scene with a static options object');
+    }
+    const drawProperties = sceneOptions.properties.filter((property) =>
+        property.type === 'Property' && !property.computed
+        && property.key?.name === 'draw');
+    if (drawProperties.length !== 1
+        || !['FunctionExpression', 'ArrowFunctionExpression'].includes(drawProperties[0].value?.type)) {
+        fail('Motion.scene must contain exactly one draw dispatcher function');
+    }
+    const dispatchedShots = new Set();
+    const collectDispatchedShots = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (node.type === 'CallExpression' && node.callee?.type === 'Identifier'
+            && /^drawShot_[0-9]+$/.test(node.callee.name)) {
+            dispatchedShots.add(Number(node.callee.name.slice('drawShot_'.length)));
+        }
+        for (const [key, value] of Object.entries(node)) {
+            if (key === 'parent' || key === 'loc' || key === 'start' || key === 'end') continue;
+            if (Array.isArray(value)) {
+                for (const child of value) {
+                    if (child && typeof child.type === 'string') collectDispatchedShots(child);
+                }
+            } else if (value && typeof value.type === 'string') {
+                collectDispatchedShots(value);
+            }
+        }
+    };
+    collectDispatchedShots(drawProperties[0].value.body);
+    for (const shotIndex of expectedShotIndexes) {
+        if (!dispatchedShots.has(shotIndex)) {
+            fail(`Film dispatcher does not invoke drawShot_${shotIndex}`);
+        }
+    }
+
     const declarationCounts = new Map();
     for (const index of allShotDeclarations) {
         declarationCounts.set(index, (declarationCounts.get(index) ?? 0) + 1);
