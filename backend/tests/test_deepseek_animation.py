@@ -624,3 +624,168 @@ class DrawingHelperSpecificationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VisualContinuityContractTests(unittest.TestCase):
+    def test_contract_reuses_canonical_visual_bible_entities_without_mutation(self):
+        from app.services.shot_design_contracts import build_visual_continuity_contract
+
+        bible = {
+            "style_id": "cinematic-editorial",
+            "style_notes": "Muted technical palette",
+            "characters": [{"id": "char_engineer", "design": {"jacket": "orange"}}],
+            "props": [{"id": "prop_bridge", "design": "steel bascule deck"}],
+            "environments": [{"id": "env_river", "design": "river valley"}],
+            "mechanisms": [],
+        }
+        original = __import__("copy").deepcopy(bible)
+
+        contract = build_visual_continuity_contract(bible)
+
+        self.assertEqual(contract["characters"], bible["characters"])
+        self.assertEqual(contract["props"], bible["props"])
+        self.assertEqual(contract["environments"], bible["environments"])
+        self.assertEqual(contract["style"]["style_id"], "cinematic-editorial")
+        self.assertTrue(contract["identity_invariants"])
+        self.assertTrue(contract["state_change_policy"])
+        self.assertEqual(bible, original)
+
+    def test_shot_contract_filters_entities_and_includes_mechanism_component_props(self):
+        from app.services.shot_design_contracts import (
+            build_visual_continuity_contract,
+            build_shot_continuity_context,
+        )
+
+        bible = {
+            "style_id": "isometric-technical",
+            "characters": [
+                {"id": "char_a", "design": "engineer"},
+                {"id": "char_b", "design": "observer"},
+            ],
+            "props": [
+                {"id": "prop_deck", "design": "bridge deck"},
+                {"id": "prop_counterweight", "design": "counterweight"},
+                {"id": "prop_unrelated", "design": "tree"},
+            ],
+            "environments": [
+                {"id": "env_river", "design": "river"},
+                {"id": "env_city", "design": "city"},
+            ],
+            "mechanisms": [{
+                "id": "mechanism_lift",
+                "components": [
+                    {"prop_id": "prop_deck", "part": "deck"},
+                    {"prop_id": "prop_counterweight", "part": "counterweight"},
+                ],
+            }],
+        }
+        contract = build_visual_continuity_contract(bible)
+        context = build_shot_continuity_context(contract, {
+            "characters": ["char_a"],
+            "props": ["prop_unrelated"],
+            "environment": "env_river",
+            "mechanism_actions": [{"mechanism_id": "mechanism_lift"}],
+        })
+
+        self.assertEqual([item["id"] for item in context["characters"]], ["char_a"])
+        self.assertEqual(
+            {item["id"] for item in context["props"]},
+            {"prop_deck", "prop_counterweight", "prop_unrelated"},
+        )
+        self.assertEqual([item["id"] for item in context["environments"]], ["env_river"])
+        self.assertEqual([item["id"] for item in context["mechanisms"]], ["mechanism_lift"])
+
+
+class PhysicalMotionContractTests(unittest.TestCase):
+    @staticmethod
+    def _physical_constraints():
+        return {
+            "motion_type": "mechanical",
+            "anchors": [
+                {"entity_id": "prop_deck", "point": "fixed hinge", "role": "rotation pivot"},
+            ],
+            "relationships": [
+                {
+                    "source_entity_id": "prop_deck",
+                    "target_entity_id": "prop_counterweight",
+                    "relationship": "cable-linked counterweight",
+                    "behavior": "moves in response to deck rotation",
+                },
+            ],
+            "constraints": [
+                {"entity_id": "prop_deck", "rule": "rotates around the fixed hinge"},
+            ],
+            "forces_and_effects": [],
+            "collision_rules": [],
+            "motion_profile": {
+                "start": "brief hold",
+                "acceleration": "smoothly accelerates",
+                "peak": "main raising movement",
+                "deceleration": "slows near the target angle",
+                "settle": "holds at the raised position",
+            },
+        }
+
+    def test_validates_physical_constraints_and_normalizes_profile(self):
+        from app.services.shot_design_contracts import validate_physical_constraints
+
+        result = validate_physical_constraints(
+            self._physical_constraints(),
+            "Shot 1",
+            {"prop_deck", "prop_counterweight"},
+        )
+
+        self.assertEqual(result["motion_type"], "mechanical")
+        self.assertEqual(result["anchors"][0]["entity_id"], "prop_deck")
+        self.assertEqual(result["motion_profile"]["settle"], "holds at the raised position")
+
+    def test_rejects_unknown_entity_references(self):
+        from app.services.shot_design_contracts import validate_physical_constraints
+
+        value = self._physical_constraints()
+        value["relationships"][0]["target_entity_id"] = "invented_component"
+        with self.assertRaisesRegex(ValueError, "unknown entity"):
+            validate_physical_constraints(
+                value, "Shot 1", {"prop_deck", "prop_counterweight"},
+            )
+
+    def test_rejects_invalid_motion_type_and_incomplete_motion_profile(self):
+        from app.services.shot_design_contracts import validate_physical_constraints
+
+        value = self._physical_constraints()
+        value["motion_type"] = "teleportation"
+        with self.assertRaisesRegex(ValueError, "unsupported motion_type"):
+            validate_physical_constraints(
+                value, "Shot 1", {"prop_deck", "prop_counterweight"},
+            )
+
+        value = self._physical_constraints()
+        del value["motion_profile"]["settle"]
+        with self.assertRaisesRegex(ValueError, "motion_profile.settle"):
+            validate_physical_constraints(
+                value, "Shot 1", {"prop_deck", "prop_counterweight"},
+            )
+
+    def test_shot_motion_validator_requires_physical_contract(self):
+        motion = {
+            "initial_state": "The deck is horizontal.",
+            "primary_action": "The deck rotates upward around its hinge.",
+            "final_state": "The deck is raised.",
+            "timing": "Accelerates and settles.",
+            "secondary_motion": "The counterweight follows the cable.",
+            "camera_motion": "Locked camera.",
+            "mechanism_motion": "Use supplied validated pivot kinematics.",
+            "physical_constraints": self._physical_constraints(),
+        }
+
+        result = DeepSeekAnimationCompiler._validate_shot_motion(
+            motion, "Shot 1", {"prop_deck", "prop_counterweight"},
+        )
+
+        self.assertEqual(result["physical_constraints"]["motion_type"], "mechanical")
+        invalid = dict(motion)
+        invalid.pop("physical_constraints")
+        with self.assertRaisesRegex(ValueError, "physical_constraints must be an object"):
+            DeepSeekAnimationCompiler._validate_shot_motion(
+                invalid, "Shot 1", {"prop_deck", "prop_counterweight"},
+            )
