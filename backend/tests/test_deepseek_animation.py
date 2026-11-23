@@ -236,6 +236,21 @@ class TargetedSharedHelperRepairTests(unittest.IsolatedAsyncioTestCase):
             "required_by_shots": [0],
             "version": 1,
         }
+        paint_tower_spec = {
+            "name": "paintTower",
+            "category": "visual",
+            "signature": "function paintTower(g, x)",
+            "purpose": "Draw the reusable tower component.",
+            "coordinate_system": "Logical canvas pixels.",
+            "origin": "The tower base.",
+            "visual_target": "A stable tower silhouette.",
+            "style_requirements": "Use the same film palette.",
+            "animation_behavior": "Static.",
+            "dependencies": [],
+            "acceptance_criteria": ["Has a clear tower silhouette.", "Remains stable across shots."],
+            "required_by_shots": [],
+            "version": 1,
+        }
         original_body = "drawBridge(g, 30);"
         bundle = {
             "schema_version": 1,
@@ -260,18 +275,28 @@ class TargetedSharedHelperRepairTests(unittest.IsolatedAsyncioTestCase):
             }],
             "helper_manifest": {
                 "schema_version": 1,
-                "functions": [spec],
+                "functions": [spec, paint_tower_spec],
                 "shots": [{"index": 0, "required_helpers": ["drawBridge"], "required_entities": []}],
             },
-            "function_specs": [spec],
-            "function_registry": [{
-                "name": "drawBridge",
-                "category": "visual",
-                "signature": spec["signature"],
-                "dependencies": [],
-                "required_by_shots": [0],
-                "version": 1,
-            }],
+            "function_specs": [spec, paint_tower_spec],
+            "function_registry": [
+                {
+                    "name": "drawBridge",
+                    "category": "visual",
+                    "signature": spec["signature"],
+                    "dependencies": [],
+                    "required_by_shots": [0],
+                    "version": 1,
+                },
+                {
+                    "name": "paintTower",
+                    "category": "visual",
+                    "signature": paint_tower_spec["signature"],
+                    "dependencies": [],
+                    "required_by_shots": [],
+                    "version": 1,
+                },
+            ],
             "visual_bible": {},
             "art_direction": {},
             "art_direction_instructions": "Cinematic editorial.",
