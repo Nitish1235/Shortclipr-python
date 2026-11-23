@@ -100,6 +100,19 @@ class DeepSeekStoryPlanner:
         plan["scenes"] = scenes
         return plan
 
+    @staticmethod
+    def validate_cached_plan(
+        project: dict[str, Any],
+        plan: Any,
+    ) -> dict[str, Any]:
+        """Re-run the active storyboard and Visual Bible contracts on a cached plan."""
+        duration = int(project["duration_seconds"])
+        minimum_scenes = max(3, min(9, duration // 4))
+        requested_style = resolve_visual_style(project.get("visual_style", "AI Auto"))
+        return DeepSeekStoryPlanner._normalize_plan(
+            plan, duration * 30, minimum_scenes, requested_style,
+        )
+
     async def plan(self, project: dict[str, Any]) -> dict[str, Any]:
         if self.client is None:
             raise RuntimeError("DEEPSEEK_API_KEY is not configured")
