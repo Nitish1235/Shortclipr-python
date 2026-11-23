@@ -479,6 +479,8 @@ Return the complete JavaScript drawing body for this shot.""".strip()
             )
             if not missing_helpers:
                 break
+            if len(function_specs_by_name) + len(missing_helpers) > 64:
+                raise ValueError("Generated drawing helper dependency graph exceeds 64 functions")
 
             spec_prompt = f"""
 ROLE
@@ -632,7 +634,11 @@ RULES
   dependency pass can specify and implement it.
 - Every helper must draw the actual named subject, not a placeholder, label or icon.
 - Use a stable local origin and scale convention consistent with related helpers.
-- Define all requested helpers completely. Do not leave TODOs or call undefined helpers.
+- Define every requested helper completely and match its exact specified signature.
+- Do not define any unrequested drawX function. If a helper needs another drawX dependency,
+  call that dependency by its exact name; the next bounded pass will specify and implement it.
+- Do not leave TODOs, empty bodies or placeholder implementations.
+- Use Canvas 2D, standard Math and documented ShortcliprStyles APIs only.
 - Use Canvas 2D, standard Math and documented ShortcliprStyles APIs only.
 - Save/restore context state; remain deterministic and side-effect free.
 - No DOM/browser globals, imports, exports, network, filesystem, Node APIs, timers,
@@ -691,7 +697,7 @@ Implement every missing helper now.""".strip()
                     "required_by_shots": spec["required_by_shots"],
                     "version": spec["version"],
                     "source_scope": "shared",
-                    "static_status": "declaration_validated",
+                    "static_status": "implementation_validated",
                     "runtime_status": "not_render_verified",
                 }
                 for spec in function_specs_by_name.values()
@@ -718,7 +724,7 @@ Implement every missing helper now.""".strip()
                         "required_by_shots": spec["required_by_shots"],
                         "version": spec["version"],
                         "source_scope": "shared",
-                        "static_status": "declaration_validated",
+                        "static_status": "implementation_validated",
                         "runtime_status": "not_render_verified",
                     }
                     for spec in function_specs_by_name.values()
