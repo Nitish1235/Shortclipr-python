@@ -147,12 +147,12 @@ class DrawingHelperContractTests(unittest.TestCase):
             ["drawPaperQuestionMark"],
         )
 
-    def test_accepts_shared_and_shot_local_helpers(self):
-        shared = "function drawBridge(g) {}"
+    def test_requires_custom_helpers_in_shared_scope(self):
+        shared = "function drawBridge(g) { g.fillRect(0, 0, 10, 10); }"
         shots = [
-            "function drawLocalGear(g) {} drawBridge(g); drawLocalGear(g); g.drawImage(img, 0, 0);"
+            "function drawLocalGear(g) { g.fillRect(0, 0, 4, 4); } drawBridge(g); drawLocalGear(g); g.drawImage(img, 0, 0);"
         ]
-        self.assertEqual(find_unresolved_draw_helpers(shared, shots), [])
+        self.assertEqual(find_unresolved_draw_helpers(shared, shots), ["drawLocalGear"])
 
     def test_finds_missing_dependencies_inside_shared_helpers(self):
         shared = "function drawBridge(g) { drawMissingGear(g); }"
