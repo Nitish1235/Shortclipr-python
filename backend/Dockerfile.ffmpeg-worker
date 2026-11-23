@@ -29,7 +29,9 @@ RUN node --check /app/drawn_by_code/engine/validate-scene.mjs \
     && printf '%s' 'Motion.scene({draw(g, t, env) { g.fillRect(0, 0, 1, 1); }});' > /tmp/linker-missing-shot-scene.js \
     && if node /app/drawn_by_code/engine/validate-scene.mjs /tmp/linker-missing-shot-scene.js /tmp/linker-empty-manifest.json > /tmp/linker-missing-shot.log 2>&1; then echo 'Linker incorrectly accepted a missing drawShot_0 implementation' >&2; exit 1; else grep -q 'Missing canonical shot implementations' /tmp/linker-missing-shot.log; fi \
     && printf '%s' 'function drawShot_0(g, t, env, absoluteTime) { g.fillRect(0, 0, 1, 1); } Motion.scene({draw(g, t, env) { g.fillRect(0, 0, 1, 1); }});' > /tmp/linker-undispatched-shot-scene.js \
-    && if node /app/drawn_by_code/engine/validate-scene.mjs /tmp/linker-undispatched-shot-scene.js /tmp/linker-empty-manifest.json > /tmp/linker-undispatched-shot.log 2>&1; then echo 'Linker incorrectly accepted an undispatched drawShot_0 implementation' >&2; exit 1; else grep -q 'Film dispatcher does not invoke drawShot_0' /tmp/linker-undispatched-shot.log; fi
+    && if node /app/drawn_by_code/engine/validate-scene.mjs /tmp/linker-undispatched-shot-scene.js /tmp/linker-empty-manifest.json > /tmp/linker-undispatched-shot.log 2>&1; then echo 'Linker incorrectly accepted an undispatched drawShot_0 implementation' >&2; exit 1; else grep -q 'Film dispatcher does not invoke drawShot_0' /tmp/linker-undispatched-shot.log; fi \
+    && printf '%s' 'function drawShot_0(g, t, env, absoluteTime) { const drawCharacter = (ctx) => ctx.fillRect(0, 0, 1, 1); drawCharacter(g); } Motion.scene({draw(g, t, env) { drawShot_0(g, t, env, t); }});' > /tmp/linker-shadowed-helper-scene.js \
+    && if node /app/drawn_by_code/engine/validate-scene.mjs /tmp/linker-shadowed-helper-scene.js /tmp/linker-empty-manifest.json > /tmp/linker-shadowed-helper.log 2>&1; then echo 'Linker incorrectly accepted a shot-local shadow helper' >&2; exit 1; else grep -q 'no top-level function declaration' /tmp/linker-shadowed-helper.log; fi
 COPY app/ /app/app/
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
