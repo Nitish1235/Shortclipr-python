@@ -129,6 +129,8 @@ Motion.scene({ draw(g, t, env) { drawShot_0(g, t, env, t); } });
         self.assertIn("linker-unresolved-scene.js", dockerfile)
         self.assertIn("linker-missing-shot-scene.js", dockerfile)
         self.assertIn("linker-undispatched-shot-scene.js", dockerfile)
+        self.assertIn("linker-shadowed-helper-scene.js", dockerfile)
+        self.assertIn("no top-level function declaration", dockerfile)
 
 
 if __name__ == "__main__":
