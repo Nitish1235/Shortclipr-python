@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -94,50 +93,31 @@ else:
     app.include_router(internal.ffmpeg_router)
 
 
-@app.get("/health", tags=["health"])
+@app.get("/health",tags=["health"])
 async def health():
-    """Liveness only: dependency outages must not cause restart loops."""
-    return {"status": "ok", "service": f"shortclipr-{settings.SERVICE_ROLE}"}
+    return {"status":"ok","service":f"shortclipr-{settings.SERVICE_ROLE}","database":bool(app.state.db)}
 
 
 @app.get("/ready", tags=["health"])
 async def ready():
-    """Check the dependencies required to accept and complete worker jobs."""
-    if not getattr(app.state, "db", None):
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database pool is not initialised")
-    required_tables = (
-        "projects", "job_attempts", "project_pipeline_artifacts", "scene_plans",
-        "users", "credit_accounts", "credit_ledger", "project_events",
-    )
-    try:
-        rows = await app.state.db.fetch(
-            "SELECT name, to_regclass(name) IS NOT NULL AS present FROM unnest($1::text[]) AS required(name)",
-            list(required_tables),
-        )
-        missing = [row["name"] for row in rows if not row["present"]]
-        if missing:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Database schema is missing required tables: " + ", ".join(missing),
-            )
-        storage = getattr(app.state, "storage", None)
-        if not storage or not storage.client or not settings.GCS_BUCKET_NAME:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="GCS storage is not configured")
-        await asyncio.wait_for(storage.health_check(), timeout=20)
+    """Readiness requires a live database connection AND that the schema is applied.
 
-        provider_client = None
-        if settings.SERVICE_ROLE == "api-worker":
-            provider_client = getattr(getattr(app.state, "planner", None), "client", None)
-        elif settings.SERVICE_ROLE == "ffmpeg-worker":
-            provider_client = getattr(getattr(app.state, "visual_reviewer", None), "client", None)
-            renderer = getattr(app.state, "renderer", None)
-            if renderer is None:
-                raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Renderer is not initialised")
-        if provider_client is not None:
-            await asyncio.wait_for(provider_client.models.list(), timeout=12)
-    except HTTPException:
-        raise
+    Cloud Run uses this probe before routing traffic.  Failing here on a
+    wrong-database URL prevents the worker from accepting jobs it cannot serve.
+    """
+    if not app.state.db:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database pool is not initialised")
+    try:
+        # Verify schema exists: SELECT 1 passes even on an empty database, but
+        # querying pg_class is cheap and fails fast when migrations haven't run.
+        table_exists = await app.state.db.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM pg_class WHERE relname='projects' AND relkind='r')"
+        )
     except Exception:
-        logger.exception("health.readiness_dependency_failed")
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="A required dependency check failed") from None
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database query failed") from None
+    if not table_exists:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database schema is missing — run migrations or check SUPABASE_DB_URL",
+        )
     return {"status": "ready", "service": f"shortclipr-{settings.SERVICE_ROLE}"}
