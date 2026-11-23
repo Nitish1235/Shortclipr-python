@@ -486,7 +486,11 @@ def find_unresolved_film_draw_helpers(source: str) -> list[str]:
 
 
 def find_unresolved_draw_helpers(shared_source: str, shot_sources: list[str]) -> list[str]:
-    """Return unqualified drawX() calls without shared or shot-local declarations."""
+    """Return drawX calls without a top-level shared declaration.
+
+    Shot-local declarations intentionally do not satisfy the contract: reusable
+    drawing functions must be available from the film's shared scope.
+    """
     masked_shared = _mask_js_comments_and_strings(shared_source)
     shared = {
         name
@@ -495,16 +499,10 @@ def find_unresolved_draw_helpers(shared_source: str, shot_sources: list[str]) ->
         if name
     }
     unresolved: set[str] = set()
-    for source in [shared_source, *shot_sources]:
+    for source in shot_sources:
         masked = _mask_js_comments_and_strings(source)
-        local = {
-            name
-            for match in _DRAW_HELPER_DECL.finditer(masked)
-            for name in match.groups()
-            if name
-        }
         for name in _DRAW_HELPER_CALL.findall(masked):
-            if name not in shared and name not in local:
+            if name not in shared:
                 unresolved.add(name)
     return sorted(unresolved)
 
