@@ -11,6 +11,116 @@ from app.services.animation_contracts import (
 )
 
 
+class ShotGenerationStageTests(unittest.TestCase):
+    def test_layout_spec_requires_composition_and_meaningful_layers(self):
+        layout = {
+            "composition": "Bridge deck runs diagonally from lower left to upper right.",
+            "camera": "Low three-quarter view.",
+            "focal_subject": "prop_bridge_deck",
+            "depth_layers": [
+                {"layer": "background", "content": "River valley", "purpose": "Establish scale"},
+                {"layer": "midground", "content": "Bridge structure", "purpose": "Show the engineering subject"},
+            ],
+            "lighting": "Warm side light from upper left.",
+            "style_application": "Cut-paper silhouettes with restrained grain.",
+            "continuity": "Keep the deck geometry and palette consistent.",
+        }
+        self.assertEqual(
+            DeepSeekAnimationCompiler._validate_shot_layout(layout, "Shot 1"),
+            layout,
+        )
+        invalid = dict(layout)
+        invalid["depth_layers"] = [
+            {"layer": "midground", "content": "Bridge", "purpose": "Subject"},
+            {"layer": "midground", "content": "River", "purpose": "Context"},
+        ]
+        with self.assertRaisesRegex(ValueError, "duplicate depth layer"):
+            DeepSeekAnimationCompiler._validate_shot_layout(invalid, "Shot 1")
+
+    def test_motion_spec_requires_complete_action_arc(self):
+        motion = {
+            "initial_state": "Deck is horizontal above the river.",
+            "primary_action": "Deck rotates upward around the hinge.",
+            "final_state": "Deck settles at the raised angle.",
+            "timing": "Pause, accelerate, then ease into the final position.",
+            "secondary_motion": "Water continues flowing.",
+            "camera_motion": "Locked camera.",
+            "mechanism_motion": "Use the declared pivot kinematics.",
+        }
+        self.assertEqual(
+            DeepSeekAnimationCompiler._validate_shot_motion(motion, "Shot 1"),
+            motion,
+        )
+        invalid = dict(motion)
+        invalid["primary_action"] = ""
+        with self.assertRaisesRegex(ValueError, "primary_action"):
+            DeepSeekAnimationCompiler._validate_shot_motion(invalid, "Shot 1")
+
+
+class ShotStructuredResponseTests(unittest.IsolatedAsyncioTestCase):
+    async def test_requests_json_mode_and_parses_single_response(self):
+        import json
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        compiler = DeepSeekAnimationCompiler.__new__(DeepSeekAnimationCompiler)
+        compiler.model = "deepseek-chat"
+        compiler.client = SimpleNamespace(
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(
+                    create=AsyncMock(return_value=SimpleNamespace(
+                        choices=[SimpleNamespace(
+                            message=SimpleNamespace(content=json.dumps({"composition": "diagonal"})),
+                            finish_reason="stop",
+                        )],
+                        usage=None,
+                    ))
+                )
+            )
+        )
+
+        result = await compiler._json_object_completion(
+            "Return JSON.",
+            "Create the layout.",
+            1000,
+            "Shot 1 visual composition",
+        )
+
+        self.assertEqual(result, {"composition": "diagonal"})
+        kwargs = compiler.client.chat.completions.create.await_args.kwargs
+        self.assertEqual(kwargs["response_format"], {"type": "json_object"})
+        compiler.client.chat.completions.create.assert_awaited_once()
+
+    async def test_invalid_structured_response_fails_without_retry(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        compiler = DeepSeekAnimationCompiler.__new__(DeepSeekAnimationCompiler)
+        compiler.model = "deepseek-chat"
+        compiler.client = SimpleNamespace(
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(
+                    create=AsyncMock(return_value=SimpleNamespace(
+                        choices=[SimpleNamespace(
+                            message=SimpleNamespace(content='{"layout":"broken\nvalue"}'),
+                            finish_reason="stop",
+                        )],
+                        usage=None,
+                    ))
+                )
+            )
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "invalid structured JSON"):
+            await compiler._json_object_completion(
+                "Return JSON.",
+                "Create the layout.",
+                1000,
+                "Shot 1 visual composition",
+            )
+        compiler.client.chat.completions.create.assert_awaited_once()
+
+
 class ShotVisualContextTests(unittest.TestCase):
     def test_context_includes_only_entities_used_by_shot(self):
         bible = {
