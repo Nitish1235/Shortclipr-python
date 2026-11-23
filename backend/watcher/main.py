@@ -133,6 +133,7 @@ class Dispatcher:
         self.blocked_until: dict[tuple[str, str], float] = {}
         self.tasks: set[asyncio.Task] = set()
         self.wake: asyncio.Event | None = None
+        self.ready = asyncio.Event()
 
     async def register_targets(self) -> None:
         for job_class, configured in (("api", self.api_targets), ("render", self.render_targets)):
@@ -519,6 +520,7 @@ class Dispatcher:
 
             await listener.add_listener("shortclipr_jobs", on_job_notification)
             self.wake = wake
+            self.ready.clear()
             logger.info("watcher.listening", extra={"channel": "shortclipr_jobs"})
             try:
                 async with httpx.AsyncClient() as client:
@@ -527,9 +529,11 @@ class Dispatcher:
                         try:
                             await self.reconcile()
                             launched = await self.fill_available_slots(client)
+                            self.ready.set()
                         except asyncio.CancelledError:
                             raise
                         except Exception:
+                            self.ready.clear()
                             logger.exception("watcher.loop_error")
                             launched = False
                             await asyncio.sleep(5)
@@ -556,14 +560,38 @@ class Dispatcher:
 # Cloud Run health server
 # ---------------------------------------------------------------------------
 
-async def health_server() -> None:
-    """Cloud Run workers must bind their assigned HTTP port."""
+async def health_server(dispatcher: Dispatcher) -> None:
+    """Expose liveness separately from the dispatcher's database readiness."""
     async def respond(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        path = "/"
         try:
-            await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5)
+            request = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5)
+            first_line = request.split(b"\r\n", 1)[0].decode("ascii", errors="ignore")
+            parts = first_line.split()
+            if len(parts) >= 2:
+                path = parts[1].split("?", 1)[0]
         except (asyncio.IncompleteReadError, asyncio.LimitOverrunError, TimeoutError):
             pass
-        writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 35\r\nConnection: close\r\n\r\n{\"status\":\"ok\",\"service\":\"watcher\"}")
+
+        if path == "/health":
+            status_code, reason, payload = 200, "OK", {"status": "ok", "service": "watcher"}
+        elif path == "/ready" and dispatcher.ready.is_set():
+            status_code, reason, payload = 200, "OK", {"status": "ready", "service": "watcher"}
+        elif path == "/ready":
+            status_code, reason, payload = 503, "Service Unavailable", {
+                "status": "not_ready", "service": "watcher",
+                "reason": "dispatcher_database_loop_not_healthy",
+            }
+        else:
+            status_code, reason, payload = 404, "Not Found", {"detail": "not found"}
+        body = json.dumps(payload).encode("utf-8")
+        headers = (
+            f"HTTP/1.1 {status_code} {reason}\r\n"
+            "Content-Type: application/json\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            "Connection: close\r\n\r\n"
+        ).encode("ascii")
+        writer.write(headers + body)
         await writer.drain()
         writer.close()
         await writer.wait_closed()
@@ -597,7 +625,7 @@ async def main() -> None:
         dispatcher = Dispatcher(pool, secret, api_targets, render_targets, cooldown)
         await dispatcher.register_targets()
         async with asyncio.TaskGroup() as tasks:
-            tasks.create_task(health_server())
+            tasks.create_task(health_server(dispatcher))
             tasks.create_task(dispatcher.run())
     finally:
         await pool.close()
