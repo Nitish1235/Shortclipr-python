@@ -8,7 +8,7 @@ def production_settings(**overrides):
         "SUPABASE_DB_URL": "postgresql://user:password@host:5432/database",
         "GOOGLE_CLIENT_ID": "client-id.apps.googleusercontent.com",
         "JWT_SECRET": "x" * 32,
-        "DEEPSEEK_API_KEY": "sk-test",
+        "OPENAI_API_KEY": "sk-test",
         "UNREALSPEECH_API_KEY": "unreal-test",
         "GCS_BUCKET_NAME": "shortclipr-private",
         "DODO_PAYMENTS_API_KEY": "dodo-test",
@@ -52,7 +52,7 @@ def test_planning_worker_requires_planning_secrets_not_payment_secrets():
     settings = Settings(
         APP_ENV="production", SERVICE_ROLE="api-worker", FRONTEND_URL="https://shortclipr.com",
         SUPABASE_DB_URL="postgresql://user:password@host:5432/database",
-        DEEPSEEK_API_KEY="sk-test", UNREALSPEECH_API_KEY="unreal-test",
+        OPENAI_API_KEY="sk-test", UNREALSPEECH_API_KEY="unreal-test",
         GCS_BUCKET_NAME="shortclipr-private", INTERNAL_TASK_SECRET="i" * 32,
     )
     assert settings.production_errors == []
@@ -64,17 +64,6 @@ def test_render_worker_requires_render_secrets_not_payment_or_model_secrets():
         SUPABASE_DB_URL="postgresql://user:password@host:5432/database",
         GCS_BUCKET_NAME="shortclipr-private",
         RESEND_API_KEY="re_test", RESEND_FROM_EMAIL="ShortClipr <films@shortclipr.com>",
-        INTERNAL_TASK_SECRET="i" * 32, DEEPSEEK_ENABLE_VISUAL_QA=False,
-    )
-    assert settings.production_errors == []
-
-
-def test_render_worker_requires_deepseek_when_visual_qa_is_enabled():
-    settings = Settings(
-        APP_ENV="production", SERVICE_ROLE="ffmpeg-worker", FRONTEND_URL="https://shortclipr.com",
-        SUPABASE_DB_URL="postgresql://user:password@host:5432/database",
-        GCS_BUCKET_NAME="shortclipr-private",
-        RESEND_API_KEY="re_test", RESEND_FROM_EMAIL="ShortClipr <films@shortclipr.com>",
         INTERNAL_TASK_SECRET="i" * 32,
     )
-    assert "DEEPSEEK_API_KEY (required when visual QA is enabled)" in settings.production_errors
+    assert settings.production_errors == []
