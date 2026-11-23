@@ -704,8 +704,9 @@ def validate_draw_helper_dependencies(
         expected = spec.get("dependencies")
         if (
             not isinstance(expected, list)
+            or not all(isinstance(dep, str) for dep in expected)
             or len(expected) != len(set(expected))
-            or any(not isinstance(dep, str) or dep not in names or dep == name for dep in expected)
+            or any(dep not in names or dep == name for dep in expected)
         ):
             raise ValueError(f"Drawing helper {name} has an invalid dependency manifest")
 
