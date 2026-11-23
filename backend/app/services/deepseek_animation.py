@@ -228,7 +228,7 @@ Visual bible:
 """.strip()
         shared_js = await self._validated_fragment(
             "You are a senior Canvas 2D JavaScript systems programmer. Return only executable JavaScript source.",
-            shared_prompt + "\n\nReturn only the required JSON object.",
+            shared_prompt + "\n\nReturn only the complete JavaScript library source.",
             min(self.max_output_tokens, 16000), "shared_js", "Shared drawing library",
             MAX_SHARED_SOURCE,
         )
@@ -268,7 +268,7 @@ const easing = action.easing ?? "in_out";
 const easedProgress = easing === "linear" ? rawProgress : easing === "ease_in" ? rawProgress * rawProgress * rawProgress : easing === "ease_out" ? 1 - Math.pow(1 - rawProgress, 3) : Ease.inOut(rawProgress);
 const actionProgress = (action.start_progress ?? 0) + ((action.end_progress ?? 1) - (action.start_progress ?? 0)) * easedProgress;
 Iterate with `for (const spec of mechanism.kinematics)`. For each spec, run `const pose = ShortcliprStyles.mechanismPose(spec, actionProgress)` and apply that pose to the component identified by `pose.part`. For pivot results, rotate pose.part around pose.anchor by pose.angle_rad. For translation/slider results, place pose.part origin at pose.position. For gear results, rotate pose.driver_part around pose.driver_anchor by pose.driver_angle_rad and pose.part around pose.anchor by pose.angle_rad; preserve the declared pitch-radius ratio and external/internal mesh direction. For pulley results, rotate pose.pulley_part around pose.anchor by pose.pulley_angle_rad and place pose.part at the returned absolute pose.position. For cable results, draw pose.part as a continuous polyline through pose.points in order. For actuator results, draw the cylinder and rod along pose.base-to-pose.tip using pose.length and pose.angle_rad. Apply the same actionProgress to all kinematic parts in this action. Do not invent geometry or constraints. When kinematics is absent, use qualitative motion only and do not present it as engineering-solved.
-Make one clear animated action with simple easing and follow-through. Use only the composition layers needed for this shot. Keep code concise: keep code efficient, but do not omit required subjects, spatial layers, or visible motion to meet an arbitrary token target; no comments, repeated character drawings or unnecessary decorative loops. Reuse shared helpers for all recurring entities. Do not render narration or subtitles.
+Establish one primary readable visual action with clear anticipation, movement and a resolved end state. If multiple mechanism actions are supplied, render each coherently but keep the storyboard focal action dominant. Use only composition layers needed for this shot. Keep code concise: keep code efficient, but do not omit required subjects, spatial layers, or visible motion to meet an arbitrary token target; no comments, repeated character drawings or unnecessary decorative loops. Reuse shared helpers for all recurring entities. Do not render narration or subtitles.
 STYLE: {style_id}
 BINDING ART DIRECTION:
 {art_direction_instructions}
@@ -335,10 +335,10 @@ Rules:
 - No browser globals, DOM, imports, exports, network, filesystem, Node APIs, timers,
   eval, Function, Date, performance, random numbers, WebGL or 3D.
 - Keep implementations deterministic, self-contained and visually consistent with
-  the selected style. Return compact code, no markdown fences.
+  the selected style. Return only complete JavaScript source. No prose, Markdown, or code fences.
 """.strip()
             generated_helpers = await self._code_completion(
-                "You are a senior Canvas 2D JavaScript systems programmer. Return strict JSON only.",
+                "You are a senior Canvas 2D JavaScript systems programmer. Return only executable JavaScript source.",
                 helper_prompt,
                 min(self.max_output_tokens, 10000),
                 label=f"On-demand drawing helpers pass {helper_pass + 1}",
@@ -518,10 +518,10 @@ Rules:
   imports, exports, Node APIs, timers, eval, Function, random numbers, WebGL or 3D.
 - Keep mechanism actions and kinematics coherent. Use the supplied validated mechanism
   arrays as-is; do not invent physics or claim engineering accuracy for qualitative motion.
-- Return the full replacement draw_body, not a diff or patch.
+- Return only the full replacement JavaScript draw_body, not a diff, JSON wrapper, explanation, or Markdown.
 """.strip()
         replacement_body = await self._validated_fragment(
-            "You are a senior Canvas 2D animation programmer. Return strict JSON only.",
+            "You are a senior Canvas 2D animation programmer. Return only executable JavaScript source.",
             prompt,
             min(self.max_output_tokens, 10000),
             "draw_body",
