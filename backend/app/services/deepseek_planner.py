@@ -25,7 +25,10 @@ class DeepSeekStoryPlanner:
             raise RuntimeError("DEEPSEEK_API_KEY is not configured")
         duration = int(project["duration_seconds"])
         total_frames = duration * 30
-        minimum_scenes = max(3, min(9, duration // 4))
+        target_shots = max(3, min(8, round(duration / 5)))
+        minimum_scenes = max(3, min(target_shots, duration // 4 if duration >= 12 else 3))
+        min_words = max(16, int(duration * 1.65))
+        max_words = max(22, int(duration * 2.15))
         styles = sorted(STYLE_IDS)
         requested_style = resolve_visual_style(project.get("visual_style", "AI Auto"))
         style_instruction = (
@@ -108,13 +111,15 @@ PROJECT:
 
 RULES
 - Keep every JSON string concise and concrete (1–2 sentences max per field; never write essays).
-- Narration: natural spoken language (~2.0–2.3 words/sec), strong opening hook, clear progression,
-  satisfying payoff. Never invent dates, quotes, statistics, or unsupported factual claims.
+- Narration: write in the requested language (`{project.get("language", "en")}`). For English/European
+  languages, strictly target {min_words}–{max_words} words so spoken audio finishes cleanly inside
+  {duration} seconds without getting cut off. Strong opening hook, clear progression, satisfying payoff.
+  Never invent dates, quotes, statistics, or unsupported factual claims.
 - Style: choose one style_id from {", ".join(styles)}. {style_instruction}
-- Visual bible: define only the recurring entities actually needed (typically 1–4 characters,
-  2–6 props, 1–3 environments). Use concise stable IDs matching [a-zA-Z][a-zA-Z0-9_-]{{1,63}}.
+- Visual bible: define only the recurring entities actually needed (1–3 characters, 2–5 props,
+  1–2 environments). Use concise stable IDs matching [a-zA-Z][a-zA-Z0-9_-]{{1,63}}.
   Include `mechanisms` only if the topic is a genuine mechanical system; otherwise `[]`.
-- Storyboard: produce {minimum_scenes} to 8 distinct shots covering frame 0 through {total_frames}
+- Storyboard: produce exactly {target_shots} distinct shots covering frame 0 through {total_frames}
   at 30 FPS (contiguous, non-overlapping integers; end_frame is exclusive).
 - Vary shot_scale (extreme_wide, wide, medium, close_up, detail, overhead, isometric) and
   composition across shots. Avoid title cards and subtitles.
@@ -204,7 +209,7 @@ OUTPUT CONTRACT (return strict JSON only, no Markdown):
             raise RuntimeError("DeepSeek story plan must be an object")
         if not isinstance(plan.get("title"), str) or not plan["title"].strip():
             raise RuntimeError("DeepSeek story plan is missing title")
-        if not isinstance(plan.get("narration"), str) or len(plan["narration"].strip()) < 40:
+        if not isinstance(plan.get("narration"), str) or len(plan["narration"].strip()) < 12:
             raise RuntimeError("DeepSeek story plan is missing usable narration")
         bible = validate_visual_bible(plan.get("visual_bible"))
         # Explicit UI selections are authoritative even if the model drifts.

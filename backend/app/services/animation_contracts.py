@@ -919,6 +919,11 @@ def validate_generated_fragment(source: Any, label: str, max_chars: int) -> str:
     if not isinstance(source, str) or not 20 <= len(source) <= max_chars:
         raise ValueError(f"{label} source length is outside allowed bounds")
     for pattern in _BLOCKED_PATTERNS:
-        if re.search(pattern, source):
-            raise ValueError(f"{label} contains a disallowed runtime capability")
+        match = re.search(pattern, source)
+        if match:
+            line_no = source.count("\n", 0, match.start()) + 1
+            snippet = match.group(0).strip()
+            raise ValueError(
+                f"{label} contains a disallowed runtime capability '{snippet}' at line {line_no}"
+            )
     return source

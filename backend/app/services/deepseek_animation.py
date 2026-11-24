@@ -114,6 +114,7 @@ class DeepSeekAnimationCompiler:
         self.model = settings.DEEPSEEK_ANIMATION_MODEL
         self.max_output_tokens = settings.DEEPSEEK_MAX_OUTPUT_TOKENS
         self.max_parallel_shots = max(1, min(4, settings.DEEPSEEK_MAX_PARALLEL_SHOTS))
+        self.enable_thinking = getattr(settings, "DEEPSEEK_ENABLE_THINKING", False)
         self.shared_reasoning_effort = settings.DEEPSEEK_PLANNING_REASONING_EFFORT or "low"
         self.client = (
             AsyncOpenAI(
@@ -586,9 +587,10 @@ Write the complete, studio-quality shared JavaScript visual library now.
             shared_prompt,
             min(self.max_output_tokens, 32000),
             label="Shared visual kit",
-            enable_thinking=True,
+            enable_thinking=self.enable_thinking,
         )
-        shared_js = validate_generated_fragment(shared_js, "Shared visual kit", MAX_SHARED_SOURCE)
+        if not isinstance(shared_js, str) or len(shared_js) > MAX_SHARED_SOURCE:
+            raise ValueError("Shared visual kit source length is outside allowed bounds")
 
         # Extract the REAL declared signatures so every shot knows the exact API.
         shared_signatures = extract_shared_function_signatures(shared_js)
@@ -597,38 +599,20 @@ Write the complete, studio-quality shared JavaScript visual library now.
             for item in shared_signatures
         ) or "(No shared functions declared — draw directly using ShortcliprStyles and Canvas 2D.)"
 
-        # ── Stage 2: Parallel Shot Code Generation (1 call per shot) ──
-        semaphore = asyncio.Semaphore(self.max_parallel_shots)
-
-        async def compile_one(scene: dict[str, Any]) -> dict[str, Any]:
-            start_s = scene["start_frame"] / 30
-            end_s = scene["end_frame"] / 30
-            shot_dur = end_s - start_s
-            shot_visual_context = self._shot_visual_context(visual_bible, scene)
-
-            mechanism_rules = ""
-            if scene.get("mechanism_actions"):
-                mechanism_rules = f"""
-MECHANISM KINEMATICS:
-- `mechanismActions` and `mechanisms` are injected local constants in this function.
-- For each action, find its mechanism by `mechanism_id`. If it has `kinematics`, compute:
-  `const rawP = Ease.clamp(Ease.seg(t, 0, {shot_dur:.3f}));`
-  `const p = (action.start_progress ?? 0) + ((action.end_progress ?? 1) - (action.start_progress ?? 0)) * Ease.inOut(rawP);`
-  and call `ShortcliprStyles.mechanismPose(spec, p)` to position/rotate connected parts.
-"""
-
-            shot_prompt = f"""
+        # ── Stage 2: Parallel Shot Code Generation (prompt-cache-optimized) ──
+        # Keep the system prompt 100% identical across all shots so DeepSeek's
+        # automatic prefix cache hits on shots 2..N (~80-90% input token savings).
+        shot_system_prompt = f"""
 ROLE
 You are a lead 2D motion-graphics director writing ONE complete, visually rich shot for a
-`{style_id}` animated film on a {logical[0]}x{logical[1]} logical canvas.
+`{style_id}` animated film on a {logical[0]}x{logical[1]} logical canvas (30 FPS, total {duration}s).
 
 OUTPUT CONTRACT
-Return ONLY executable JavaScript statements for the body of:
-`function drawShot_{scene['index']}(g, t, env, absoluteTime) {{ ... }}`
-- `t` is local shot time in seconds (0 to {shot_dur:.3f}s).
+Return ONLY executable JavaScript statements for the body of `drawShot_N(g, t, env, absoluteTime)`.
+- `t` is local shot time in seconds (starts at 0).
 - `absoluteTime` is overall film time in seconds.
 - `env` has `{{ W: {logical[0]}, H: {logical[1]}, fps: 30, duration: {duration}, k }}`.
-- Return raw JavaScript statements only (no function wrapper, no JSON, no explanation).
+- Return raw JavaScript statements only (no outer function wrapper, no JSON, no explanation).
 
 AVAILABLE SHARED VISUAL LIBRARY FUNCTIONS (use these exact names & signatures):
 {shared_api_doc}
@@ -649,30 +633,51 @@ VISUAL CRAFT & CHOREOGRAPHY RULES
 4. Keep every element cleanly framed inside {logical[0]}x{logical[1]} with generous margin and clear focal hierarchy.
 5. Strictly deterministic Canvas 2D: NEVER use `Math.random()`, `Date`, `performance`, `window`, `document`, `fetch`, `eval`, or bare `mix()` (always `Ease.lerp`).
 6. Do NOT render subtitles or full narration paragraphs on screen.
-{mechanism_rules}
 
 ART DIRECTION:
 {art_direction_instructions}
+""".strip()
 
+        semaphore = asyncio.Semaphore(self.max_parallel_shots)
+
+        async def compile_one(scene: dict[str, Any]) -> dict[str, Any]:
+            start_s = scene["start_frame"] / 30
+            end_s = scene["end_frame"] / 30
+            shot_dur = end_s - start_s
+            shot_visual_context = self._shot_visual_context(visual_bible, scene)
+
+            mechanism_rules = ""
+            if scene.get("mechanism_actions"):
+                mechanism_rules = f"""
+MECHANISM KINEMATICS:
+- `mechanismActions` and `mechanisms` are injected local constants in this function.
+- For each action, find its mechanism by `mechanism_id`. If it has `kinematics`, compute:
+  `const rawP = Ease.clamp(Ease.seg(t, 0, {shot_dur:.3f}));`
+  `const p = (action.start_progress ?? 0) + ((action.end_progress ?? 1) - (action.start_progress ?? 0)) * Ease.inOut(rawP);`
+  and call `ShortcliprStyles.mechanismPose(spec, p)` to position/rotate connected parts.
+"""
+
+            shot_user_prompt = f"""
+Write the complete JavaScript drawing body for `drawShot_{scene['index']}` ({start_s:.2f}s to {end_s:.2f}s, local duration {shot_dur:.2f}s).
+{mechanism_rules}
 SHOT VISUAL REFERENCES:
 {json.dumps(shot_visual_context, ensure_ascii=False, separators=(",", ":"))}
 
-STORYBOARD FOR SHOT {scene['index'] + 1} ({start_s:.2f}s to {end_s:.2f}s, duration {shot_dur:.2f}s):
+STORYBOARD:
 {json.dumps(scene, ensure_ascii=False, separators=(",", ":"))}
-
-Write the complete JavaScript drawing body for drawShot_{scene['index']} now.
 """.strip()
 
             async with semaphore:
                 body = await self._code_completion(
-                    "You are a senior Canvas 2D animation programmer. Return only executable JavaScript statements.",
-                    shot_prompt,
+                    shot_system_prompt,
+                    shot_user_prompt,
                     min(self.max_output_tokens, 24000),
                     label=f"Shot {scene['index'] + 1}",
                     enable_thinking=False,
                 )
                 body = self._unwrap_shot_body(body, scene["index"])
-                body = validate_generated_fragment(body, f"Shot {scene['index'] + 1}", MAX_SHOT_SOURCE)
+                if not isinstance(body, str) or len(body) > MAX_SHOT_SOURCE:
+                    raise ValueError(f"Shot {scene['index'] + 1} source length is outside allowed bounds")
 
             return {
                 "index": scene["index"],
