@@ -57,16 +57,28 @@ async def _gather_cancel_on_error(*coroutines):
 _TOOLKIT_REFERENCE = """
 AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
 1. ShortcliprStyles:
-   - palette(styleId) -> { bg, bg2, ink, paper, shadow, accent, secondary, highlight }
-   - backdrop(g, styleId, env, t) -> paints multi-stop studio gradient + ambient light pool + returns palette
+   - palette(styleId) -> { bg, bg2, ink, paper, primary, accent, secondary, shadow, highlight }
+     (pre-configured with this film's custom visual_direction palette!)
+   - backdrop(g, styleId, env, t, mood) -> paints multi-stop studio gradient + mood-aware ambient light pool + returns palette
    - shadedShape(g, (ctx) => { ctx.beginPath(); ... }, { fill, stroke, lineWidth, shadowColor, shadowBlur, shadowY, highlight, highlightWidth })
      (draws drop shadow + rich fill/gradient + directional rim highlight + optional crisp stroke)
-   - glow(g, x, y, r, color, alpha) -> soft radial volumetric light/glow
+   - glow(g, x, y, r, color, alpha) -> additive ('screen') radial volumetric glow
+   - lightBeam(g, x0, y0, x1, y1, r0, r1, color, alpha) -> additive ('screen') volumetric light cone/shaft
+   - bloomLayer(g, env, name, blurPx, alpha, (bg) => { ... }) -> renders glowing elements with offscreen additive bloom
+   - parallaxLayers(g, env, { cx, cy, zoom, rotation }, [{ depth: 0.25, blur: 2, draw: (ctx)=>{...} }, { depth: 1.0, draw: ... }, { depth: 1.35, draw: ... }])
+     (true multi-plane 2.5D parallax camera with depth-scaled movement & optional depth-of-field blur)
+   - solveIK(x0, y0, tx, ty, L1, L2, bendDir=1) -> analytical 2-bone Law-of-Cosines IK solver returning { jx, jy, ex, ey, a1, a2 } for natural knees/elbows/limbs
+   - squash(g, x, y, amount) -> volume-preserving squash & stretch transform around contact point (x, y)
+   - spring(t, start, stiffness=180, damping=14) -> snappy damped harmonic 0->1 curve
+   - stagger(t, index, step=0.09, start=0, duration=0.45, easeFn) -> staggered 0..1 entrance progress for item `index` (prevents simultaneous t=0 pop-ins)
+   - anticipation(t, start=0, duration=0.55, pull=0.14) -> Disney wind-back (-pull) before springing to 1.0
+   - posterize(t, fps=12) -> snaps time `t` to 12fps for tactile stop-motion / comic / paper feel while camera stays at 30fps
+   - strokeReveal(g, [[x0,y0],[x1,y1],...], progress, { color, width, dashed, glow, arrow }) -> smoothly traces any path from 0 -> 1 (SVG stroke-dashoffset equivalent)
+   - organicPath(g, [[x0,y0],...], seed, { roughness, closed, fill, stroke, lineWidth, shadow, highlight }) -> hand-crafted path with deterministic noise jitter
    - roundedCard(g, x, y, w, h, r, { fill, stroke, lineWidth, shadowBlur, highlight })
-   - badge(g, x, y, text, { bg, color, border, fontSize, align }) -> crisp auto-sized pill label (use sparingly, only when a short visual label clarifies a diagram)
+   - badge(g, x, y, text, { bg, color, border, fontSize, align }) -> crisp auto-sized pill label (use sparingly for short diagram callouts)
    - flowPath(g, [[x0,y0],[x1,y1],...], t, { color, width, progress, dashed, speed, glow, arrow, arrowSize }) -> animated connector/energy path
    - particles(g, seed, count, t, { x, y, w, h }, { mode: 'drift'|'rise'|'sparkle'|'stream', color, speed, minR, maxR, alpha })
-   - spring(t, start, stiffness=180, damping=14) -> snappy damped harmonic 0->1 curve for entrances & pop-ins
    - cameraRig(g, env, { cx, cy, zoom, rotation, shake, t }) -> smooth 2D camera inside g.save()/g.restore()
    - editorialShape(g, points, { fill, depth, shadow, stroke, lineWidth }), editorialLight(g, x, y, r, color)
    - isoProject(x, y, z, scale, origin), isoBox(g, x, y, z, w, d, h, scale, { top, left, right, edge }), isoLine(g, a, b, color, width)
@@ -407,9 +419,12 @@ class DeepSeekAnimationCompiler:
         duration: int,
         logical: list[int],
         style_id: str,
+        visual_direction: dict[str, Any] | None = None,
     ) -> tuple[str, list[dict[str, Any]]]:
         """Surgically fix a syntax or unresolved-identifier error before returning the film."""
-        assembled = self._assemble_film(shared_js, compiled_shots, duration, logical, style_id)
+        assembled = self._assemble_film(
+            shared_js, compiled_shots, duration, logical, style_id, visual_direction,
+        )
         lines = assembled.splitlines()
 
         # If one or more missing draw* helpers are called across multiple shots, adding them
@@ -526,6 +541,7 @@ RULES:
         motion_diagnostics = analyze_mechanism_motion(visual_bible, scenes)
 
         style_id = visual_bible["style_id"]
+        visual_direction = visual_bible.get("visual_direction", {})
         art_direction_value = plan.get("art_direction")
         if art_direction_value is None:
             art_direction = build_art_direction(
@@ -537,7 +553,7 @@ RULES:
             art_direction = validate_art_direction(art_direction_value, style_id)
         art_direction_instructions = format_art_direction(art_direction)
 
-        # ── Stage 1: Shared Visual Kit (1 call, thinking enabled for high craft) ──
+        # ── Stage 1: Shared Visual Kit ──
         shared_prompt = f"""
 ROLE
 You are a lead motion-graphics artist and Canvas 2D engineer creating a studio-grade
@@ -547,7 +563,8 @@ NEVER crude stick figures, thin pencil outlines, or flat unshaded boxes).
 
 TASK
 Write the shared JavaScript visual asset library for this {logical[0]}x{logical[1]} ({aspect})
-film in the `{style_id}` style.
+film in the `{style_id}` style, following this film's VISUALOGRAPHY DIRECTION:
+{json.dumps(visual_direction, ensure_ascii=False)}
 
 DESIGN & QUALITY STANDARDS
 - Build clean, modular top-level named functions for the recurring characters, props,
@@ -555,11 +572,13 @@ DESIGN & QUALITY STANDARDS
 - You MAY write internal helper functions (e.g., drawWheel, drawCloud, drawWindow) and call
   shared helpers from other shared helpers.
 - Put a concise 1-line `//` comment above each main function explaining its parameters and
-  origin (e.g. `// Draws hero rocket centered at base (x, y), scale=1 (~240px tall), thrust 0..1`).
+  origin (e.g. `// Draws hero explorer at ground contact (x, y), scale=1, pose='walk'|'idle', walkPhase=0`).
 - Use default parameter values where helpful (e.g. `scale = 1, pose = 'idle'`).
-- Use `ShortcliprStyles.shadedShape`, linear/radial gradients, `ShortcliprStyles.glow`,
-  ground contact shadows, rim highlights, and layered shapes so every subject looks polished
-  at 1080p.
+- Use the film's custom palette (`ShortcliprStyles.palette('{style_id}')` or the hex colors from
+  `visual_direction.palette`), `ShortcliprStyles.shadedShape`, linear/radial gradients,
+  `ShortcliprStyles.glow`, `ShortcliprStyles.solveIK` (for articulated character limbs),
+  `ShortcliprStyles.organicPath` (for tactile/hand-crafted styles), ground contact shadows, and
+  rim highlights so every subject looks polished at 1080p.
 - Always wrap transforms/styles in `g.save()` / `g.restore()`.
 - Keep all code 100% deterministic: use `Motion.rng(seed)` / `Motion.noise1(seed, x)`, NEVER
   `Math.random()`, `Date`, `performance`, DOM, `window`, `document`, `fetch`, `eval`, or timers.
@@ -607,6 +626,9 @@ ROLE
 You are a lead 2D motion-graphics director writing ONE complete, visually rich shot for a
 `{style_id}` animated film on a {logical[0]}x{logical[1]} logical canvas (30 FPS, total {duration}s).
 
+FILM VISUALOGRAPHY DIRECTION (authoritative palette, genre, lighting, camera & motion feel):
+{json.dumps(visual_direction, ensure_ascii=False)}
+
 OUTPUT CONTRACT
 Return ONLY executable JavaScript statements for the body of `drawShot_N(g, t, env, absoluteTime)`.
 - `t` is local shot time in seconds (starts at 0).
@@ -619,14 +641,21 @@ AVAILABLE SHARED VISUAL LIBRARY FUNCTIONS (use these exact names & signatures):
 
 {_TOOLKIT_REFERENCE}
 
-VISUAL CRAFT & CHOREOGRAPHY RULES
-1. Paint a rich, world-specific background that fits THIS shot (custom sky/space/underwater/
-   interior/editorial canvas, or `ShortcliprStyles.backdrop(g, '{style_id}', env, absoluteTime)`),
-   then layer clear depth planes: Background -> Midground (focal subject) -> Foreground framing.
-2. Choose the animation physics & choreography that fits this shot's genre (snappy springs via
-   `ShortcliprStyles.spring`/`Ease.pop`, smooth cinematic camera push-ins via `ShortcliprStyles.cameraRig`,
-   keyframed trajectories via `Motion.keys`, articulated motion, animated `flowPath` diagrams,
-   or atmospheric `ShortcliprStyles.particles` & `glow`).
+VISUAL CRAFT & 4-PHASE DISNEY CHOREOGRAPHY RULES
+1. Stage Depth & Atmosphere:
+   - Paint a rich, world-specific background that fits THIS shot and `lighting_mood` (custom sky/space/
+     underwater/interior/editorial canvas, or `ShortcliprStyles.backdrop(g, '{style_id}', env, absoluteTime)`).
+   - Separate depth planes (`Background -> Midground Hero -> Foreground Framing`) or use
+     `ShortcliprStyles.parallaxLayers(g, env, camState, [...])` for 2.5D multi-plane depth.
+2. Structure Local Time `t` into a 4-Phase Choreography Beat-Grid (NEVER pop everything in at `t = 0`):
+   - Phase A (0–15% of shot): Establish environment, atmosphere, and camera drift.
+   - Phase B (15–35% of shot): Staggered entrances using `ShortcliprStyles.stagger(t, idx, 0.09, 0.1)`,
+     `ShortcliprStyles.spring(t, delay)`, or `ShortcliprStyles.anticipation(t, delay)`.
+   - Phase C (35–85% of shot): Core visual transformation / action — e.g. character movement with
+     `ShortcliprStyles.solveIK` & `ShortcliprStyles.squash`, path tracing with `ShortcliprStyles.strokeReveal`
+     or `flowPath`, volumetric `lightBeam` / `bloomLayer`, or isometric assembly.
+   - Phase D (85–100% of shot): Settle with continuous living secondary motion (gentle sine breathing/bobbing,
+     `ShortcliprStyles.particles`, pulsing `glow`, or slow camera push-in) — ZERO frozen/dead frames.
 3. Reuse the shared visual library functions above for recurring characters, props, and environments.
    You MAY also define local helper functions inside this shot if helpful, and NEVER call a function
    name that isn't defined above or locally.
@@ -696,7 +725,9 @@ STORYBOARD:
         max_auto_repairs = 2
         source = ""
         for repair_attempt in range(max_auto_repairs + 1):
-            source = self._assemble_film(shared_js, compiled, duration, logical, style_id)
+            source = self._assemble_film(
+                shared_js, compiled, duration, logical, style_id, visual_direction,
+            )
             error_report: str | None = None
             try:
                 if len(source) > MAX_FILM_SOURCE:
@@ -730,7 +761,7 @@ STORYBOARD:
                 },
             )
             shared_js, compiled = await self._repair_assembled_error(
-                shared_js, compiled, error_report, duration, logical, style_id,
+                shared_js, compiled, error_report, duration, logical, style_id, visual_direction,
             )
 
         # Build clean metadata from the actual final shared_js & compiled shots.
@@ -844,7 +875,10 @@ RULES:
         duration = repair_bundle["duration"]
         logical = repair_bundle["logical"]
         style_id = repair_bundle["style_id"]
-        source = self._assemble_film(updated_shared, shots, duration, logical, style_id)
+        visual_direction = (repair_bundle.get("visual_bible") or {}).get("visual_direction")
+        source = self._assemble_film(
+            updated_shared, shots, duration, logical, style_id, visual_direction,
+        )
         self.validate_source(source, duration, logical)
 
         repaired_program = {"scene_js": source, "repair_bundle": updated_bundle}
@@ -927,7 +961,10 @@ RULES:
         duration = repair_bundle["duration"]
         logical = repair_bundle["logical"]
         style_id = repair_bundle["style_id"]
-        source = self._assemble_film(shared_js, updated_bundle["shots"], duration, logical, style_id)
+        visual_direction = (repair_bundle.get("visual_bible") or {}).get("visual_direction")
+        source = self._assemble_film(
+            shared_js, updated_bundle["shots"], duration, logical, style_id, visual_direction,
+        )
         self.validate_source(source, duration, logical)
 
         repaired_program = {"scene_js": source, "repair_bundle": updated_bundle}
@@ -947,6 +984,7 @@ RULES:
         duration: int,
         logical: list[int],
         style_id: str,
+        visual_direction: dict[str, Any] | None = None,
     ) -> str:
         functions, ranges, dispatch = [], [], []
         for idx, shot in enumerate(shots):
@@ -963,7 +1001,7 @@ RULES:
             name = re.sub(r"[^a-zA-Z0-9 _-]", "", shot["name"]).replace("'", "")[:60]
             ranges.append(f"[{start:.6f},{end:.6f},'{name}']")
             transition = shot.get("transition_out", "cut")
-            if transition not in {"cut", "wipe", "iris", "paper", "fade"}:
+            if transition not in {"cut", "wipe", "iris", "paper", "fade", "zoom", "whip"}:
                 transition = "cut"
             is_last = idx == len(shots) - 1
             cond = f"t >= {start:.6f}" if is_last else f"t >= {start:.6f} && t < {end:.6f}"
@@ -979,13 +1017,18 @@ RULES:
             dispatch.append(block + "return; }")
 
         function_source = "\n".join(functions)
+        palette_setup = ""
+        if isinstance(visual_direction, dict) and isinstance(visual_direction.get("palette"), dict):
+            pal_json = json.dumps(visual_direction["palette"], ensure_ascii=False, separators=(",", ":"))
+            mood_json = json.dumps(str(visual_direction.get("lighting_mood") or ""), ensure_ascii=False)
+            palette_setup = f"if (ShortcliprStyles.setCustomPalette) ShortcliprStyles.setCustomPalette({pal_json}, {mood_json});\n"
         # Apply subtle film finishing only on painterly/atmospheric styles; keep technical/crisp styles razor-sharp.
         use_post = style_id not in {"pixel-art", "blueprint", "line", "isometric-technical"}
         post_line = f"  post(ctx,t,env) {{ ShortcliprStyles.postProcess(ctx,t,env,'{style_id}'); }}\n" if use_post else ""
         return (
             "// ShortClipr studio Drawn-by-Code film. Generated code is untrusted input.\n"
             f"// Visual style: {style_id}\n"
-            f"{shared_js}\n{function_source}\n"
+            f"{palette_setup}{shared_js}\n{function_source}\n"
             "Motion.scene({\n"
             "  uses: ['styles/shortclipr.js'],\n"
             "  fps: 30,\n"

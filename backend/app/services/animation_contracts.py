@@ -153,6 +153,66 @@ def validate_kinematics(value: Any, component_parts: set[str]) -> dict[str, Any]
     return result
 
 
+_DEFAULT_PALETTES_BY_STYLE: dict[str, dict[str, str]] = {
+    "paper-cutout": {"bg": "#f2ead8", "bg2": "#e4d6bb", "ink": "#2c2722", "primary": "#547f77", "accent": "#d86b45", "secondary": "#8c6d53"},
+    "risograph": {"bg": "#f4ecd9", "bg2": "#e7dcc2", "ink": "#25223b", "primary": "#287f83", "accent": "#ef5b45", "secondary": "#d9a441"},
+    "comic": {"bg": "#fff3d6", "bg2": "#f5dfad", "ink": "#171717", "primary": "#2474bd", "accent": "#e84437", "secondary": "#f2b84b"},
+    "70s-poster": {"bg": "#f0dfbd", "bg2": "#dec598", "ink": "#3d3028", "primary": "#4d6f64", "accent": "#c85a36", "secondary": "#d99b38"},
+    "engraving": {"bg": "#f1eadb", "bg2": "#e2d7c2", "ink": "#2a2722", "primary": "#5c6854", "accent": "#8b4937", "secondary": "#7a6f5d"},
+    "blueprint": {"bg": "#0e2845", "bg2": "#163c66", "ink": "#f1f4e8", "primary": "#78c9d0", "accent": "#f2c86a", "secondary": "#4682b4"},
+    "line": {"bg": "#f8f7f1", "bg2": "#ece9de", "ink": "#202628", "primary": "#557d79", "accent": "#d56b4b", "secondary": "#8a9996"},
+    "pixel-art": {"bg": "#162030", "bg2": "#22334a", "ink": "#f2f0d5", "primary": "#69c5a6", "accent": "#f2b84b", "secondary": "#e06343"},
+    "cinematic-editorial": {"bg": "#1b232b", "bg2": "#2b3844", "ink": "#f4efe4", "primary": "#59948c", "accent": "#e06343", "secondary": "#e9c46a"},
+    "isometric-technical": {"bg": "#e6ecf0", "bg2": "#d2dde4", "ink": "#223342", "primary": "#44848c", "accent": "#e17b42", "secondary": "#5c768d"},
+    "layered-paper": {"bg": "#efe5d3", "bg2": "#dfd0b6", "ink": "#3b322a", "primary": "#6b8c81", "accent": "#d36f50", "secondary": "#c9a259"},
+}
+
+
+def validate_visual_direction(value: Any, style_id: str) -> dict[str, Any]:
+    """Normalize DeepSeek's topic-specific visualography decision with safe fallbacks."""
+    raw = value if isinstance(value, dict) else {}
+    default_pal = _DEFAULT_PALETTES_BY_STYLE.get(style_id, _DEFAULT_PALETTES_BY_STYLE["cinematic-editorial"])
+    raw_pal = raw.get("palette") if isinstance(raw.get("palette"), dict) else {}
+
+    def clean_color(key: str) -> str:
+        candidate = raw_pal.get(key)
+        if isinstance(candidate, str) and re.fullmatch(r"#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)", candidate.strip()):
+            return candidate.strip()
+        return default_pal[key]
+
+    palette = {key: clean_color(key) for key in ("bg", "bg2", "ink", "primary", "accent", "secondary")}
+
+    genre = str(raw.get("visual_genre") or "").strip() or (
+        "isometric_engineering" if style_id in {"isometric-technical", "blueprint"}
+        else "layered_papercraft" if style_id in {"layered-paper", "paper-cutout"}
+        else "comic_cel_action" if style_id == "comic"
+        else "retro_pixel_arcade" if style_id == "pixel-art"
+        else "vox_editorial" if style_id in {"risograph", "line"}
+        else "kurzgesagt_cosmic"
+    )
+    lighting = str(raw.get("lighting_mood") or "").strip() or (
+        "technical_clean" if style_id in {"isometric-technical", "blueprint", "line"}
+        else "warm_sunlit_shadows" if style_id in {"layered-paper", "paper-cutout", "70s-poster"}
+        else "dramatic_rim_glow"
+    )
+    camera_style = str(raw.get("camera_style") or "").strip() or (
+        "crisp_orthographic" if style_id in {"isometric-technical", "blueprint"}
+        else "multiplane_parallax"
+    )
+    motion_feel = str(raw.get("motion_feel") or "").strip() or (
+        "posterized_12fps" if style_id in {"comic", "paper-cutout"}
+        else "mechanical_precise" if style_id in {"isometric-technical", "blueprint"}
+        else "snappy_spring"
+    )
+    return {
+        "visual_genre": genre[:80],
+        "palette": palette,
+        "lighting_mood": lighting[:80],
+        "camera_style": camera_style[:80],
+        "motion_feel": motion_feel[:80],
+    }
+
+
 def validate_visual_bible(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("Visual bible must be an object")
@@ -277,6 +337,7 @@ def validate_visual_bible(value: Any) -> dict[str, Any]:
                 raise ValueError("Mechanism action pattern followers must be an array of named parts")
     value["mechanisms"] = mechanisms
     value["environments"] = environments
+    value["visual_direction"] = validate_visual_direction(value.get("visual_direction"), style)
     return value
 
 

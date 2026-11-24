@@ -115,14 +115,26 @@ RULES
   languages, strictly target {min_words}–{max_words} words so spoken audio finishes cleanly inside
   {duration} seconds without getting cut off. Strong opening hook, clear progression, satisfying payoff.
   Never invent dates, quotes, statistics, or unsupported factual claims.
-- Style: choose one style_id from {", ".join(styles)}. {style_instruction}
+- Style & Visualography: choose one style_id from {", ".join(styles)}. {style_instruction}
+  Also design `visual_direction` tailored specifically to THIS topic:
+  - `visual_genre`: one of `kurzgesagt_cosmic`, `vox_editorial`, `isometric_engineering`,
+    `atmospheric_noir`, `expressive_character`, `comic_cel_action`, `layered_papercraft`,
+    `retro_pixel_arcade`, `organic_storybook`.
+  - `palette`: 6 topic-specific hex colors (`bg`, `bg2`, `ink`, `primary`, `accent`, `secondary`)
+    with high contrast and emotional fit for the subject.
+  - `lighting_mood`: one of `dramatic_rim_glow`, `bright_editorial`, `warm_sunlit_shadows`,
+    `neon_bloom`, `technical_clean`, `moody_volumetric`.
+  - `camera_style`: one of `multiplane_parallax`, `crisp_orthographic`, `dynamic_action_cuts`,
+    `slow_cinematic_dolly`.
+  - `motion_feel`: one of `snappy_spring`, `smooth_fluid`, `posterized_12fps`, `mechanical_precise`.
 - Visual bible: define only the recurring entities actually needed (1–3 characters, 2–5 props,
   1–2 environments). Use concise stable IDs matching [a-zA-Z][a-zA-Z0-9_-]{{1,63}}.
   Include `mechanisms` only if the topic is a genuine mechanical system; otherwise `[]`.
 - Storyboard: produce exactly {target_shots} distinct shots covering frame 0 through {total_frames}
   at 30 FPS (contiguous, non-overlapping integers; end_frame is exclusive).
-- Vary shot_scale (extreme_wide, wide, medium, close_up, detail, overhead, isometric) and
-  composition across shots. Avoid title cards and subtitles.
+- Vary shot_scale (extreme_wide, wide, medium, close_up, detail, overhead, isometric),
+  composition, and transition_out (cut, fade, wipe, iris, paper, zoom, whip) across shots.
+  Avoid title cards and subtitles.
 
 OUTPUT CONTRACT (return strict JSON only, no Markdown):
 {{
@@ -131,6 +143,13 @@ OUTPUT CONTRACT (return strict JSON only, no Markdown):
   "visual_bible": {{
     "style_id": "one allowed style",
     "style_notes": "concise art direction & palette guidance",
+    "visual_direction": {{
+      "visual_genre": "kurzgesagt_cosmic",
+      "palette": {{"bg":"#0b1021","bg2":"#16203d","ink":"#f4f1ea","primary":"#38bdf8","accent":"#ff6b35","secondary":"#a855f7"}},
+      "lighting_mood": "dramatic_rim_glow",
+      "camera_style": "multiplane_parallax",
+      "motion_feel": "snappy_spring"
+    }},
     "characters": [{{"id":"char_hero","name":"Hero","design":{{"silhouette":"...","face":"...","clothing":"...","palette":["#..."],"proportions":"..."}},"poses":["idle","action"],"expressions":["focused"],"scale_reference":"..."}}],
     "props": [{{"id":"prop_item","name":"Item","design":"concise shape & material","material":"...","relative_scale":"..."}}],
     "environments": [{{"id":"env_main","name":"Main Setting","design":"concise place description","spatial_layout":"...","foreground":"...","midground":"...","background":"...","atmosphere":"..."}}],
