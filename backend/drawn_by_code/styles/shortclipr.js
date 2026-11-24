@@ -157,6 +157,7 @@ function paperShadow(g, x, y, blur = 12, color = 'rgba(30,20,10,.18)') {
 }
 
 function halftone(g, x, y, w, h, spacing = 12, color = 'rgba(20,20,20,.18)') {
+    if (!isCtx(g) || !(w > 0) || !(h > 0)) return;
     const step = Math.max(4, spacing);
     g.save();
     g.fillStyle = color;
@@ -271,6 +272,7 @@ function posterize(t, fps = 12) {
 
 /* Volume-preserving squash & stretch transform around contact point (x, y). */
 function squash(g, x, y, amount = 0) {
+    if (!isCtx(g)) return;
     const a = clamp(Number(amount) || 0, -0.55, 0.75);
     const sx = 1 + a;
     const sy = 1 / Math.max(0.35, sx);
@@ -656,7 +658,7 @@ function rackFocus(g, env, camState = {}, focusT = 0.5, bgDraw = null, fgDraw = 
 
 /* Volumetric additive ('screen') light beam / cone / flashlight shaft. */
 function lightBeam(g, x0, y0, x1, y1, r0 = 16, r1 = 140, color = '#ffe8a3', alpha = 0.26) {
-    if (!isCtx(g) || alpha <= 0) return;
+    if (!isCtx(g) || alpha <= 0 || !Number.isFinite(x0) || !Number.isFinite(y0) || !Number.isFinite(x1) || !Number.isFinite(y1)) return;
     const angle = Math.atan2(y1 - y0, x1 - x0);
     const perp = angle + Math.PI / 2;
     const p0a = [x0 + Math.cos(perp) * r0, y0 + Math.sin(perp) * r0];
@@ -740,7 +742,7 @@ function shadedShape(g, drawPath, opts = {}) {
 
 /* Volumetric radial glow / focal light (uses additive 'screen' blend by default). */
 function glow(g, x, y, r, color = '#ffdd99', alpha = 0.35) {
-    if (!isCtx(g) || r <= 0 || alpha <= 0) return;
+    if (!isCtx(g) || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(r) || r <= 0 || alpha <= 0) return;
     g.save();
     g.globalCompositeOperation = 'screen';
     g.globalAlpha *= clamp(alpha, 0, 1);
@@ -757,7 +759,8 @@ function glow(g, x, y, r, color = '#ffdd99', alpha = 0.35) {
 
 /* Sleek rounded motion-graphics card / container. */
 function roundedCard(g, x, y, w, h, r = 18, opts = {}) {
-    const radius = Math.min(r, w / 2, h / 2);
+    if (!isCtx(g) || !(w > 0) || !(h > 0)) return;
+    const radius = Math.max(0, Math.min(Number(r) || 0, w / 2, h / 2));
     shadedShape(g, (ctx) => {
         ctx.beginPath();
         if (ctx.roundRect) {
@@ -959,7 +962,7 @@ function postProcess(ctx, t, env, styleId) {
 
 /* Studio transitions including 'zoom' (zoom-through match cut) and 'whip' (fast whip-pan). */
 function transition(g, env, nextCanvas, progress, type = 'wipe') {
-    if (!nextCanvas) return;
+    if (!isCtx(g) || !env || !nextCanvas) return;
     const p = ease(progress);
     g.save();
     if (type === 'zoom') {
@@ -1012,7 +1015,7 @@ function transition(g, env, nextCanvas, progress, type = 'wipe') {
 
 /* Dedicated deterministic primitives for art systems. */
 function editorialShape(g, points, opts = {}) {
-    if (!Array.isArray(points) || points.length < 3) return;
+    if (!isCtx(g) || !Array.isArray(points) || points.length < 3) return;
     const depth = Number(opts.depth) || 0;
     const shadow = opts.shadow || 'rgba(20,25,28,.22)';
     g.save();
@@ -1039,6 +1042,7 @@ function editorialShape(g, points, opts = {}) {
 }
 
 function editorialLight(g, x, y, r, color = 'rgba(255,236,190,.24)') {
+    if (!isCtx(g) || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(r) || r <= 0) return;
     g.save();
     const grad = g.createRadialGradient(x, y, 0, x, y, r);
     grad.addColorStop(0, color);
@@ -1057,6 +1061,7 @@ function isoProject(x, y, z = 0, scale = 1, origin = { x: 0, y: 0 }) {
 }
 
 function isoBox(g, x, y, z, w, d, h, scale = 1, colors = {}) {
+    if (!isCtx(g)) return null;
     const a = isoProject(x, y, z, scale), b = isoProject(x + w, y, z, scale), c = isoProject(x + w, y + d, z, scale), e = isoProject(x, y + d, z, scale);
     const at = isoProject(x, y, z + h, scale), bt = isoProject(x + w, y, z + h, scale), ct = isoProject(x + w, y + d, z + h, scale), et = isoProject(x, y + d, z + h, scale);
     g.save();
@@ -1074,6 +1079,7 @@ function isoBox(g, x, y, z, w, d, h, scale = 1, colors = {}) {
 }
 
 function isoLine(g, a, b, color = '#263746', width = 2) {
+    if (!isCtx(g) || !a || !b) return;
     g.save();
     g.strokeStyle = color;
     g.lineWidth = width;
@@ -1082,6 +1088,7 @@ function isoLine(g, a, b, color = '#263746', width = 2) {
 }
 
 function paperLayer(g, draw, opts = {}) {
+    if (!isCtx(g) || typeof draw !== 'function') return;
     g.save();
     g.shadowColor = opts.shadowColor || 'rgba(58,42,28,.24)';
     g.shadowBlur = Number.isFinite(opts.blur) ? opts.blur : 10;
@@ -1107,6 +1114,7 @@ function paperPolygon(g, points, opts = {}) {
 }
 
 function paperEllipse(g, x, y, rx, ry, opts = {}) {
+    if (!isCtx(g) || !(Number(rx) > 0) || !(Number(ry) > 0)) return;
     paperLayer(g, (ctx) => {
         ctx.beginPath();
         ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
@@ -1114,8 +1122,10 @@ function paperEllipse(g, x, y, rx, ry, opts = {}) {
 }
 
 function paperParallax(g, offset, drawLayers) {
+    if (!isCtx(g) || !Array.isArray(drawLayers)) return;
     for (let i = 0; i < drawLayers.length; i++) {
         const layer = drawLayers[i];
+        if (!layer || typeof layer.draw !== 'function') continue;
         g.save();
         g.translate(offset * (layer.depth || 0), 0);
         layer.draw(g);
