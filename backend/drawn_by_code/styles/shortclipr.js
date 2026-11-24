@@ -518,6 +518,135 @@ function organicPath(g, points, seed = 'organic', opts = {}) {
     }
 }
 
+/* Decaying impact shake magnitude for high-energy collisions or reveals. */
+function impactShake(t, at = 0, strength = 14, decay = 9) {
+    const dt = (Number(t) || 0) - (Number(at) || 0);
+    if (dt < 0 || dt > 0.9) return 0;
+    return (Number(strength) || 14) * Math.exp(-dt * Math.max(1, Number(decay) || 9));
+}
+
+/* Radial or linear anime/action speed lines (use ONLY on high-energy action/rush beats). */
+function speedLines(g, env, t = 0, opts = {}) {
+    const mode = opts.mode || 'radial'; // radial | linear
+    const count = clamp(Math.round(Number(opts.count) || 36), 8, 90);
+    const alpha = clamp(Number.isFinite(opts.alpha) ? opts.alpha : 0.35, 0, 1);
+    if (alpha <= 0.005) return;
+    const color = opts.color || '#ffffff';
+    const rand = typeof Motion !== 'undefined' && Motion.rng ? Motion.rng(opts.seed || 'speed-lines') : () => 0.5;
+    const stepT = Math.floor((Number(t) || 0) * 18); // crisp 18fps comic/anime streak rhythm
+
+    g.save();
+    g.globalCompositeOperation = 'screen';
+    g.strokeStyle = color;
+    g.lineCap = 'round';
+    if (mode === 'linear') {
+        const angle = Number(opts.angle) || 0;
+        g.translate(env.W / 2, env.H / 2);
+        g.rotate(angle);
+        const span = Math.hypot(env.W, env.H);
+        for (let i = 0; i < count; i++) {
+            const y = (rand() - 0.5) * span;
+            const len = 140 + rand() * 340;
+            const x = (((rand() * span + (Number(t) || 0) * (1200 + rand() * 900)) % span) - span / 2);
+            g.globalAlpha = alpha * (0.35 + rand() * 0.65);
+            g.lineWidth = 1.5 + rand() * 3.5;
+            g.beginPath();
+            g.moveTo(x, y);
+            g.lineTo(x + len, y);
+            g.stroke();
+        }
+    } else {
+        const cx = Number.isFinite(opts.cx) ? opts.cx : env.W / 2;
+        const cy = Number.isFinite(opts.cy) ? opts.cy : env.H / 2;
+        const outerR = Math.hypot(env.W, env.H) * 0.72;
+        const innerR = Number.isFinite(opts.innerR) ? opts.innerR : Math.min(env.W, env.H) * 0.28;
+        for (let i = 0; i < count; i++) {
+            const baseA = (i / count) * Math.PI * 2 + (rand() - 0.5) * 0.08 + stepT * 0.03;
+            const r0 = innerR * (0.85 + rand() * 0.45);
+            const r1 = outerR;
+            g.globalAlpha = alpha * (0.3 + rand() * 0.7);
+            g.lineWidth = 1.5 + rand() * 4;
+            g.beginPath();
+            g.moveTo(cx + Math.cos(baseA) * r0, cy + Math.sin(baseA) * r0);
+            g.lineTo(cx + Math.cos(baseA) * r1, cy + Math.sin(baseA) * r1);
+            g.stroke();
+        }
+    }
+    g.restore();
+}
+
+/* Expanding volumetric dust/smoke burst + debris on heavy contact, landing, or launch. */
+function dustBurst(g, x, y, t = 0, start = 0, opts = {}) {
+    const dt = (Number(t) || 0) - (Number(start) || 0);
+    const dur = Math.max(0.15, Number(opts.duration) || 0.75);
+    if (dt < 0 || dt > dur) return;
+    const u = clamp(dt / dur, 0, 1);
+    const out = 1 - Math.pow(1 - u, 3);
+    const fade = 1 - u * u;
+    const count = clamp(Math.round(Number(opts.count) || 12), 4, 32);
+    const spread = Number(opts.spread) || 120;
+    const color = opts.color || 'rgba(230,215,190,0.65)';
+    const rand = typeof Motion !== 'undefined' && Motion.rng ? Motion.rng(opts.seed || `dust-${Math.round(x)}-${Math.round(y)}`) : () => 0.5;
+
+    g.save();
+    g.fillStyle = color;
+    for (let i = 0; i < count; i++) {
+        const ang = (opts.upward ? -Math.PI * (0.1 + rand() * 0.8) : rand() * Math.PI * 2);
+        const dist = (0.35 + rand() * 0.85) * spread * out;
+        const px = x + Math.cos(ang) * dist;
+        const py = y + Math.sin(ang) * dist * (opts.upward ? 0.75 : 0.6) - u * 18;
+        const r = (10 + rand() * 24) * (0.55 + out * 0.9);
+        g.globalAlpha = clamp(fade * (0.45 + rand() * 0.55) * (opts.alpha ?? 1), 0, 1);
+        g.beginPath();
+        g.arc(px, py, r, 0, Math.PI * 2);
+        g.fill();
+    }
+    g.restore();
+}
+
+/* Concussive 2-4 frame impact flash + expanding shockwave ring for climactic hits/breakthroughs. */
+function impactFlash(g, env, t = 0, at = 0, opts = {}) {
+    const dt = (Number(t) || 0) - (Number(at) || 0);
+    const dur = Math.max(0.06, Number(opts.duration) || 0.28);
+    if (dt < 0 || dt > dur) return;
+    const u = clamp(dt / dur, 0, 1);
+    const cx = Number.isFinite(opts.cx) ? opts.cx : env.W / 2;
+    const cy = Number.isFinite(opts.cy) ? opts.cy : env.H / 2;
+    const maxR = Number(opts.maxR) || Math.min(env.W, env.H) * 0.48;
+
+    g.save();
+    g.globalCompositeOperation = 'screen';
+    // Brief bright flash in first 35% of impact
+    if (u < 0.35) {
+        g.globalAlpha = (1 - u / 0.35) * clamp(opts.flashAlpha ?? 0.42, 0, 0.85);
+        g.fillStyle = opts.color || '#fff8e1';
+        g.fillRect(0, 0, env.W, env.H);
+    }
+    // Crisp expanding shockwave ring
+    const ringR = maxR * (1 - Math.pow(1 - u, 3));
+    g.globalAlpha = (1 - u) * 0.85;
+    g.strokeStyle = opts.ringColor || opts.color || '#ffe082';
+    g.lineWidth = Math.max(2, (1 - u) * 18);
+    g.beginPath();
+    g.arc(cx, cy, ringR, 0, Math.PI * 2);
+    g.stroke();
+    g.restore();
+}
+
+/* Optical rack focus shifting depth-of-field blur between background (focusT=0) and foreground (focusT=1). */
+function rackFocus(g, env, camState = {}, focusT = 0.5, bgDraw = null, fgDraw = null, maxBlur = 6) {
+    const f = clamp(Number(focusT) || 0, 0, 1);
+    const blurAmt = Math.max(1, Number(maxBlur) || 6);
+    const layers = [];
+    if (typeof bgDraw === 'function') {
+        layers.push({ depth: 0.45, blur: f * blurAmt, draw: bgDraw });
+    }
+    if (typeof fgDraw === 'function') {
+        layers.push({ depth: 1.15, blur: (1 - f) * blurAmt, draw: fgDraw });
+    }
+    parallaxLayers(g, env, camState, layers);
+}
+
 /* Volumetric additive ('screen') light beam / cone / flashlight shaft. */
 function lightBeam(g, x0, y0, x1, y1, r0 = 16, r1 = 140, color = '#ffe8a3', alpha = 0.26) {
     if (alpha <= 0) return;
@@ -1049,6 +1178,11 @@ window.ShortcliprStyles = Object.freeze({
     organicPath,
     lightBeam,
     bloomLayer,
+    impactShake,
+    speedLines,
+    dustBurst,
+    impactFlash,
+    rackFocus,
     shadedShape,
     glow,
     roundedCard,

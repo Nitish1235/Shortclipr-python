@@ -136,9 +136,16 @@ RULES
   Set `mechanisms` to `[]` (express moving parts directly via `props`, `action`, and `visual_change`).
 - Storyboard: produce exactly {target_shots} distinct shots covering frame 0 through {total_frames}
   at 30 FPS (contiguous, non-overlapping integers; end_frame is exclusive).
-- Enforce real shot-scale variety across shots (NEVER repeat the same flat wide view back-to-back):
-  mix establishing/wide, tight close-up/detail on moving parts, overhead/isometric, and monumental
-  hero reveals. Never keep an idle bystander character in an object-focus or close-up shot.
+- CINEMATOGRAPHY & PACING (CRITICAL):
+  - Assign each shot an explicit `camera_angle` (`low_angle`, `eye_level`, `high_angle`, `overhead`,
+    `dutch_tilt`, `macro_closeup`, `isometric`) and `energy` (`calm`, `building`, `action`, `climax`).
+  - NEVER repeat the same `camera_angle` or `shot_scale` in two consecutive shots! Break flat static
+    horizon lines: e.g. dramatic `low_angle` looking up -> tight `macro_closeup` or `overhead` on the
+    key mechanism/action -> dynamic `dutch_tilt` or monumental `low_angle` climax reveal.
+  - Motivated action ONLY: use `action` / `climax` energy (high-speed cuts, impact, speed lines, dust
+    bursts) ONLY on genuine breakthroughs, collisions, launches, or dramatic reveals — use `calm` /
+    `building` on quiet or explanatory beats so the rhythm has real contrast and never feels chaotic.
+  - Never keep an idle bystander character in an object-focus or close-up shot.
 - Vary `transition_out` (cut, fade, wipe, iris, paper, zoom, whip). Avoid title cards and subtitles.
 
 OUTPUT CONTRACT (return strict JSON only, no Markdown):
@@ -169,6 +176,8 @@ OUTPUT CONTRACT (return strict JSON only, no Markdown):
     "visual_objective": "single clear takeaway",
     "composition": "specific spatial framing & focal placement",
     "shot_scale": "wide",
+    "camera_angle": "low_angle",
+    "energy": "building",
     "camera_position": "concrete 2D viewpoint/crop",
     "depth_layers": ["background element", "midground subject", "foreground framing"],
     "focal_entity": "char_hero",

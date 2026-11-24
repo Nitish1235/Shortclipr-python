@@ -428,6 +428,12 @@ def validate_scene_plan(scenes: Any, total_frames: int) -> list[dict[str, Any]]:
         scene.setdefault("visual_objective", scene["visual_description"])
         scene.setdefault("composition", "clear focal hierarchy with intentional negative space")
         scene.setdefault("shot_scale", "medium")
+        scene.setdefault("camera_angle", "eye_level")
+        scene.setdefault("energy", "building")
+        if scene["camera_angle"] not in {"low_angle", "eye_level", "high_angle", "overhead", "dutch_tilt", "macro_closeup", "isometric"}:
+            scene["camera_angle"] = "eye_level"
+        if scene["energy"] not in {"calm", "building", "action", "climax"}:
+            scene["energy"] = "building"
         scene.setdefault("camera_position", scene["camera"])
         scene.setdefault("depth_layers", ["background", "subject", "foreground"])
         scene.setdefault("focal_entity", "")
