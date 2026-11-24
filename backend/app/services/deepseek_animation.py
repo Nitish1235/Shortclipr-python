@@ -585,6 +585,7 @@ DESIGN & QUALITY STANDARDS
 - Put a concise 1-line `//` comment above each main function explaining its parameters and
   origin (e.g. `// Draws hero explorer at ground contact (x, y), scale=1, pose='walk'|'idle', walkPhase=0`).
 - Use default parameter values where helpful (e.g. `scale = 1, pose = 'idle'`).
+- If any helper accepts a draw callback `fn`, ALWAYS pass the Canvas context into it (`fn(g)`), never bare `fn()`.
 - Use the film's custom palette (`ShortcliprStyles.palette('{style_id}')` or the hex colors from
   `visual_direction.palette`), `ShortcliprStyles.shadedShape`, linear/radial gradients,
   `ShortcliprStyles.glow`, `ShortcliprStyles.solveIK` (for articulated character limbs),
@@ -856,6 +857,46 @@ STORYBOARD:
         }
         self.validate_compiled_program(result)
         return result
+
+    async def repair_runtime_error(
+        self,
+        repair_bundle: dict[str, Any],
+        error_report: str,
+    ) -> dict[str, Any]:
+        """Surgically fix a Chromium runtime_preflight error (e.g. TypeError/ReferenceError) using the stack trace."""
+        if self.client is None:
+            raise RuntimeError("DEEPSEEK_API_KEY is not configured")
+        if not isinstance(repair_bundle, dict):
+            raise ValueError("Missing repair_bundle for runtime error repair")
+        shared_js = repair_bundle.get("shared_js")
+        shots = repair_bundle.get("shots")
+        duration = repair_bundle.get("duration")
+        logical = repair_bundle.get("logical")
+        style_id = repair_bundle.get("style_id")
+        if (
+            not isinstance(shared_js, str)
+            or not isinstance(shots, list)
+            or not shots
+            or isinstance(duration, bool)
+            or not isinstance(duration, int)
+            or not isinstance(logical, list)
+            or len(logical) != 2
+            or not isinstance(style_id, str)
+        ):
+            raise ValueError("Incomplete repair_bundle for runtime error repair")
+
+        visual_direction = (repair_bundle.get("visual_bible") or {}).get("visual_direction")
+        fixed_shared, fixed_shots = await self._repair_assembled_error(
+            shared_js, shots, error_report, duration, logical, style_id, visual_direction,
+        )
+        source = self._assemble_film(
+            fixed_shared, fixed_shots, duration, logical, style_id, visual_direction,
+        )
+        self.validate_source(source, duration, logical)
+        updated_bundle = copy.deepcopy(repair_bundle)
+        updated_bundle["shared_js"] = fixed_shared
+        updated_bundle["shots"] = fixed_shots
+        return {"scene_js": source, "repair_bundle": updated_bundle}
 
     async def repair_shared_helpers(
         self,
