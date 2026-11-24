@@ -1063,13 +1063,37 @@ RULES:
             pal_json = json.dumps(visual_direction["palette"], ensure_ascii=False, separators=(",", ":"))
             mood_json = json.dumps(str(visual_direction.get("lighting_mood") or ""), ensure_ascii=False)
             palette_setup = f"if (ShortcliprStyles.setCustomPalette) ShortcliprStyles.setCustomPalette({pal_json}, {mood_json});\n"
+        # Expose ShortcliprStyles helpers as top-level bindings (excluding any name
+        # already declared at top level in shared_js) so both `ShortcliprStyles.fn(...)`
+        # and bare `fn(...)` calls resolve cleanly without wasting auto-repair cycles.
+        shared_declared = {item["name"] for item in extract_shared_function_signatures(shared_js)}
+        shared_declared.update(
+            re.findall(r"(?m)^\s*(?:const|let|var|function)\s+([A-Za-z_$][A-Za-z0-9_$]*)\b", shared_js)
+        )
+        style_exports = [
+            name for name in (
+                "backdrop", "palette", "shadedShape", "glow", "lightBeam", "bloomLayer",
+                "parallaxLayers", "solveIK", "drawCharacterRig", "squash", "spring",
+                "stagger", "anticipation", "posterize", "strokeReveal", "organicPath",
+                "roundedCard", "badge", "flowPath", "particles", "camera", "cameraRig",
+                "speedLines", "dustBurst", "impactFlash", "impactShake", "rackFocus",
+                "editorialShape", "editorialLight", "isoProject", "isoBox", "isoLine",
+                "paperLayer", "paperPolygon", "paperEllipse", "paperParallax",
+                "halftone", "pixelSnap", "mechanismPose", "paperBackground", "paperShadow",
+            )
+            if name not in shared_declared
+        ]
+        style_bindings = (
+            f"const {{ {', '.join(style_exports)} }} = ShortcliprStyles;\n"
+            if style_exports else ""
+        )
         # Apply subtle film finishing only on painterly/atmospheric styles; keep technical/crisp styles razor-sharp.
         use_post = style_id not in {"pixel-art", "blueprint", "line", "isometric-technical"}
         post_line = f"  post(ctx,t,env) {{ ShortcliprStyles.postProcess(ctx,t,env,'{style_id}'); }}\n" if use_post else ""
         return (
             "// ShortClipr studio Drawn-by-Code film. Generated code is untrusted input.\n"
             f"// Visual style: {style_id}\n"
-            f"{palette_setup}{shared_js}\n{function_source}\n"
+            f"{palette_setup}{style_bindings}{shared_js}\n{function_source}\n"
             "Motion.scene({\n"
             "  uses: ['styles/shortclipr.js'],\n"
             "  fps: 30,\n"
