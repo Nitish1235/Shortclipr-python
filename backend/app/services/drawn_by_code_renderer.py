@@ -250,7 +250,7 @@ class DrawnByCodeRenderer:
                 env=env,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
-                start_new_session=True,
+                start_new_session=(os.name == "posix"),
             )
             deadline = asyncio.get_running_loop().time() + self.timeout
             try:

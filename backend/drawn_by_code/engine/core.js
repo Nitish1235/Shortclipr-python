@@ -47,14 +47,15 @@ const Motion = (() => {
     // --- sprite cache: expensive things are painted once at output resolution -----
     const cache = new Map();
     function sprite(key, box, scale, drawFn) {
-        const k = key + '@' + scale.toFixed(4);
+        const sc = Number.isFinite(scale) && scale > 0 ? scale : 1;
+        const k = key + '@' + sc.toFixed(4);
         if (!cache.has(k)) {
             const c = document.createElement('canvas');
-            c.width = Math.max(1, Math.ceil(box.w * scale));
-            c.height = Math.max(1, Math.ceil(box.h * scale));
+            c.width = Math.max(1, Math.ceil((Number.isFinite(box.w) ? box.w : 1) * sc));
+            c.height = Math.max(1, Math.ceil((Number.isFinite(box.h) ? box.h : 1) * sc));
             const g = c.getContext('2d');
-            g.scale(scale, scale);
-            g.translate(-box.x, -box.y);
+            g.scale(sc, sc);
+            g.translate(-(Number.isFinite(box.x) ? box.x : 0), -(Number.isFinite(box.y) ? box.y : 0));
             drawFn(g);
             cache.set(k, c);
         }
@@ -198,21 +199,139 @@ const Motion = (() => {
 
 // Timing curves. x in [0, 1].
 const Ease = {
-    clamp: (x, a = 0, b = 1) => Math.max(a, Math.min(b, x)),
-    seg: (t, a, b) => (b === a ? (t >= b ? 1 : 0) : Math.max(0, Math.min(1, (t - a) / (b - a)))),
-    linear: (x) => x,
-    inOut: (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2),
-    out: (x) => 1 - Math.pow(1 - x, 3),
-    in: (x) => x * x * x,
+    clamp: (x, a = 0, b = 1) => (Number.isFinite(x) ? Math.max(a, Math.min(b, x)) : a),
+    seg: (t, a, b) => (!Number.isFinite(t) || !Number.isFinite(a) || !Number.isFinite(b) ? 0 : b === a ? (t >= b ? 1 : 0) : Math.max(0, Math.min(1, (t - a) / (b - a)))),
+    linear: (x) => (Number.isFinite(x) ? x : 0),
+    inOut: (x) => (!Number.isFinite(x) ? 0 : x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2),
+    out: (x) => (!Number.isFinite(x) ? 0 : 1 - Math.pow(1 - x, 3)),
+    in: (x) => (!Number.isFinite(x) ? 0 : x * x * x),
     back: (x) => {
+        if (!Number.isFinite(x)) return 0;
         const c1 = 1.7, c3 = c1 + 1;
         return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
     },
-    elastic: (x) => (x === 0 || x === 1 ? x : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * ((2 * Math.PI) / 3)) + 1),
+    elastic: (x) => (!Number.isFinite(x) ? 0 : x === 0 || x === 1 ? x : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * ((2 * Math.PI) / 3)) + 1),
     // 0→1→0 over [a, a+dur]
     bump: (t, a, dur) => Math.sin(Ease.seg(t, a, a + dur) * Math.PI),
     // appears with a bounce at `at`
     pop: (t, at, dur = 0.35) => (t < at ? 0 : Ease.back(Ease.seg(t, at, at + dur))),
-    lerp: (a, b, t) => a + (b - a) * t,
-    lerpPt: (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t],
+    lerp: (a, b, t) => (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(t) ? (Number.isFinite(a) ? a : 0) : a + (b - a) * t),
+    lerpPt: (p, q, t) => [Ease.lerp(p[0], q[0], t), Ease.lerp(p[1], q[1], t)],
 };
+
+// Defensive Canvas 2D hardening so generated scenes never crash on non-finite
+// coordinates, negative radii, or out-of-range gradient stops.
+(() => {
+    const fin = (v, fallback = 0) => (Number.isFinite(v) ? v : fallback);
+
+    if (typeof CanvasRenderingContext2D !== 'undefined') {
+        const proto = CanvasRenderingContext2D.prototype;
+
+        const origLinear = proto.createLinearGradient;
+        if (typeof origLinear === 'function') {
+            proto.createLinearGradient = function (x0, y0, x1, y1) {
+                return origLinear.call(this, fin(x0), fin(y0), fin(x1), fin(y1));
+            };
+        }
+
+        const origRadial = proto.createRadialGradient;
+        if (typeof origRadial === 'function') {
+            proto.createRadialGradient = function (x0, y0, r0, x1, y1, r1) {
+                return origRadial.call(
+                    this,
+                    fin(x0),
+                    fin(y0),
+                    Math.max(0, fin(r0)),
+                    fin(x1),
+                    fin(y1),
+                    Math.max(0.001, fin(r1, 0.001)),
+                );
+            };
+        }
+
+        const origConic = proto.createConicGradient;
+        if (typeof origConic === 'function') {
+            proto.createConicGradient = function (startAngle, x, y) {
+                return origConic.call(this, fin(startAngle), fin(x), fin(y));
+            };
+        }
+
+        const origArc = proto.arc;
+        if (typeof origArc === 'function') {
+            proto.arc = function (x, y, r, s, e, ccw) {
+                if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(r) || !Number.isFinite(s) || !Number.isFinite(e)) {
+                    return;
+                }
+                return origArc.call(this, x, y, Math.max(0, r), s, e, ccw);
+            };
+        }
+
+        const origEllipse = proto.ellipse;
+        if (typeof origEllipse === 'function') {
+            proto.ellipse = function (x, y, rx, ry, rot, s, e, ccw) {
+                if (
+                    !Number.isFinite(x) || !Number.isFinite(y) ||
+                    !Number.isFinite(rx) || !Number.isFinite(ry) ||
+                    !Number.isFinite(rot) || !Number.isFinite(s) || !Number.isFinite(e)
+                ) {
+                    return;
+                }
+                return origEllipse.call(this, x, y, Math.max(0, rx), Math.max(0, ry), rot, s, e, ccw);
+            };
+        }
+
+        const origArcTo = proto.arcTo;
+        if (typeof origArcTo === 'function') {
+            proto.arcTo = function (x1, y1, x2, y2, r) {
+                if (!Number.isFinite(x1) || !Number.isFinite(y1) || !Number.isFinite(x2) || !Number.isFinite(y2) || !Number.isFinite(r)) {
+                    return;
+                }
+                return origArcTo.call(this, x1, y1, x2, y2, Math.max(0, r));
+            };
+        }
+
+        const origRoundRect = proto.roundRect;
+        if (typeof origRoundRect === 'function') {
+            proto.roundRect = function (x, y, w, h, radii) {
+                if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(w) || !Number.isFinite(h)) {
+                    return;
+                }
+                let safeRadii = radii;
+                if (typeof radii === 'number') {
+                    safeRadii = Math.max(0, fin(radii));
+                } else if (Array.isArray(radii)) {
+                    safeRadii = radii.map((rv) => (typeof rv === 'number' ? Math.max(0, fin(rv)) : rv));
+                }
+                return origRoundRect.call(this, x, y, w, h, safeRadii);
+            };
+        }
+
+        const origSetLineDash = proto.setLineDash;
+        if (typeof origSetLineDash === 'function') {
+            proto.setLineDash = function (segments) {
+                if (!Array.isArray(segments)) return origSetLineDash.call(this, []);
+                const safe = [];
+                for (let i = 0; i < segments.length; i++) {
+                    const v = Number(segments[i]);
+                    if (Number.isFinite(v) && v >= 0) safe.push(v);
+                }
+                return origSetLineDash.call(this, safe);
+            };
+        }
+    }
+
+    if (typeof CanvasGradient !== 'undefined') {
+        const gProto = CanvasGradient.prototype;
+        const origAddStop = gProto.addColorStop;
+        if (typeof origAddStop === 'function') {
+            gProto.addColorStop = function (offset, color) {
+                const safeOffset = Math.max(0, Math.min(1, fin(offset)));
+                try {
+                    return origAddStop.call(this, safeOffset, color);
+                } catch (_) {
+                    // Ignore malformed CSS color strings instead of crashing the frame.
+                }
+            };
+        }
+    }
+})();
