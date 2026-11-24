@@ -43,6 +43,7 @@ const loadScript = (src) => new Promise((ok, ko) => {
     if (!scenePath) return showErr('Missing ?scene=path/to/scene.js');
     // Generated ShortClipr scene code can reference this helper at top level,
     // so it must exist before the scene script is evaluated (not after Motion.scene).
+    const loadedScripts = new Set(['styles/shortclipr.js']);
     await loadScript(root + 'styles/shortclipr.js');
     await loadScript(root + scenePath);
     const def = Motion.def;
@@ -51,6 +52,8 @@ const loadScript = (src) => new Promise((ok, ko) => {
     // Optional entries (a client's private brand files, not committed) are skipped if absent.
     for (const u of def.uses ?? []) {
         const src = typeof u === 'string' ? u : u.src;
+        if (loadedScripts.has(src)) continue;
+        loadedScripts.add(src);
         try {
             await loadScript(root + src + (typeof u === 'object' && u.optional ? '?optional' : ''));
         } catch (e) {
@@ -84,6 +87,11 @@ const loadScript = (src) => new Promise((ok, ko) => {
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = 'source-over';
         ctx.filter = 'none';
+        ctx.shadowBlur = 0;
+        ctx.shadowColor = 'rgba(0,0,0,0)';
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.setLineDash([]);
         ctx.clearRect(0, 0, c.width, c.height);
         ctx.setTransform(k, 0, 0, k, 0, 0);
         ctx.save();

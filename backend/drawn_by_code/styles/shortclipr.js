@@ -1,6 +1,7 @@
 /* ShortClipr deterministic 2D motion-graphics toolkit, visualography engine, and transition helpers. */
 (() => {
 'use strict';
+if (window.ShortcliprStyles) return;
 
 const palettes = {
     'paper-cutout': {
