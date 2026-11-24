@@ -1063,13 +1063,58 @@ RULES:
             pal_json = json.dumps(visual_direction["palette"], ensure_ascii=False, separators=(",", ":"))
             mood_json = json.dumps(str(visual_direction.get("lighting_mood") or ""), ensure_ascii=False)
             palette_setup = f"if (ShortcliprStyles.setCustomPalette) ShortcliprStyles.setCustomPalette({pal_json}, {mood_json});\n"
+        # Expose ShortcliprStyles helpers as top-level bindings (excluding any name
+        # already declared at top level in shared_js) so both `ShortcliprStyles.fn(...)`
+        # and bare `fn(...)` calls resolve cleanly without wasting auto-repair cycles.
+        shared_declared = {item["name"] for item in extract_shared_function_signatures(shared_js)}
+        shared_declared.update(
+            re.findall(r"(?m)^\s*(?:const|let|var|function)\s+([A-Za-z_$][A-Za-z0-9_$]*)\b", shared_js)
+        )
+        style_exports = [
+            name for name in (
+                "backdrop", "palette", "shadedShape", "glow", "lightBeam", "bloomLayer",
+                "parallaxLayers", "solveIK", "drawCharacterRig", "squash", "spring",
+                "stagger", "anticipation", "posterize", "strokeReveal", "organicPath",
+                "roundedCard", "badge", "flowPath", "particles", "camera", "cameraRig",
+                "speedLines", "dustBurst", "impactFlash", "impactShake", "rackFocus",
+                "editorialShape", "editorialLight", "isoProject", "isoBox", "isoLine",
+                "paperLayer", "paperPolygon", "paperEllipse", "paperParallax",
+                "halftone", "pixelSnap", "mechanismPose", "paperBackground", "paperShadow",
+            )
+            if name not in shared_declared
+        ]
+        style_bindings = (
+            f"const {{ {', '.join(style_exports)} }} = ShortcliprStyles;\n"
+            if style_exports else ""
+        )
+        ease_exports = [
+            name for name in ("clamp", "seg", "lerp", "lerpPt", "inOut", "back", "elastic", "bump", "pop")
+            if name not in shared_declared and name not in style_exports
+        ]
+        ease_bindings = (
+            f"const {{ {', '.join(ease_exports)} }} = Ease;\n"
+            if ease_exports else ""
+        )
+        mix_binding = (
+            "const mix = Ease.lerp;\n"
+            if "mix" not in shared_declared else ""
+        )
+        motion_exports = [
+            name for name in ("rng", "noise1", "keys", "shake")
+            if name not in shared_declared and name not in style_exports and name not in ease_exports
+        ]
+        motion_bindings = (
+            f"const {{ {', '.join(motion_exports)} }} = Motion;\n"
+            if motion_exports else ""
+        )
+        preamble = f"{palette_setup}{style_bindings}{ease_bindings}{mix_binding}{motion_bindings}"
         # Apply subtle film finishing only on painterly/atmospheric styles; keep technical/crisp styles razor-sharp.
         use_post = style_id not in {"pixel-art", "blueprint", "line", "isometric-technical"}
         post_line = f"  post(ctx,t,env) {{ ShortcliprStyles.postProcess(ctx,t,env,'{style_id}'); }}\n" if use_post else ""
         return (
             "// ShortClipr studio Drawn-by-Code film. Generated code is untrusted input.\n"
             f"// Visual style: {style_id}\n"
-            f"{palette_setup}{shared_js}\n{function_source}\n"
+            f"{preamble}{shared_js}\n{function_source}\n"
             "Motion.scene({\n"
             "  uses: ['styles/shortclipr.js'],\n"
             "  fps: 30,\n"
@@ -1094,10 +1139,4 @@ RULES:
         compact = re.sub(r"\s+", "", source)
         if f"logical:{json.dumps(logical, separators=(',', ':'))}" not in compact:
             raise ValueError("Animation canvas does not match project aspect ratio")
-        mix_match = re.search(r"(?<![\w$.])mix\s*\(", source)
-        if mix_match:
-            line_no = source.count("\n", 0, mix_match.start()) + 1
-            raise ValueError(
-                f"Generated animation calls unsupported bare mix() at line {line_no}; use Ease.lerp(a, b, progress)"
-            )
         validate_generated_fragment(source, "Assembled animation", MAX_FILM_SOURCE)
