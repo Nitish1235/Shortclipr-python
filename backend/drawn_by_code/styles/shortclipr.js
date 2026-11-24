@@ -176,8 +176,11 @@ function camera(g, env, o = {}) {
     if (!isCtx(g) || !env) return;
     const cx = Number.isFinite(o.cx) ? o.cx : env.W / 2;
     const cy = Number.isFinite(o.cy) ? o.cy : env.H / 2;
-    const zoom = clamp(Number(o.zoom) || 1, 0.25, 4);
     const rotation = Number(o.rotation) || 0;
+    const absRot = Math.abs(rotation);
+    const aspectMax = Math.max(env.W / Math.max(1, env.H), env.H / Math.max(1, env.W));
+    const minRotZoom = absRot > 0.001 ? (Math.cos(absRot) + Math.sin(absRot) * aspectMax) * 1.03 : 1;
+    const zoom = clamp(Math.max(Number(o.zoom) || 1, minRotZoom), 0.25, 4);
     g.translate(env.W / 2, env.H / 2);
     g.rotate(rotation);
     g.scale(zoom, zoom);
@@ -201,12 +204,16 @@ function parallaxLayers(g, env, camState = {}, layers = []) {
     const rot = Number(camState.rotation) || 0;
     const dx = cx - env.W / 2;
     const dy = cy - env.H / 2;
+    const aspectMax = Math.max(env.W / Math.max(1, env.H), env.H / Math.max(1, env.W));
 
     for (let i = 0; i < layers.length; i++) {
         const layer = layers[i];
         if (!layer || typeof layer.draw !== 'function') continue;
         const depth = Number.isFinite(layer.depth) ? layer.depth : 1.0;
-        const layerZoom = 1 + (zoom - 1) * depth;
+        const layerRot = rot * depth;
+        const absRot = Math.abs(layerRot);
+        const minRotZoom = absRot > 0.001 ? (Math.cos(absRot) + Math.sin(absRot) * aspectMax) * 1.03 : 1;
+        const layerZoom = Math.max(1 + (zoom - 1) * depth, minRotZoom);
         const lx = env.W / 2 + dx * depth;
         const ly = env.H / 2 + dy * depth;
         g.save();
@@ -217,7 +224,7 @@ function parallaxLayers(g, env, camState = {}, layers = []) {
             g.globalAlpha *= clamp(layer.alpha, 0, 1);
         }
         g.translate(env.W / 2, env.H / 2);
-        g.rotate(rot * depth);
+        g.rotate(layerRot);
         g.scale(layerZoom, layerZoom);
         g.translate(-lx, -ly);
         layer.draw(g);
@@ -789,7 +796,7 @@ function roundedCard(g, x, y, w, h, r = 18, opts = {}) {
     });
 }
 
-/* Crisp pill label/callout badge (auto-sized to text). */
+/* Crisp pill label/callout badge (auto-sized to text, clamped inside safe viewport margin). */
 function badge(g, x, y, text, opts = {}) {
     const str = String(text ?? '');
     if (!isCtx(g) || !str) return;
@@ -801,8 +808,17 @@ function badge(g, x, y, text, opts = {}) {
     const metrics = g.measureText(str);
     const w = metrics.width + padX * 2;
     const h = fontSize + padY * 2;
-    const rx = opts.align === 'left' ? x : opts.align === 'right' ? x - w : x - w / 2;
-    const ry = y - h / 2;
+    let rx = opts.align === 'left' ? x : opts.align === 'right' ? x - w : x - w / 2;
+    let ry = y - h / 2;
+    // Clamp inside logical canvas bounds with a 28px safe margin so labels never clip off-screen.
+    const tr = typeof g.getTransform === 'function' ? g.getTransform() : null;
+    const scaleX = tr ? Math.hypot(tr.a, tr.b) : 1;
+    const scaleY = tr ? Math.hypot(tr.c, tr.d) : 1;
+    const maxW = opts.env?.W || (g.canvas && scaleX > 0.01 ? g.canvas.width / scaleX : 0);
+    const maxH = opts.env?.H || (g.canvas && scaleY > 0.01 ? g.canvas.height / scaleY : 0);
+    const margin = 28;
+    if (maxW > w + margin * 2) rx = clamp(rx, margin, maxW - w - margin);
+    if (maxH > h + margin * 2) ry = clamp(ry, margin, maxH - h - margin);
     roundedCard(g, rx, ry, w, h, h / 2, {
         fill: opts.bg || '#1b232b',
         stroke: opts.border || 'rgba(255,255,255,0.16)',

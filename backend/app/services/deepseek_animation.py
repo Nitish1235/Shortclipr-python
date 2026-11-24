@@ -82,12 +82,12 @@ AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
    - strokeReveal(g, [[x0,y0],[x1,y1],...], progress, { color, width, dashed, glow, arrow }) -> smoothly traces any path from 0 -> 1 (SVG stroke-dashoffset equivalent)
    - organicPath(g, [[x0,y0],...], seed, { roughness, closed, fill, stroke, lineWidth, shadow, highlight }) -> hand-crafted path with deterministic noise jitter
    - roundedCard(g, x, y, w, h, r, { fill, stroke, lineWidth, shadowBlur, highlight })
-   - badge(g, x, y, text, { bg, color, border, fontSize, align }) -> crisp auto-sized pill label (use sparingly for short diagram callouts)
-   - flowPath(g, [[x0,y0],[x1,y1],...], t, { color, width, progress, dashed, speed, glow, arrow, arrowSize }) -> animated connector/energy path
+   - badge(g, x, y, text, { bg, color, border, fontSize, align }) -> auto-clamped pill label (AVOID unless 1 tiny 1–2 word label is truly needed; NEVER draw top title banners!)
+   - flowPath(g, [[x0,y0],[x1,y1],...], t, { color, width, progress, dashed, speed, glow, arrow, arrowSize }) -> animated directional force/flow arrow
    - particles(g, seed, count, t, { x, y, w, h }, { mode: 'drift'|'rise'|'sparkle'|'stream', color, speed, minR, maxR, alpha })
    - cameraRig(g, env, { cx, cy, zoom, rotation, shake, t }) -> smooth 2D camera inside g.save()/g.restore()
    - editorialShape(g, points, { fill, depth, shadow, stroke, lineWidth }), editorialLight(g, x, y, r, color)
-   - isoProject(x, y, z, scale, origin), isoBox(g, x, y, z, w, d, h, scale, { top, left, right, edge }), isoLine(g, a, b, color, width)
+   - isoProject(x, y, z, scale, origin), isoBox(g, x, y, z, w, d, h, scale, { top, left, right, edge }), isoLine(g, a, b, color, width) -> STRICTLY for architecture/machines ONLY (NEVER use isoBox for rocks, terrain, water, or nature!)
    - paperLayer(g, drawFn, { fill, edge, blur, offsetY }), paperPolygon(g, points, opts), paperEllipse(g, x, y, rx, ry, opts), paperParallax(g, offset, layers)
    - halftone(g, x, y, w, h, spacing, color), pixelSnap(v, size), mechanismPose(spec, progress)
 2. Motion (from core.js):
@@ -103,25 +103,23 @@ AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
 """.strip()
 
 _CRAFT_REFERENCE_SNIPPET = """
-CREATIVE AUTONOMY — YOU DECIDE THE ANIMATION STYLE & MOTION LANGUAGE:
-Do NOT make every video look the same. Choose the visual architecture, color palette,
-lighting, framing, and animation physics that best serve THIS specific topic and `style_id`:
-- Explainer / science / space / tech: crisp layered vector motion graphics, glowing energy
-  paths, orbital/mechanical motion, spring entrances, clean cutaway diagrams.
-- Story / fable / comedy / character: expressive multi-part character silhouettes, squash &
-  stretch, articulated limbs/faces, layered parallax scenery, motivated camera cuts.
-- Historical / documentary / mystery / horror: dramatic atmospheric lighting, volumetric
-  beams, rich silhouettes, moody color grading, slow cinematic dolly/push-ins.
-- Engineering / architecture / tactics / maps: isometric 3-axis projection (`isoBox`/`isoProject`),
-  blueprint/schematic reveals, animated flow arrows (`flowPath`), exploded component views.
-- Paper-craft / retro / comic / pixel-art: tactile overlapping cut-paper shadows (`paperPolygon`),
-  bold comic ink contours & dynamic diagonals, halftone shading, or pixel-snapped sprites.
-
-You are free to design custom palettes, custom sky/space/underwater/interior backgrounds,
-and custom procedural effects. `ShortcliprStyles.*` helpers are optional power tools—use
-them whenever they elevate the visuals, and write custom Canvas 2D shaders/gradients/shapes
-whenever the scene calls for something bespoke. Never settle for flat stick figures or
-thin unshaded pencil outlines.
+VISUAL SIMPLICITY, RECOGNIZABILITY & COHESIVE ART DIRECTION (CRITICAL):
+- MUTED-AUDIO TEST: Every frame must look like a clean, iconic Kurzgesagt / Vox flat-vector
+  illustration that a viewer understands in 1 second with the sound OFF.
+- SIMPLE > COMPLEX: Draw 3–5 large, unmistakable, cleanly shaded shapes per shot — NEVER clutter
+  the screen with abstract wireframes, tiny glowing dots, floating CAD boxes, or scattered lines.
+- FULL-BLEED WORLDS ONLY: Environments (river + curved organic banks, sky + hills, room walls + floor,
+  space + planet) MUST extend all the way to all 4 edges of the canvas (`0..env.W`, `0..env.H`).
+  NEVER float a disconnected rectangular slab or island in an empty dark void!
+- RECOGNIZABLE REAL-WORLD SHAPES:
+  * Water/rivers: full-bleed layered blue bands with smooth curved banks, animated white foam/current
+    ribbons, and rounded organic stones (NEVER a tilted flat cyan rectangle or gray `isoBox` cubes!).
+  * People/human actions: draw a clear, large stylized human (`ShortcliprStyles.drawCharacterRig` or
+    a clean articulated custom character with head, torso, arms, legs, boots) — NEVER represent a
+    person as a glowing orange dot or stick!
+  * Visual arrows: use bold, clean `flowPath` arrows to show direction/force right next to the action.
+- NO TEXT CLUTTER: Do NOT draw top pill title banners (`THE CHALLENGE...`) or multiple callout badges.
+  Let the clear illustration and motion tell the story.
 """.strip()
 
 
@@ -657,16 +655,16 @@ Write the complete, studio-quality shared JavaScript visual library now.
         # Keep the system prompt 100% identical across all shots so DeepSeek's
         # automatic prefix cache hits on shots 2..N (~80-90% input token savings).
         vertical_framing_rule = (
-            "VERTICAL 9:16 FRAMING LAW (CRITICAL):\n"
-            "- NEVER leave the top 50–60% of the 900x1600 canvas as empty blank sky!\n"
-            "- Place the primary hero subject large in the central vertical band (y = 32%–74% of H),\n"
-            "  filling 45%–75% of canvas width so every detail is bold and unmistakable on mobile.\n"
-            "- Fill the upper third (y = 0%–32%) with rich visual context (celestial sky, dramatic\n"
-            "  mountain peaks, architecture, overhead ground plane, foliage, or atmospheric lighting).\n"
+            "VERTICAL 9:16 FULL-BLEED FRAMING LAW (CRITICAL):\n"
+            "- Fill 100% of the 900x1600 canvas edge-to-edge with continuous scenery (sky/hills/banks/water/ground).\n"
+            "- NEVER leave the top 50% as empty dark void and NEVER squish the scene into the bottom third!\n"
+            "- Place the main hero subject LARGE in the center band (y = 25%–75% of H, 45%–75% of canvas width)\n"
+            "  so every detail is crystal clear and unmistakable on a phone screen.\n"
+            "- Keep all visual elements and any rare label inside a 60px safe margin from all edges.\n"
             if aspect == "9:16" else
-            "FRAMING LAW:\n"
-            "- Fill the frame purposefully with the hero subject occupying 40%–65% of the viewport\n"
-            "  and meaningful foreground/midground/background depth across the whole canvas.\n"
+            "FULL-BLEED FRAMING LAW:\n"
+            "- Fill 100% of the canvas edge-to-edge with continuous scenery (no floating slabs in empty void).\n"
+            "- Place the main hero subject large and centered (45%–65% of the viewport) with clean focal hierarchy.\n"
         )
 
         shot_system_prompt = f"""
@@ -691,42 +689,44 @@ AVAILABLE SHARED VISUAL LIBRARY FUNCTIONS (use these exact names & signatures):
 
 {vertical_framing_rule}
 
-VISUAL CRAFT, CINEMATOGRAPHY & MOTIVATED ACTION RULES
-1. Active Cinema Camera & Dynamic Angles (NEVER a dead static tripod!):
+VISUAL CLARITY, SIMPLICITY & CINEMATOGRAPHY RULES
+1. Simple, Recognizable, Full-Bleed Storytelling (MUTED-AUDIO TEST):
+   - Every shot MUST look like a clean, iconic flat-vector studio illustration that is immediately
+     recognizable with the sound OFF (3–5 large, bold, cleanly shaded elements — NEVER cluttered
+     wireframes, floating CAD boxes, glowing-dot stand-ins, or detached slabs in empty dark void).
+   - Keep visual continuity across shots by reusing the SAME shared world and hero helpers from above,
+     varying camera framing and action rather than inventing disconnected abstract diagrams.
+   - NO floating top pill banners (`THE CHALLENGE...`), NO subtitles, and NO scattered callout badges.
+     Show forces and direction with bold animated `flowPath` arrows and clear physical motion.
+2. Active Cinema Camera & Dynamic Angles (NEVER a dead static tripod!):
    - Honor the storyboard's `camera_angle`:
-     * `low_angle`: place horizon low (`y = 76%–84%`) so hero subject towers monumentally upward.
-     * `overhead`: true top-down bird's-eye layout filling the whole canvas with no sky band.
-     * `macro_closeup`: zoom in tightly (`1.6x–2.6x`) onto the moving mechanism, contact point, or focal detail.
-     * `dutch_tilt`: canted horizon (`rotation: ±0.07 to ±0.13 rad` in `cameraRig`/`parallaxLayers`) for tension/momentum.
-     * `high_angle` / `isometric`: angled downward view revealing spatial geography & scale.
-   - ALWAYS animate the camera smoothly with `parallaxLayers` or `cameraRig` (slow push-in `zoom: 1.0 -> 1.15`,
-     tracking pan, or `rackFocus` pull) so every shot has living cinematic depth.
-2. Energy-Gated Action Polish (ONLY when motivated by `scene.energy` — NEVER gratuitous!):
+     * `low_angle`: place horizon low (`y = 72%–82%`) so the hero subject rises boldly upward.
+     * `overhead`: true top-down bird's-eye layout filling 100% of the canvas edge-to-edge.
+     * `macro_closeup`: zoom in tightly (`1.5x–2.4x`) onto the moving contact point, feet, mechanism, or key detail.
+     * `dutch_tilt`: subtle canted angle (`rotation: ±0.05 to ±0.09 rad` in `cameraRig`/`parallaxLayers`) ONLY on high-energy beats.
+     * `high_angle` / `eye_level`: clear grounded viewpoint with rich foreground, midground, and background depth.
+   - ALWAYS animate the camera smoothly with `parallaxLayers` or `cameraRig` (gentle push-in `zoom: 1.0 -> 1.12`,
+     tracking pan, or `rackFocus` pull) so every shot has living depth.
+3. Energy-Gated Action Polish (ONLY when motivated by `scene.energy` — NEVER gratuitous!):
    - If `energy` is `"action"` or `"climax"`: punctuate the key breakthrough/impact beat with
      `ShortcliprStyles.dustBurst(...)`, `ShortcliprStyles.impactFlash(...)` + `impactShake(...)`,
      and brief `ShortcliprStyles.speedLines(...)` during fast rushes or launches.
-   - If `energy` is `"calm"` or `"building"`: keep motion smooth, weighty, and poised (parallax dolly,
-     `rackFocus`, `lightBeam`, subtle `particles`) — DO NOT add shaking or speed lines.
-3. Characters & Physical Realism:
-   - NEVER draw tiny front-facing stickmen or idle bystander characters in object-focus/close-up shots.
-   - If a shot actually involves a character, stage them at hero scale (25%–45% of canvas height),
-     facing the action in 3/4 or side profile using `ShortcliprStyles.drawCharacterRig(...)` (or a rich
-     shared character helper with thick IK limbs), leaning into pushes/pulls/walks with hands anchored to props.
-   - Rolling/spinning objects (wheels, logs, gears, planets) MUST draw visible radial grain/spokes/markings
+   - If `energy` is `"calm"` or `"building"`: keep motion smooth, clean, and poised — DO NOT add shaking or speed lines.
+4. Characters & Physical Realism:
+   - Whenever the shot shows a human action, stage the character LARGE (30%–50% of canvas height)
+     using `ShortcliprStyles.drawCharacterRig(...)` or the shared character helper — NEVER draw
+     stick figures or replace a person with a glowing dot!
+   - Rolling/spinning objects (wheels, logs, gears, planets) MUST draw visible radial spokes/markings
      that visibly rotate (`angle = distance / radius`) — never slide a static circle!
-4. Structure Local Time `t` into a 4-Phase Choreography Beat-Grid (NEVER pop everything in at `t = 0`):
-   - Phase A (0–15% of shot): Establish angle, atmosphere, and camera motion.
+5. Structure Local Time `t` into a Smooth 4-Phase Choreography (NEVER pop everything in at `t = 0`):
+   - Phase A (0–15% of shot): Establish the full-bleed environment and camera motion.
    - Phase B (15–35% of shot): Staggered entrances using `ShortcliprStyles.stagger`, `spring`, or `anticipation`.
-   - Phase C (35–85% of shot): Core visual transformation / action — `drawCharacterRig`/`solveIK` & `squash`,
-     `strokeReveal`/`flowPath`, volumetric `lightBeam`/`bloomLayer`, or isometric assembly.
-   - Phase D (85–100% of shot): Settle with continuous living secondary motion (breathing, `particles`,
-     pulsing `glow`, or camera glide) — ZERO frozen/dead frames.
-4. Reuse the shared visual library functions above for recurring characters, props, and environments.
+   - Phase C (35–85% of shot): Core visual action / transformation (character motion, `flowPath` arrows, clear physical cause-and-effect).
+   - Phase D (85–100% of shot): Settle with continuous living secondary motion (water ripples, breathing, `particles`, camera glide) — ZERO frozen frames.
+6. Reuse the shared visual library functions above for recurring characters, props, and environments.
    You MAY also define local helper functions inside this shot if helpful, and NEVER call a function
    name that isn't defined above or locally.
-5. Keep every element cleanly framed inside {logical[0]}x{logical[1]} with generous margin and clear focal hierarchy.
-6. Strictly deterministic Canvas 2D: NEVER use `Math.random()`, `Date`, `performance`, `window`, `document`, `fetch`, `eval`, or bare `mix()` (always `Ease.lerp`).
-7. Do NOT render subtitles or full narration paragraphs on screen.
+7. Strictly deterministic Canvas 2D: NEVER use `Math.random()`, `Date`, `performance`, `window`, `document`, `fetch`, `eval`, or bare `mix()` (always `Ease.lerp`).
 
 ART DIRECTION:
 {art_direction_instructions}

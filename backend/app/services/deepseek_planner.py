@@ -115,37 +115,56 @@ RULES
   languages, strictly target {min_words}–{max_words} words so spoken audio finishes cleanly inside
   {duration} seconds without getting cut off. Strong opening hook, clear progression, satisfying payoff.
   Never invent dates, quotes, statistics, or unsupported factual claims.
-- Style & Visualography: choose one style_id from {", ".join(styles)}. {style_instruction}
-  Also design `visual_direction` tailored specifically to THIS topic:
-  - `visual_genre`: one of `kurzgesagt_cosmic`, `vox_editorial`, `isometric_engineering`,
-    `atmospheric_noir`, `expressive_character`, `comic_cel_action`, `layered_papercraft`,
-    `retro_pixel_arcade`, `organic_storybook`.
-  - `palette`: 6 topic-specific hex colors (`bg`, `bg2`, `ink`, `primary`, `accent`, `secondary`)
-    with high contrast and emotional fit for the subject.
-  - `lighting_mood`: one of `dramatic_rim_glow`, `bright_editorial`, `warm_sunlit_shadows`,
-    `neon_bloom`, `technical_clean`, `moody_volumetric`.
-  - `camera_style`: one of `multiplane_parallax`, `crisp_orthographic`, `dynamic_action_cuts`,
-    `slow_cinematic_dolly`.
-  - `motion_feel`: one of `snappy_spring`, `smooth_fluid`, `posterized_12fps`, `mechanical_precise`.
-- Visual bible: define only the recurring entities actually needed (0–2 characters, 2–5 props,
-  1–2 environments). IMPORTANT: default to `characters: []` (ZERO characters) for explainers,
-  science, space, engineering, maps, data, history, and object/mechanism topics — focus on
-  monumental hero objects, environments, and motion graphics instead of adding a person. Only
-  include 1–2 characters when the brief is genuinely character-driven (comedy, fable, conversation,
-  or a specific person's story). Use concise stable IDs matching [a-zA-Z][a-zA-Z0-9_-]{{1,63}}.
-  Set `mechanisms` to `[]` (express moving parts directly via `props`, `action`, and `visual_change`).
-- Storyboard: produce exactly {target_shots} distinct shots covering frame 0 through {total_frames}
-  at 30 FPS (contiguous, non-overlapping integers; end_frame is exclusive).
-- CINEMATOGRAPHY & PACING (CRITICAL):
+- VISUAL CLARITY & SIMPLICITY FIRST (MUTED-AUDIO TEST — CRITICAL):
+  - Imagine the viewer watches with SOUND MUTED: within 1 second of every shot, they must instantly
+    recognize the real-world place, subject, and physical action (think Kurzgesagt / clean flat-vector
+    editorial illustration — simple, bold, iconic shapes with clear contrast).
+  - NEVER turn real-world scenes (nature, rivers, outdoors, people, sports, survival, biology) into
+    abstract dark-navy CAD diagrams, floating gray cubes, wireframe sticks, or glowing dots!
+  - Style-to-topic matching: choose one `style_id` from {", ".join(styles)}. {style_instruction}
+    * Restrict `isometric-technical` and `blueprint` STRICTLY to architecture, circuits, hardware,
+      factories, or machines — NEVER use them for nature, outdoor survival, sports, or human action.
+    * For outdoor/nature/how-to/human topics, prefer bright, legible flat-vector styles
+      (`paper-cutout`, `layered-paper`, `cinematic-editorial`, `comic`, `risograph`) with natural,
+      vivid colors (e.g., sunlit sky/water/foliage — NOT a dark empty void).
+  - Also design `visual_direction` tailored specifically to THIS topic:
+    * `visual_genre`: one of `kurzgesagt_cosmic`, `vox_editorial`, `isometric_engineering`,
+      `atmospheric_noir`, `expressive_character`, `comic_cel_action`, `layered_papercraft`,
+      `retro_pixel_arcade`, `organic_storybook`.
+    * `palette`: 6 topic-specific hex colors (`bg`, `bg2`, `ink`, `primary`, `accent`, `secondary`)
+      with high contrast and authentic real-world color fit for the subject.
+    * `lighting_mood`: one of `dramatic_rim_glow`, `bright_editorial`, `warm_sunlit_shadows`,
+      `neon_bloom`, `technical_clean`, `moody_volumetric`.
+    * `camera_style`: one of `multiplane_parallax`, `crisp_orthographic`, `dynamic_action_cuts`,
+      `slow_cinematic_dolly`.
+    * `motion_feel`: one of `snappy_spring`, `smooth_fluid`, `posterized_12fps`, `mechanical_precise`.
+- SUBJECT & CHARACTER RULE (CRITICAL):
+  - If the topic involves a HUMAN body, posture, or physical action (crossing a river, swimming,
+    running, lifting, sports, survival, cooking, daily life, stories), you MUST include 1 clear
+    stylized hero character (`characters: [{{...}}]`) performing the actual action — NEVER replace
+    a person with a glowing dot, circle, or abstract icon!
+  - Only set `characters: []` when the topic is genuinely non-human (planets, black holes, engines,
+    molecules, economics, history maps).
+  - Define only the essential recurring entities (0–2 characters, 2–4 props, 1 main continuous
+    environment). Use concise stable IDs matching [a-zA-Z][a-zA-Z0-9_-]{{1,63}}.
+  - Set `mechanisms` to `[]` (express moving parts directly via `props`, `action`, and `visual_change`).
+- FULL-BLEED CONTINUOUS WORLD & SIMPLE STORYBOARD:
+  - Produce exactly {target_shots} distinct shots covering frame 0 through {total_frames} at 30 FPS
+    (contiguous, non-overlapping integers; end_frame is exclusive).
+  - Every shot must stay in the SAME recognizable continuous world (full-bleed edge-to-edge scenery
+    filling 100% of the canvas — NEVER floating slabs in empty space) and focus on ONE simple,
+    unmistakable visual idea with 3–5 bold elements max.
+  - NO title cards, NO top pill banners, NO cluttered callout labels — let clear visual storytelling
+    and bold directional arrows do the explaining.
+- CINEMATOGRAPHY & PACING:
   - Assign each shot an explicit `camera_angle` (`low_angle`, `eye_level`, `high_angle`, `overhead`,
     `dutch_tilt`, `macro_closeup`, `isometric`) and `energy` (`calm`, `building`, `action`, `climax`).
-  - NEVER repeat the same `camera_angle` or `shot_scale` in two consecutive shots! Break flat static
-    horizon lines: e.g. dramatic `low_angle` looking up -> tight `macro_closeup` or `overhead` on the
-    key mechanism/action -> dynamic `dutch_tilt` or monumental `low_angle` climax reveal.
-  - Motivated action ONLY: use `action` / `climax` energy (high-speed cuts, impact, speed lines, dust
-    bursts) ONLY on genuine breakthroughs, collisions, launches, or dramatic reveals — use `calm` /
-    `building` on quiet or explanatory beats so the rhythm has real contrast and never feels chaotic.
-  - Never keep an idle bystander character in an object-focus or close-up shot.
+  - Vary `camera_angle` and `shot_scale` naturally across shots (e.g., wide `overhead` establishing
+    the full river -> medium `eye_level` / `high_angle` showing the hiker turning upstream ->
+    `macro_closeup` on planted boots splitting the water -> wide `low_angle` reaching the far bank).
+    Only use `dutch_tilt` on brief high-energy moments, never on calm explanation shots.
+  - Motivated action ONLY: use `action` / `climax` energy ONLY on genuine breakthroughs, impacts,
+    or dramatic peaks — keep explanatory beats `calm` / `building`.
 - Vary `transition_out` (cut, fade, wipe, iris, paper, zoom, whip). Avoid title cards and subtitles.
 
 OUTPUT CONTRACT (return strict JSON only, no Markdown):
