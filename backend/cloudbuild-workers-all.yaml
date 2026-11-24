@@ -6,9 +6,9 @@
 # their own deployment target. Leave unused slots empty.
 substitutions:
   _API_REGION: us-central1
-  _DEPLOY_API_WORKER: 'false'
-  _FFMPEG_REGION_1: ''
-  _FFMPEG_REGION_2: ''
+  _DEPLOY_API_WORKER: 'true'
+  _FFMPEG_REGION_1: australia-southeast1
+  _FFMPEG_REGION_2: europe-west1
   _API_CPU: '4'
   _API_MAX_INSTANCES: '2'
   _FFMPEG_CPU: '4'
