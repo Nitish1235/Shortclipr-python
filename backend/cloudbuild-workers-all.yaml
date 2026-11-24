@@ -7,8 +7,8 @@
 substitutions:
   _API_REGION: us-central1
   _DEPLOY_API_WORKER: 'true'
-  _FFMPEG_REGION_1: australia-southeast1
-  _FFMPEG_REGION_2: europe-west1
+  _FFMPEG_REGION_1: ''
+  _FFMPEG_REGION_2: ''
   _API_CPU: '4'
   _API_MAX_INSTANCES: '2'
   _FFMPEG_CPU: '4'
@@ -63,6 +63,10 @@ steps:
     args:
       - -ceu
       - |
+        if [ "${_DEPLOY_API_WORKER}" != "true" ]; then
+          echo "API worker deployment disabled for this trigger; skipping."
+          exit 0
+        fi
         gcloud run deploy "shortclipr-api-worker-${_API_REGION}" \
           --image="us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-api-worker:$COMMIT_SHA" \
           --region="${_API_REGION}" \
@@ -87,7 +91,18 @@ steps:
     args:
       - -ceu
       - |
-        region='australia-southeast1'
+        region='${_FFMPEG_REGION_1}'
+        if [ -z "$$region" ]; then
+          echo "FFmpeg region slot 1 is empty; skipping deployment."
+          exit 0
+        fi
+        case "$$region" in
+          australia-southeast1|europe-west1) ;;
+          *)
+            echo "Invalid _FFMPEG_REGION_1: '$$region'. Use australia-southeast1 or europe-west1."
+            exit 1
+            ;;
+        esac
         gcloud run deploy "shortclipr-ffmpeg-worker-$${region}" \
           --image="us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-ffmpeg-worker:$COMMIT_SHA" \
           --region="$$region" \
@@ -112,7 +127,18 @@ steps:
     args:
       - -ceu
       - |
-        region='europe-west1'
+        region='${_FFMPEG_REGION_2}'
+        if [ -z "$$region" ]; then
+          echo "FFmpeg region slot 2 is empty; skipping deployment."
+          exit 0
+        fi
+        case "$$region" in
+          australia-southeast1|europe-west1) ;;
+          *)
+            echo "Invalid _FFMPEG_REGION_2: '$$region'. Use australia-southeast1 or europe-west1."
+            exit 1
+            ;;
+        esac
         gcloud run deploy "shortclipr-ffmpeg-worker-$${region}" \
           --image="us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/shortclipr-ffmpeg-worker:$COMMIT_SHA" \
           --region="$$region" \
@@ -138,4 +164,3 @@ images:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  substitutionOption: ALLOW_LOOSE
