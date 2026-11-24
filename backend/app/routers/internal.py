@@ -668,6 +668,7 @@ async def run_render(
     emailer: ProjectReadyEmailer,
     visual_reviewer: VisualQualityReviewer,
     shot_repairer: DeepSeekAnimationCompiler | None = None,
+    runtime_repairer: DeepSeekAnimationCompiler | None = None,
 ):
     t0_total = _time.monotonic()
     bind(
@@ -838,9 +839,30 @@ async def run_render(
         await set_render_progress(pool, project_id, attempt_id, lease_token, 55)
         motion_qa = None
         async with timed(logger, "render.subprocess") as ctx:
-            _, motion_qa = await renderer.render(
-                plan, output_path, progress_callback=update_visual_progress,
-            )
+            max_runtime_repairs = 2 if (runtime_repairer is not None and isinstance(plan.get("repair_bundle"), dict)) else 0
+            for runtime_attempt in range(max_runtime_repairs + 1):
+                try:
+                    _, motion_qa = await renderer.render(
+                        plan, output_path, progress_callback=update_visual_progress,
+                    )
+                    ctx["runtime_repairs"] = runtime_attempt
+                    break
+                except NonRetryableRenderError as render_error:
+                    if runtime_attempt >= max_runtime_repairs or runtime_repairer is None or not isinstance(plan.get("repair_bundle"), dict):
+                        raise
+                    logger.warning(
+                        "render.runtime_auto_repair",
+                        extra={
+                            "attempt": runtime_attempt + 1,
+                            "max_attempts": max_runtime_repairs,
+                            "error": str(render_error)[:600],
+                        },
+                    )
+                    repaired_runtime = await runtime_repairer.repair_runtime_error(
+                        plan["repair_bundle"], str(render_error),
+                    )
+                    plan["scene_js"] = repaired_runtime["scene_js"]
+                    plan["repair_bundle"] = repaired_runtime["repair_bundle"]
             if output_path.exists():
                 ctx["output_size_mb"] = round(output_path.stat().st_size / 1_048_576, 2)
             if motion_qa:
@@ -1316,5 +1338,6 @@ async def render_stage(payload: InternalRunRequest, request: Request, pool: asyn
             pool, request.app.state.renderer, request.app.state.storage, request.app.state.emailer,
             request.app.state.visual_reviewer,
             request.app.state.shot_repairer,
+            getattr(request.app.state, "runtime_repairer", None),
         )
     return {"completed": True, "projectId": str(payload.project_id), "renderer": "drawn-by-code"}

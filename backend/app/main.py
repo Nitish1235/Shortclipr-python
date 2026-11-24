@@ -68,6 +68,10 @@ async def lifespan(app: FastAPI):
             DeepSeekAnimationCompiler(settings)
             if settings.DEEPSEEK_ENABLE_SHOT_REPAIR else None
         )
+        app.state.runtime_repairer=(
+            app.state.shot_repairer
+            or (DeepSeekAnimationCompiler(settings) if settings.DEEPSEEK_API_KEY else None)
+        )
         if settings.APP_ENV.lower() == "production":
             await app.state.renderer.preflight()
     yield
