@@ -461,6 +461,29 @@ class DeepSeekAnimationCompiler:
                     if lines[idx].startswith("Motion.scene("):
                         break
 
+        # Extract source-code context around every scene.js:<line> frame in the error
+        # so the debugger sees both the throwing helper line and the shot call-site line.
+        snippet_blocks: list[str] = []
+        seen_lines: set[int] = set()
+        for m in re.finditer(r"scene\.js:(\d+)", error_report):
+            ln = int(m.group(1))
+            if ln in seen_lines or not (1 <= ln <= len(lines)):
+                continue
+            seen_lines.add(ln)
+            lo = max(1, ln - 3)
+            hi = min(len(lines), ln + 3)
+            excerpt = "\n".join(
+                f"{'>' if i == ln else ' '} {i:4d} | {lines[i - 1]}"
+                for i in range(lo, hi + 1)
+            )
+            snippet_blocks.append(f"Context around scene.js:{ln}:\n{excerpt}")
+            if len(snippet_blocks) >= 3:
+                break
+        enriched_error = (
+            error_report + "\n\nFAILING SOURCE CONTEXT:\n" + "\n\n".join(snippet_blocks)
+            if snippet_blocks else error_report
+        )
+
         shared_sigs = extract_shared_function_signatures(shared_js)
         sig_block = "\n".join(
             f"- {item['signature']}" + (f"  // {item['doc']}" if item["doc"] else "")
@@ -473,7 +496,7 @@ class DeepSeekAnimationCompiler:
 Fix the JavaScript error in drawShot_{shot['index']}.
 
 ERROR TO FIX:
-{error_report}
+{enriched_error}
 
 AVAILABLE SHARED FUNCTIONS (exact signatures):
 {sig_block}
@@ -485,7 +508,7 @@ CURRENT BROKEN BODY OF drawShot_{shot['index']}(g, t, env, absoluteTime):
 
 RULES:
 - Return ONLY the fixed JavaScript statements for the body of drawShot_{shot['index']} (no outer function wrapper).
-- Fix every syntax error, undefined variable, or undefined function call.
+- Fix every syntax error, runtime TypeError/ReferenceError, undefined variable, or wrong helper argument order.
 - If a helper function is missing, either call an existing shared function above or define it locally inside this body.
 - Never use bare mix(); use Ease.lerp(a, b, u). Never use Math.random(), Date, fetch, eval, window, or document.
 - Return raw JavaScript only (no JSON, no explanation).
@@ -512,7 +535,7 @@ RULES:
 Fix the JavaScript error in the shared drawing library.
 
 ERROR TO FIX:
-{error_report}
+{enriched_error}
 {missing_note}
 {_TOOLKIT_REFERENCE}
 
@@ -521,7 +544,7 @@ CURRENT SHARED DRAWING LIBRARY:
 
 RULES:
 - Return ONLY the complete fixed shared JavaScript drawing library.
-- Fix every syntax error, undefined variable, or missing helper function.
+- Fix every syntax error, runtime TypeError/ReferenceError, undefined variable, missing null/array guard, or missing helper function.
 - Keep all existing working function names and signatures intact so shots can still call them.
 - Never use bare mix(); use Ease.lerp(a, b, u). Never use Math.random(), Date, fetch, eval, window, or document.
 - Return raw JavaScript only (no JSON, no explanation).
@@ -763,8 +786,8 @@ STORYBOARD:
 
         compiled = await _gather_cancel_on_error(*(compile_one(scene) for scene in scenes))
 
-        # ── Stage 3: Assemble + Pre-Save Syntax/Linker Auto-Repair Loop ──
-        max_auto_repairs = 2
+        # ── Stage 3: Assemble + Pre-Save Syntax/Linker/VM-Runtime Auto-Repair Loop ──
+        max_auto_repairs = 3
         source = ""
         for repair_attempt in range(max_auto_repairs + 1):
             source = self._assemble_film(

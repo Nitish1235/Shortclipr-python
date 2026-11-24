@@ -15,8 +15,12 @@ WORKDIR /app
 COPY --from=builder /install /usr/local
 COPY --from=linker-builder /linker/node_modules /app/drawn_by_code/node_modules
 COPY drawn_by_code/engine/validate-scene.mjs /app/drawn_by_code/engine/validate-scene.mjs
+COPY drawn_by_code/engine/core.js /app/drawn_by_code/engine/core.js
+COPY drawn_by_code/styles/shortclipr.js /app/drawn_by_code/styles/shortclipr.js
 RUN node --check /app/drawn_by_code/engine/validate-scene.mjs \
-    && printf '%s' 'if (ShortcliprStyles.setCustomPalette) ShortcliprStyles.setCustomPalette({bg:"#0b1021"}); function drawHero(g, x = 0) { g.fillRect(x, 0, 10, 10); } function drawShot_0(g, t, env, absoluteTime) { drawHero(g, t * 10); } Motion.scene({draw(g, t, env) { drawShot_0(g, t, env, t); }});' > /tmp/linker-smoke-scene.js \
+    && node --check /app/drawn_by_code/engine/core.js \
+    && node --check /app/drawn_by_code/styles/shortclipr.js \
+    && printf '%s' 'if (ShortcliprStyles.setCustomPalette) ShortcliprStyles.setCustomPalette({bg:"#0b1021"}); function drawHero(g, x = 0) { g.fillRect(x, 0, 10, 10); } function drawShot_0(g, t, env, absoluteTime) { drawHero(g, t * 10); } Motion.scene({fps:30, duration:3, logical:[900,1600], shots:[[0,3,"Intro"]], draw(g, t, env) { drawShot_0(g, t, env, t); }});' > /tmp/linker-smoke-scene.js \
     && node /app/drawn_by_code/engine/validate-scene.mjs /tmp/linker-smoke-scene.js \
     && rm -f /tmp/linker-smoke-scene.js
 COPY app/ /app/app/
