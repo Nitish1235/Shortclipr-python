@@ -437,8 +437,11 @@ class DeepSeekAnimationCompiler:
 
         target_shot_pos: int | None = None
         if not (missing_draw_helpers and shots_calling_missing >= 2):
-            line_match = re.search(r"line\s+(\d+)|:(\d+)(?::\d+)?", error_report)
-            failing_line = int(line_match.group(1) or line_match.group(2)) if line_match else None
+            line_match = re.search(r"line\s+(\d+)|scene\.js:(\d+)|\((\d+):\d+\)", error_report)
+            failing_line = (
+                int(line_match.group(1) or line_match.group(2) or line_match.group(3))
+                if line_match else None
+            )
             if failing_line is not None and 1 <= failing_line <= len(lines):
                 for idx in range(failing_line - 1, -1, -1):
                     shot_header = re.match(r"^function\s+drawShot_(\d+)\s*\(", lines[idx])
@@ -488,7 +491,8 @@ RULES:
                 label=f"Auto-repair drawShot_{shot['index']}",
             )
             fixed_body = self._unwrap_shot_body(fixed_body, shot["index"])
-            fixed_body = validate_generated_fragment(fixed_body, f"Auto-repaired Shot {shot['index'] + 1}", MAX_SHOT_SOURCE)
+            if not isinstance(fixed_body, str) or len(fixed_body) > MAX_SHOT_SOURCE:
+                raise ValueError(f"Auto-repaired Shot {shot['index'] + 1} source length is outside allowed bounds")
             updated_shots = copy.deepcopy(compiled_shots)
             updated_shots[target_shot_pos]["draw_body"] = fixed_body
             return shared_js, updated_shots
@@ -522,7 +526,8 @@ RULES:
             min(self.max_output_tokens, 24000),
             label="Auto-repair shared drawing library",
         )
-        fixed_shared = validate_generated_fragment(fixed_shared, "Auto-repaired shared library", MAX_SHARED_SOURCE)
+        if not isinstance(fixed_shared, str) or len(fixed_shared) > MAX_SHARED_SOURCE:
+            raise ValueError("Auto-repaired shared library source length is outside allowed bounds")
         return fixed_shared, compiled_shots
 
     async def compile(self, project: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
@@ -1053,8 +1058,10 @@ RULES:
         compact = re.sub(r"\s+", "", source)
         if f"logical:{json.dumps(logical, separators=(',', ':'))}" not in compact:
             raise ValueError("Animation canvas does not match project aspect ratio")
-        if re.search(r"(?<![\w$.])mix\s*\(", source):
+        mix_match = re.search(r"(?<![\w$.])mix\s*\(", source)
+        if mix_match:
+            line_no = source.count("\n", 0, mix_match.start()) + 1
             raise ValueError(
-                "Generated animation calls unsupported bare mix(); use Ease.lerp(a, b, progress)"
+                f"Generated animation calls unsupported bare mix() at line {line_no}; use Ease.lerp(a, b, progress)"
             )
         validate_generated_fragment(source, "Assembled animation", MAX_FILM_SOURCE)

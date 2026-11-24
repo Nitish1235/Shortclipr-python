@@ -4,7 +4,7 @@ import json
 from typing import Any
 from openai import AsyncOpenAI
 from ..core.config import Settings
-from .animation_contracts import STYLE_IDS, validate_scene_plan, validate_visual_bible
+from .animation_contracts import STYLE_IDS, validate_scene_plan, validate_visual_bible, validate_visual_direction
 from .generation_policy import planning_effort
 from .style_registry import apply_visual_direction, resolve_visual_style
 from .art_direction import build_art_direction
@@ -233,6 +233,7 @@ OUTPUT CONTRACT (return strict JSON only, no Markdown):
         bible = validate_visual_bible(plan.get("visual_bible"))
         # Explicit UI selections are authoritative even if the model drifts.
         bible = apply_visual_direction(bible, requested_style)
+        bible["visual_direction"] = validate_visual_direction(bible.get("visual_direction"), bible["style_id"])
         art_direction = build_art_direction(
             bible["style_id"],
             requested_style=requested_style,

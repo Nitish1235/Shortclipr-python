@@ -54,18 +54,12 @@ let customMood = null;
 
 function setCustomPalette(p, mood = null) {
     if (p && typeof p === 'object') {
-        const base = palettes['cinematic-editorial'];
-        customPalette = {
-            bg: p.bg || base.bg,
-            bg2: p.bg2 || p.bg || base.bg2,
-            ink: p.ink || base.ink,
-            paper: p.paper || p.primary || base.paper,
-            primary: p.primary || p.secondary || base.primary,
-            accent: p.accent || base.accent,
-            secondary: p.secondary || p.primary || base.secondary,
-            shadow: p.shadow || base.shadow,
-            highlight: p.highlight || '#ffffff',
-        };
+        customPalette = {};
+        for (const key of ['bg', 'bg2', 'ink', 'paper', 'primary', 'accent', 'secondary', 'shadow', 'highlight']) {
+            if (typeof p[key] === 'string' && p[key].trim()) {
+                customPalette[key] = p[key].trim();
+            }
+        }
     }
     if (typeof mood === 'string' && mood) {
         customMood = mood;
@@ -401,21 +395,20 @@ function lightBeam(g, x0, y0, x1, y1, r0 = 16, r1 = 140, color = '#ffe8a3', alph
     g.restore();
 }
 
-/* Selective offscreen additive bloom pass for glowing hero objects, stars, lasers, or fire. */
+/* Selective additive bloom pass that preserves the active Canvas transform & clip. */
 function bloomLayer(g, env, name, blurPx = 12, alpha = 0.55, drawFn = null) {
     if (typeof drawFn !== 'function') return;
     // Draw crisp base pass
+    g.save();
     drawFn(g);
-    // Composite blurred additive bloom pass if Motion.layer is available
-    if (typeof Motion !== 'undefined' && Motion.layer && env && env.px) {
-        const layerCanvas = Motion.layer(env, 'bloom-' + String(name || 'main'), drawFn);
-        g.save();
-        g.globalCompositeOperation = 'screen';
-        g.globalAlpha *= clamp(alpha, 0, 1);
-        g.filter = `blur(${Math.max(2, Number(blurPx) || 12)}px)`;
-        Motion.drawLayer(g, env, layerCanvas);
-        g.restore();
-    }
+    g.restore();
+    // Draw blurred additive bloom pass directly in the active coordinate transform
+    g.save();
+    g.globalCompositeOperation = 'screen';
+    g.globalAlpha *= clamp(alpha, 0, 1);
+    g.filter = `blur(${Math.max(2, Number(blurPx) || 12)}px)`;
+    drawFn(g);
+    g.restore();
 }
 
 /* Draw any Canvas 2D path with cast shadow, rich fill/gradient, and optional rim highlight. */
