@@ -129,7 +129,7 @@ RULES
   - `motion_feel`: one of `snappy_spring`, `smooth_fluid`, `posterized_12fps`, `mechanical_precise`.
 - Visual bible: define only the recurring entities actually needed (1–3 characters, 2–5 props,
   1–2 environments). Use concise stable IDs matching [a-zA-Z][a-zA-Z0-9_-]{{1,63}}.
-  Include `mechanisms` only if the topic is a genuine mechanical system; otherwise `[]`.
+  Set `mechanisms` to `[]` (express moving parts directly via `props`, `action`, and `visual_change`).
 - Storyboard: produce exactly {target_shots} distinct shots covering frame 0 through {total_frames}
   at 30 FPS (contiguous, non-overlapping integers; end_frame is exclusive).
 - Vary shot_scale (extreme_wide, wide, medium, close_up, detail, overhead, isometric),
