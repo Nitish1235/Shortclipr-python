@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     DEEPSEEK_REASONING_EFFORT: str = "medium"  # legacy fallback; stage policies below take precedence
     DEEPSEEK_PLANNING_REASONING_EFFORT: str = "low"
     DEEPSEEK_CODING_REASONING_EFFORT: str = "max"
-    DEEPSEEK_PLAN_MAX_OUTPUT_TOKENS: int = 16384
+    DEEPSEEK_PLAN_MAX_OUTPUT_TOKENS: int = 32768
     DEEPSEEK_MAX_OUTPUT_TOKENS: int = 65536
     DEEPSEEK_MAX_PARALLEL_SHOTS: int = 3
     DEEPSEEK_ENABLE_SHOT_REVIEW: bool = True

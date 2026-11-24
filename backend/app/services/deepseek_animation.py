@@ -584,7 +584,7 @@ Write the complete, studio-quality shared JavaScript visual library now.
         shared_js = await self._code_completion(
             "You are a lead Canvas 2D motion-graphics engineer. Return only clean, executable JavaScript.",
             shared_prompt,
-            min(self.max_output_tokens, 24000),
+            min(self.max_output_tokens, 32000),
             label="Shared visual kit",
             enable_thinking=True,
         )
@@ -667,9 +667,9 @@ Write the complete JavaScript drawing body for drawShot_{scene['index']} now.
                 body = await self._code_completion(
                     "You are a senior Canvas 2D animation programmer. Return only executable JavaScript statements.",
                     shot_prompt,
-                    min(self.max_output_tokens, 12000),
+                    min(self.max_output_tokens, 24000),
                     label=f"Shot {scene['index'] + 1}",
-                    enable_thinking=True,
+                    enable_thinking=False,
                 )
                 body = self._unwrap_shot_body(body, scene["index"])
                 body = validate_generated_fragment(body, f"Shot {scene['index'] + 1}", MAX_SHOT_SOURCE)
