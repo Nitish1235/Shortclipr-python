@@ -163,7 +163,6 @@ class DrawnByCodeRenderer:
         if not isinstance(source, str) or not source:
             raise NonRetryableRenderError("Missing DeepSeek-generated scene_js program")
 
-        self._validate_generated_helpers(source)
         if aspect not in self.widths:
             raise NonRetryableRenderError(f"Unsupported aspect ratio: {aspect}")
 

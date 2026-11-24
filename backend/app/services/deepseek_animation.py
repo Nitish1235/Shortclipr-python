@@ -140,18 +140,16 @@ class DeepSeekAnimationCompiler:
 
     @staticmethod
     def validate_compiled_program(program: dict[str, Any]) -> None:
-        """Validate cached and freshly compiled programs for real structural/runtime integrity."""
+        """Validate cached and freshly compiled programs for structural and safety integrity.
+
+        JavaScript identifier/helper resolution is enforced authoritatively by the
+        Acorn + eslint-scope AST linker (`validate-scene.mjs`) rather than regex.
+        """
         if not isinstance(program, dict):
             raise ValueError("Animation program must be an object")
         source = program.get("scene_js")
         if not isinstance(source, str) or not source:
             raise ValueError("Animation program is missing scene_js")
-
-        unresolved = find_unresolved_film_draw_helpers(source)
-        if unresolved:
-            raise ValueError(
-                "Animation program has unresolved drawing helpers: " + ", ".join(unresolved)
-            )
 
         bundle = program.get("repair_bundle")
         if not isinstance(bundle, dict):
@@ -695,14 +693,16 @@ Write the complete JavaScript drawing body for drawShot_{scene['index']} now.
                 if len(source) > MAX_FILM_SOURCE:
                     raise ValueError("Assembled animation program exceeds maximum source size")
                 self.validate_source(source, duration, logical)
-                unresolved = find_unresolved_film_draw_helpers(source)
-                if unresolved:
-                    raise ValueError("Unresolved drawing helper calls: " + ", ".join(unresolved))
             except ValueError as err:
                 error_report = str(err)
 
             if error_report is None:
-                error_report = await self._run_local_js_validation(source)
+                if self.node and shutil.which(self.node):
+                    error_report = await self._run_local_js_validation(source)
+                else:
+                    unresolved = find_unresolved_film_draw_helpers(source)
+                    if unresolved:
+                        error_report = "Unresolved drawing helper calls: " + ", ".join(unresolved)
 
             if error_report is None:
                 break
