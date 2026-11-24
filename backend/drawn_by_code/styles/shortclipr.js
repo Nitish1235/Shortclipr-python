@@ -304,6 +304,156 @@ function solveIK(x0, y0, tx, ty, L1 = 60, L2 = 60, bendDir = 1) {
     return { jx, jy, x1: jx, y1: jy, ex, ey, x2: ex, y2: ey, a1, a2 };
 }
 
+/* Stylized, non-stickman articulated 2D character rig (side/3-4 profile with 2-bone IK limbs).
+   Origin (x, y) is the ground contact point between the feet. At scale=1, height is ~260 logical px. */
+function drawCharacterRig(g, x, y, opts = {}) {
+    const scale = Number.isFinite(opts.scale) ? opts.scale : 1;
+    const facing = opts.facing === -1 ? -1 : 1;
+    const pose = String(opts.pose || 'idle');
+    const t = Number(opts.t) || 0;
+    const speed = Number(opts.speed) || 5.2;
+    const skin = opts.skin || '#f2c6a0';
+    const coat = opts.coat || '#d86b45';
+    const pants = opts.pants || '#2e3a46';
+    const hair = opts.hair || '#231f20';
+    const accent = opts.accent || '#f2b84b';
+    const boot = opts.boot || '#1c1f24';
+
+    const phase = t * speed;
+    const isMoving = pose === 'walk' || pose === 'run';
+    const stride = pose === 'run' ? 46 : pose === 'walk' ? 32 : 0;
+    const lift = pose === 'run' ? 28 : pose === 'walk' ? 18 : 0;
+    const bob = isMoving ? Math.abs(Math.sin(phase)) * (pose === 'run' ? 11 : 6) : Math.sin(t * 2.4) * 2.2;
+    const defaultLean = pose === 'push' ? 0.34 : pose === 'pull' ? -0.26 : pose === 'run' ? 0.22 : pose === 'walk' ? 0.08 : 0;
+    const lean = Number.isFinite(opts.lean) ? opts.lean : defaultLean;
+
+    // Grounded foot targets in local space (y = 0 is floor)
+    const lPhase = Math.sin(phase);
+    const rPhase = Math.sin(phase + Math.PI);
+    const lfX = isMoving ? lPhase * stride : (pose === 'push' ? -24 : pose === 'pull' ? 22 : -13);
+    const lfY = isMoving ? -Math.max(0, Math.cos(phase)) * lift : 0;
+    const rfX = isMoving ? rPhase * stride : (pose === 'push' ? 20 : pose === 'pull' ? -20 : 14);
+    const rfY = isMoving ? -Math.max(0, Math.cos(phase + Math.PI)) * lift : 0;
+
+    const hipX = 0;
+    const hipY = -98 - bob;
+    const shoulderX = hipX + Math.sin(lean) * 76;
+    const shoulderY = hipY - Math.cos(lean) * 76;
+
+    // Hand targets by pose
+    let lhX, lhY, rhX, rhY;
+    if (pose === 'push') {
+        lhX = shoulderX + 68; lhY = shoulderY + 6 + Math.sin(t * 4) * 3;
+        rhX = shoulderX + 76; rhY = shoulderY + 14 + Math.cos(t * 4) * 3;
+    } else if (pose === 'pull') {
+        lhX = shoulderX + 58; lhY = shoulderY + 18 + Math.sin(t * 4.5) * 3;
+        rhX = shoulderX + 46; rhY = shoulderY + 24;
+    } else if (pose === 'point') {
+        lhX = shoulderX - 18; lhY = shoulderY + 52;
+        rhX = shoulderX + 78; rhY = shoulderY - 12;
+    } else if (pose === 'celebrate') {
+        lhX = shoulderX - 42; lhY = shoulderY - 62 + Math.sin(t * 6) * 6;
+        rhX = shoulderX + 48; rhY = shoulderY - 66 + Math.cos(t * 6) * 6;
+    } else {
+        const swing = isMoving ? lPhase * (pose === 'run' ? 42 : 26) : Math.sin(t * 2.1) * 4;
+        lhX = shoulderX - swing; lhY = shoulderY + 56 - Math.abs(swing) * 0.18;
+        rhX = shoulderX + swing; rhY = shoulderY + 56 - Math.abs(swing) * 0.18;
+    }
+
+    const lLeg = solveIK(hipX - 6, hipY, lfX, lfY - 6, 52, 52, 1);
+    const rLeg = solveIK(hipX + 6, hipY, rfX, rfY - 6, 52, 52, 1);
+    const lArm = solveIK(shoulderX - 4, shoulderY + 8, lhX, lhY, 38, 36, -1);
+    const rArm = solveIK(shoulderX + 6, shoulderY + 8, rhX, rhY, 38, 36, -1);
+
+    const drawLimb = (ctx, ax, ay, jx, jy, ex, ey, w1, w2, color, tipColor, tipR) => {
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = w1;
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(jx, jy); ctx.stroke();
+        ctx.lineWidth = w2;
+        ctx.beginPath(); ctx.moveTo(jx, jy); ctx.lineTo(ex, ey); ctx.stroke();
+        if (tipColor) {
+            ctx.fillStyle = tipColor;
+            ctx.beginPath(); ctx.arc(ex, ey, tipR, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+    };
+
+    g.save();
+    g.translate(x, y);
+    g.scale(facing * scale, scale);
+
+    // Ground contact shadow
+    g.fillStyle = 'rgba(15,20,28,0.24)';
+    g.beginPath(); g.ellipse(0, 4, 44, 10, 0, 0, Math.PI * 2); g.fill();
+
+    // Back arm & back leg (slightly darkened for depth)
+    g.save(); g.globalAlpha = 0.88;
+    drawLimb(g, shoulderX - 4, shoulderY + 8, lArm.jx, lArm.jy, lArm.ex, lArm.ey, 15, 12, coat, skin, 8);
+    drawLimb(g, hipX - 6, hipY, lLeg.jx, lLeg.jy, lLeg.ex, lLeg.ey, 19, 15, pants, boot, 9);
+    g.restore();
+
+    // Front leg
+    drawLimb(g, hipX + 6, hipY, rLeg.jx, rLeg.jy, rLeg.ex, rLeg.ey, 20, 16, pants, boot, 10);
+
+    // Tapered stylized torso / tunic with directional shading
+    g.save();
+    g.translate(hipX, hipY);
+    g.rotate(lean);
+    const torsoGrad = g.createLinearGradient(-26, -86, 28, 10);
+    torsoGrad.addColorStop(0, coat);
+    torsoGrad.addColorStop(1, 'rgba(0,0,0,0.22)');
+    shadedShape(g, (ctx) => {
+        ctx.beginPath();
+        ctx.moveTo(-22, 6);
+        ctx.quadraticCurveTo(-28, -40, -21, -80);
+        ctx.quadraticCurveTo(0, -90, 22, -78);
+        ctx.quadraticCurveTo(28, -36, 24, 6);
+        ctx.closePath();
+    }, { fill: coat, shadowBlur: 12, shadowY: 5, highlight: 'rgba(255,255,255,0.28)', highlightWidth: 3 });
+    // Belt / collar accent
+    g.fillStyle = accent;
+    g.beginPath();
+    if (g.roundRect) g.roundRect(-24, -10, 48, 10, 4);
+    else g.rect(-24, -10, 48, 10);
+    g.fill();
+    g.restore();
+
+    // Head (3/4 profile, expressive eye + hair volume)
+    const headX = shoulderX + Math.sin(lean) * 28;
+    const headY = shoulderY - Math.cos(lean) * 28 - 6;
+    g.save();
+    g.translate(headX, headY);
+    g.rotate(lean * 0.45);
+    shadedShape(g, (ctx) => {
+        ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2);
+    }, { fill: skin, shadowBlur: 10, shadowY: 4, highlight: 'rgba(255,255,255,0.32)' });
+    // Stylized hair cap
+    g.fillStyle = hair;
+    g.beginPath();
+    g.arc(-3, -5, 25, Math.PI * 0.72, Math.PI * 2.08);
+    g.quadraticCurveTo(10, -14, -14, -4);
+    g.closePath();
+    g.fill();
+    // Expressive eye (with periodic deterministic blink)
+    const blinkCycle = (t % 3.4);
+    const blinking = blinkCycle > 3.24 && blinkCycle < 3.36;
+    g.fillStyle = '#1b1d21';
+    if (blinking) {
+        g.fillRect(8, -2, 8, 2.5);
+    } else {
+        g.beginPath(); g.ellipse(12, -2, 3.2, 4.4, 0, 0, Math.PI * 2); g.fill();
+    }
+    g.restore();
+
+    // Front arm
+    drawLimb(g, shoulderX + 6, shoulderY + 8, rArm.jx, rArm.jy, rArm.ex, rArm.ey, 16, 13, coat, skin, 8.5);
+
+    g.restore();
+}
+
 /* Smoothly trace/reveal any polyline path from 0 -> 1 (SVG stroke-dashoffset equivalent). */
 function strokeReveal(g, points, progress = 1, opts = {}) {
     if (!Array.isArray(points) || points.length < 2) return;
@@ -894,6 +1044,7 @@ window.ShortcliprStyles = Object.freeze({
     posterize,
     squash,
     solveIK,
+    drawCharacterRig,
     strokeReveal,
     organicPath,
     lightBeam,

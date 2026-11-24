@@ -127,14 +127,19 @@ RULES
   - `camera_style`: one of `multiplane_parallax`, `crisp_orthographic`, `dynamic_action_cuts`,
     `slow_cinematic_dolly`.
   - `motion_feel`: one of `snappy_spring`, `smooth_fluid`, `posterized_12fps`, `mechanical_precise`.
-- Visual bible: define only the recurring entities actually needed (1–3 characters, 2–5 props,
-  1–2 environments). Use concise stable IDs matching [a-zA-Z][a-zA-Z0-9_-]{{1,63}}.
+- Visual bible: define only the recurring entities actually needed (0–2 characters, 2–5 props,
+  1–2 environments). IMPORTANT: default to `characters: []` (ZERO characters) for explainers,
+  science, space, engineering, maps, data, history, and object/mechanism topics — focus on
+  monumental hero objects, environments, and motion graphics instead of adding a person. Only
+  include 1–2 characters when the brief is genuinely character-driven (comedy, fable, conversation,
+  or a specific person's story). Use concise stable IDs matching [a-zA-Z][a-zA-Z0-9_-]{{1,63}}.
   Set `mechanisms` to `[]` (express moving parts directly via `props`, `action`, and `visual_change`).
 - Storyboard: produce exactly {target_shots} distinct shots covering frame 0 through {total_frames}
   at 30 FPS (contiguous, non-overlapping integers; end_frame is exclusive).
-- Vary shot_scale (extreme_wide, wide, medium, close_up, detail, overhead, isometric),
-  composition, and transition_out (cut, fade, wipe, iris, paper, zoom, whip) across shots.
-  Avoid title cards and subtitles.
+- Enforce real shot-scale variety across shots (NEVER repeat the same flat wide view back-to-back):
+  mix establishing/wide, tight close-up/detail on moving parts, overhead/isometric, and monumental
+  hero reveals. Never keep an idle bystander character in an object-focus or close-up shot.
+- Vary `transition_out` (cut, fade, wipe, iris, paper, zoom, whip). Avoid title cards and subtitles.
 
 OUTPUT CONTRACT (return strict JSON only, no Markdown):
 {{

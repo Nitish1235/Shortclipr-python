@@ -68,6 +68,8 @@ AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
    - parallaxLayers(g, env, { cx, cy, zoom, rotation }, [{ depth: 0.25, blur: 2, draw: (ctx)=>{...} }, { depth: 1.0, draw: ... }, { depth: 1.35, draw: ... }])
      (true multi-plane 2.5D parallax camera with depth-scaled movement & optional depth-of-field blur)
    - solveIK(x0, y0, tx, ty, L1, L2, bendDir=1) -> analytical 2-bone Law-of-Cosines IK solver returning { jx, jy, ex, ey, a1, a2 } for natural knees/elbows/limbs
+   - drawCharacterRig(g, x, y, { scale, facing: 1|-1, pose: 'idle'|'walk'|'run'|'push'|'pull'|'point'|'celebrate', t, lean, skin, coat, pants, hair, accent })
+     (studio-grade 3/4-profile articulated character rig grounded at (x, y), ~260px tall at scale=1 — NEVER draw thin stick figures!)
    - squash(g, x, y, amount) -> volume-preserving squash & stretch transform around contact point (x, y)
    - spring(t, start, stiffness=180, damping=14) -> snappy damped harmonic 0->1 curve
    - stagger(t, index, step=0.09, start=0, duration=0.45, easeFn) -> staggered 0..1 entrance progress for item `index` (prevents simultaneous t=0 pop-ins)
@@ -626,6 +628,19 @@ Write the complete, studio-quality shared JavaScript visual library now.
         # ── Stage 2: Parallel Shot Code Generation (prompt-cache-optimized) ──
         # Keep the system prompt 100% identical across all shots so DeepSeek's
         # automatic prefix cache hits on shots 2..N (~80-90% input token savings).
+        vertical_framing_rule = (
+            "VERTICAL 9:16 FRAMING LAW (CRITICAL):\n"
+            "- NEVER leave the top 50–60% of the 900x1600 canvas as empty blank sky!\n"
+            "- Place the primary hero subject large in the central vertical band (y = 32%–74% of H),\n"
+            "  filling 45%–75% of canvas width so every detail is bold and unmistakable on mobile.\n"
+            "- Fill the upper third (y = 0%–32%) with rich visual context (celestial sky, dramatic\n"
+            "  mountain peaks, architecture, overhead ground plane, foliage, or atmospheric lighting).\n"
+            if aspect == "9:16" else
+            "FRAMING LAW:\n"
+            "- Fill the frame purposefully with the hero subject occupying 40%–65% of the viewport\n"
+            "  and meaningful foreground/midground/background depth across the whole canvas.\n"
+        )
+
         shot_system_prompt = f"""
 ROLE
 You are a lead 2D motion-graphics director writing ONE complete, visually rich shot for a
@@ -646,27 +661,36 @@ AVAILABLE SHARED VISUAL LIBRARY FUNCTIONS (use these exact names & signatures):
 
 {_TOOLKIT_REFERENCE}
 
-VISUAL CRAFT & 4-PHASE DISNEY CHOREOGRAPHY RULES
+{vertical_framing_rule}
+
+VISUAL CRAFT, PHYSICAL MOTION & 4-PHASE DISNEY CHOREOGRAPHY RULES
 1. Stage Depth & Atmosphere:
    - Paint a rich, world-specific background that fits THIS shot and `lighting_mood` (custom sky/space/
      underwater/interior/editorial canvas, or `ShortcliprStyles.backdrop(g, '{style_id}', env, absoluteTime)`).
    - Separate depth planes (`Background -> Midground Hero -> Foreground Framing`) or use
      `ShortcliprStyles.parallaxLayers(g, env, camState, [...])` for 2.5D multi-plane depth.
-2. Structure Local Time `t` into a 4-Phase Choreography Beat-Grid (NEVER pop everything in at `t = 0`):
+2. Characters & Physical Realism:
+   - NEVER draw tiny front-facing stickmen or idle bystander characters in object-focus/close-up shots.
+   - If a shot actually involves a character, stage them at hero scale (25%–45% of canvas height),
+     facing the action in 3/4 or side profile using `ShortcliprStyles.drawCharacterRig(...)` (or a rich
+     shared character helper with thick IK limbs), leaning into pushes/pulls/walks with hands anchored to props.
+   - Rolling/spinning objects (wheels, logs, gears, planets) MUST draw visible radial grain/spokes/markings
+     that visibly rotate (`angle = distance / radius`) — never slide a static circle!
+3. Structure Local Time `t` into a 4-Phase Choreography Beat-Grid (NEVER pop everything in at `t = 0`):
    - Phase A (0–15% of shot): Establish environment, atmosphere, and camera drift.
    - Phase B (15–35% of shot): Staggered entrances using `ShortcliprStyles.stagger(t, idx, 0.09, 0.1)`,
      `ShortcliprStyles.spring(t, delay)`, or `ShortcliprStyles.anticipation(t, delay)`.
-   - Phase C (35–85% of shot): Core visual transformation / action — e.g. character movement with
-     `ShortcliprStyles.solveIK` & `ShortcliprStyles.squash`, path tracing with `ShortcliprStyles.strokeReveal`
-     or `flowPath`, volumetric `lightBeam` / `bloomLayer`, or isometric assembly.
+   - Phase C (35–85% of shot): Core visual transformation / action — e.g. `ShortcliprStyles.drawCharacterRig` /
+     `solveIK` & `squash`, path tracing with `strokeReveal` or `flowPath`, volumetric `lightBeam` /
+     `bloomLayer`, or isometric assembly with active `cameraRig` push-in/zoom.
    - Phase D (85–100% of shot): Settle with continuous living secondary motion (gentle sine breathing/bobbing,
      `ShortcliprStyles.particles`, pulsing `glow`, or slow camera push-in) — ZERO frozen/dead frames.
-3. Reuse the shared visual library functions above for recurring characters, props, and environments.
+4. Reuse the shared visual library functions above for recurring characters, props, and environments.
    You MAY also define local helper functions inside this shot if helpful, and NEVER call a function
    name that isn't defined above or locally.
-4. Keep every element cleanly framed inside {logical[0]}x{logical[1]} with generous margin and clear focal hierarchy.
-5. Strictly deterministic Canvas 2D: NEVER use `Math.random()`, `Date`, `performance`, `window`, `document`, `fetch`, `eval`, or bare `mix()` (always `Ease.lerp`).
-6. Do NOT render subtitles or full narration paragraphs on screen.
+5. Keep every element cleanly framed inside {logical[0]}x{logical[1]} with generous margin and clear focal hierarchy.
+6. Strictly deterministic Canvas 2D: NEVER use `Math.random()`, `Date`, `performance`, `window`, `document`, `fetch`, `eval`, or bare `mix()` (always `Ease.lerp`).
+7. Do NOT render subtitles or full narration paragraphs on screen.
 
 ART DIRECTION:
 {art_direction_instructions}
