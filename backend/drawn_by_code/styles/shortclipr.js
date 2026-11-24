@@ -304,6 +304,156 @@ function solveIK(x0, y0, tx, ty, L1 = 60, L2 = 60, bendDir = 1) {
     return { jx, jy, x1: jx, y1: jy, ex, ey, x2: ex, y2: ey, a1, a2 };
 }
 
+/* Stylized, non-stickman articulated 2D character rig (side/3-4 profile with 2-bone IK limbs).
+   Origin (x, y) is the ground contact point between the feet. At scale=1, height is ~260 logical px. */
+function drawCharacterRig(g, x, y, opts = {}) {
+    const scale = Number.isFinite(opts.scale) ? opts.scale : 1;
+    const facing = opts.facing === -1 ? -1 : 1;
+    const pose = String(opts.pose || 'idle');
+    const t = Number(opts.t) || 0;
+    const speed = Number(opts.speed) || 5.2;
+    const skin = opts.skin || '#f2c6a0';
+    const coat = opts.coat || '#d86b45';
+    const pants = opts.pants || '#2e3a46';
+    const hair = opts.hair || '#231f20';
+    const accent = opts.accent || '#f2b84b';
+    const boot = opts.boot || '#1c1f24';
+
+    const phase = t * speed;
+    const isMoving = pose === 'walk' || pose === 'run';
+    const stride = pose === 'run' ? 46 : pose === 'walk' ? 32 : 0;
+    const lift = pose === 'run' ? 28 : pose === 'walk' ? 18 : 0;
+    const bob = isMoving ? Math.abs(Math.sin(phase)) * (pose === 'run' ? 11 : 6) : Math.sin(t * 2.4) * 2.2;
+    const defaultLean = pose === 'push' ? 0.34 : pose === 'pull' ? -0.26 : pose === 'run' ? 0.22 : pose === 'walk' ? 0.08 : 0;
+    const lean = Number.isFinite(opts.lean) ? opts.lean : defaultLean;
+
+    // Grounded foot targets in local space (y = 0 is floor)
+    const lPhase = Math.sin(phase);
+    const rPhase = Math.sin(phase + Math.PI);
+    const lfX = isMoving ? lPhase * stride : (pose === 'push' ? -24 : pose === 'pull' ? 22 : -13);
+    const lfY = isMoving ? -Math.max(0, Math.cos(phase)) * lift : 0;
+    const rfX = isMoving ? rPhase * stride : (pose === 'push' ? 20 : pose === 'pull' ? -20 : 14);
+    const rfY = isMoving ? -Math.max(0, Math.cos(phase + Math.PI)) * lift : 0;
+
+    const hipX = 0;
+    const hipY = -98 - bob;
+    const shoulderX = hipX + Math.sin(lean) * 76;
+    const shoulderY = hipY - Math.cos(lean) * 76;
+
+    // Hand targets by pose
+    let lhX, lhY, rhX, rhY;
+    if (pose === 'push') {
+        lhX = shoulderX + 68; lhY = shoulderY + 6 + Math.sin(t * 4) * 3;
+        rhX = shoulderX + 76; rhY = shoulderY + 14 + Math.cos(t * 4) * 3;
+    } else if (pose === 'pull') {
+        lhX = shoulderX + 58; lhY = shoulderY + 18 + Math.sin(t * 4.5) * 3;
+        rhX = shoulderX + 46; rhY = shoulderY + 24;
+    } else if (pose === 'point') {
+        lhX = shoulderX - 18; lhY = shoulderY + 52;
+        rhX = shoulderX + 78; rhY = shoulderY - 12;
+    } else if (pose === 'celebrate') {
+        lhX = shoulderX - 42; lhY = shoulderY - 62 + Math.sin(t * 6) * 6;
+        rhX = shoulderX + 48; rhY = shoulderY - 66 + Math.cos(t * 6) * 6;
+    } else {
+        const swing = isMoving ? lPhase * (pose === 'run' ? 42 : 26) : Math.sin(t * 2.1) * 4;
+        lhX = shoulderX - swing; lhY = shoulderY + 56 - Math.abs(swing) * 0.18;
+        rhX = shoulderX + swing; rhY = shoulderY + 56 - Math.abs(swing) * 0.18;
+    }
+
+    const lLeg = solveIK(hipX - 6, hipY, lfX, lfY - 6, 52, 52, 1);
+    const rLeg = solveIK(hipX + 6, hipY, rfX, rfY - 6, 52, 52, 1);
+    const lArm = solveIK(shoulderX - 4, shoulderY + 8, lhX, lhY, 38, 36, -1);
+    const rArm = solveIK(shoulderX + 6, shoulderY + 8, rhX, rhY, 38, 36, -1);
+
+    const drawLimb = (ctx, ax, ay, jx, jy, ex, ey, w1, w2, color, tipColor, tipR) => {
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = w1;
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(jx, jy); ctx.stroke();
+        ctx.lineWidth = w2;
+        ctx.beginPath(); ctx.moveTo(jx, jy); ctx.lineTo(ex, ey); ctx.stroke();
+        if (tipColor) {
+            ctx.fillStyle = tipColor;
+            ctx.beginPath(); ctx.arc(ex, ey, tipR, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+    };
+
+    g.save();
+    g.translate(x, y);
+    g.scale(facing * scale, scale);
+
+    // Ground contact shadow
+    g.fillStyle = 'rgba(15,20,28,0.24)';
+    g.beginPath(); g.ellipse(0, 4, 44, 10, 0, 0, Math.PI * 2); g.fill();
+
+    // Back arm & back leg (slightly darkened for depth)
+    g.save(); g.globalAlpha = 0.88;
+    drawLimb(g, shoulderX - 4, shoulderY + 8, lArm.jx, lArm.jy, lArm.ex, lArm.ey, 15, 12, coat, skin, 8);
+    drawLimb(g, hipX - 6, hipY, lLeg.jx, lLeg.jy, lLeg.ex, lLeg.ey, 19, 15, pants, boot, 9);
+    g.restore();
+
+    // Front leg
+    drawLimb(g, hipX + 6, hipY, rLeg.jx, rLeg.jy, rLeg.ex, rLeg.ey, 20, 16, pants, boot, 10);
+
+    // Tapered stylized torso / tunic with directional shading
+    g.save();
+    g.translate(hipX, hipY);
+    g.rotate(lean);
+    const torsoGrad = g.createLinearGradient(-26, -86, 28, 10);
+    torsoGrad.addColorStop(0, coat);
+    torsoGrad.addColorStop(1, 'rgba(0,0,0,0.22)');
+    shadedShape(g, (ctx) => {
+        ctx.beginPath();
+        ctx.moveTo(-22, 6);
+        ctx.quadraticCurveTo(-28, -40, -21, -80);
+        ctx.quadraticCurveTo(0, -90, 22, -78);
+        ctx.quadraticCurveTo(28, -36, 24, 6);
+        ctx.closePath();
+    }, { fill: coat, shadowBlur: 12, shadowY: 5, highlight: 'rgba(255,255,255,0.28)', highlightWidth: 3 });
+    // Belt / collar accent
+    g.fillStyle = accent;
+    g.beginPath();
+    if (g.roundRect) g.roundRect(-24, -10, 48, 10, 4);
+    else g.rect(-24, -10, 48, 10);
+    g.fill();
+    g.restore();
+
+    // Head (3/4 profile, expressive eye + hair volume)
+    const headX = shoulderX + Math.sin(lean) * 28;
+    const headY = shoulderY - Math.cos(lean) * 28 - 6;
+    g.save();
+    g.translate(headX, headY);
+    g.rotate(lean * 0.45);
+    shadedShape(g, (ctx) => {
+        ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2);
+    }, { fill: skin, shadowBlur: 10, shadowY: 4, highlight: 'rgba(255,255,255,0.32)' });
+    // Stylized hair cap
+    g.fillStyle = hair;
+    g.beginPath();
+    g.arc(-3, -5, 25, Math.PI * 0.72, Math.PI * 2.08);
+    g.quadraticCurveTo(10, -14, -14, -4);
+    g.closePath();
+    g.fill();
+    // Expressive eye (with periodic deterministic blink)
+    const blinkCycle = (t % 3.4);
+    const blinking = blinkCycle > 3.24 && blinkCycle < 3.36;
+    g.fillStyle = '#1b1d21';
+    if (blinking) {
+        g.fillRect(8, -2, 8, 2.5);
+    } else {
+        g.beginPath(); g.ellipse(12, -2, 3.2, 4.4, 0, 0, Math.PI * 2); g.fill();
+    }
+    g.restore();
+
+    // Front arm
+    drawLimb(g, shoulderX + 6, shoulderY + 8, rArm.jx, rArm.jy, rArm.ex, rArm.ey, 16, 13, coat, skin, 8.5);
+
+    g.restore();
+}
+
 /* Smoothly trace/reveal any polyline path from 0 -> 1 (SVG stroke-dashoffset equivalent). */
 function strokeReveal(g, points, progress = 1, opts = {}) {
     if (!Array.isArray(points) || points.length < 2) return;
@@ -366,6 +516,135 @@ function organicPath(g, points, seed = 'organic', opts = {}) {
         g.stroke();
         g.restore();
     }
+}
+
+/* Decaying impact shake magnitude for high-energy collisions or reveals. */
+function impactShake(t, at = 0, strength = 14, decay = 9) {
+    const dt = (Number(t) || 0) - (Number(at) || 0);
+    if (dt < 0 || dt > 0.9) return 0;
+    return (Number(strength) || 14) * Math.exp(-dt * Math.max(1, Number(decay) || 9));
+}
+
+/* Radial or linear anime/action speed lines (use ONLY on high-energy action/rush beats). */
+function speedLines(g, env, t = 0, opts = {}) {
+    const mode = opts.mode || 'radial'; // radial | linear
+    const count = clamp(Math.round(Number(opts.count) || 36), 8, 90);
+    const alpha = clamp(Number.isFinite(opts.alpha) ? opts.alpha : 0.35, 0, 1);
+    if (alpha <= 0.005) return;
+    const color = opts.color || '#ffffff';
+    const rand = typeof Motion !== 'undefined' && Motion.rng ? Motion.rng(opts.seed || 'speed-lines') : () => 0.5;
+    const stepT = Math.floor((Number(t) || 0) * 18); // crisp 18fps comic/anime streak rhythm
+
+    g.save();
+    g.globalCompositeOperation = 'screen';
+    g.strokeStyle = color;
+    g.lineCap = 'round';
+    if (mode === 'linear') {
+        const angle = Number(opts.angle) || 0;
+        g.translate(env.W / 2, env.H / 2);
+        g.rotate(angle);
+        const span = Math.hypot(env.W, env.H);
+        for (let i = 0; i < count; i++) {
+            const y = (rand() - 0.5) * span;
+            const len = 140 + rand() * 340;
+            const x = (((rand() * span + (Number(t) || 0) * (1200 + rand() * 900)) % span) - span / 2);
+            g.globalAlpha = alpha * (0.35 + rand() * 0.65);
+            g.lineWidth = 1.5 + rand() * 3.5;
+            g.beginPath();
+            g.moveTo(x, y);
+            g.lineTo(x + len, y);
+            g.stroke();
+        }
+    } else {
+        const cx = Number.isFinite(opts.cx) ? opts.cx : env.W / 2;
+        const cy = Number.isFinite(opts.cy) ? opts.cy : env.H / 2;
+        const outerR = Math.hypot(env.W, env.H) * 0.72;
+        const innerR = Number.isFinite(opts.innerR) ? opts.innerR : Math.min(env.W, env.H) * 0.28;
+        for (let i = 0; i < count; i++) {
+            const baseA = (i / count) * Math.PI * 2 + (rand() - 0.5) * 0.08 + stepT * 0.03;
+            const r0 = innerR * (0.85 + rand() * 0.45);
+            const r1 = outerR;
+            g.globalAlpha = alpha * (0.3 + rand() * 0.7);
+            g.lineWidth = 1.5 + rand() * 4;
+            g.beginPath();
+            g.moveTo(cx + Math.cos(baseA) * r0, cy + Math.sin(baseA) * r0);
+            g.lineTo(cx + Math.cos(baseA) * r1, cy + Math.sin(baseA) * r1);
+            g.stroke();
+        }
+    }
+    g.restore();
+}
+
+/* Expanding volumetric dust/smoke burst + debris on heavy contact, landing, or launch. */
+function dustBurst(g, x, y, t = 0, start = 0, opts = {}) {
+    const dt = (Number(t) || 0) - (Number(start) || 0);
+    const dur = Math.max(0.15, Number(opts.duration) || 0.75);
+    if (dt < 0 || dt > dur) return;
+    const u = clamp(dt / dur, 0, 1);
+    const out = 1 - Math.pow(1 - u, 3);
+    const fade = 1 - u * u;
+    const count = clamp(Math.round(Number(opts.count) || 12), 4, 32);
+    const spread = Number(opts.spread) || 120;
+    const color = opts.color || 'rgba(230,215,190,0.65)';
+    const rand = typeof Motion !== 'undefined' && Motion.rng ? Motion.rng(opts.seed || `dust-${Math.round(x)}-${Math.round(y)}`) : () => 0.5;
+
+    g.save();
+    g.fillStyle = color;
+    for (let i = 0; i < count; i++) {
+        const ang = (opts.upward ? -Math.PI * (0.1 + rand() * 0.8) : rand() * Math.PI * 2);
+        const dist = (0.35 + rand() * 0.85) * spread * out;
+        const px = x + Math.cos(ang) * dist;
+        const py = y + Math.sin(ang) * dist * (opts.upward ? 0.75 : 0.6) - u * 18;
+        const r = (10 + rand() * 24) * (0.55 + out * 0.9);
+        g.globalAlpha = clamp(fade * (0.45 + rand() * 0.55) * (opts.alpha ?? 1), 0, 1);
+        g.beginPath();
+        g.arc(px, py, r, 0, Math.PI * 2);
+        g.fill();
+    }
+    g.restore();
+}
+
+/* Concussive 2-4 frame impact flash + expanding shockwave ring for climactic hits/breakthroughs. */
+function impactFlash(g, env, t = 0, at = 0, opts = {}) {
+    const dt = (Number(t) || 0) - (Number(at) || 0);
+    const dur = Math.max(0.06, Number(opts.duration) || 0.28);
+    if (dt < 0 || dt > dur) return;
+    const u = clamp(dt / dur, 0, 1);
+    const cx = Number.isFinite(opts.cx) ? opts.cx : env.W / 2;
+    const cy = Number.isFinite(opts.cy) ? opts.cy : env.H / 2;
+    const maxR = Number(opts.maxR) || Math.min(env.W, env.H) * 0.48;
+
+    g.save();
+    g.globalCompositeOperation = 'screen';
+    // Brief bright flash in first 35% of impact
+    if (u < 0.35) {
+        g.globalAlpha = (1 - u / 0.35) * clamp(opts.flashAlpha ?? 0.42, 0, 0.85);
+        g.fillStyle = opts.color || '#fff8e1';
+        g.fillRect(0, 0, env.W, env.H);
+    }
+    // Crisp expanding shockwave ring
+    const ringR = maxR * (1 - Math.pow(1 - u, 3));
+    g.globalAlpha = (1 - u) * 0.85;
+    g.strokeStyle = opts.ringColor || opts.color || '#ffe082';
+    g.lineWidth = Math.max(2, (1 - u) * 18);
+    g.beginPath();
+    g.arc(cx, cy, ringR, 0, Math.PI * 2);
+    g.stroke();
+    g.restore();
+}
+
+/* Optical rack focus shifting depth-of-field blur between background (focusT=0) and foreground (focusT=1). */
+function rackFocus(g, env, camState = {}, focusT = 0.5, bgDraw = null, fgDraw = null, maxBlur = 6) {
+    const f = clamp(Number(focusT) || 0, 0, 1);
+    const blurAmt = Math.max(1, Number(maxBlur) || 6);
+    const layers = [];
+    if (typeof bgDraw === 'function') {
+        layers.push({ depth: 0.45, blur: f * blurAmt, draw: bgDraw });
+    }
+    if (typeof fgDraw === 'function') {
+        layers.push({ depth: 1.15, blur: (1 - f) * blurAmt, draw: fgDraw });
+    }
+    parallaxLayers(g, env, camState, layers);
 }
 
 /* Volumetric additive ('screen') light beam / cone / flashlight shaft. */
@@ -894,10 +1173,16 @@ window.ShortcliprStyles = Object.freeze({
     posterize,
     squash,
     solveIK,
+    drawCharacterRig,
     strokeReveal,
     organicPath,
     lightBeam,
     bloomLayer,
+    impactShake,
+    speedLines,
+    dustBurst,
+    impactFlash,
+    rackFocus,
     shadedShape,
     glow,
     roundedCard,
