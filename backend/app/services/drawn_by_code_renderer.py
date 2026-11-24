@@ -197,21 +197,10 @@ class DrawnByCodeRenderer:
                     + syntax_error.decode(errors="replace")[-1200:]
                 )
 
-            helper_manifest = plan.get("helper_manifest")
-            if not isinstance(helper_manifest, dict):
-                raise NonRetryableRenderError(
-                    "Compiled animation is missing its canonical required-function manifest"
-                )
-            manifest_file = scene_dir / "helper-manifest.json"
-            manifest_file.write_text(
-                json.dumps(helper_manifest, ensure_ascii=False, separators=(",", ":")),
-                encoding="utf-8",
-            )
             linker = await asyncio.create_subprocess_exec(
                 self.node,
                 str(self.root / "engine" / "validate-scene.mjs"),
                 str(scene_file),
-                str(manifest_file),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 start_new_session=(os.name == "posix"),

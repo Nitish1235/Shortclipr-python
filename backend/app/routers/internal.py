@@ -454,6 +454,8 @@ async def run_planning(
             compiled_scenes = [{
                 "index": 0, "start_frame": 0, "end_frame": total_frames,
                 "complexity": "heavy", "assigned_model": compiler.model,
+                "compiler_version": compiled_film.get("compiler_version"),
+                "runtime_contract_version": compiled_film.get("runtime_contract_version"),
                 "scene_js": compiled_film["scene_js"], "style": compiled_film["style"],
                 "quality_review": compiled_film.get("quality_review", {}),
                 "shot_manifest": compiled_film.get("shot_manifest", []),

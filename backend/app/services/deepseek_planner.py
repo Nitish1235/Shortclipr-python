@@ -326,15 +326,26 @@ action to read. Return JSON only, without Markdown or explanations.
             scene.setdefault("transition_out","cut")
             cursor=end
 
-        scenes = validate_scene_plan(scenes,total_frames)
+        scenes = validate_scene_plan(scenes, total_frames)
         character_ids = {x["id"] for x in bible["characters"]}
         prop_ids = {x["id"] for x in bible["props"]}
         environment_ids = {x["id"] for x in bible["environments"]}
+        mechanism_ids = {x["id"] for x in bible.get("mechanisms", [])}
+        patterns_by_mechanism = {
+            m["id"]: {p["id"] for p in m.get("action_patterns", [])}
+            for m in bible.get("mechanisms", [])
+        }
+        # Sanitize minor model ID typos instead of aborting the entire film.
         for scene in scenes:
-            if set(scene["characters"])-character_ids or set(scene["props"])-prop_ids:
-                raise RuntimeError("Shot references an undeclared character or prop ID")
+            scene["characters"] = [cid for cid in scene["characters"] if cid in character_ids]
+            scene["props"] = [pid for pid in scene["props"] if pid in prop_ids]
             if scene["environment"] and scene["environment"] not in environment_ids:
-                raise RuntimeError("Shot references an undeclared environment ID")
+                scene["environment"] = next(iter(environment_ids), "")
+            scene["mechanism_actions"] = [
+                action for action in scene.get("mechanism_actions", [])
+                if action.get("mechanism_id") in mechanism_ids
+                and action.get("pattern_id") in patterns_by_mechanism.get(action["mechanism_id"], set())
+            ]
         plan["visual_bible"] = bible
         plan["art_direction"] = art_direction
         plan["scenes"] = scenes

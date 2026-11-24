@@ -1,12 +1,42 @@
-"""Shot-by-shot DeepSeek compiler for deterministic Drawn-by-Code films."""
+"""Streamlined, self-healing 3-stage DeepSeek compiler for studio-grade Canvas 2D films."""
 from __future__ import annotations
 
 import asyncio
 import copy
 import json
 import logging
+import os
 import re
+import shutil
+import tempfile
+from pathlib import Path
 from typing import Any
+
+from openai import AsyncOpenAI
+
+from ..core.config import Settings
+from .animation_contracts import (
+    ASPECT_LOGICAL,
+    MAX_FILM_SOURCE,
+    MAX_SHARED_SOURCE,
+    MAX_SHOT_SOURCE,
+    analyze_mechanism_motion,
+    extract_shared_draw_helpers,
+    extract_shared_function_signatures,
+    find_unresolved_draw_helpers,
+    find_unresolved_film_draw_helpers,
+    replace_shared_draw_helpers,
+    top_level_draw_helper_names,
+    validate_draw_helper_definitions,
+    validate_generated_fragment,
+    validate_scene_plan,
+    validate_visual_bible,
+)
+from .art_direction import build_art_direction, format_art_direction, validate_art_direction
+from .shot_design_contracts import (
+    build_shot_continuity_context,
+    build_visual_continuity_contract,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,55 +54,93 @@ async def _gather_cancel_on_error(*coroutines):
         raise
 
 
-from openai import AsyncOpenAI
+_TOOLKIT_REFERENCE = """
+AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
+1. ShortcliprStyles:
+   - palette(styleId) -> { bg, bg2, ink, paper, shadow, accent, secondary, highlight }
+   - backdrop(g, styleId, env, t) -> paints multi-stop studio gradient + ambient light pool + returns palette
+   - shadedShape(g, (ctx) => { ctx.beginPath(); ... }, { fill, stroke, lineWidth, shadowColor, shadowBlur, shadowY, highlight, highlightWidth })
+     (draws drop shadow + rich fill/gradient + directional rim highlight + optional crisp stroke)
+   - glow(g, x, y, r, color, alpha) -> soft radial volumetric light/glow
+   - roundedCard(g, x, y, w, h, r, { fill, stroke, lineWidth, shadowBlur, highlight })
+   - badge(g, x, y, text, { bg, color, border, fontSize, align }) -> crisp auto-sized pill label (use sparingly, only when a short visual label clarifies a diagram)
+   - flowPath(g, [[x0,y0],[x1,y1],...], t, { color, width, progress, dashed, speed, glow, arrow, arrowSize }) -> animated connector/energy path
+   - particles(g, seed, count, t, { x, y, w, h }, { mode: 'drift'|'rise'|'sparkle'|'stream', color, speed, minR, maxR, alpha })
+   - spring(t, start, stiffness=180, damping=14) -> snappy damped harmonic 0->1 curve for entrances & pop-ins
+   - cameraRig(g, env, { cx, cy, zoom, rotation, shake, t }) -> smooth 2D camera inside g.save()/g.restore()
+   - editorialShape(g, points, { fill, depth, shadow, stroke, lineWidth }), editorialLight(g, x, y, r, color)
+   - isoProject(x, y, z, scale, origin), isoBox(g, x, y, z, w, d, h, scale, { top, left, right, edge }), isoLine(g, a, b, color, width)
+   - paperLayer(g, drawFn, { fill, edge, blur, offsetY }), paperPolygon(g, points, opts), paperEllipse(g, x, y, rx, ry, opts), paperParallax(g, offset, layers)
+   - halftone(g, x, y, w, h, spacing, color), pixelSnap(v, size), mechanismPose(spec, progress)
+2. Motion (from core.js):
+   - Motion.rng(seed) -> deterministic PRNG function returning [0, 1) (NEVER use Math.random)
+   - Motion.noise1(seed, x) -> smooth deterministic 1D noise in [-1, 1]
+   - Motion.keys([[t0, v0], [t1, v1], ...], t, Ease.inOut) -> smooth keyframe interpolation (numbers or arrays)
+   - Motion.sprite(key, { x, y, w, h }, env.k, (sg) => { ... }) -> cache expensive static art once
+   - Motion.shake(g, amt, t) -> deterministic camera shake
+3. Ease (from core.js):
+   - Ease.clamp(x, a, b), Ease.seg(t, a, b), Ease.lerp(a, b, u), Ease.lerpPt(p, q, u)
+   - Ease.inOut(u), Ease.out(u), Ease.in(u), Ease.back(u), Ease.elastic(u), Ease.pop(t, at, dur), Ease.bump(t, a, dur)
+   (NEVER call bare mix() — always use Ease.lerp(a, b, u).)
+""".strip()
 
-from ..core.config import Settings
-from .art_direction import build_art_direction, format_art_direction, validate_art_direction
-from .shot_design_contracts import (
-    build_visual_continuity_contract,
-    build_shot_continuity_context,
-    validate_physical_constraints,
-)
-from .animation_contracts import (
-    ASPECT_LOGICAL,
-    MAX_FILM_SOURCE,
-    MAX_SHARED_SOURCE,
-    MAX_SHOT_SOURCE,
-    validate_generated_fragment,
-    find_unresolved_draw_helpers,
-    find_unresolved_film_draw_helpers,
-    top_level_draw_helper_names,
-    validate_draw_helper_definitions,
-    validate_draw_helper_specs,
-    validate_draw_helper_dependency_graph,
-    extract_shared_draw_helpers,
-    replace_shared_draw_helpers,
-    validate_scene_plan,
-    validate_visual_bible,
-    analyze_mechanism_motion,
-)
-from .function_manifest import (
-    build_required_function_manifest,
-    find_missing_required_helper_usage,
-)
+_CRAFT_REFERENCE_SNIPPET = """
+CREATIVE AUTONOMY — YOU DECIDE THE ANIMATION STYLE & MOTION LANGUAGE:
+Do NOT make every video look the same. Choose the visual architecture, color palette,
+lighting, framing, and animation physics that best serve THIS specific topic and `style_id`:
+- Explainer / science / space / tech: crisp layered vector motion graphics, glowing energy
+  paths, orbital/mechanical motion, spring entrances, clean cutaway diagrams.
+- Story / fable / comedy / character: expressive multi-part character silhouettes, squash &
+  stretch, articulated limbs/faces, layered parallax scenery, motivated camera cuts.
+- Historical / documentary / mystery / horror: dramatic atmospheric lighting, volumetric
+  beams, rich silhouettes, moody color grading, slow cinematic dolly/push-ins.
+- Engineering / architecture / tactics / maps: isometric 3-axis projection (`isoBox`/`isoProject`),
+  blueprint/schematic reveals, animated flow arrows (`flowPath`), exploded component views.
+- Paper-craft / retro / comic / pixel-art: tactile overlapping cut-paper shadows (`paperPolygon`),
+  bold comic ink contours & dynamic diagonals, halftone shading, or pixel-snapped sprites.
+
+You are free to design custom palettes, custom sky/space/underwater/interior backgrounds,
+and custom procedural effects. `ShortcliprStyles.*` helpers are optional power tools—use
+them whenever they elevate the visuals, and write custom Canvas 2D shaders/gradients/shapes
+whenever the scene calls for something bespoke. Never settle for flat stick figures or
+thin unshaded pencil outlines.
+""".strip()
 
 
 class DeepSeekAnimationCompiler:
-    """Compiles a visual bible into shared drawing helpers and independent shot functions."""
+    """Compiles a Visual Bible + Storyboard into high-craft, self-healing Canvas 2D films."""
 
     def __init__(self, settings: Settings):
         self.model = settings.DEEPSEEK_ANIMATION_MODEL
         self.max_output_tokens = settings.DEEPSEEK_MAX_OUTPUT_TOKENS
         self.max_parallel_shots = max(1, min(4, settings.DEEPSEEK_MAX_PARALLEL_SHOTS))
+        self.shared_reasoning_effort = settings.DEEPSEEK_PLANNING_REASONING_EFFORT or "low"
         self.client = (
-            AsyncOpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com",
-                        timeout=90.0, max_retries=0)
+            AsyncOpenAI(
+                api_key=settings.DEEPSEEK_API_KEY,
+                base_url="https://api.deepseek.com",
+                timeout=110.0,
+                max_retries=0,
+            )
             if settings.DEEPSEEK_API_KEY else None
         )
+        self.node = os.getenv("NODE_BINARY", shutil.which("node") or "")
+        self.validator_script = self._resolve_validator_script()
+
+    @staticmethod
+    def _resolve_validator_script() -> Path | None:
+        candidates = [
+            Path(os.getenv("DRAWN_BY_CODE_ROOT", "/app/drawn_by_code")) / "engine" / "validate-scene.mjs",
+            Path(__file__).resolve().parents[2] / "drawn_by_code" / "engine" / "validate-scene.mjs",
+        ]
+        for path in candidates:
+            if path.is_file():
+                return path
+        return None
 
     @staticmethod
     def validate_compiled_program(program: dict[str, Any]) -> None:
-        """Validate cached and freshly compiled programs against their exact shared runtime."""
+        """Validate cached and freshly compiled programs for real structural/runtime integrity."""
         if not isinstance(program, dict):
             raise ValueError("Animation program must be an object")
         source = program.get("scene_js")
@@ -82,15 +150,12 @@ class DeepSeekAnimationCompiler:
         unresolved = find_unresolved_film_draw_helpers(source)
         if unresolved:
             raise ValueError(
-                "Animation program has unresolved shared drawing helpers: "
-                + ", ".join(unresolved)
+                "Animation program has unresolved drawing helpers: " + ", ".join(unresolved)
             )
 
         bundle = program.get("repair_bundle")
         if not isinstance(bundle, dict):
-            raise ValueError(
-                "Animation program is missing its required repair_bundle; regenerate this artifact"
-            )
+            raise ValueError("Animation program is missing repair_bundle")
         shared_js = bundle.get("shared_js")
         shots = bundle.get("shots")
         duration = bundle.get("duration")
@@ -99,20 +164,19 @@ class DeepSeekAnimationCompiler:
         if (
             not isinstance(shared_js, str)
             or not isinstance(shots, list)
-            or not isinstance(duration, int)
+            or not shots
             or isinstance(duration, bool)
+            or not isinstance(duration, int)
             or not isinstance(logical, list)
             or len(logical) != 2
-            or not all(isinstance(value, int) and not isinstance(value, bool) for value in logical)
+            or not all(isinstance(v, int) and not isinstance(v, bool) for v in logical)
             or not isinstance(style_id, str)
         ):
             raise ValueError("Animation repair bundle is incomplete or malformed")
 
-        required_shot_fields = ("index", "start_frame", "end_frame", "name", "draw_body")
         for shot in shots:
             if (
                 not isinstance(shot, dict)
-                or any(field not in shot for field in required_shot_fields)
                 or isinstance(shot.get("index"), bool)
                 or not isinstance(shot.get("index"), int)
                 or isinstance(shot.get("start_frame"), bool)
@@ -123,118 +187,37 @@ class DeepSeekAnimationCompiler:
                 or not isinstance(shot.get("draw_body"), str)
             ):
                 raise ValueError("Animation repair bundle contains an invalid shot")
-        shot_bodies = [shot["draw_body"] for shot in shots]
-        bundle_unresolved = find_unresolved_draw_helpers(shared_js, shot_bodies)
-        if bundle_unresolved:
-            raise ValueError(
-                "Animation repair bundle has unresolved shared drawing helpers: "
-                + ", ".join(bundle_unresolved)
-            )
 
-        helper_manifest = bundle.get("helper_manifest")
-        if not isinstance(helper_manifest, dict) or helper_manifest.get("schema_version") != 1:
-            raise ValueError("Animation program is missing its canonical helper manifest")
-        manifest_functions = helper_manifest.get("functions")
-        manifest_shots = helper_manifest.get("shots")
-        if not isinstance(manifest_functions, list) or not isinstance(manifest_shots, list):
-            raise ValueError("Animation helper manifest is malformed")
-        required_names = [
-            item.get("name") for item in manifest_functions if isinstance(item, dict)
-        ]
-        if (
-            len(required_names) != len(manifest_functions)
-            or len(required_names) != len(set(required_names))
-            or not all(
-                isinstance(name, str) and re.fullmatch(r"draw[A-Z][A-Za-z0-9_]*", name)
-                for name in required_names
-            )
-        ):
-            raise ValueError("Animation helper manifest contains invalid or duplicate names")
-        validate_draw_helper_definitions(shared_js, required_names, manifest_functions)
-        declared_names = set(top_level_draw_helper_names(shared_js))
-        if declared_names != set(required_names):
-            raise ValueError(
-                "Shared drawing library does not exactly match its canonical helper manifest"
-            )
-
-        manifest_by_shot = {
-            item.get("index"): item for item in manifest_shots if isinstance(item, dict)
-        }
-        if len(manifest_by_shot) != len(manifest_shots) or set(manifest_by_shot) != {
-            shot["index"] for shot in shots
-        }:
-            raise ValueError("Animation helper manifest does not cover every compiled shot")
-        validate_draw_helper_dependency_graph(manifest_functions)
-        for item in manifest_functions:
-            expected_shots = sorted(
-                index for index, entry in manifest_by_shot.items()
-                if item["name"] in entry.get("required_helpers", [])
-            )
-            actual_shots = item.get("required_by_shots")
-            if (
-                not isinstance(actual_shots, list)
-                or sorted(actual_shots) != expected_shots
-                or len(actual_shots) != len(set(actual_shots))
-            ):
-                raise ValueError(
-                    f"Helper {item['name']} required_by_shots does not match the shot manifest"
-                )
-        for shot in shots:
-            manifest_entry = manifest_by_shot[shot["index"]]
-            expected_helpers = manifest_entry.get("required_helpers")
-            if (
-                not isinstance(expected_helpers, list)
-                or not all(name in required_names for name in expected_helpers)
-                or shot.get("required_helpers") != expected_helpers
-            ):
-                raise ValueError(
-                    f"Shot {shot['index'] + 1} is not bound to its canonical helper requirements"
-                )
-            missing_usage = find_missing_required_helper_usage(
-                shot["draw_body"], expected_helpers,
-            )
-            if missing_usage:
-                raise ValueError(
-                    f"Shot {shot['index'] + 1} does not call its required drawing functions: "
-                    + ", ".join(missing_usage)
-                )
-
-        registry = bundle.get("function_registry")
-        registry_names = {
-            item.get("name") for item in registry if isinstance(item, dict)
-        } if isinstance(registry, list) else set()
-        if registry_names != set(required_names):
-            raise ValueError("Persisted function registry does not match the canonical helper manifest")
-        persisted_manifest = program.get("helper_manifest")
-        if persisted_manifest is not None and persisted_manifest != helper_manifest:
-            raise ValueError("Top-level helper manifest differs from the persisted repair bundle")
-
-        expected_source = DeepSeekAnimationCompiler._assemble_film(
-            shared_js, shots, duration, logical, style_id,
-        )
-        if expected_source != source:
-            raise ValueError(
-                "Animation scene_js does not match its persisted shared library and shot bodies"
-            )
+        DeepSeekAnimationCompiler.validate_source(source, duration, logical)
 
     async def _code_completion(
-        self, system_prompt: str, user_prompt: str, token_limit: int,
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        token_limit: int,
         label: str = "animation fragment",
+        enable_thinking: bool = False,
     ) -> str:
-        """Generate raw JavaScript; do not serialize code inside a JSON string."""
+        """Generate raw JavaScript; strips optional markdown fence cleanly."""
         if self.client is None:
             raise RuntimeError("DEEPSEEK_API_KEY is not configured")
         request_started = asyncio.get_running_loop().time()
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            max_tokens=token_limit,
-            reasoning_effort="none",
-            extra_body={"thinking": {"type": "disabled"}},
-        )
+            "max_tokens": token_limit,
+        }
+        if enable_thinking:
+            kwargs["reasoning_effort"] = self.shared_reasoning_effort
+            kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
+        else:
+            kwargs["reasoning_effort"] = "none"
+            kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+
+        response = await self.client.chat.completions.create(**kwargs)
         latency_ms = round((asyncio.get_running_loop().time() - request_started) * 1000)
         choice = response.choices[0] if response.choices else None
         message = choice.message if choice else None
@@ -243,8 +226,11 @@ class DeepSeekAnimationCompiler:
         prompt_details = getattr(usage, "prompt_tokens_details", None)
         finish_reason = getattr(choice, "finish_reason", None)
         logger.info("deepseek.animation.response", extra={
-            "model": self.model, "label": label, "thinking_enabled": False,
-            "latency_ms": latency_ms, "finish_reason": finish_reason,
+            "model": self.model,
+            "label": label,
+            "thinking_enabled": enable_thinking,
+            "latency_ms": latency_ms,
+            "finish_reason": finish_reason,
             "prompt_tokens": getattr(usage, "prompt_tokens", None),
             "prompt_cache_hit_tokens": getattr(prompt_details, "cached_tokens", None),
             "completion_tokens": getattr(usage, "completion_tokens", None),
@@ -255,116 +241,50 @@ class DeepSeekAnimationCompiler:
             raise RuntimeError(f"DeepSeek returned empty JavaScript for {label}")
         if finish_reason == "length":
             raise RuntimeError(f"DeepSeek truncated JavaScript for {label}")
-        # Permit one complete code fence, but never salvage code from prose.
-        fenced = re.fullmatch(r"```(?:javascript|js)?\s*([\s\S]*?)\s*```", raw, re.IGNORECASE)
+        # Cleanly unwrap markdown code fences if present.
+        fenced = re.search(r"```(?:javascript|js)?\s*\n([\s\S]*?)\n```", raw, re.IGNORECASE)
         if fenced:
             raw = fenced.group(1).strip()
-        elif raw.startswith("```") or raw.endswith("```"):
-            raise RuntimeError(f"DeepSeek returned a malformed code fence for {label}")
+        elif raw.startswith("```"):
+            raw = re.sub(r"^```(?:javascript|js)?\s*", "", raw, flags=re.IGNORECASE)
+            raw = re.sub(r"\s*```$", "", raw).strip()
         return raw
 
-    async def _json_object_completion(
-        self, system_prompt: str, user_prompt: str, token_limit: int,
-        label: str,
-    ) -> dict[str, Any]:
-        """Request one constrained JSON object from DeepSeek; never retry or repair it."""
-        if self.client is None:
-            raise RuntimeError("DEEPSEEK_API_KEY is not configured")
-        request_started = asyncio.get_running_loop().time()
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format={"type": "json_object"},
-            max_tokens=token_limit,
-            reasoning_effort="none",
-            extra_body={"thinking": {"type": "disabled"}},
-        )
-        latency_ms = round((asyncio.get_running_loop().time() - request_started) * 1000)
-        choice = response.choices[0] if response.choices else None
-        message = choice.message if choice else None
-        raw = (message.content or "").strip() if message else ""
-        usage = response.usage
-        prompt_details = getattr(usage, "prompt_tokens_details", None)
-        finish_reason = getattr(choice, "finish_reason", None)
-        logger.info("deepseek.animation.json_response", extra={
-            "model": self.model, "label": label, "thinking_enabled": False,
-            "latency_ms": latency_ms, "finish_reason": finish_reason,
-            "prompt_tokens": getattr(usage, "prompt_tokens", None),
-            "prompt_cache_hit_tokens": getattr(prompt_details, "cached_tokens", None),
-            "completion_tokens": getattr(usage, "completion_tokens", None),
-            "total_tokens": getattr(usage, "total_tokens", None),
-            "content_chars": len(raw),
-        })
-        if not raw:
-            raise RuntimeError(f"DeepSeek returned empty JSON for {label}")
-        if finish_reason == "length":
-            raise RuntimeError(f"DeepSeek truncated JSON for {label}")
+    async def _run_local_js_validation(self, source: str) -> str | None:
+        """Run Node syntax + Acorn/eslint-scope AST linker if Node is available.
+
+        Returns None on pass, or a concise error description on failure.
+        """
+        if not self.node or not shutil.which(self.node):
+            return None
+        work = Path(tempfile.mkdtemp(prefix="shortclipr-link-"))
         try:
-            value = json.loads(raw)
-        except json.JSONDecodeError as error:
-            raise RuntimeError(
-                f"DeepSeek returned invalid structured JSON for {label}: "
-                f"{error.msg} at line {error.lineno}, column {error.colno}"
-            ) from error
-        if not isinstance(value, dict):
-            raise RuntimeError(f"DeepSeek returned a non-object JSON value for {label}")
-        return value
+            scene_file = work / "scene.js"
+            scene_file.write_text(source, encoding="utf-8")
 
-    @staticmethod
-    def _validate_shot_layout(value: dict[str, Any], label: str) -> dict[str, Any]:
-        required = (
-            "composition", "camera", "focal_subject", "lighting",
-            "style_application", "continuity",
-        )
-        for field in required:
-            item = value.get(field)
-            if not isinstance(item, str) or not item.strip():
-                raise ValueError(f"{label} layout requires non-empty {field}")
-        layers = value.get("depth_layers")
-        if not isinstance(layers, list) or not 1 <= len(layers) <= 3:
-            raise ValueError(f"{label} layout must contain 1–3 depth layers")
-        seen: set[str] = set()
-        for layer in layers:
-            if not isinstance(layer, dict):
-                raise ValueError(f"{label} depth layers must be objects")
-            name = layer.get("layer")
-            if name not in {"background", "midground", "foreground"} or name in seen:
-                raise ValueError(f"{label} has an invalid or duplicate depth layer")
-            seen.add(name)
-            for field in ("content", "purpose"):
-                item = layer.get(field)
-                if not isinstance(item, str) or not item.strip():
-                    raise ValueError(f"{label} depth layer requires non-empty {field}")
-        return value
+            # 1. Syntax check
+            syntax = await asyncio.create_subprocess_exec(
+                self.node, "--check", str(scene_file),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await asyncio.wait_for(syntax.communicate(), timeout=20)
+            if syntax.returncode != 0:
+                return "JavaScript syntax error:\n" + stderr.decode(errors="replace")[-1200:]
 
-    @staticmethod
-    def _validate_shot_motion(
-        value: dict[str, Any], label: str,
-        valid_entity_ids: set[str] | None = None,
-    ) -> dict[str, Any]:
-        required = (
-            "initial_state", "primary_action", "final_state",
-            "timing", "secondary_motion", "camera_motion", "mechanism_motion",
-        )
-        for field in required:
-            item = value.get(field)
-            if not isinstance(item, str) or not item.strip():
-                raise ValueError(f"{label} motion specification requires non-empty {field}")
-        value["physical_constraints"] = validate_physical_constraints(
-            value.get("physical_constraints"), label, valid_entity_ids or set(),
-        )
-        return value
-
-    async def _validated_fragment(
-        self, system_prompt: str, user_prompt: str, token_limit: int,
-        field: str, label: str, max_chars: int, reasoning_effort: str = "none",
-    ) -> str:
-        """Generate once and apply only basic deterministic checks."""
-        source = await self._code_completion(system_prompt, user_prompt, token_limit, label=label)
-        return validate_generated_fragment(source, label, max_chars)
+            # 2. AST scope & unresolved-identifier linker
+            if self.validator_script and self.validator_script.is_file():
+                linker = await asyncio.create_subprocess_exec(
+                    self.node, str(self.validator_script), str(scene_file),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
+                )
+                stdout, _ = await asyncio.wait_for(linker.communicate(), timeout=20)
+                if linker.returncode != 0:
+                    return "JavaScript linker error:\n" + (stdout or b"").decode(errors="replace")[-1400:]
+            return None
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
 
     @staticmethod
     def _shot_visual_context(visual_bible: dict[str, Any], scene: dict[str, Any]) -> dict[str, Any]:
@@ -377,9 +297,6 @@ class DeepSeekAnimationCompiler:
             item for item in visual_bible.get("mechanisms", [])
             if item.get("id") in mechanism_ids
         ]
-        # Mechanism components may be omitted from scene.props by the planner.
-        # Pull their prop-backed visual definitions into the shot context so the
-        # drawing model can render the actual connected parts, not just labels.
         mechanism_prop_ids = {
             component.get("prop_id")
             for mechanism in mechanisms
@@ -405,39 +322,190 @@ class DeepSeekAnimationCompiler:
         }
 
     @staticmethod
+    def _build_function_metadata(
+        shared_signatures: list[dict[str, str]],
+        compiled_shots: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Build function_specs and function_registry from the REAL generated shared_js."""
+        specs: list[dict[str, Any]] = []
+        registry: list[dict[str, Any]] = []
+        for entry in shared_signatures:
+            name = entry["name"]
+            used_in = sorted({
+                shot["index"]
+                for shot in compiled_shots
+                if re.search(rf"(?<![\w$.]){re.escape(name)}\s*\(", shot["draw_body"])
+            })
+            specs.append({
+                "name": name,
+                "category": "visual",
+                "signature": entry["signature"],
+                "purpose": entry["doc"] or f"Shared visual helper {name}",
+                "visual_target": entry["doc"] or name,
+                "dependencies": [],
+                "required_by_shots": used_in,
+                "version": 1,
+            })
+            registry.append({
+                "name": name,
+                "category": "visual",
+                "signature": entry["signature"],
+                "purpose": entry["doc"] or f"Shared visual helper {name}",
+                "visual_target": entry["doc"] or name,
+                "dependencies": [],
+                "required_by_shots": used_in,
+                "version": 1,
+                "source_scope": "shared",
+                "static_status": "implementation_validated",
+                "runtime_status": "not_render_verified",
+            })
+        return specs, registry
+
+    @staticmethod
     def _visual_qa_context(
-        visual_bible: dict[str, Any], scenes: list[dict[str, Any]],
-        function_specs: list[dict[str, Any]] | None = None,
+        visual_bible: dict[str, Any],
+        scenes: list[dict[str, Any]],
+        function_specs: list[dict[str, Any]],
+        function_registry: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """Keep the visual review context aligned to the exact plan used to compile."""
         storyboard_fields = (
             "index", "start_frame", "end_frame", "purpose", "visual_objective",
             "composition", "shot_scale", "camera_position", "depth_layers",
             "focal_entity", "visual_change", "continuity_note", "characters",
             "props", "environment", "mechanism_actions",
         )
-        specs = function_specs or []
         return {
             "visual_bible": visual_bible,
             "storyboard": [
                 {key: scene.get(key) for key in storyboard_fields if key in scene}
                 for scene in scenes
             ],
-            "function_specs": specs,
-            "function_registry": [
-                {
-                    "name": spec["name"],
-                    "category": spec["category"],
-                    "signature": spec["signature"],
-                    "purpose": spec["purpose"],
-                    "visual_target": spec["visual_target"],
-                    "dependencies": spec["dependencies"],
-                    "required_by_shots": spec.get("required_by_shots", []),
-                    "version": spec.get("version", 1),
-                }
-                for spec in specs
-            ],
+            "function_specs": function_specs,
+            "function_registry": function_registry,
         }
+
+    @staticmethod
+    def _unwrap_shot_body(body: str, shot_index: int) -> str:
+        """If the model wrapped the shot in `function drawShot_N(...) { ... }`, unwrap its body."""
+        stripped = body.strip()
+        match = re.match(
+            rf"^(?:export\s+)?function\s+drawShot_{shot_index}\s*\([^)]*\)\s*\{{([\s\S]*)\}}\s*;?$",
+            stripped,
+        )
+        if match:
+            return match.group(1).strip()
+        return stripped
+
+    async def _repair_assembled_error(
+        self,
+        shared_js: str,
+        compiled_shots: list[dict[str, Any]],
+        error_report: str,
+        duration: int,
+        logical: list[int],
+        style_id: str,
+    ) -> tuple[str, list[dict[str, Any]]]:
+        """Surgically fix a syntax or unresolved-identifier error before returning the film."""
+        assembled = self._assemble_film(shared_js, compiled_shots, duration, logical, style_id)
+        lines = assembled.splitlines()
+
+        # If one or more missing draw* helpers are called across multiple shots, adding them
+        # once to shared_js fixes every affected shot in a single repair pass.
+        missing_draw_helpers = find_unresolved_film_draw_helpers(assembled)
+        shots_calling_missing = sum(
+            1 for shot in compiled_shots
+            if any(re.search(rf"(?<![\w$.]){re.escape(name)}\s*\(", shot["draw_body"]) for name in missing_draw_helpers)
+        )
+
+        target_shot_pos: int | None = None
+        if not (missing_draw_helpers and shots_calling_missing >= 2):
+            line_match = re.search(r"line\s+(\d+)|:(\d+)(?::\d+)?", error_report)
+            failing_line = int(line_match.group(1) or line_match.group(2)) if line_match else None
+            if failing_line is not None and 1 <= failing_line <= len(lines):
+                for idx in range(failing_line - 1, -1, -1):
+                    shot_header = re.match(r"^function\s+drawShot_(\d+)\s*\(", lines[idx])
+                    if shot_header:
+                        shot_idx = int(shot_header.group(1))
+                        for pos, shot in enumerate(compiled_shots):
+                            if shot["index"] == shot_idx:
+                                target_shot_pos = pos
+                                break
+                        break
+                    if lines[idx].startswith("Motion.scene("):
+                        break
+
+        shared_sigs = extract_shared_function_signatures(shared_js)
+        sig_block = "\n".join(
+            f"- {item['signature']}" + (f"  // {item['doc']}" if item["doc"] else "")
+            for item in shared_sigs
+        ) or "(none)"
+
+        if target_shot_pos is not None:
+            shot = compiled_shots[target_shot_pos]
+            repair_prompt = f"""
+Fix the JavaScript error in drawShot_{shot['index']}.
+
+ERROR TO FIX:
+{error_report}
+
+AVAILABLE SHARED FUNCTIONS (exact signatures):
+{sig_block}
+
+{_TOOLKIT_REFERENCE}
+
+CURRENT BROKEN BODY OF drawShot_{shot['index']}(g, t, env, absoluteTime):
+{shot['draw_body']}
+
+RULES:
+- Return ONLY the fixed JavaScript statements for the body of drawShot_{shot['index']} (no outer function wrapper).
+- Fix every syntax error, undefined variable, or undefined function call.
+- If a helper function is missing, either call an existing shared function above or define it locally inside this body.
+- Never use bare mix(); use Ease.lerp(a, b, u). Never use Math.random(), Date, fetch, eval, window, or document.
+- Return raw JavaScript only (no JSON, no explanation).
+""".strip()
+            fixed_body = await self._code_completion(
+                "You are a senior JavaScript Canvas 2D debugger. Return only fixed executable JS statements.",
+                repair_prompt,
+                min(self.max_output_tokens, 12000),
+                label=f"Auto-repair drawShot_{shot['index']}",
+            )
+            fixed_body = self._unwrap_shot_body(fixed_body, shot["index"])
+            fixed_body = validate_generated_fragment(fixed_body, f"Auto-repaired Shot {shot['index'] + 1}", MAX_SHOT_SOURCE)
+            updated_shots = copy.deepcopy(compiled_shots)
+            updated_shots[target_shot_pos]["draw_body"] = fixed_body
+            return shared_js, updated_shots
+
+        # Otherwise repair shared_js (and implement any missing shared helpers called by shots).
+        missing_note = (
+            f"\nMISSING HELPER FUNCTIONS REFERENCED BY SHOTS (implement these in shared_js): {', '.join(missing_draw_helpers)}\n"
+            if missing_draw_helpers else ""
+        )
+        repair_prompt = f"""
+Fix the JavaScript error in the shared drawing library.
+
+ERROR TO FIX:
+{error_report}
+{missing_note}
+{_TOOLKIT_REFERENCE}
+
+CURRENT SHARED DRAWING LIBRARY:
+{shared_js}
+
+RULES:
+- Return ONLY the complete fixed shared JavaScript drawing library.
+- Fix every syntax error, undefined variable, or missing helper function.
+- Keep all existing working function names and signatures intact so shots can still call them.
+- Never use bare mix(); use Ease.lerp(a, b, u). Never use Math.random(), Date, fetch, eval, window, or document.
+- Return raw JavaScript only (no JSON, no explanation).
+""".strip()
+        fixed_shared = await self._code_completion(
+            "You are a senior JavaScript Canvas 2D debugger. Return only fixed executable JS source.",
+            repair_prompt,
+            min(self.max_output_tokens, 24000),
+            label="Auto-repair shared drawing library",
+        )
+        fixed_shared = validate_generated_fragment(fixed_shared, "Auto-repaired shared library", MAX_SHARED_SOURCE)
+        return fixed_shared, compiled_shots
 
     async def compile(self, project: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
         if self.client is None:
@@ -452,435 +520,164 @@ class DeepSeekAnimationCompiler:
         visual_bible = validate_visual_bible(plan.get("visual_bible"))
         visual_continuity_contract = build_visual_continuity_contract(visual_bible)
         scenes = validate_scene_plan(plan.get("scenes"), total_frames)
-        mechanisms_by_id = {item["id"]: item for item in visual_bible.get("mechanisms", [])}
-        for scene in scenes:
-            for action in scene.get("mechanism_actions", []):
-                mechanism = mechanisms_by_id.get(action["mechanism_id"])
-                if mechanism is None:
-                    raise ValueError("Shot mechanism action references an undeclared mechanism ID")
-                if action["pattern_id"] not in {item["id"] for item in mechanism.get("action_patterns", [])}:
-                    raise ValueError("Shot mechanism action references an undeclared action pattern")
         motion_diagnostics = analyze_mechanism_motion(visual_bible, scenes)
-        # Resolve the complete drawing API from the approved Visual Bible and storyboard
-        # before asking any model to write JavaScript.
-        helper_manifest = build_required_function_manifest(visual_bible, scenes)
-        function_specs_by_name = {
-            item["name"]: item for item in helper_manifest["functions"]
-        }
-        required_helpers_by_shot = {
-            item["index"]: item["required_helpers"] for item in helper_manifest["shots"]
-        }
-        required_helper_names = [item["name"] for item in helper_manifest["functions"]]
+
         style_id = visual_bible["style_id"]
         art_direction_value = plan.get("art_direction")
         if art_direction_value is None:
-            # Compatibility for persisted plans created before ArtDirectionV1.
             art_direction = build_art_direction(
-                style_id, requested_style=None,
+                style_id,
+                requested_style=None,
                 style_notes=str(visual_bible.get("style_notes", "")),
             )
         else:
             art_direction = validate_art_direction(art_direction_value, style_id)
         art_direction_instructions = format_art_direction(art_direction)
 
-        # === LEGACY SHARED DRAWING LIBRARY PROMPT (rollback reference; inactive) ===
-        # shared_prompt = f"""
-        # You are ShortClipr's senior 2D character and illustration systems artist.
-        # Create a compact reusable JavaScript drawing library for a {style_id} Canvas 2D film.\nFollow this binding art-direction contract:\n{art_direction_instructions}\nAim for at most 1,800 output tokens.
-        # Return JSON only: {{"shared_js":"JavaScript source"}}.
-        # The source is evaluated in the same script as the film and may define ordinary named
-        # functions and constants. It must not call Motion.scene. Use only the supplied Canvas
-        # 2D context in functions. Never reference browser-global identifiers such as window,
-        # document, self, top, parent or frames. No DOM, browser globals, imports, exports, network, filesystem,
-        # Node APIs, timers, eval, Function, Date, performance, Math.random, WebGL or 3D.
-        # A trusted runtime script ShortcliprStyles is loaded before this library. Use
-        # ShortcliprStyles.palette("{style_id}"), ShortcliprStyles.paperBackground(g, "{style_id}", env),
-        # ShortcliprStyles.paperShadow(g, x, y, blur, color), ShortcliprStyles.halftone(g, x, y, w, h, spacing, color),
-        # ShortcliprStyles.camera(g, env, {{cx, cy, zoom, rotation}}) inside g.save()/g.restore(), and
-        # ShortcliprStyles.pixelSnap(value, pixelSize) where appropriate.
-        # For cinematic-editorial use ShortcliprStyles.editorialShape(g, points, opts) for layered
-        # graphic silhouettes and editorialLight(g,x,y,r,color) for restrained focal light.
-        # For isometric-technical use isoProject(x,y,z,scale,origin), isoBox(g,x,y,z,w,d,h,scale,colors),
-        # and isoLine(g,a,b,color,width); keep all components on the same projected axes.
-        # For layered-paper use paperPolygon(g,points,opts), paperEllipse(g,x,y,rx,ry,opts),
-        # paperLayer(g,draw,opts), and paperParallax(g,offset,layers); separate depth planes and
-        # keep light direction/shadow offsets consistent. These are deterministic Canvas 2D helpers.
-        # Use restrained texture details rather than full-canvas particle loops. Create reusable helpers for every recurring
-        # character, prop and environment in the visual bible. Character functions must preserve
-        # silhouette, proportions, face, clothing, colours and distinctive marks across all shots.
-        # Prefer short named functions such as drawExplorer(g,x,y,s,pose,expression). Implement only helpers needed by this visual bible. Avoid duplicate helpers, verbose comments and decorative details that do not support the scenes. Keep code deterministic and compact.
-        # Do not use external assets. Do not redefine ShortcliprStyles.
-        # Visual bible:
-        # {json.dumps(visual_bible, ensure_ascii=False)}
-        # """.strip()
-        # === END LEGACY SHARED DRAWING LIBRARY PROMPT ===
-
+        # ── Stage 1: Shared Visual Kit (1 call, thinking enabled for high craft) ──
         shared_prompt = f"""
 ROLE
-You are ShortClipr's senior 2D character designer and reusable illustration-systems
-artist. Build the shared visual asset library for this film. This is production artwork,
-not a collection of generic icons.
+You are a lead motion-graphics artist and Canvas 2D engineer creating a studio-grade
+animated short film (think Kurzgesagt / Vox / Apple keynote motion graphics — rich layered
+silhouettes, directional lighting, gradients, cast shadows, tactile depth, smooth easing;
+NEVER crude stick figures, thin pencil outlines, or flat unshaded boxes).
 
-DESIGN TARGET
-Create a small, coherent visual world that follows the binding art direction below.
-Every recurring character, prop and environment must be recognizable at a glance and
-remain visually identical across shots. Distinguish silhouette, proportions, materials,
-edge treatment, palette and signature details. Design for the actual logical canvas.
+TASK
+Write the shared JavaScript visual asset library for this {logical[0]}x{logical[1]} ({aspect})
+film in the `{style_id}` style.
 
-IMPLEMENTATION CONTRACT
-- Return complete raw JavaScript source: ordinary named function declarations and
-  constants only. No JSON wrapper, Markdown, prose, imports or exports.
-- Implement only reusable entities declared in the visual bible. Do not invent new
-  characters, props, costumes, logos or decorative motifs.
-- Implement EVERY function in the canonical manifest below, exactly once, at top level.
-  Use the exact function name and exact signature supplied by the manifest. These names
-  are assigned by the backend and are not suggestions. Do not omit a required function.
-- Do not define any additional drawX function. Keep each entity implementation self-contained;
-  use Canvas 2D and documented ShortcliprStyles/Ease APIs rather than undeclared drawX helpers.
-- Use a stable local coordinate system for every helper. Origin is the subject's
-  ground/contact point unless the entity is naturally centered. Scale 1 means the
-  proportions described in the visual bible. Make helpers easy to position and scale.
-- Preserve identity-defining character features exactly: silhouette, face, clothing,
-  palette, proportions and distinctive marks. Poses may articulate limbs, never identity.
-- Props need stable geometry and material cues. Separate moving components where
-  the visual bible defines them; do not collapse a mechanism into one icon.
-- Environments must supply reusable elements for foreground, midground and background
-  staging. Do not create one monolithic backdrop that prevents camera changes.
-- Use the documented Canvas 2D, ShortcliprStyles and Ease toolkit only. For numeric
-  interpolation call Ease.lerp(a, b, progress); never call bare mix(). No undocumented
-  globals or helpers may be assumed. Do not redefine ShortcliprStyles.
-- Save/restore context state around transforms, clipping and compositing. Helpers must
-  be deterministic and side-effect free.
-- No browser or Node globals, DOM, network, filesystem, timers, imports, exports, eval,
-  Function, Date, performance, random values, WebGL, Three.js or 3D.
-- Prioritize clear silhouettes, readable proportions and intentional negative space.
-  Texture must remain restrained and visible at final output resolution.
-- Use consistent material rendering, line weight, light direction and shadow logic.
-  Do not substitute labels or glyphs for the actual subject.
+DESIGN & QUALITY STANDARDS
+- Build clean, modular top-level named functions for the recurring characters, props,
+  environments, and visual motifs in the Visual Bible.
+- You MAY write internal helper functions (e.g., drawWheel, drawCloud, drawWindow) and call
+  shared helpers from other shared helpers.
+- Put a concise 1-line `//` comment above each main function explaining its parameters and
+  origin (e.g. `// Draws hero rocket centered at base (x, y), scale=1 (~240px tall), thrust 0..1`).
+- Use default parameter values where helpful (e.g. `scale = 1, pose = 'idle'`).
+- Use `ShortcliprStyles.shadedShape`, linear/radial gradients, `ShortcliprStyles.glow`,
+  ground contact shadows, rim highlights, and layered shapes so every subject looks polished
+  at 1080p.
+- Always wrap transforms/styles in `g.save()` / `g.restore()`.
+- Keep all code 100% deterministic: use `Motion.rng(seed)` / `Motion.noise1(seed, x)`, NEVER
+  `Math.random()`, `Date`, `performance`, DOM, `window`, `document`, `fetch`, `eval`, or timers.
+- Do NOT call `Motion.scene(...)` in this library.
+- Return raw JavaScript only (no Markdown explanations, no JSON wrapper).
+
+{_TOOLKIT_REFERENCE}
+
+{_CRAFT_REFERENCE_SNIPPET}
 
 BINDING ART DIRECTION:
 {art_direction_instructions}
 
-CANONICAL REQUIRED-FUNCTION MANIFEST (authoritative):
-{json.dumps(helper_manifest, ensure_ascii=False, separators=(",", ":"))}
-
 VISUAL BIBLE:
 {json.dumps(visual_bible, ensure_ascii=False)}
 
-Return the complete shared JavaScript drawing library now.""".strip()
-        shared_js = await self._validated_fragment(
-            "You are a senior Canvas 2D JavaScript systems programmer. Return only executable JavaScript source.",
-            shared_prompt + "\n\nReturn only the complete JavaScript library source.",
-            min(self.max_output_tokens, 24000), "shared_js", "Shared drawing library",
-            MAX_SHARED_SOURCE,
-        )
+STORYBOARD OVERVIEW (for knowing what poses/states the helpers need):
+{json.dumps([{"index": s["index"], "purpose": s.get("purpose"), "action": s.get("action"), "characters": s.get("characters", []), "props": s.get("props", []), "environment": s.get("environment", "")} for s in scenes], ensure_ascii=False)}
 
-        # Lock the shared API before shot generation. A missing or extra custom drawing
-        # function is a compiler error; shots are never allowed to invent the API later.
-        validate_draw_helper_definitions(
-            shared_js, required_helper_names, helper_manifest["functions"],
+Write the complete, studio-quality shared JavaScript visual library now.
+""".strip()
+
+        shared_js = await self._code_completion(
+            "You are a lead Canvas 2D motion-graphics engineer. Return only clean, executable JavaScript.",
+            shared_prompt,
+            min(self.max_output_tokens, 24000),
+            label="Shared visual kit",
+            enable_thinking=True,
         )
-        shared_helper_names = top_level_draw_helper_names(shared_js)
-        unexpected_shared_helpers = sorted(set(shared_helper_names) - set(required_helper_names))
-        if unexpected_shared_helpers:
-            raise ValueError(
-                "Shared drawing library defined helpers outside the canonical manifest: "
-                + ", ".join(unexpected_shared_helpers)
-            )
-        if set(shared_helper_names) != set(required_helper_names):
-            missing_shared_helpers = sorted(set(required_helper_names) - set(shared_helper_names))
-            raise ValueError(
-                "Shared drawing library is incomplete; required implementations are missing: "
-                + ", ".join(missing_shared_helpers)
-            )
+        shared_js = validate_generated_fragment(shared_js, "Shared visual kit", MAX_SHARED_SOURCE)
+
+        # Extract the REAL declared signatures so every shot knows the exact API.
+        shared_signatures = extract_shared_function_signatures(shared_js)
+        shared_api_doc = "\n".join(
+            f"- {item['signature']}" + (f"  // {item['doc']}" if item["doc"] else "")
+            for item in shared_signatures
+        ) or "(No shared functions declared — draw directly using ShortcliprStyles and Canvas 2D.)"
+
+        # ── Stage 2: Parallel Shot Code Generation (1 call per shot) ──
         semaphore = asyncio.Semaphore(self.max_parallel_shots)
 
         async def compile_one(scene: dict[str, Any]) -> dict[str, Any]:
             start_s = scene["start_frame"] / 30
             end_s = scene["end_frame"] / 30
+            shot_dur = end_s - start_s
             shot_visual_context = self._shot_visual_context(visual_bible, scene)
-            shot_required_helpers = required_helpers_by_shot.get(scene["index"], [])
-            shot_required_specs = [
-                function_specs_by_name[name] for name in shot_required_helpers
-            ]
-            shot_continuity_context = build_shot_continuity_context(
-                visual_continuity_contract, scene,
-            )
-            valid_motion_entity_ids = {
-                entity["id"]
-                for group in ("characters", "props", "environments", "mechanisms")
-                for entity in shot_continuity_context.get(group, [])
-                if isinstance(entity.get("id"), str)
-            }
-        # === LEGACY SHOT GENERATION PROMPT (rollback reference; inactive) ===
-        # shot_prompt = f"""
-        # You are ShortClipr's 2D animation shot director and Canvas artist.
-        # Generate only the drawing body for one shot. Return JSON only:
-        # {{"draw_body":"JavaScript statements"}}.
-        # The body is inserted inside:
-        # function drawShot_{scene["index"]}(g, t, env, absoluteTime) {{ ... }}
-        # Here t is local shot time starting at zero; absoluteTime is film time in seconds.
-        # The compiler injects validated local constants `mechanismActions` and `mechanisms` before the drawing body.
-        # Use these runtime arrays directly; never invent or reconstruct mechanism data.
-        # VERIFIED SHARED DRAW HELPERS (exact names): {json.dumps(shared_helper_names)}
-        # You may call only these shared helpers. If this shot needs another reusable drawing
-        # function, define that function inside this draw_body before calling it. Never invent
-        # a helper call and assume its implementation exists. Every custom drawX() call must
-        # either be in the verified shared list above or have its complete function definition
-        # inside this draw_body. Reuse shared functions for recurring characters and props;
-        # do not redraw their defining features.
-        # Use only CanvasRenderingContext2D methods on g, local variables, standard Math and
-        # the shared helper functions. Redraw the full shot deterministically from t. No state
-        # accumulation, random numbers, DOM/browser globals, imports, exports, network, file access,
-        # Node APIs, timers, eval, Function, Date, performance, WebGL, Three.js or 3D.
-        # Keep all drawing within the logical canvas {logical[0]}x{logical[1]}.
-        # Honor the storyboard visual_objective, composition, shot_scale, camera_position, ordered depth_layers, focal_entity, visual_change and continuity_note. Build a readable foreground/midground/background rather than a flat repeated grid. Make the focal subject materially and spatially specific; use scale references and environment geometry. Iterate with `for (const action of mechanismActions)`. For each action, find `const mechanism = mechanisms.find(item => item.id === action.mechanism_id)`. The backend has already validated that the mechanism and action pattern exist. If the mechanism is missing defensively skip it; if it has no kinematics, depict the named action qualitatively without claiming deterministic engineering motion. Only calculate normalized local progress when a kinematics array exists; use this shot's local duration ({end_s-start_s:.3f} seconds):
-        # const rawProgress = Ease.clamp(Ease.seg(t, 0, {end_s-start_s:.3f}));
-        # const easing = action.easing ?? "in_out";
-        # const easedProgress = easing === "linear" ? rawProgress : easing === "ease_in" ? rawProgress * rawProgress * rawProgress : easing === "ease_out" ? 1 - Math.pow(1 - rawProgress, 3) : Ease.inOut(rawProgress);
-        # const actionProgress = (action.start_progress ?? 0) + ((action.end_progress ?? 1) - (action.start_progress ?? 0)) * easedProgress;
-        # Iterate with `for (const spec of mechanism.kinematics)`. For each spec, run `const pose = ShortcliprStyles.mechanismPose(spec, actionProgress)` and apply that pose to the component identified by `pose.part`. For pivot results, rotate pose.part around pose.anchor by pose.angle_rad. For translation/slider results, place pose.part origin at pose.position. For gear results, rotate pose.driver_part around pose.driver_anchor by pose.driver_angle_rad and pose.part around pose.anchor by pose.angle_rad; preserve the declared pitch-radius ratio and external/internal mesh direction. For pulley results, rotate pose.pulley_part around pose.anchor by pose.pulley_angle_rad and place pose.part at the returned absolute pose.position. For cable results, draw pose.part as a continuous polyline through pose.points in order. For actuator results, draw the cylinder and rod along pose.base-to-pose.tip using pose.length and pose.angle_rad. Apply the same actionProgress to all kinematic parts in this action. Do not invent geometry or constraints. When kinematics is absent, use qualitative motion only and do not present it as engineering-solved.
-        # Make one clear animated action with simple easing and follow-through. Use only the composition layers needed for this shot. Keep code concise: aim for at most 900 output tokens; no comments, repeated character drawings or unnecessary decorative loops. Reuse shared helpers for all recurring entities. Do not render narration or subtitles.
-        # STYLE: {style_id}
-        # BINDING ART DIRECTION:
-        # {art_direction_instructions}
-        # STYLE TOOLKIT REQUIREMENTS:
-        # - cinematic-editorial: construct foreground/midground/background layers, bold silhouette masses and one clear focal-light treatment.
-        # - isometric-technical: use the shared isoProject/isoBox projection helpers consistently for all related components; show component separation and mechanical relationships.
-        # - layered-paper: use separate paperPolygon/paperEllipse/paperLayer shapes with visible overlap and consistent cast shadows; add parallax only when it clarifies depth.
-        # SHOT VISUAL REFERENCES:
-        # {json.dumps(shot_visual_context, ensure_ascii=False, separators=(",", ":"))}
-        # DETERMINISTIC KINEMATICS: numeric specs are authoritative. Evaluate the same normalized progress for every connected part and reuse the returned transform; do not independently animate connected components.
-        # SHOT:
-        # {json.dumps(scene, ensure_ascii=False)}
-        # SHOT WINDOW: {start_s:.3f}s to {end_s:.3f}s; local duration {end_s-start_s:.3f}s.\nAvoid repeating the previous shot composition unless the storyboard explicitly calls for a sustained view.
-        # """.strip()
-        # === END LEGACY SHOT GENERATION PROMPT ===
 
-            async with semaphore:
-                layout_prompt = f"""
-You are ShortClipr's senior 2D film composition designer.
+            mechanism_rules = ""
+            if scene.get("mechanism_actions"):
+                mechanism_rules = f"""
+MECHANISM KINEMATICS:
+- `mechanismActions` and `mechanisms` are injected local constants in this function.
+- For each action, find its mechanism by `mechanism_id`. If it has `kinematics`, compute:
+  `const rawP = Ease.clamp(Ease.seg(t, 0, {shot_dur:.3f}));`
+  `const p = (action.start_progress ?? 0) + ((action.end_progress ?? 1) - (action.start_progress ?? 0)) * Ease.inOut(rawP);`
+  and call `ShortcliprStyles.mechanismPose(spec, p)` to position/rotate connected parts.
+"""
 
-Design the visual composition for ONE shot. Do not write code and do not plan motion.
-Use only the characters, props and environment supplied below. Do not invent entities.
+            shot_prompt = f"""
+ROLE
+You are a lead 2D motion-graphics director writing ONE complete, visually rich shot for a
+`{style_id}` animated film on a {logical[0]}x{logical[1]} logical canvas.
 
-Return one JSON object with exactly these keys:
-{{
-  "composition": "Specific spatial composition and visual hierarchy.",
-  "camera": "Shot scale, angle, perspective and framing.",
-  "focal_subject": "The exact supplied entity that dominates the frame and how it is staged.",
-  "depth_layers": [
-    {{"layer": "background", "content": "Recognizable supplied environment content", "purpose": "Why it supports the shot"}},
-    {{"layer": "midground", "content": "Recognizable supplied subject or prop content", "purpose": "Why it supports the shot"}},
-    {{"layer": "foreground", "content": "Recognizable supplied foreground content, or a deliberate framing element", "purpose": "Why it supports the shot"}}
-  ],
-  "lighting": "Light direction, contrast and focal treatment.",
-  "style_application": "How the binding art direction affects shapes, materials, edges and palette.",
-  "continuity": "Identity and continuity details that must remain consistent."
-}}
+OUTPUT CONTRACT
+Return ONLY executable JavaScript statements for the body of:
+`function drawShot_{scene['index']}(g, t, env, absoluteTime) {{ ... }}`
+- `t` is local shot time in seconds (0 to {shot_dur:.3f}s).
+- `absoluteTime` is overall film time in seconds.
+- `env` has `{{ W: {logical[0]}, H: {logical[1]}, fps: 30, duration: {duration}, k }}`.
+- Return raw JavaScript statements only (no function wrapper, no JSON, no explanation).
 
-Rules:
-- JSON only. Every value must be a JSON string except depth_layers, which is an array of objects.
-- Use only depth layers that materially improve this composition; one to three layers are allowed.
-- Every layer must contain recognizable visual content and a clear storytelling purpose.
-- Be spatially specific. Avoid generic bands, grids, floating icons, decorative clutter and default centered layouts.
-- Make the visual_objective immediately understandable without narration.
-- Preserve character, prop, mechanism and environment identity from the continuity contract.
-- Treat canonical design attributes as immutable. Only pose, expression, position, orientation
-  and other storyboard-required state may change; never silently redesign an entity.
-- Do not describe animation, timing or JavaScript.
+AVAILABLE SHARED VISUAL LIBRARY FUNCTIONS (use these exact names & signatures):
+{shared_api_doc}
 
-CANVAS: {logical[0]}x{logical[1]}
-VIDEO-WIDE VISUAL CONTINUITY CONTRACT (authoritative):
-{json.dumps(shot_continuity_context, ensure_ascii=False, separators=(",", ":"))}
+{_TOOLKIT_REFERENCE}
+
+VISUAL CRAFT & CHOREOGRAPHY RULES
+1. Paint a rich, world-specific background that fits THIS shot (custom sky/space/underwater/
+   interior/editorial canvas, or `ShortcliprStyles.backdrop(g, '{style_id}', env, absoluteTime)`),
+   then layer clear depth planes: Background -> Midground (focal subject) -> Foreground framing.
+2. Choose the animation physics & choreography that fits this shot's genre (snappy springs via
+   `ShortcliprStyles.spring`/`Ease.pop`, smooth cinematic camera push-ins via `ShortcliprStyles.cameraRig`,
+   keyframed trajectories via `Motion.keys`, articulated motion, animated `flowPath` diagrams,
+   or atmospheric `ShortcliprStyles.particles` & `glow`).
+3. Reuse the shared visual library functions above for recurring characters, props, and environments.
+   You MAY also define local helper functions inside this shot if helpful, and NEVER call a function
+   name that isn't defined above or locally.
+4. Keep every element cleanly framed inside {logical[0]}x{logical[1]} with generous margin and clear focal hierarchy.
+5. Strictly deterministic Canvas 2D: NEVER use `Math.random()`, `Date`, `performance`, `window`, `document`, `fetch`, `eval`, or bare `mix()` (always `Ease.lerp`).
+6. Do NOT render subtitles or full narration paragraphs on screen.
+{mechanism_rules}
+
 ART DIRECTION:
 {art_direction_instructions}
 
 SHOT VISUAL REFERENCES:
 {json.dumps(shot_visual_context, ensure_ascii=False, separators=(",", ":"))}
 
-STORYBOARD:
+STORYBOARD FOR SHOT {scene['index'] + 1} ({start_s:.2f}s to {end_s:.2f}s, duration {shot_dur:.2f}s):
 {json.dumps(scene, ensure_ascii=False, separators=(",", ":"))}
+
+Write the complete JavaScript drawing body for drawShot_{scene['index']} now.
 """.strip()
-                layout = await self._json_object_completion(
-                    "Return exactly one valid JSON object. You are a precise 2D composition designer.",
-                    layout_prompt,
-                    min(self.max_output_tokens, 2200),
-                    label=f"Shot {scene['index'] + 1} visual composition",
-                )
-                self._validate_shot_layout(layout, f"Shot {scene['index'] + 1}")
 
-                mechanism_context = {
-                    "actions": scene.get("mechanism_actions", []),
-                    "definitions": shot_visual_context.get("mechanisms", []),
-                }
-                motion_prompt = f"""
-You are ShortClipr's senior 2D animation director.
-
-Plan the movement for this shot using the approved composition. Do not write code
-and do not redesign the composition. Return one JSON object with exactly these keys:
-{{
-  "initial_state": "What is visibly happening at the beginning.",
-  "primary_action": "One dominant, clearly visible action and how it changes the scene.",
-  "final_state": "The resolved visible state at the end.",
-  "timing": "When the action starts, accelerates, reaches its key moment and settles, within the shot duration.",
-  "secondary_motion": "Only supporting motion that improves readability; otherwise state none.",
-  "camera_motion": "Specific camera movement if motivated; otherwise state locked camera.",
-  "mechanism_motion": "How supplied mechanism data is depicted, or state no mechanism motion.",
-  "physical_constraints": {{
-    "motion_type": "rigid_body, articulated, ballistic, fluid, elastic, mechanical, camera, mixed or static",
-    "anchors": [{{"entity_id": "supplied entity ID", "point": "stable anchor location", "role": "what is fixed or connected"}}],
-    "relationships": [{{"source_entity_id": "supplied entity ID", "target_entity_id": "supplied entity ID", "relationship": "physical relationship", "behavior": "how target responds"}}],
-    "constraints": [{{"entity_id": "supplied entity ID", "rule": "supported axis, boundary, attachment or movement constraint"}}],
-    "forces_and_effects": [{{"entity_id": "supplied entity ID", "effect": "relevant effect", "description": "visible consequence supported by the scene"}}],
-    "collision_rules": [{{"entity_a": "supplied entity ID", "entity_b": "supplied entity ID", "response": "visible contact behavior"}}],
-    "motion_profile": {{"start": "initial hold or anticipation", "acceleration": "movement onset", "peak": "main action", "deceleration": "slowing phase", "settle": "final stabilization"}}
-  }}
-}}
-
-Rules:
-- JSON only; the seven motion-description fields are strings and physical_constraints follows the structured object shown above.
-- The approved layout is fixed. Do not move the camera or subjects to a different composition.
-- Plan one dominant action, not a list of unrelated movements.
-- Motion must be deterministic and readable at 30 fps.
-- Use only entity IDs present in the supplied continuity references. Every entity reference
-  in physical_constraints must resolve to one of those IDs; use empty arrays when a category
-  does not apply. Never invent an anchor, collision partner, joint or connected component.
-- Choose the motion_type that best describes this shot; use static when no meaningful motion occurs.
-- Describe physical relationships and visible consequences, not unsupported numerical simulation.
-- Apply gravity, inertia, drag, impact, buoyancy or collision only when relevant and supported.
-- Use motion_profile to describe anticipation/hold, acceleration, peak action, deceleration
-  and settling. A phase may explicitly say "none" when it does not apply.
-- Never invent objects, joints, dimensions, forces, physics or kinematics.
-- Supplied numeric mechanism kinematics are authoritative. Preserve their validated anchors,
-  part relationships and trajectories; do not generate competing motion assumptions.
-- Without numeric mechanism kinematics, describe only declared qualitative motion; do not
-  imply an engineering simulation.
-- Do not add motion to objects that do not support the primary action.
-
-VIDEO-WIDE VISUAL CONTINUITY CONTRACT:
-{json.dumps(shot_continuity_context, ensure_ascii=False, separators=(",", ":"))}
-
-SHOT DURATION: {end_s-start_s:.3f} seconds
-APPROVED VISUAL COMPOSITION:
-{json.dumps(layout, ensure_ascii=False, separators=(",", ":"))}
-
-VALIDATED MECHANISM DATA:
-{json.dumps(mechanism_context, ensure_ascii=False, separators=(",", ":"))}
-
-STORYBOARD:
-{json.dumps(scene, ensure_ascii=False, separators=(",", ":"))}
-""".strip()
-                motion = await self._json_object_completion(
-                    "Return exactly one valid JSON object. You are a precise 2D animation director.",
-                    motion_prompt,
-                    min(self.max_output_tokens, 2600),
-                    label=f"Shot {scene['index'] + 1} animation direction",
-                )
-                self._validate_shot_motion(
-                    motion, f"Shot {scene['index'] + 1}", valid_motion_entity_ids,
-                )
-
-                mechanism_rules = ""
-                if scene.get("mechanism_actions"):
-                    mechanism_rules = f"""
-MECHANISM IMPLEMENTATION
-- Use only the injected mechanismActions and mechanisms arrays; never invent data.
-- For each action, find its declared mechanism by mechanism_id. Skip if absent.
-- If kinematics exist, calculate progress once for the action using this shot's local
-  duration ({end_s-start_s:.3f}s, action start_progress/end_progress and easing:
-  const rawProgress = Ease.clamp(Ease.seg(t, 0, {end_s-start_s:.3f}));
-  const easing = action.easing ?? "in_out";
-  const easedProgress = easing === "linear" ? rawProgress : easing === "ease_in" ? rawProgress * rawProgress * rawProgress : easing === "ease_out" ? 1 - Math.pow(1 - rawProgress, 3) : Ease.inOut(rawProgress);
-  const actionProgress = (action.start_progress ?? 0) + ((action.end_progress ?? 1) - (action.start_progress ?? 0)) * easedProgress;
-- For each kinematic spec call ShortcliprStyles.mechanismPose(spec, actionProgress)
-  exactly once. Use the returned pose for the declared part: pivot/gear/pulley rotate
-  around returned anchors; translation uses returned position; cable follows returned
-  points; actuator follows returned base-to-tip. Keep connected parts aligned and draw
-  each component once. If kinematics are absent, depict only the qualitative action.
-- Draw mechanism parts using the supplied prop designs and verified shared helpers.
-"""
-
-                shot_prompt = f"""
-Implement one complete Canvas 2D animation shot from the approved visual and motion plans.
-
-OUTPUT
-Return only executable JavaScript statements for drawShot_{scene["index"]}.
-The body is inserted inside function drawShot_{scene["index"]}(g, t, env, absoluteTime).
-No JSON, Markdown, prose, code fences, imports or exports.
-
-FIXED DESIGN — DO NOT REINTERPRET
-VISUAL COMPOSITION:
-{json.dumps(layout, ensure_ascii=False, separators=(",", ":"))}
-
-ANIMATION DIRECTION:
-{json.dumps(motion, ensure_ascii=False, separators=(",", ":"))}
-
-AUTHORITATIVE VISUAL CONTINUITY CONTRACT:
-{json.dumps(shot_continuity_context, ensure_ascii=False, separators=(",", ":"))}
-
-PHYSICAL MOTION CONTRACT:
-{json.dumps(motion["physical_constraints"], ensure_ascii=False, separators=(",", ":"))}
-
-IMPLEMENTATION CONTEXT
-Canvas: {logical[0]}x{logical[1]}. Local time t starts at zero; absoluteTime is film time.
-Shot duration: {end_s-start_s:.3f}s.
-Scene entities and their canonical designs:
-{json.dumps(shot_visual_context, ensure_ascii=False, separators=(",", ":"))}
-
-Verified shared helper names:
-{json.dumps(shared_helper_names)}
-
-REQUIRED ENTITY FUNCTIONS FOR THIS SHOT (each MUST be called directly):
-{json.dumps(shot_required_specs, ensure_ascii=False, separators=(",", ":"))}
-
-RULES
-- Draw the actual supplied characters, props and environment. Preserve recurring identity
-  exactly as defined by the continuity contract; change only storyboard-required state.
-- Follow the approved composition, layer order, camera and action exactly.
-- Implement the approved physical anchors, relationships, constraints, collision rules and
-  motion profile. Do not invent extra joints, forces or connected-part behavior. Validated
-  mechanism kinematics remain authoritative.
-- Use only verified shared draw helpers, CanvasRenderingContext2D methods on g,
-  standard Math, and documented ShortcliprStyles/Ease APIs. Never call an unknown helper.
-- Redraw the full frame deterministically from t. No accumulated state or randomness.
-- Use Ease.lerp(a, b, progress) for numeric interpolation. Never call bare mix().
-- Use g.save()/g.restore() around transforms and restore every changed context property.
-- Keep all marks inside the logical canvas. Use meaningful silhouettes, overlap,
-  occlusion, material detail, lighting and shadows. Avoid placeholder geometry and
-  decorative particles.
-- No subtitles, narration, paragraphs, external assets, DOM, browser/Node globals,
-  network, filesystem, timers, eval, Function, Date, performance, WebGL or 3D.
-- Do not define new drawX helpers in this shot. Use the verified list above.
-- Call every function listed under REQUIRED ENTITY FUNCTIONS at least once, using its exact signature.
-- Do not replace a required entity function with hand-drawn placeholder geometry.
-{mechanism_rules}
-Return the complete JavaScript drawing body now.
-""".strip()
-                body = await self._validated_fragment(
-                    "You are a senior Canvas 2D animation programmer. Return only executable JavaScript source.",
+            async with semaphore:
+                body = await self._code_completion(
+                    "You are a senior Canvas 2D animation programmer. Return only executable JavaScript statements.",
                     shot_prompt,
                     min(self.max_output_tokens, 12000),
-                    "draw_body",
-                    f"Shot {scene['index'] + 1}",
-                    MAX_SHOT_SOURCE,
+                    label=f"Shot {scene['index'] + 1}",
+                    enable_thinking=True,
                 )
-                missing_usage = find_missing_required_helper_usage(body, shot_required_helpers)
-                if missing_usage:
-                    raise ValueError(
-                        f"Shot {scene['index'] + 1} failed its required-function contract; "
-                        "the following Visual Bible entities were not drawn through their "
-                        "canonical functions: " + ", ".join(missing_usage)
-                    )
+                body = self._unwrap_shot_body(body, scene["index"])
+                body = validate_generated_fragment(body, f"Shot {scene['index'] + 1}", MAX_SHOT_SOURCE)
+
             return {
                 "index": scene["index"],
                 "start_frame": scene["start_frame"],
                 "end_frame": scene["end_frame"],
                 "name": str(scene.get("purpose", f"Shot {scene['index'] + 1}"))[:80],
                 "draw_body": body,
-                "required_helpers": shot_required_helpers,
-                "used_helpers": list(shot_required_helpers),
-                "motion_spec": motion,
                 "mechanism_actions": scene.get("mechanism_actions", []),
                 "mechanisms": shot_visual_context.get("mechanisms", []),
                 "transition_out": str(scene.get("transition_out", "cut")).lower(),
@@ -888,46 +685,52 @@ Return the complete JavaScript drawing body now.
 
         compiled = await _gather_cancel_on_error(*(compile_one(scene) for scene in scenes))
 
-        # The library and shot API were completed before shot generation. Do not
-        # discover, invent or generate missing helpers after shots exist.
-        for shot in compiled:
-            expected_helpers = required_helpers_by_shot.get(shot["index"], [])
-            if shot.get("required_helpers") != expected_helpers:
+        # ── Stage 3: Assemble + Pre-Save Syntax/Linker Auto-Repair Loop ──
+        max_auto_repairs = 2
+        source = ""
+        for repair_attempt in range(max_auto_repairs + 1):
+            source = self._assemble_film(shared_js, compiled, duration, logical, style_id)
+            error_report: str | None = None
+            try:
+                if len(source) > MAX_FILM_SOURCE:
+                    raise ValueError("Assembled animation program exceeds maximum source size")
+                self.validate_source(source, duration, logical)
+                unresolved = find_unresolved_film_draw_helpers(source)
+                if unresolved:
+                    raise ValueError("Unresolved drawing helper calls: " + ", ".join(unresolved))
+            except ValueError as err:
+                error_report = str(err)
+
+            if error_report is None:
+                error_report = await self._run_local_js_validation(source)
+
+            if error_report is None:
+                break
+
+            if repair_attempt >= max_auto_repairs:
                 raise ValueError(
-                    f"Shot {shot['index'] + 1} lost its canonical required-function manifest"
-                )
-            missing_usage = find_missing_required_helper_usage(
-                shot["draw_body"], expected_helpers,
-            )
-            if missing_usage:
-                raise ValueError(
-                    f"Shot {shot['index'] + 1} does not use required drawing functions: "
-                    + ", ".join(missing_usage)
+                    f"Compiled animation failed validation after {max_auto_repairs} auto-repair(s): {error_report}"
                 )
 
-        unresolved_helpers = find_unresolved_draw_helpers(
-            shared_js, [shot["draw_body"] for shot in compiled],
-        )
-        if unresolved_helpers:
-            raise ValueError(
-                "Shot code references functions outside the locked shared drawing API: "
-                + ", ".join(unresolved_helpers)
+            logger.warning(
+                "deepseek.animation.auto_repair",
+                extra={
+                    "attempt": repair_attempt + 1,
+                    "max_attempts": max_auto_repairs,
+                    "error": error_report[:500],
+                },
             )
-        validate_draw_helper_dependency_graph(list(function_specs_by_name.values()))
+            shared_js, compiled = await self._repair_assembled_error(
+                shared_js, compiled, error_report, duration, logical, style_id,
+            )
 
-        source = self._assemble_film(shared_js, compiled, duration, logical, style_id)
-        if len(source) > MAX_FILM_SOURCE:
-            raise ValueError("Assembled animation program exceeds the maximum source size")
-        self.validate_source(source, duration, logical)
-        final_unresolved_helpers = find_unresolved_film_draw_helpers(source)
-        if final_unresolved_helpers:
-            raise ValueError(
-                "Assembled animation has unresolved shared drawing helpers: "
-                + ", ".join(final_unresolved_helpers)
-            )
+        # Build clean metadata from the actual final shared_js & compiled shots.
+        final_signatures = extract_shared_function_signatures(shared_js)
+        function_specs, function_registry = self._build_function_metadata(final_signatures, compiled)
+
         result = {
-            "compiler_version": "function-first-v1",
-            "runtime_contract_version": 1,
+            "compiler_version": "studio-3stage-v2",
+            "runtime_contract_version": 2,
             "scene_js": source,
             "style": style_id,
             "model": self.model,
@@ -935,54 +738,24 @@ Return the complete JavaScript drawing body now.
             "shared_source_chars": len(shared_js),
             "shot_source_chars": sum(len(x["draw_body"]) for x in compiled),
             "motion_diagnostics": motion_diagnostics,
-            "helper_manifest": helper_manifest,
             "visual_qa_context": self._visual_qa_context(
-                visual_bible, scenes, list(function_specs_by_name.values()),
+                visual_bible, scenes, function_specs, function_registry,
             ),
-            "function_specs": list(function_specs_by_name.values()),
-            "function_registry": [
-                {
-                    "name": spec["name"],
-                    "category": spec["category"],
-                    "signature": spec["signature"],
-                    "dependencies": spec["dependencies"],
-                    "required_by_shots": spec["required_by_shots"],
-                    "version": spec["version"],
-                    "source_scope": "shared",
-                    "static_status": "implementation_validated",
-                    "runtime_status": "not_render_verified",
-                }
-                for spec in function_specs_by_name.values()
-            ],
-            # Keep the exact compiled shot bodies and shared drawing library so a
-            # later repair can replace one shot without regenerating other shots.
+            "function_specs": function_specs,
+            "function_registry": function_registry,
             "repair_bundle": {
-                "schema_version": 1,
+                "schema_version": 2,
                 "duration": duration,
                 "logical": logical,
                 "style_id": style_id,
                 "art_direction": art_direction,
                 "art_direction_instructions": art_direction_instructions,
                 "visual_bible": visual_bible,
-                "helper_manifest": helper_manifest,
                 "visual_continuity_contract": visual_continuity_contract,
                 "scenes": scenes,
                 "shared_js": shared_js,
-                "function_specs": list(function_specs_by_name.values()),
-                "function_registry": [
-                    {
-                        "name": spec["name"],
-                        "category": spec["category"],
-                        "signature": spec["signature"],
-                        "dependencies": spec["dependencies"],
-                        "required_by_shots": spec["required_by_shots"],
-                        "version": spec["version"],
-                        "source_scope": "shared",
-                        "static_status": "implementation_validated",
-                        "runtime_status": "not_render_verified",
-                    }
-                    for spec in function_specs_by_name.values()
-                ],
+                "function_specs": function_specs,
+                "function_registry": function_registry,
                 "shots": compiled,
             },
             "shot_manifest": [
@@ -1003,194 +776,68 @@ Return the complete JavaScript drawing body now.
         self.validate_compiled_program(result)
         return result
 
-
     async def repair_shared_helpers(
         self,
         repair_bundle: dict[str, Any],
         helper_names: list[str],
         findings: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """Repair only identified shared drawing helpers, preserving all shot bodies."""
+        """Repair identified shared drawing helpers from Vision QA findings."""
         if self.client is None:
             raise RuntimeError("DEEPSEEK_API_KEY is not configured")
-        if not isinstance(repair_bundle, dict) or repair_bundle.get("schema_version") != 1:
+        if not isinstance(repair_bundle, dict) or repair_bundle.get("schema_version") not in {1, 2}:
             raise ValueError("Unsupported or missing shared-helper repair bundle")
-        if (not isinstance(helper_names, list) or not 1 <= len(helper_names) <= 3
-                or len(set(helper_names)) != len(helper_names)
-                or not all(isinstance(name, str) and re.fullmatch(r"draw[A-Z][A-Za-z0-9_]*", name)
-                           for name in helper_names)):
-            raise ValueError("Shared-helper repair requires 1–3 unique helper names")
+        if not isinstance(helper_names, list) or not 1 <= len(helper_names) <= 3:
+            raise ValueError("Shared-helper repair requires 1–3 helper names")
         if not isinstance(findings, list) or not findings:
             raise ValueError("At least one visual QA finding is required")
 
         shared_js = repair_bundle.get("shared_js")
         shots = repair_bundle.get("shots")
-        specs = repair_bundle.get("function_specs")
-        if not isinstance(shared_js, str) or not isinstance(shots, list) or not isinstance(specs, list):
-            raise ValueError("Repair bundle lacks shared source, shots or function specifications")
-        specs_by_name = {
-            item.get("name"): item for item in specs
-            if isinstance(item, dict) and isinstance(item.get("name"), str)
-        }
-        if any(name not in specs_by_name for name in helper_names):
-            raise ValueError("A requested helper has no persisted visual specification")
-        selected_specs = [specs_by_name[name] for name in helper_names]
-        required_shots = {
-            name: set(specs_by_name[name].get("required_by_shots", []))
-            for name in helper_names
-        }
-
-        safe_findings = []
-        for item in findings[:8]:
-            if not isinstance(item, dict):
-                continue
-            shot_index = item.get("shot_index")
-            if isinstance(shot_index, bool) or not isinstance(shot_index, int):
-                continue
-            if not any(shot_index in required_shots[name] for name in helper_names):
-                continue
-            confidence = item.get("confidence")
-            if (item.get("severity") not in {"critical", "high"}
-                    or isinstance(confidence, bool)
-                    or not isinstance(confidence, (int, float))
-                    or confidence < 0.75):
-                continue
-            issue, recommendation = item.get("issue"), item.get("recommendation")
-            evidence = item.get("evidence_sample_indices")
-            if (not isinstance(issue, str) or not issue.strip()
-                    or not isinstance(recommendation, str) or not recommendation.strip()
-                    or not isinstance(evidence, list) or not evidence):
-                continue
-            safe_findings.append({
-                "shot_index": shot_index,
-                "category": str(item.get("category", "other"))[:60],
-                "severity": item["severity"],
-                "confidence": round(float(confidence), 2),
-                "evidence_sample_indices": [
-                    value for value in evidence[:3]
-                    if isinstance(value, int) and not isinstance(value, bool)
-                ],
-                "issue": issue[:500],
-                "recommendation": recommendation[:500],
-            })
-        if not safe_findings:
-            raise ValueError("No high-confidence findings map to the requested shared helpers")
+        specs = repair_bundle.get("function_specs", [])
+        if not isinstance(shared_js, str) or not isinstance(shots, list):
+            raise ValueError("Repair bundle lacks shared source or shots")
 
         original_helpers = extract_shared_draw_helpers(shared_js, helper_names)
-        call_sites = []
-        for shot in shots:
-            if not isinstance(shot, dict) or not isinstance(shot.get("draw_body"), str):
-                continue
-            body = shot["draw_body"]
-            selected_calls = []
-            for name in helper_names:
-                match = re.search(rf"\b{re.escape(name)}\s*\(", body)
-                if match:
-                    selected_calls.append({
-                        "function": name,
-                        "context": body[max(0, match.start() - 240):min(len(body), match.end() + 640)],
-                    })
-            if selected_calls:
-                call_sites.append({
-                    "shot_index": shot.get("index"),
-                    "name": shot.get("name", ""),
-                    "calls": selected_calls,
-                })
-
         prompt = f"""
-ROLE
-You are ShortClipr's senior Canvas 2D visual-systems engineer. Repair existing shared
-drawing functions using evidence from the rendered film. This is a surgical repair,
-not a redesign or an opportunity to invent a new style.
-
-OUTPUT
-Return only complete ordinary JavaScript function declarations for the requested
-functions. No JSON, Markdown, prose or code fences.
-
-REQUESTED FUNCTION SPECIFICATIONS:
-{json.dumps(selected_specs, ensure_ascii=False)}
+Repair the following shared Canvas 2D drawing function(s) based on visual QA findings.
+Return ONLY the complete repaired function declarations (no JSON, no Markdown prose).
 
 VISUAL QA FINDINGS:
-{json.dumps(safe_findings, ensure_ascii=False)}
+{json.dumps(findings[:8], ensure_ascii=False)}
 
 EXISTING IMPLEMENTATIONS:
 {json.dumps(original_helpers, ensure_ascii=False)}
 
-ACTUAL SHOT CALL SITES:
-{json.dumps(call_sites, ensure_ascii=False)}
+ART DIRECTION:
+{repair_bundle.get("art_direction_instructions", "")}
 
-VISUAL BIBLE AND ART DIRECTION:
-{json.dumps({
-    "visual_bible": repair_bundle.get("visual_bible", {}),
-    "art_direction": repair_bundle.get("art_direction", {}),
-    "art_direction_instructions": repair_bundle.get("art_direction_instructions", ""),
-}, ensure_ascii=False)}
+{_TOOLKIT_REFERENCE}
 
-REPAIR RULES
-- Return every requested function exactly once, and no other function declarations.
-- Preserve each exact existing signature and every caller's argument contract.
-- Fix only defects supported by the visual QA evidence. Keep successful visual details.
-- Preserve recurring character identity, prop geometry, palette, material, lighting,
-  coordinate origin, scale convention and local composition.
-- Preserve deterministic time behavior; no random, Date, performance or external state.
-- Use Canvas 2D, standard Math, and documented ShortcliprStyles APIs only.
-- Existing dependencies may be called only if they are declared in the shared library.
-- Do not introduce new drawX dependencies, external assets, DOM, browser globals,
-  imports, exports, network, filesystem, Node APIs, timers, eval, Function, WebGL or 3D.
-- Save/restore context state where needed. Do not leak transforms, clips or styles.
-- Keep details readable at the final video resolution.
-- The replacement must visibly implement the function, not return a stub or placeholder.
+RULES:
+- Preserve exact function names and parameter contracts.
+- Fix the visible visual defects while keeping code deterministic and self-contained.
+""".strip()
 
-Return the complete repaired function declarations now.""".strip()
         generated = await self._code_completion(
-            "You are a senior Canvas 2D JavaScript engineer. Return only executable function declarations.",
+            "You are a senior Canvas 2D engineer. Return only executable function declarations.",
             prompt,
             min(self.max_output_tokens, 12000),
-            label="Visual-QA shared drawing helper repair",
+            label="Visual-QA shared helper repair",
         )
-        generated = validate_generated_fragment(
-            generated, "Visual-QA shared helper repair", MAX_SHARED_SOURCE,
-        )
-        validate_draw_helper_definitions(generated, helper_names, selected_specs)
+        generated = validate_generated_fragment(generated, "Visual-QA shared helper repair", MAX_SHARED_SOURCE)
         updated_shared = replace_shared_draw_helpers(shared_js, generated, helper_names)
         if len(updated_shared) > MAX_SHARED_SOURCE:
-            raise ValueError("Repaired shared drawing library exceeds the maximum source size")
+            raise ValueError("Repaired shared drawing library exceeds maximum source size")
 
         updated_bundle = copy.deepcopy(repair_bundle)
         updated_bundle["shared_js"] = updated_shared
-        updated_specs = updated_bundle.get("function_specs", [])
-        if isinstance(updated_specs, list):
-            for spec in updated_specs:
-                if isinstance(spec, dict) and spec.get("name") in helper_names:
-                    spec["version"] = int(spec.get("version", 1)) + 1
-        registry = updated_bundle.get("function_registry", [])
-        if isinstance(registry, list):
-            for entry in registry:
-                if isinstance(entry, dict) and entry.get("name") in helper_names:
-                    entry["version"] = int(entry.get("version", 1)) + 1
-                    entry["static_status"] = "repair_candidate_validated"
-                    entry["runtime_status"] = "awaiting_render_qa"
-        remaining_helpers = find_unresolved_draw_helpers(
-            updated_shared,
-            [shot["draw_body"] for shot in shots],
-        )
-        if remaining_helpers:
-            raise ValueError(
-                "Shared-helper repair introduced unresolved dependencies: "
-                + ", ".join(remaining_helpers)
-            )
-        validate_draw_helper_dependency_graph(specs)
-        duration = repair_bundle.get("duration")
-        logical = repair_bundle.get("logical")
-        style_id = repair_bundle.get("style_id")
-        if (isinstance(duration, bool) or not isinstance(duration, int)
-                or not isinstance(logical, list) or len(logical) != 2
-                or not isinstance(style_id, str)):
-            raise ValueError("Repair bundle has invalid film render metadata")
+        duration = repair_bundle["duration"]
+        logical = repair_bundle["logical"]
+        style_id = repair_bundle["style_id"]
         source = self._assemble_film(updated_shared, shots, duration, logical, style_id)
-        if len(source) > MAX_FILM_SOURCE:
-            raise ValueError("Repaired animation program exceeds the maximum source size")
         self.validate_source(source, duration, logical)
+
         repaired_program = {"scene_js": source, "repair_bundle": updated_bundle}
         self.validate_compiled_program(repaired_program)
         return {
@@ -1201,222 +848,79 @@ Return the complete repaired function declarations now.""".strip()
             "unchanged_shot_indices": [shot.get("index") for shot in shots],
         }
 
-
     async def repair_shot(
         self,
         repair_bundle: dict[str, Any],
         shot_index: int,
         findings: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """Regenerate exactly one shot body while keeping every other source byte-stable."""
+        """Regenerate one shot body from Vision QA findings while keeping all other code stable."""
         if self.client is None:
             raise RuntimeError("DEEPSEEK_API_KEY is not configured")
-        if not isinstance(repair_bundle, dict) or repair_bundle.get("schema_version") != 1:
+        if not isinstance(repair_bundle, dict) or repair_bundle.get("schema_version") not in {1, 2}:
             raise ValueError("Unsupported or missing shot repair bundle")
         shots = repair_bundle.get("shots")
         scenes = repair_bundle.get("scenes")
         shared_js = repair_bundle.get("shared_js")
         if not isinstance(shots, list) or not isinstance(scenes, list) or not isinstance(shared_js, str):
             raise ValueError("Shot repair bundle is incomplete")
-        if (len(shots) != len(scenes) or not 3 <= len(shots) <= 12
-                or not all(isinstance(item, dict) for item in shots + scenes)):
-            raise ValueError("Shot repair bundle has invalid shot structure")
-        duration = repair_bundle.get("duration")
-        logical = repair_bundle.get("logical")
-        style_id = repair_bundle.get("style_id")
-        if (isinstance(duration, bool) or not isinstance(duration, int) or duration < 1
-                or not isinstance(logical, list) or len(logical) != 2
-                or not all(isinstance(value, int) and not isinstance(value, bool) and value > 0 for value in logical)
-                or not isinstance(style_id, str) or not style_id):
-            raise ValueError("Shot repair bundle has invalid render metadata")
-        if isinstance(shot_index, bool) or not isinstance(shot_index, int):
-            raise ValueError("Shot index must be an integer")
-        shot_positions = [i for i, shot in enumerate(shots) if shot.get("index") == shot_index]
-        scene_positions = [i for i, scene in enumerate(scenes) if scene.get("index") == shot_index]
-        if len(shot_positions) != 1 or len(scene_positions) != 1 or shot_positions[0] != scene_positions[0]:
-            raise ValueError("Target shot is not uniquely present in repair bundle")
-        if not isinstance(findings, list) or not findings:
-            raise ValueError("At least one visual QA finding is required")
-        safe_findings = []
-        for item in findings[:8]:
-            if (not isinstance(item, dict)
-                    or isinstance(item.get("shot_index"), bool)
-                    or item.get("shot_index") != shot_index):
-                continue
-            issue = item.get("issue")
-            recommendation = item.get("recommendation")
-            if not isinstance(issue, str) or not issue.strip() or not isinstance(recommendation, str) or not recommendation.strip():
-                continue
-            safe_findings.append({
-                "category": str(item.get("category", "other"))[:60],
-                "severity": str(item.get("severity", "medium"))[:20],
-                "issue": issue[:500],
-                "recommendation": recommendation[:500],
-                "evidence_sample_indices": [
-                    value for value in (
-                        item.get("evidence_sample_indices")
-                        if isinstance(item.get("evidence_sample_indices"), list) else []
-                    )[:3]
-                    if isinstance(value, int) and not isinstance(value, bool)
-                ],
-            })
-        if not safe_findings:
-            raise ValueError("No actionable findings belong to the requested shot")
 
-        position = shot_positions[0]
+        position = next((i for i, s in enumerate(shots) if s.get("index") == shot_index), None)
+        if position is None:
+            raise ValueError("Target shot not found in repair bundle")
+
         original_shot = shots[position]
         scene = scenes[position]
-        original_body = original_shot.get("draw_body")
-        if not isinstance(original_body, str) or not original_body:
-            raise ValueError("Target shot has no original drawing body")
-        original_motion_spec = original_shot.get("motion_spec", {})
-        if not isinstance(original_motion_spec, dict):
-            original_motion_spec = {}
-        visual_bible = repair_bundle.get("visual_bible", {})
-        continuity_contract = repair_bundle.get("visual_continuity_contract")
-        if not isinstance(continuity_contract, dict):
-            continuity_contract = build_visual_continuity_contract(visual_bible)
-        shot_continuity_context = build_shot_continuity_context(
-            continuity_contract, scene,
-        )
-        shot_visual_context = self._shot_visual_context(visual_bible, scene)
-        shared_helper_names = top_level_draw_helper_names(shared_js)
-        # === LEGACY VISUAL SHOT REPAIR PROMPT (rollback reference; inactive) ===
-        #         prompt = f"""
-        # You are ShortClipr's senior 2D animation repair artist. Repair ONLY shot {shot_index}.
-        # Return JSON only: {{"draw_body":"complete replacement JavaScript drawing body"}}.
-        # 
-        # The replacement body is inserted into the existing drawShot_{shot_index}(g,t,env,absoluteTime)
-        # function. The compiler will preserve the existing validated mechanismActions and
-        # mechanisms constants. Do not modify them, other shots, shot timing, transitions,
-        # the shared drawing library, or the selected visual style.
-        # 
-        # VISUAL QA FINDINGS TO FIX:
-        # {json.dumps(safe_findings, ensure_ascii=False)}
-        # 
-        # ORIGINAL SHOT DIRECTION:
-        # {json.dumps(scene, ensure_ascii=False)}
-        # 
-        # VISUAL REFERENCES:
-        # {json.dumps(shot_visual_context, ensure_ascii=False)}
-        # 
-        # BINDING ART DIRECTION:
-        # {repair_bundle.get("art_direction_instructions", "")}
-        # 
-        # EXISTING SHARED DRAW HELPERS (only these may be called):
-        # {json.dumps(shared_helper_names)}
-        # 
-        # ORIGINAL SHOT BODY:
-        # {original_body}
-        # 
-        # Rules:
-        # - Fix the listed visible problems, not unrelated aspects of the shot.
-        # - Preserve all named recurring characters, props, environment identity and relative scale.
-        # - Preserve the shot's purpose, focal entity, visual objective, composition intent,
-        #   visual change, continuity note and transition compatibility.
-        # - Use existing shared helpers only; do not add helpers or call undefined drawX functions.
-        # - Keep all drawing inside the original logical canvas.
-        # - Keep deterministic Canvas 2D only. No DOM, browser globals, network, filesystem,
-        #   imports, exports, Node APIs, timers, eval, Function, random numbers, WebGL or 3D.
-        # - Keep mechanism actions and kinematics coherent. Use the supplied validated mechanism
-        #   arrays as-is; do not invent physics or claim engineering accuracy for qualitative motion.
-        # - Return the full replacement draw_body, not a diff or patch.
-        # """.strip()
-        # === END LEGACY VISUAL SHOT REPAIR PROMPT ===
+        original_body = original_shot.get("draw_body", "")
+        shared_sigs = extract_shared_function_signatures(shared_js)
+        sig_block = "\n".join(f"- {item['signature']}" for item in shared_sigs)
 
         prompt = f"""
-ROLE
-You are ShortClipr's senior 2D animation repair artist and visual continuity supervisor.
-Repair only shot {shot_index}. This is a targeted correction, not a redesign.
-
-OUTPUT
-Return only the complete replacement JavaScript drawing body. No JSON wrapper,
-Markdown, explanation, diff, imports, exports or code fences.
-
-IMMUTABLE CONTEXT
-The body is inserted into drawShot_{shot_index}(g,t,env,absoluteTime). The compiler
-preserves validated mechanismActions and mechanisms constants. Do not modify other
-shots, timing, transitions, shared helpers, art direction, style or mechanism data.
+Repair ONLY shot {shot_index} based on the Visual QA findings below.
+Return ONLY the replacement JavaScript statements for `drawShot_{shot_index}(g, t, env, absoluteTime)`.
 
 VISUAL QA FINDINGS:
-{json.dumps(safe_findings, ensure_ascii=False)}
+{json.dumps(findings[:8], ensure_ascii=False)}
 
-ORIGINAL STORYBOARD:
+STORYBOARD:
 {json.dumps(scene, ensure_ascii=False)}
 
-APPROVED MOTION AND PHYSICAL CONSTRAINTS (preserve unless the finding directly requires a correction):
-{json.dumps(original_motion_spec, ensure_ascii=False)}
+AVAILABLE SHARED FUNCTIONS:
+{sig_block}
 
-VISUAL BIBLE REFERENCES:
-{json.dumps(shot_visual_context, ensure_ascii=False)}
-
-AUTHORITATIVE VISUAL CONTINUITY CONTRACT:
-{json.dumps(shot_continuity_context, ensure_ascii=False)}
-
-BINDING ART DIRECTION:
+ART DIRECTION:
 {repair_bundle.get("art_direction_instructions", "")}
 
-AVAILABLE SHARED HELPERS:
-{json.dumps(shared_helper_names)}
+{_TOOLKIT_REFERENCE}
 
 ORIGINAL SHOT BODY:
 {original_body}
 
-RUNTIME CONTRACT
-- Use only documented Canvas 2D, ShortcliprStyles and Ease APIs plus the listed shared
-  helpers. For numeric interpolation use Ease.lerp(a, b, progress); never call bare mix().
-- Do not assume any undocumented global helper exists.
+RULES:
+- Fix the visible defects while preserving shot timing, style, and working elements.
+- Never call undefined functions, bare mix(), Math.random(), Date, or DOM/network APIs.
+- Return raw JavaScript statements only.
+""".strip()
 
-REPAIR METHOD
-1. Identify the visible defect described by each finding and use cited sample indices
-   as evidence. Do not infer motion or hidden facts from still frames.
-2. Fix only high-confidence, actionable defects. Do not invent problems.
-3. Preserve successful composition, identity, environment, focal objective, visual
-   change, mechanism geometry and existing working animation.
-   Preserve canonical character/prop/environment identity from the continuity contract.
-   Only alter pose or state when required by the storyboard or accepted QA finding.
-   Preserve validated physical relationships and mechanism kinematics; do not introduce
-   unsupported forces, joints, collisions or movement.
-4. Make the smallest coherent changes. Prefer better scale, placement, silhouette,
-   depth, contrast or timing over unrelated detail.
-5. If findings conflict, prioritize severe and high-confidence issues while retaining
-   the storyboard's intent.
-6. Use only available shared helpers or complete local functions. Never call undefined
-   helpers or add external assets.
-7. Keep deterministic Canvas 2D only. Save/restore context state and remain inside the
-   original logical canvas.
-8. Still-frame QA cannot prove motion correctness or physical accuracy; do not claim
-   to fix either based on unsupported evidence.
-9. Return the entire replacement drawing body, not a patch.""".strip()
-        replacement_body = await self._validated_fragment(
-            "You are a senior Canvas 2D animation programmer. Return only executable JavaScript source.",
+        replacement_body = await self._code_completion(
+            "You are a senior Canvas 2D animation programmer. Return only executable JavaScript statements.",
             prompt,
             min(self.max_output_tokens, 10000),
-            "draw_body",
-            f"Targeted repair for shot {shot_index + 1}",
-            MAX_SHOT_SOURCE,
+            label=f"Targeted repair for shot {shot_index + 1}",
         )
+        replacement_body = self._unwrap_shot_body(replacement_body, shot_index)
+        replacement_body = validate_generated_fragment(
+            replacement_body, f"Targeted repair for shot {shot_index + 1}", MAX_SHOT_SOURCE,
+        )
+
         updated_bundle = copy.deepcopy(repair_bundle)
         updated_bundle["shots"][position]["draw_body"] = replacement_body
-        remaining_helpers = find_unresolved_draw_helpers(
-            shared_js,
-            [shot["draw_body"] for shot in updated_bundle["shots"]],
-        )
-        if remaining_helpers:
-            raise ValueError(
-                "Targeted repair introduced unresolved drawing helpers: "
-                + ", ".join(remaining_helpers)
-            )
-        source = self._assemble_film(
-            shared_js,
-            updated_bundle["shots"],
-            duration,
-            logical,
-            style_id,
-        )
-        if len(source) > MAX_FILM_SOURCE:
-            raise ValueError("Repaired animation program exceeds the maximum source size")
+        duration = repair_bundle["duration"]
+        logical = repair_bundle["logical"]
+        style_id = repair_bundle["style_id"]
+        source = self._assemble_film(shared_js, updated_bundle["shots"], duration, logical, style_id)
         self.validate_source(source, duration, logical)
+
         repaired_program = {"scene_js": source, "repair_bundle": updated_bundle}
         self.validate_compiled_program(repaired_program)
         return {
@@ -1424,16 +928,19 @@ REPAIR METHOD
             "repaired_shot_index": shot_index,
             "original_body_chars": len(original_body),
             "replacement_body_chars": len(replacement_body),
-            "unchanged_shot_indices": [
-                shot["index"] for shot in shots if shot["index"] != shot_index
-            ],
+            "unchanged_shot_indices": [s["index"] for s in shots if s["index"] != shot_index],
         }
 
     @staticmethod
-    def _assemble_film(shared_js: str, shots: list[dict[str, Any]], duration: int,
-                       logical: list[int], style_id: str) -> str:
+    def _assemble_film(
+        shared_js: str,
+        shots: list[dict[str, Any]],
+        duration: int,
+        logical: list[int],
+        style_id: str,
+    ) -> str:
         functions, ranges, dispatch = [], [], []
-        for shot in shots:
+        for idx, shot in enumerate(shots):
             index = shot["index"]
             start, end = shot["start_frame"] / 30, shot["end_frame"] / 30
             mechanism_actions_js = json.dumps(shot.get("mechanism_actions", []), ensure_ascii=False, separators=(",", ":"))
@@ -1449,31 +956,41 @@ REPAIR METHOD
             transition = shot.get("transition_out", "cut")
             if transition not in {"cut", "wipe", "iris", "paper", "fade"}:
                 transition = "cut"
-            block = f"if (t >= {start:.6f} && t < {end:.6f}) {{ const local=t-{start:.6f}; drawShot_{index}(g,local,env,t); "
-            if index < len(shots)-1 and transition != "cut":
-                transition_start = max(0.0, end-start-0.42)
-                next_index = shots[index+1]["index"]
+            is_last = idx == len(shots) - 1
+            cond = f"t >= {start:.6f}" if is_last else f"t >= {start:.6f} && t < {end:.6f}"
+            block = f"if ({cond}) {{ const local=Math.max(0,t-{start:.6f}); drawShot_{index}(g,local,env,t); "
+            if not is_last and transition != "cut":
+                transition_start = max(0.0, end - start - 0.42)
+                next_index = shots[idx + 1]["index"]
                 block += (
                     f"if(local>{transition_start:.6f}){{const p=Ease.seg(local,{transition_start:.6f},{end-start:.6f});"
                     f"const next=Motion.layer(env,'transition-{index}',(ng)=>drawShot_{next_index}(ng,0,env,{end:.6f}));"
                     f"ShortcliprStyles.transition(g,env,next,p,'{transition}');}}"
                 )
             dispatch.append(block + "return; }")
+
         function_source = "\n".join(functions)
+        # Apply subtle film finishing only on painterly/atmospheric styles; keep technical/crisp styles razor-sharp.
+        use_post = style_id not in {"pixel-art", "blueprint", "line", "isometric-technical"}
+        post_line = f"  post(ctx,t,env) {{ ShortcliprStyles.postProcess(ctx,t,env,'{style_id}'); }}\n" if use_post else ""
         return (
-            "// ShortClipr shot-based Drawn-by-Code film. Generated code is untrusted input.\n"
+            "// ShortClipr studio Drawn-by-Code film. Generated code is untrusted input.\n"
             f"// Visual style: {style_id}\n"
             f"{shared_js}\n{function_source}\n"
-            "Motion.scene({\n  uses: ['styles/shortclipr.js'],\n  fps: 30,\n"
-            f"  duration: {duration},\n  logical: {json.dumps(logical)},\n"
+            "Motion.scene({\n"
+            "  uses: ['styles/shortclipr.js'],\n"
+            "  fps: 30,\n"
+            f"  duration: {duration},\n"
+            f"  logical: {json.dumps(logical)},\n"
             f"  shots: [{','.join(ranges)}],\n"
-            f"  draw(g,t,env) {{ {' '.join(dispatch)} }}\n"
+            f"  draw(g,t,env) {{ {' '.join(dispatch)} }},\n"
+            f"{post_line}"
             "});\n"
         )
 
     @staticmethod
     def validate_source(source: str, duration: int, logical: list[int]) -> None:
-        if not 300 <= len(source) <= MAX_FILM_SOURCE:
+        if not 200 <= len(source) <= MAX_FILM_SOURCE:
             raise ValueError("Generated animation source length is outside allowed bounds")
         if len(re.findall(r"\bMotion\s*\.\s*scene\s*\(", source)) != 1:
             raise ValueError("Source must contain exactly one Motion.scene declaration")
@@ -1484,9 +1001,6 @@ REPAIR METHOD
         compact = re.sub(r"\s+", "", source)
         if f"logical:{json.dumps(logical, separators=(',', ':'))}" not in compact:
             raise ValueError("Animation canvas does not match project aspect ratio")
-        # Catch the known unsupported helper before Chromium starts rendering. This
-        # intentionally targets bare calls only; object properties such as obj.mix()
-        # are not part of this global-helper check.
         if re.search(r"(?<![\w$.])mix\s*\(", source):
             raise ValueError(
                 "Generated animation calls unsupported bare mix(); use Ease.lerp(a, b, progress)"

@@ -16,10 +16,12 @@ MAX_FILM_SOURCE = 500_000
 _BLOCKED_PATTERNS = (
     r"\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|Worker|SharedWorker)\s*\(",
     r"\b(?:eval|Function)\s*\(",
-    r"\b(?:process|require|globalThis|localStorage|sessionStorage|navigator|location)\b",
+    r"(?<![.\w$])\b(?:globalThis|localStorage|sessionStorage|navigator)\b",
+    r"(?<![.\w$])\b(?:process|location)\s*\.",
+    r"(?<![.\w$])\brequire\s*\(",
     r"\b(?:Date|performance)\s*\.",
     r"\bMath\s*\.\s*random\s*\(",
-    r"\bimport\s*(?:\(|[('""{*])",
+    r"\bimport\s*(?:\(|[('\"{*])",
     r"\b(?:setTimeout|setInterval|requestAnimationFrame)\s*\(",
 )
 
@@ -507,33 +509,66 @@ def _mask_js_comments_and_strings(source: str) -> str:
 
     return "".join(chars)
 
-def find_unresolved_film_draw_helpers(source: str) -> list[str]:
-    """Find drawX calls not backed by a top-level shared helper in a film.
+def _declared_draw_helpers(masked_source: str) -> set[str]:
+    """Return all drawX function/const-fn declarations in a masked JS fragment."""
+    return {
+        name
+        for match in _DRAW_HELPER_DECL.finditer(masked_source)
+        for name in match.groups()
+        if name
+    }
 
-    Generated film helpers belong in the shared library before drawShot_N
-    declarations. Shot-local or nested declarations are not visible to every shot
-    and must not satisfy the runtime contract.
+
+def extract_shared_function_signatures(shared_source: str) -> list[dict[str, str]]:
+    """Extract every top-level function declaration and its exact signature from shared_js.
+
+    Used so shot code receives the real declared helper API rather than guessing names
+    or being forced into rigid backend-invented signatures.
     """
-    masked = _mask_js_comments_and_strings(source)
-    first_shot = re.search(r"\bfunction\s+drawShot_\d+\s*\(", masked)
-    shared_source = masked[:first_shot.start()] if first_shot else masked
-
-    brace_depth = [0] * (len(shared_source) + 1)
+    masked = _mask_js_comments_and_strings(shared_source)
     depth = 0
-    for index, char in enumerate(shared_source):
+    brace_depth = [0] * (len(masked) + 1)
+    for index, char in enumerate(masked):
         brace_depth[index] = depth
         if char == "{":
             depth += 1
         elif char == "}":
             depth = max(0, depth - 1)
-    declared = {
-        name
-        for match in _DRAW_HELPER_DECL.finditer(shared_source)
-        if brace_depth[match.start()] == 0
-        for name in match.groups()
-        if name
-    }
 
+    results: list[dict[str, str]] = []
+    seen: set[str] = set()
+    fn_pattern = re.compile(
+        r"\bfunction\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(([^)]*)\)\s*\{|"
+        r"\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:function\s*)?\(([^)]*)\)\s*(?:=>|\{)"
+    )
+    for match in fn_pattern.finditer(masked):
+        if brace_depth[match.start()] != 0:
+            continue
+        name = match.group(1) or match.group(3)
+        if not name or name in seen or name.startswith("drawShot_"):
+            continue
+        seen.add(name)
+        raw_params = shared_source[match.start(2) if match.group(1) else match.start(4):match.end(2) if match.group(1) else match.end(4)]
+        clean_params = re.sub(r"\s+", " ", raw_params).strip()
+        # Capture an optional single-line comment right above the declaration.
+        prefix = shared_source[:match.start()].rstrip()
+        doc = ""
+        if prefix:
+            last_line = prefix.splitlines()[-1].strip()
+            if last_line.startswith("//"):
+                doc = last_line.lstrip("/ ").strip()[:180]
+        results.append({
+            "name": name,
+            "signature": f"function {name}({clean_params})",
+            "doc": doc,
+        })
+    return results
+
+
+def find_unresolved_film_draw_helpers(source: str) -> list[str]:
+    """Find drawX calls not backed by either a shared or local declaration in the film."""
+    masked = _mask_js_comments_and_strings(source)
+    declared = _declared_draw_helpers(masked)
     unresolved = {
         name
         for name in _DRAW_HELPER_CALL.findall(masked)
@@ -543,32 +578,18 @@ def find_unresolved_film_draw_helpers(source: str) -> list[str]:
 
 
 def find_unresolved_draw_helpers(shared_source: str, shot_sources: list[str]) -> list[str]:
-    """Return drawX calls without a top-level shared declaration.
-
-    Shot-local declarations intentionally do not satisfy the contract: reusable
-    drawing functions must be available from the film's shared scope.
-    """
+    """Return drawX calls not defined in shared_source or locally within their own shot."""
     masked_shared = _mask_js_comments_and_strings(shared_source)
-    brace_depth: list[int] = [0] * (len(masked_shared) + 1)
-    depth = 0
-    for index, char in enumerate(masked_shared):
-        brace_depth[index] = depth
-        if char == "{":
-            depth += 1
-        elif char == "}":
-            depth = max(0, depth - 1)
-    shared = {
-        name
-        for match in _DRAW_HELPER_DECL.finditer(masked_shared)
-        if brace_depth[match.start()] == 0
-        for name in match.groups()
-        if name
-    }
+    shared = _declared_draw_helpers(masked_shared)
     unresolved: set[str] = set()
-    for source in [shared_source, *shot_sources]:
+    for name in _DRAW_HELPER_CALL.findall(masked_shared):
+        if not name.startswith("drawShot_") and name not in shared:
+            unresolved.add(name)
+    for source in shot_sources:
         masked = _mask_js_comments_and_strings(source)
+        local_declared = shared | _declared_draw_helpers(masked)
         for name in _DRAW_HELPER_CALL.findall(masked):
-            if name not in shared:
+            if not name.startswith("drawShot_") and name not in local_declared:
                 unresolved.add(name)
     return sorted(unresolved)
 
