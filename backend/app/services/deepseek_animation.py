@@ -152,8 +152,12 @@ class DeepSeekAnimationCompiler:
             raise ValueError("Animation program is missing scene_js")
 
         bundle = program.get("repair_bundle")
+        if bundle is None:
+            # Allow programs from older api-worker revisions or without optional repair metadata
+            # to render cleanly; validate-scene.mjs performs full JS AST/syntax validation next.
+            return
         if not isinstance(bundle, dict):
-            raise ValueError("Animation program is missing repair_bundle")
+            raise ValueError("Animation repair_bundle must be an object when present")
         shared_js = bundle.get("shared_js")
         shots = bundle.get("shots")
         duration = bundle.get("duration")
