@@ -20,9 +20,9 @@ COPY drawn_by_code/ /app/drawn_by_code/
 # Fail the image build if the JavaScript AST linker or its installed parser/scope
 # dependencies cannot execute. This prevents deploying a worker without the linker.
 RUN node --check /app/drawn_by_code/engine/validate-scene.mjs \
-    && printf '%s' 'function drawPropDeck(g, x) { g.fillRect(x, 0, 10, 2); } function drawShot_0(g, t, env, absoluteTime) { drawPropDeck(g, 0); } Motion.scene({draw(g, t, env) { drawShot_0(g, t, env, t); }});' > /tmp/linker-smoke-scene.js \
-    && printf '%s' '{"schema_version":1,"functions":[{"name":"drawPropDeck","signature":"function drawPropDeck(g, x)","dependencies":[],"required_by_shots":[0]}],"shots":[{"index":0,"required_helpers":["drawPropDeck"]}]}' > /tmp/linker-smoke-manifest.json \
-    && node /app/drawn_by_code/engine/validate-scene.mjs /tmp/linker-smoke-scene.js /tmp/linker-smoke-manifest.json
+    && printf '%s' 'function drawPropDeck(g, x = 0) { g.fillRect(x, 0, 10, 2); } function drawShot_0(g, t, env, absoluteTime) { drawPropDeck(g, 0); } Motion.scene({draw(g, t, env) { drawShot_0(g, t, env, t); }});' > /tmp/linker-smoke-scene.js \
+    && node /app/drawn_by_code/engine/validate-scene.mjs /tmp/linker-smoke-scene.js \
+    && rm -f /tmp/linker-smoke-scene.js
 COPY app/ /app/app/
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh

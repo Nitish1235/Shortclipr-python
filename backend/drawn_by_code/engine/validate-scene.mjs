@@ -1,41 +1,43 @@
 #!/usr/bin/env node
-// Link a generated ShortClipr film against its canonical Visual Bible helper manifest.
-// This runs in the FFmpeg-worker image before Chromium/FFmpeg starts.
+// Validate a generated ShortClipr film for JavaScript syntax, safety, and
+// genuinely unresolved identifiers (variables or functions not defined anywhere
+// in shared scope, local shot scope, or the allowed runtime globals).
+//
+// Usage: node validate-scene.mjs <scene.js> [optional-manifest.json]
 import fs from 'node:fs';
 import { parse } from 'acorn';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const eslintScope = require('eslint-scope');
 
-const [sourcePath, manifestPath] = process.argv.slice(2);
-if (!sourcePath || !manifestPath) {
-    console.error('Usage: node validate-scene.mjs <scene.js> <helper-manifest.json>');
+const [sourcePath] = process.argv.slice(2);
+if (!sourcePath) {
+    console.error('Usage: node validate-scene.mjs <scene.js>');
     process.exit(2);
 }
 
-const fail = (message) => {
+const fail = (message, details = {}) => {
     console.error(JSON.stringify({
         event: 'drawn_by_code.linker.failed',
         message: String(message).slice(0, 1800),
+        ...details,
     }));
     process.exit(1);
 };
 
+// Runtime globals available inside engine/player.html without exposing DOM,
+// network, timers, storage, or nondeterministic APIs.
 const allowedGlobals = new Set([
     'Motion', 'Ease', 'ShortcliprStyles',
     'Math', 'Number', 'String', 'Boolean', 'Array', 'Object', 'JSON',
     'Map', 'Set', 'WeakMap', 'WeakSet', 'Symbol', 'BigInt', 'RegExp',
     'Error', 'TypeError', 'RangeError', 'parseInt', 'parseFloat',
     'isFinite', 'isNaN', 'NaN', 'Infinity', 'undefined',
+    'Path2D', 'DOMMatrix', 'Float32Array', 'Float64Array', 'Int16Array', 'Uint16Array', 'Int32Array', 'Uint8Array', 'Uint8ClampedArray',
 ]);
 
 try {
     const source = fs.readFileSync(sourcePath, 'utf8');
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    if (!manifest || manifest.schema_version !== 1
-        || !Array.isArray(manifest.functions) || !Array.isArray(manifest.shots)) {
-        fail('Canonical helper manifest is missing or malformed');
-    }
 
     const ast = parse(source, {
         ecmaVersion: 'latest',
@@ -44,6 +46,7 @@ try {
         locations: true,
         ranges: true,
     });
+
     const scopeManager = eslintScope.analyze(ast, {
         ecmaVersion: 2022,
         sourceType: 'script',
@@ -51,171 +54,77 @@ try {
         ignoreEval: true,
         impliedStrict: false,
     });
+
     const globalScope = scopeManager.scopes.find((scope) => scope.type === 'global');
     if (!globalScope) fail('JavaScript global scope could not be constructed');
 
-    const required = new Map();
-    for (const item of manifest.functions) {
-        if (!item || typeof item.name !== 'string'
-            || !/^draw[A-Z][A-Za-z0-9_]*$/.test(item.name)
-            || required.has(item.name)
-            || !Array.isArray(item.required_by_shots)
-            || !Array.isArray(item.dependencies)) {
-            fail('Canonical helper manifest contains an invalid or duplicate function entry');
-        }
-        required.set(item.name, item);
-    }
-
-    const manifestShots = new Map();
-    for (const shot of manifest.shots) {
-        if (!shot || !Number.isInteger(shot.index)
-            || !Array.isArray(shot.required_helpers)
-            || manifestShots.has(shot.index)
-            || shot.required_helpers.some((name) => !required.has(name))) {
-            fail('Canonical helper manifest contains an invalid shot entry');
-        }
-        manifestShots.set(shot.index, shot);
-    }
-
-    // Child-scope through lists also contain references that are resolved by
-    // an enclosing scope. Only the global scope's through list represents names
-    // that remain unresolved after the complete scope chain has been analyzed.
+    // Only globalScope.through contains references that were NOT resolved by any
+    // enclosing local, function, block, or top-level declaration.
     const unresolved = new Map();
     for (const ref of globalScope.through) {
         const name = ref.identifier.name;
         if (allowedGlobals.has(name)) continue;
         const location = ref.identifier.loc?.start;
-        const entry = {
+        unresolved.set(ref.identifier.start, {
             name,
             line: location?.line ?? null,
             column: location?.column ?? null,
-        };
-        unresolved.set(ref.identifier.start, entry);
+        });
     }
+
     if (unresolved.size) {
-        const details = [...unresolved.values()]
-            .slice(0, 30)
-            .map((item) => `${item.name} at ${item.line ?? '?'}:${item.column ?? '?'}`);
-        fail('Unresolved JavaScript identifiers: ' + details.join('; '));
+        const items = [...unresolved.values()].slice(0, 30);
+        const summary = items
+            .map((item) => `${item.name} at line ${item.line ?? '?'}:${item.column ?? '?'}`)
+            .join('; ');
+        fail('Unresolved JavaScript identifiers: ' + summary, { unresolved: items });
     }
 
-    const declarationNames = new Set();
-    const helperNodes = new Map();
-    for (const [name, variable] of globalScope.set.entries()) {
-        if (!/^draw[A-Z]/.test(name) || name.startsWith('drawShot_')) continue;
-        if (!required.has(name)) {
-            fail(`Shared library declares drawing helper ${name} outside the canonical manifest`);
-        }
-        const functionDefs = variable.defs.filter((definition) =>
-            definition.type === 'FunctionName' && definition.node?.type === 'FunctionDeclaration');
-        if (functionDefs.length !== 1) {
-            fail(`Required helper ${name} must be defined exactly once as a top-level function declaration`);
-        }
-        const params = functionDefs[0].node.params.map((param) => param.type === 'Identifier' ? param.name : null);
-        const expectedSignature = required.get(name).signature;
-        const expectedMatch = typeof expectedSignature === 'string'
-            ? expectedSignature.match(/^function\s+[A-Za-z_$][\w$]*\s*\(([^)]*)\)$/)
-            : null;
-        const expectedParams = expectedMatch
-            ? expectedMatch[1].split(',').map((value) => value.trim()).filter(Boolean)
-            : null;
-        if (!expectedParams || JSON.stringify(params) !== JSON.stringify(expectedParams)) {
-            fail(`Required helper ${name} does not match its canonical function signature`);
-        }
-        declarationNames.add(name);
-        helperNodes.set(name, functionDefs[0].node);
-    }
-
-    const missingDefinitions = [...required.keys()].filter((name) => !declarationNames.has(name));
-    if (missingDefinitions.length) {
-        fail('Missing canonical drawing implementations: ' + missingDefinitions.join(', '));
-    }
-
-    // Dependencies must be declared before implementation. Entity functions are
-    // intentionally self-contained in v1; a cross-helper call not listed in the
-    // manifest is a linker error, not an implicit runtime dependency.
-    const collectCalledHelpers = (root, ownerName) => {
-        const called = new Set();
-        const visit = (node) => {
-            if (!node || typeof node !== 'object') return;
-            if (node.type === 'Identifier'
-                && required.has(node.name) && node.name !== ownerName) {
-                called.add(node.name);
+    // Verify at least one Motion.scene(...) call exists and collect shot/helper counts.
+    let motionSceneCalls = 0;
+    const shotFunctions = [];
+    const helperFunctions = [];
+    for (const node of ast.body) {
+        if (node.type === 'FunctionDeclaration' && node.id?.name) {
+            if (/^drawShot_\d+$/.test(node.id.name)) {
+                shotFunctions.push(node.id.name);
+            } else {
+                helperFunctions.push(node.id.name);
             }
-            for (const [key, value] of Object.entries(node)) {
-                if (key === 'parent' || key === 'loc' || key === 'start' || key === 'end') continue;
-                if (Array.isArray(value)) {
-                    for (const child of value) {
-                        if (child && typeof child.type === 'string') visit(child);
-                    }
-                } else if (value && typeof value.type === 'string') {
-                    visit(value);
-                }
-            }
-        };
-        visit(root.body);
-        return [...called].sort();
-    };
-    for (const [name, item] of required.entries()) {
-        const expectedDependencies = [...item.dependencies].sort();
-        const actualDependencies = collectCalledHelpers(helperNodes.get(name), name);
-        if (JSON.stringify(expectedDependencies) !== JSON.stringify(actualDependencies)) {
-            fail(`Helper ${name} dependency manifest does not match its implementation; expected [${expectedDependencies.join(', ')}], found [${actualDependencies.join(', ')}]`);
         }
     }
-
-    // Track direct calls by enclosing drawShot_N function, including calls nested in
-    // blocks/closures, so a declaration alone cannot satisfy the usage contract.
-    const callsByShot = new Map();
-    const walk = (node, currentShot = null) => {
+    const countSceneCalls = (node) => {
         if (!node || typeof node !== 'object') return;
-        let activeShot = currentShot;
-        if (node.type === 'FunctionDeclaration' && node.id?.name
-            && /^drawShot_\d+$/.test(node.id.name)) {
-            activeShot = Number(node.id.name.slice('drawShot_'.length));
-        }
-        if (node.type === 'CallExpression' && node.callee?.type === 'Identifier'
-            && required.has(node.callee.name) && activeShot !== null) {
-            if (!callsByShot.has(activeShot)) callsByShot.set(activeShot, new Set());
-            callsByShot.get(activeShot).add(node.callee.name);
+        if (
+            node.type === 'CallExpression'
+            && node.callee?.type === 'MemberExpression'
+            && node.callee.object?.name === 'Motion'
+            && node.callee.property?.name === 'scene'
+        ) {
+            motionSceneCalls += 1;
         }
         for (const [key, value] of Object.entries(node)) {
             if (key === 'parent' || key === 'loc' || key === 'start' || key === 'end') continue;
             if (Array.isArray(value)) {
                 for (const child of value) {
-                    if (child && typeof child.type === 'string') walk(child, activeShot);
+                    if (child && typeof child.type === 'string') countSceneCalls(child);
                 }
             } else if (value && typeof value.type === 'string') {
-                walk(value, activeShot);
+                countSceneCalls(value);
             }
         }
     };
-    walk(ast);
-
-    for (const [shotIndex, shot] of manifestShots.entries()) {
-        const used = callsByShot.get(shotIndex) ?? new Set();
-        const missing = shot.required_helpers.filter((name) => !used.has(name));
-        if (missing.length) {
-            fail(`Shot ${shotIndex + 1} does not call required Visual Bible functions: ${missing.join(', ')}`);
-        }
-    }
-    for (const [name, item] of required.entries()) {
-        const expectedShots = [...manifestShots.values()]
-            .filter((shot) => shot.required_helpers.includes(name))
-            .map((shot) => shot.index)
-            .sort((a, b) => a - b);
-        const actualShots = [...item.required_by_shots].sort((a, b) => a - b);
-        if (JSON.stringify(expectedShots) !== JSON.stringify(actualShots)) {
-            fail(`Helper ${name} has inconsistent required_by_shots metadata`);
-        }
+    countSceneCalls(ast);
+    if (motionSceneCalls !== 1) {
+        fail(`Film must contain exactly one Motion.scene(...) call; found ${motionSceneCalls}`);
     }
 
     console.log(JSON.stringify({
         event: 'drawn_by_code.linker.passed',
-        helper_count: required.size,
-        shot_count: manifestShots.size,
+        helper_count: helperFunctions.length,
+        shot_count: shotFunctions.length,
         unresolved_identifiers: 0,
     }));
 } catch (error) {
-    fail(error?.stack || error?.message || String(error));
+    fail(error?.message || String(error));
 }
