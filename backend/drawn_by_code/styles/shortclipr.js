@@ -70,6 +70,7 @@ function setCustomPalette(p, mood = null) {
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 const ease = (v) => { v = clamp(v); return v * v * (3 - 2 * v); };
 const pixelSnap = (v, size = 1) => Math.round(v / Math.max(1, size)) * Math.max(1, size);
+const isCtx = (g) => Boolean(g && typeof g.save === 'function');
 
 function palette(id) {
     if (id && typeof id === 'object') return { ...palettes['cinematic-editorial'], ...id };
@@ -102,6 +103,7 @@ function getGrainTile() {
 /* Rich multi-stop studio backdrop with mood-aware ambient lighting. */
 function backdrop(g, id, env, t = 0, mood = null) {
     const p = palette(id);
+    if (!isCtx(g) || !env) return p;
     const activeMood = mood || customMood || '';
     g.save();
     const grad = g.createLinearGradient(0, 0, 0, env.H);
@@ -155,6 +157,7 @@ function paperShadow(g, x, y, blur = 12, color = 'rgba(30,20,10,.18)') {
 }
 
 function halftone(g, x, y, w, h, spacing = 12, color = 'rgba(20,20,20,.18)') {
+    if (!isCtx(g) || !(w > 0) || !(h > 0)) return;
     const step = Math.max(4, spacing);
     g.save();
     g.fillStyle = color;
@@ -169,6 +172,7 @@ function halftone(g, x, y, w, h, spacing = 12, color = 'rgba(20,20,20,.18)') {
 }
 
 function camera(g, env, o = {}) {
+    if (!isCtx(g) || !env) return;
     const cx = Number.isFinite(o.cx) ? o.cx : env.W / 2;
     const cy = Number.isFinite(o.cy) ? o.cy : env.H / 2;
     const zoom = clamp(Number(o.zoom) || 1, 0.25, 4);
@@ -189,7 +193,7 @@ function cameraRig(g, env, o = {}) {
 
 /* True multi-plane parallax camera with depth-scaled movement & optional depth-of-field blur. */
 function parallaxLayers(g, env, camState = {}, layers = []) {
-    if (!Array.isArray(layers)) return;
+    if (!isCtx(g) || !env || !Array.isArray(layers)) return;
     const cx = Number.isFinite(camState.cx) ? camState.cx : env.W / 2;
     const cy = Number.isFinite(camState.cy) ? camState.cy : env.H / 2;
     const zoom = clamp(Number(camState.zoom) || 1, 0.35, 3.5);
@@ -268,6 +272,7 @@ function posterize(t, fps = 12) {
 
 /* Volume-preserving squash & stretch transform around contact point (x, y). */
 function squash(g, x, y, amount = 0) {
+    if (!isCtx(g)) return;
     const a = clamp(Number(amount) || 0, -0.55, 0.75);
     const sx = 1 + a;
     const sy = 1 / Math.max(0.35, sx);
@@ -307,6 +312,7 @@ function solveIK(x0, y0, tx, ty, L1 = 60, L2 = 60, bendDir = 1) {
 /* Stylized, non-stickman articulated 2D character rig (side/3-4 profile with 2-bone IK limbs).
    Origin (x, y) is the ground contact point between the feet. At scale=1, height is ~260 logical px. */
 function drawCharacterRig(g, x, y, opts = {}) {
+    if (!isCtx(g)) return;
     const scale = Number.isFinite(opts.scale) ? opts.scale : 1;
     const facing = opts.facing === -1 ? -1 : 1;
     const pose = String(opts.pose || 'idle');
@@ -471,7 +477,7 @@ function strokeReveal(g, points, progress = 1, opts = {}) {
 
 /* Tactile hand-crafted path with deterministic Motion.noise1 micro-jitter. */
 function organicPath(g, points, seed = 'organic', opts = {}) {
-    if (!Array.isArray(points) || points.length < 2) return;
+    if (!isCtx(g) || !Array.isArray(points) || points.length < 2) return;
     const roughness = Number.isFinite(opts.roughness) ? opts.roughness : 2.5;
     const closed = Boolean(opts.closed);
     const noiseFn = typeof Motion !== 'undefined' && Motion.noise1
@@ -527,6 +533,7 @@ function impactShake(t, at = 0, strength = 14, decay = 9) {
 
 /* Radial or linear anime/action speed lines (use ONLY on high-energy action/rush beats). */
 function speedLines(g, env, t = 0, opts = {}) {
+    if (!isCtx(g) || !env) return;
     const mode = opts.mode || 'radial'; // radial | linear
     const count = clamp(Math.round(Number(opts.count) || 36), 8, 90);
     const alpha = clamp(Number.isFinite(opts.alpha) ? opts.alpha : 0.35, 0, 1);
@@ -577,6 +584,7 @@ function speedLines(g, env, t = 0, opts = {}) {
 
 /* Expanding volumetric dust/smoke burst + debris on heavy contact, landing, or launch. */
 function dustBurst(g, x, y, t = 0, start = 0, opts = {}) {
+    if (!isCtx(g)) return;
     const dt = (Number(t) || 0) - (Number(start) || 0);
     const dur = Math.max(0.15, Number(opts.duration) || 0.75);
     if (dt < 0 || dt > dur) return;
@@ -606,6 +614,7 @@ function dustBurst(g, x, y, t = 0, start = 0, opts = {}) {
 
 /* Concussive 2-4 frame impact flash + expanding shockwave ring for climactic hits/breakthroughs. */
 function impactFlash(g, env, t = 0, at = 0, opts = {}) {
+    if (!isCtx(g) || !env) return;
     const dt = (Number(t) || 0) - (Number(at) || 0);
     const dur = Math.max(0.06, Number(opts.duration) || 0.28);
     if (dt < 0 || dt > dur) return;
@@ -649,7 +658,7 @@ function rackFocus(g, env, camState = {}, focusT = 0.5, bgDraw = null, fgDraw = 
 
 /* Volumetric additive ('screen') light beam / cone / flashlight shaft. */
 function lightBeam(g, x0, y0, x1, y1, r0 = 16, r1 = 140, color = '#ffe8a3', alpha = 0.26) {
-    if (alpha <= 0) return;
+    if (!isCtx(g) || alpha <= 0 || !Number.isFinite(x0) || !Number.isFinite(y0) || !Number.isFinite(x1) || !Number.isFinite(y1)) return;
     const angle = Math.atan2(y1 - y0, x1 - x0);
     const perp = angle + Math.PI / 2;
     const p0a = [x0 + Math.cos(perp) * r0, y0 + Math.sin(perp) * r0];
@@ -676,7 +685,7 @@ function lightBeam(g, x0, y0, x1, y1, r0 = 16, r1 = 140, color = '#ffe8a3', alph
 
 /* Selective additive bloom pass that preserves the active Canvas transform & clip. */
 function bloomLayer(g, env, name, blurPx = 12, alpha = 0.55, drawFn = null) {
-    if (typeof drawFn !== 'function') return;
+    if (!isCtx(g) || typeof drawFn !== 'function') return;
     // Draw crisp base pass
     g.save();
     drawFn(g);
@@ -692,6 +701,7 @@ function bloomLayer(g, env, name, blurPx = 12, alpha = 0.55, drawFn = null) {
 
 /* Draw any Canvas 2D path with cast shadow, rich fill/gradient, and optional rim highlight. */
 function shadedShape(g, drawPath, opts = {}) {
+    if (!isCtx(g) || typeof drawPath !== 'function') return;
     g.save();
     if (opts.shadow !== false) {
         g.shadowColor = opts.shadowColor || 'rgba(15,20,28,0.24)';
@@ -732,7 +742,7 @@ function shadedShape(g, drawPath, opts = {}) {
 
 /* Volumetric radial glow / focal light (uses additive 'screen' blend by default). */
 function glow(g, x, y, r, color = '#ffdd99', alpha = 0.35) {
-    if (r <= 0 || alpha <= 0) return;
+    if (!isCtx(g) || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(r) || r <= 0 || alpha <= 0) return;
     g.save();
     g.globalCompositeOperation = 'screen';
     g.globalAlpha *= clamp(alpha, 0, 1);
@@ -749,7 +759,8 @@ function glow(g, x, y, r, color = '#ffdd99', alpha = 0.35) {
 
 /* Sleek rounded motion-graphics card / container. */
 function roundedCard(g, x, y, w, h, r = 18, opts = {}) {
-    const radius = Math.min(r, w / 2, h / 2);
+    if (!isCtx(g) || !(w > 0) || !(h > 0)) return;
+    const radius = Math.max(0, Math.min(Number(r) || 0, w / 2, h / 2));
     shadedShape(g, (ctx) => {
         ctx.beginPath();
         if (ctx.roundRect) {
@@ -780,7 +791,7 @@ function roundedCard(g, x, y, w, h, r = 18, opts = {}) {
 /* Crisp pill label/callout badge (auto-sized to text). */
 function badge(g, x, y, text, opts = {}) {
     const str = String(text ?? '');
-    if (!str) return;
+    if (!isCtx(g) || !str) return;
     const fontSize = Number(opts.fontSize) || 26;
     const padX = Number(opts.padX) || 22;
     const padY = Number(opts.padY) || 12;
@@ -807,7 +818,7 @@ function badge(g, x, y, text, opts = {}) {
 
 /* Animated connector/flow line with optional marching dash and arrowhead. */
 function flowPath(g, points, t = 0, opts = {}) {
-    if (!Array.isArray(points) || points.length < 2) return;
+    if (!isCtx(g) || !Array.isArray(points) || points.length < 2) return;
     const progress = clamp(Number.isFinite(opts.progress) ? opts.progress : 1, 0, 1);
     if (progress <= 0) return;
     g.save();
@@ -876,6 +887,7 @@ function flowPath(g, points, t = 0, opts = {}) {
 
 /* Deterministic seeded particle field (sparks, dust, bubbles, data packets). */
 function particles(g, seed, count, t, bounds, opts = {}) {
+    if (!isCtx(g)) return;
     const n = clamp(Math.round(Number(count) || 24), 1, 160);
     const rand = typeof Motion !== 'undefined' && Motion.rng ? Motion.rng(seed) : () => 0.5;
     const x0 = bounds?.x ?? 0;
@@ -950,7 +962,7 @@ function postProcess(ctx, t, env, styleId) {
 
 /* Studio transitions including 'zoom' (zoom-through match cut) and 'whip' (fast whip-pan). */
 function transition(g, env, nextCanvas, progress, type = 'wipe') {
-    if (!nextCanvas) return;
+    if (!isCtx(g) || !env || !nextCanvas) return;
     const p = ease(progress);
     g.save();
     if (type === 'zoom') {
@@ -1003,7 +1015,7 @@ function transition(g, env, nextCanvas, progress, type = 'wipe') {
 
 /* Dedicated deterministic primitives for art systems. */
 function editorialShape(g, points, opts = {}) {
-    if (!Array.isArray(points) || points.length < 3) return;
+    if (!isCtx(g) || !Array.isArray(points) || points.length < 3) return;
     const depth = Number(opts.depth) || 0;
     const shadow = opts.shadow || 'rgba(20,25,28,.22)';
     g.save();
@@ -1030,6 +1042,7 @@ function editorialShape(g, points, opts = {}) {
 }
 
 function editorialLight(g, x, y, r, color = 'rgba(255,236,190,.24)') {
+    if (!isCtx(g) || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(r) || r <= 0) return;
     g.save();
     const grad = g.createRadialGradient(x, y, 0, x, y, r);
     grad.addColorStop(0, color);
@@ -1048,6 +1061,7 @@ function isoProject(x, y, z = 0, scale = 1, origin = { x: 0, y: 0 }) {
 }
 
 function isoBox(g, x, y, z, w, d, h, scale = 1, colors = {}) {
+    if (!isCtx(g)) return null;
     const a = isoProject(x, y, z, scale), b = isoProject(x + w, y, z, scale), c = isoProject(x + w, y + d, z, scale), e = isoProject(x, y + d, z, scale);
     const at = isoProject(x, y, z + h, scale), bt = isoProject(x + w, y, z + h, scale), ct = isoProject(x + w, y + d, z + h, scale), et = isoProject(x, y + d, z + h, scale);
     g.save();
@@ -1065,6 +1079,7 @@ function isoBox(g, x, y, z, w, d, h, scale = 1, colors = {}) {
 }
 
 function isoLine(g, a, b, color = '#263746', width = 2) {
+    if (!isCtx(g) || !a || !b) return;
     g.save();
     g.strokeStyle = color;
     g.lineWidth = width;
@@ -1073,6 +1088,7 @@ function isoLine(g, a, b, color = '#263746', width = 2) {
 }
 
 function paperLayer(g, draw, opts = {}) {
+    if (!isCtx(g) || typeof draw !== 'function') return;
     g.save();
     g.shadowColor = opts.shadowColor || 'rgba(58,42,28,.24)';
     g.shadowBlur = Number.isFinite(opts.blur) ? opts.blur : 10;
@@ -1098,6 +1114,7 @@ function paperPolygon(g, points, opts = {}) {
 }
 
 function paperEllipse(g, x, y, rx, ry, opts = {}) {
+    if (!isCtx(g) || !(Number(rx) > 0) || !(Number(ry) > 0)) return;
     paperLayer(g, (ctx) => {
         ctx.beginPath();
         ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
@@ -1105,8 +1122,10 @@ function paperEllipse(g, x, y, rx, ry, opts = {}) {
 }
 
 function paperParallax(g, offset, drawLayers) {
+    if (!isCtx(g) || !Array.isArray(drawLayers)) return;
     for (let i = 0; i < drawLayers.length; i++) {
         const layer = drawLayers[i];
+        if (!layer || typeof layer.draw !== 'function') continue;
         g.save();
         g.translate(offset * (layer.depth || 0), 0);
         layer.draw(g);

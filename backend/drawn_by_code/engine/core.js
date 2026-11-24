@@ -93,6 +93,7 @@ const Motion = (() => {
     }
     // Interpolates keyframes [[t, value], ...] with inOut between each pair.
     function keys(frames, t, ease = Ease.inOut) {
+        if (!Array.isArray(frames) || !frames.length) return 0;
         if (t <= frames[0][0]) return frames[0][1];
         for (let i = 1; i < frames.length; i++) {
             const [t1, v1] = frames[i], [t0, v0] = frames[i - 1];
@@ -198,7 +199,7 @@ const Motion = (() => {
 // Timing curves. x in [0, 1].
 const Ease = {
     clamp: (x, a = 0, b = 1) => Math.max(a, Math.min(b, x)),
-    seg: (t, a, b) => Math.max(0, Math.min(1, (t - a) / (b - a))),
+    seg: (t, a, b) => (b === a ? (t >= b ? 1 : 0) : Math.max(0, Math.min(1, (t - a) / (b - a)))),
     linear: (x) => x,
     inOut: (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2),
     out: (x) => 1 - Math.pow(1 - x, 3),

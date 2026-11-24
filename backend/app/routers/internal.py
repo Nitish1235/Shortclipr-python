@@ -838,6 +838,7 @@ async def run_render(
 
         await set_render_progress(pool, project_id, attempt_id, lease_token, 55)
         motion_qa = None
+        runtime_repaired = False
         async with timed(logger, "render.subprocess") as ctx:
             max_runtime_repairs = 2 if (runtime_repairer is not None and isinstance(plan.get("repair_bundle"), dict)) else 0
             for runtime_attempt in range(max_runtime_repairs + 1):
@@ -863,6 +864,7 @@ async def run_render(
                     )
                     plan["scene_js"] = repaired_runtime["scene_js"]
                     plan["repair_bundle"] = repaired_runtime["repair_bundle"]
+                    runtime_repaired = True
             if output_path.exists():
                 ctx["output_size_mb"] = round(output_path.stat().st_size / 1_048_576, 2)
             if motion_qa:
@@ -1156,7 +1158,7 @@ async def run_render(
                     discard_output = True
                     logger.warning("render.duplicate_delivery", extra={"output_object": output_object})
                 else:
-                    if quality.get("shot_repair", {}).get("accepted"):
+                    if runtime_repaired or quality.get("shot_repair", {}).get("accepted"):
                         repaired_program = dict(program)
                         repaired_program["scene_js"] = plan["scene_js"]
                         repaired_program["repair_bundle"] = plan["repair_bundle"]

@@ -42,7 +42,11 @@ const grab = async (i, type, phase = 'video_render') => {
     } catch (error) {
         const timeSeconds = i / fps;
         const shotIndex = Array.isArray(info.shots)
-            ? info.shots.findIndex(([start, end]) => i >= start && i < end)
+            ? info.shots.findIndex(([start, end], idx) => (
+                idx === info.shots.length - 1
+                    ? timeSeconds >= start
+                    : timeSeconds >= start && timeSeconds < end
+            ))
             : -1;
         const message = String(error?.message || error);
         const typed = /^(ReferenceError|TypeError|SyntaxError|RangeError):/.exec(message);
