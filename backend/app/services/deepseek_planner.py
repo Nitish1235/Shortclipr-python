@@ -25,7 +25,10 @@ class DeepSeekStoryPlanner:
             raise RuntimeError("DEEPSEEK_API_KEY is not configured")
         duration = int(project["duration_seconds"])
         total_frames = duration * 30
-        minimum_scenes = max(3, min(9, duration // 4))
+        target_shots = max(3, min(8, round(duration / 5)))
+        minimum_scenes = max(3, min(target_shots, duration // 4 if duration >= 12 else 3))
+        min_words = max(16, int(duration * 1.65))
+        max_words = max(22, int(duration * 2.15))
         styles = sorted(STYLE_IDS)
         requested_style = resolve_visual_style(project.get("visual_style", "AI Auto"))
         style_instruction = (
@@ -93,161 +96,83 @@ class DeepSeekStoryPlanner:
 
         prompt = f"""
 ROLE
-You are ShortClipr's film development director: story editor, factual-accuracy editor,
-production designer and storyboard director. Design a film that can be executed by
-a deterministic 2D Canvas renderer. You are planning a film, not writing generic
-descriptive prose.
+You are ShortClipr's film director and storyboard writer. Design a visually compelling,
+coherent {duration}-second short film for a deterministic 2D Canvas renderer.
 
-PRIMARY OBJECTIVE
-Create a visually compelling, understandable short film. Every shot must add new
-information or change the viewer's understanding. Prefer concrete subjects, spatial
-relationships, cause-and-effect, transformations and visible states over abstract
-claims or decorative graphics. Do not solve visual quality with text cards, repeated
-icons, generic grids, or a sequence of unrelated illustrations.
+PROJECT:
+{json.dumps({
+    "brief": project.get("brief", ""),
+    "clip_type": project.get("clip_type", ""),
+    "language": project.get("language", "en"),
+    "visual_style": project.get("visual_style", "AI Auto"),
+    "duration_seconds": duration,
+    "aspect_ratio": project.get("aspect_ratio", "9:16"),
+}, ensure_ascii=False)}
 
-FACTUAL DISCIPLINE
-Do not invent statistics, dates, quotations, named sources, identities, engineering
-specifications or causal claims. Use only facts that are well established from the
-topic and supplied brief. If a precise value or mechanism is uncertain, avoid the
-number and explain the principle visually at an appropriate level. Do not imply
-that illustrative motion is a physically exact simulation unless defensible numeric
-kinematics are supplied.
+RULES
+- Keep every JSON string concise and concrete (1–2 sentences max per field; never write essays).
+- Narration: write in the requested language (`{project.get("language", "en")}`). For English/European
+  languages, strictly target {min_words}–{max_words} words so spoken audio finishes cleanly inside
+  {duration} seconds without getting cut off. Strong opening hook, clear progression, satisfying payoff.
+  Never invent dates, quotes, statistics, or unsupported factual claims.
+- Style: choose one style_id from {", ".join(styles)}. {style_instruction}
+- Visual bible: define only the recurring entities actually needed (1–3 characters, 2–5 props,
+  1–2 environments). Use concise stable IDs matching [a-zA-Z][a-zA-Z0-9_-]{{1,63}}.
+  Include `mechanisms` only if the topic is a genuine mechanical system; otherwise `[]`.
+- Storyboard: produce exactly {target_shots} distinct shots covering frame 0 through {total_frames}
+  at 30 FPS (contiguous, non-overlapping integers; end_frame is exclusive).
+- Vary shot_scale (extreme_wide, wide, medium, close_up, detail, overhead, isometric) and
+  composition across shots. Avoid title cards and subtitles.
 
-FILM STRUCTURE
-- Produce between {minimum_scenes} and 12 shots for a {duration}-second film.
-- Build a clear opening hook, progressive explanation or story development, and
-  a satisfying final state. The ending must resolve the opening question or idea.
-- Each shot communicates one primary idea through a visible action or state change.
-- Use varied, motivated shot scales: establishing wide, medium action, close-up,
-  detail, overhead or isometric when useful. Do not repeat the same composition
-  merely because the scene changes.
-- Use visual transitions only when they connect ideas, locations, time or motion.
-- Avoid title-card openings and endings. Do not add subtitles; narration is muxed
-  separately. Do not put narration text into the visual plan.
-- Narration should sound natural when spoken, with a compelling opening and a
-  coherent progression. Target approximately 2.0–2.3 spoken words per second;
-  never pad to hit a word count.
-
-VISUAL BIBLE — DEFINE BEFORE STORYBOARDING
-Create a reusable visual bible that makes the film drawable and consistent.
-- Use concise stable IDs matching [a-zA-Z][a-zA-Z0-9_-]{1,63}; IDs are case-sensitive.
-- Keep the bible economical: no more than 20 characters, 40 props, 20 environments
-  and 20 mechanisms. Include only entities that appear or are needed for continuity.
-- Choose one style_id from: {", ".join(styles)}. {style_instruction}
-- Characters: give each a stable unique ID and a drawable design specifying
-  silhouette, proportions, face, hair/head, clothing, palette and distinctive marks.
-  Define poses and expressions that are actually needed. Include scale_reference.
-  Never change identity-defining features between shots.
-- Props: give each a stable unique ID, clear silhouette and material. Include
-  relative_scale, components, anchors and moving_parts where useful. A prop used
-  repeatedly must retain the same geometry and appearance.
-- Environments: define spatial_layout, foreground, midground, background,
-  scale_reference and atmosphere. Describe a coherent place, not just a background
-  color or decorative pattern.
-- Mechanisms: include only when the topic genuinely contains a connected mechanism.
-  Declare every component with a unique part name, prop_id and functional role.
-  Describe joints, motion_constraints, action_patterns, driver and followers.
-  Include numeric kinematics only when the geometry and values are known and
-  defensible. Never invent dimensions, angles, gear ratios or physical laws.
-  Supported kinematics:
-  pivot: {{"type":"pivot","part":"deck","anchor":{{"x":120,"y":520}},"start_angle_deg":0,"end_angle_deg":65}}
-  translation: {{"type":"translation","part":"carriage","start":{{"x":100,"y":200}},"end":{{"x":420,"y":200}}}}
-  actuator: {{"type":"actuator","part":"rod","base_anchor":{{"x":250,"y":590}},"rod_anchor":{{"x":350,"y":545}},"min_length":95,"max_length":220}}
-  gear: {{"type":"gear","part":"gear_b","driver_part":"gear_a","anchor":{{"x":375,"y":300}},"driver_anchor":{{"x":300,"y":300}},"driver_radius":50,"driven_radius":25,"driver_start_angle_deg":0,"driver_end_angle_deg":180,"driven_start_angle_deg":0,"mesh":"external"}}
-  pulley: {{"type":"pulley","part":"counterweight","pulley_part":"pulley","anchor":{{"x":450,"y":180}},"radius":30,"start_angle_deg":0,"end_angle_deg":180,"start_position":{{"x":500,"y":420}},"axis":{{"x":0,"y":1}},"direction":1}}
-  cable: {{"type":"cable","part":"cable","points_start":[{{"x":100,"y":100}},{{"x":200,"y":150}}],"points_end":[{{"x":100,"y":100}},{{"x":260,"y":150}}]}}
-  Coordinates are logical Canvas coordinates for the selected aspect ratio. Every
-  referenced part must be declared. If geometry is unknown, omit kinematics and
-  describe qualitative movement honestly.
-  Mechanism object contract:
-  {{"id":"mechanism_bridge","name":"Drawbridge","principle":"Counterweight and cable assist deck rotation",
-   "components":[{{"part":"deck","prop_id":"prop_deck","role":"moving bridge deck"}},{{"part":"counterweight","prop_id":"prop_weight","role":"follower"}}],
-   "joints":[{{"type":"pivot","anchor":"hinge","between":["deck","support"]}}],
-   "motion_constraints":["The deck rotates around the fixed hinge."],
-   "action_patterns":[{{"id":"raise_deck","description":"Raise deck from closed to open","driver":"deck","followers":["counterweight"],"relationship":"Counterweight moves as the deck rotates."}}],
-   "kinematics":[{{"type":"pivot","part":"deck","anchor":{{"x":450,"y":700}},"start_angle_deg":0,"end_angle_deg":65}}]}}
-  Every component prop_id must reference a declared prop; part names are unique.
-  Every joint requires type, anchor and exactly two part names in between.
-  Each action pattern requires id, description, driver, followers and relationship.
-  Kinematics is optional and must follow one supported type contract.
-
-SHOT-BY-SHOT STORYBOARD
-For every shot provide ALL of these fields with specific, non-generic direction:
-- purpose: why this shot exists in the film.
-- visual_description: what is physically visible in the frame.
-- visual_objective: the single idea the viewer should understand from this shot.
-- composition: subject placement, relative scale, negative space, foreground framing
-  and visual hierarchy. Avoid vague phrases such as "balanced composition".
-- shot_scale: one of extreme_wide, wide, medium, close_up, extreme_close_up,
-  detail, overhead, isometric.
-- camera_position: a concrete 2D viewpoint, angle, height and/or crop.
-- depth_layers: an ordered array of 1–6 named layers from background to foreground;
-  describe actual elements, not just the words "background, subject, foreground".
-- focal_entity: the principal character, prop or mechanism component, using its
-  stable ID or declared part name.
-- visual_change: explicit initial state -> action -> final state. The change must
-  be visible and achievable in the shot duration.
-- continuity_note: what must carry over from the preceding shot: identity, position,
-  motion direction, prop state, environment, lighting or screen direction.
-- characters, props and environment: reference only declared IDs.
-- action: one concise description of the main visible action.
-- camera: short camera movement/framing summary.
-- transition_out: a motivated transition to the next shot.
-- mechanism_actions: [] unless a declared mechanism is used. Each action must name
-  mechanism_id, pattern_id, action, start_progress, end_progress and easing
-  (linear, in_out, ease_in or ease_out). Progress is normalized 0–1 and increases.
-  Only use declared action patterns. Use at most 8 actions per shot. start_progress
-  must be less than end_progress; use 0 and 1 for a complete action unless the shot
-  deliberately continues a mechanism's motion from an adjacent shot.
-
-COMPOSITION AND CONTINUITY
-Think in shots, not slides. Establish geography before close-ups. When a close-up
-shows a component, make its location and relationship to the wider mechanism clear.
-Keep screen direction, lighting, character scale and prop state coherent across cuts.
-Use foreground/midground/background only when each plane contributes depth or story.
-Every shot must have a different visual reason to exist; vary camera distance and
-composition while preserving the same world and design language.
-
-OUTPUT CONTRACT
-Return one JSON object only, with this structure:
+OUTPUT CONTRACT (return strict JSON only, no Markdown):
 {{
   "title": "short film title",
   "narration": "complete spoken narration",
   "visual_bible": {{
     "style_id": "one allowed style",
-    "style_notes": "specific art direction",
-    "characters": [{{"id":"char_explorer","name":"Explorer","design":{{"silhouette":"...","face":"...","clothing":"...","palette":["#..."],"proportions":"...","distinctive_marks":"..."}},"poses":["standing","walking"],"expressions":["curious","surprised"],"scale_reference":"..."}}],
-    "props": [{{"id":"prop_map","name":"Map","design":"...","material":"...","relative_scale":"...","components":[],"anchors":[],"moving_parts":[]}}],
-    "environments": [{{"id":"env_forest","name":"Forest","design":"...","spatial_layout":"...","foreground":"...","midground":"...","background":"...","scale_reference":"...","atmosphere":"..."}}],
+    "style_notes": "concise art direction & palette guidance",
+    "characters": [{{"id":"char_hero","name":"Hero","design":{{"silhouette":"...","face":"...","clothing":"...","palette":["#..."],"proportions":"..."}},"poses":["idle","action"],"expressions":["focused"],"scale_reference":"..."}}],
+    "props": [{{"id":"prop_item","name":"Item","design":"concise shape & material","material":"...","relative_scale":"..."}}],
+    "environments": [{{"id":"env_main","name":"Main Setting","design":"concise place description","spatial_layout":"...","foreground":"...","midground":"...","background":"...","atmosphere":"..."}}],
     "mechanisms": []
   }},
   "scenes": [{{
-    "index":0,"start_frame":0,"end_frame":180,"purpose":"...",
-    "visual_description":"...","visual_objective":"...","composition":"...",
-    "shot_scale":"wide","camera_position":"...","depth_layers":["distant hills","bridge","river foreground"],
-    "focal_entity":"prop_bridge","visual_change":"closed -> deck rises -> open",
-    "continuity_note":"...","complexity":"medium","characters":[],"props":["prop_bridge"],
-    "environment":"env_river","action":"...","camera":"...","transition_out":"...",
-    "mechanism_actions":[]
+    "index": 0,
+    "start_frame": 0,
+    "end_frame": 150,
+    "purpose": "why this shot exists",
+    "visual_description": "what is visibly happening",
+    "visual_objective": "single clear takeaway",
+    "composition": "specific spatial framing & focal placement",
+    "shot_scale": "wide",
+    "camera_position": "concrete 2D viewpoint/crop",
+    "depth_layers": ["background element", "midground subject", "foreground framing"],
+    "focal_entity": "char_hero",
+    "visual_change": "start state -> action -> end state",
+    "continuity_note": "what carries over",
+    "complexity": "medium",
+    "characters": ["char_hero"],
+    "props": ["prop_item"],
+    "environment": "env_main",
+    "action": "one clear visible action",
+    "camera": "camera movement",
+    "transition_out": "cut",
+    "mechanism_actions": []
   }}]
 }}
-
-TIMING
-Use exactly 30 FPS. Frame ranges are integers, contiguous, non-overlapping and
-cover frame 0 through {total_frames}; end_frame is exclusive. Include at least
-{minimum_scenes} distinct shots. Keep shot durations long enough for their visible
-action to read. Return JSON only, without Markdown or explanations.
 """.strip()
-        effort = planning_effort(project, self.low_reasoning_effort, self.medium_reasoning_effort)
         response = await self.client.chat.completions.create(
             model=self.model,
-            messages=[{"role":"system","content":prompt},
-                      {"role":"user","content":"Create the story, visual bible and timed shot plan."}],
-            response_format={"type":"json_object"},
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": "Create the concise story, visual bible, and timed shot plan JSON."},
+            ],
+            response_format={"type": "json_object"},
             max_tokens=self.max_output_tokens,
-            reasoning_effort=effort,
-            extra_body={"thinking": {"type": "enabled"}},
+            reasoning_effort="none",
+            extra_body={"thinking": {"type": "disabled"}},
         )
+        effort = "none"
         import logging
         logging.getLogger(__name__).info(
             "deepseek.story.response",
@@ -284,7 +209,7 @@ action to read. Return JSON only, without Markdown or explanations.
             raise RuntimeError("DeepSeek story plan must be an object")
         if not isinstance(plan.get("title"), str) or not plan["title"].strip():
             raise RuntimeError("DeepSeek story plan is missing title")
-        if not isinstance(plan.get("narration"), str) or len(plan["narration"].strip()) < 40:
+        if not isinstance(plan.get("narration"), str) or len(plan["narration"].strip()) < 12:
             raise RuntimeError("DeepSeek story plan is missing usable narration")
         bible = validate_visual_bible(plan.get("visual_bible"))
         # Explicit UI selections are authoritative even if the model drifts.

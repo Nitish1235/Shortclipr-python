@@ -386,7 +386,7 @@ async def run_planning(
                             extra={
                                 "artifact": "animation_program",
                                 "scene_js_sha256": hashlib.sha256(cached["scene_js"].encode("utf-8")).hexdigest(),
-                                "repair_bundle_schema_version": cached["repair_bundle"].get("schema_version"),
+                                "repair_bundle_schema_version": (cached.get("repair_bundle") or {}).get("schema_version"),
                             },
                         )
                         return cached
@@ -404,7 +404,7 @@ async def run_planning(
                     extra={
                         "artifact": "animation_program",
                         "scene_js_sha256": hashlib.sha256(result["scene_js"].encode("utf-8")).hexdigest(),
-                        "repair_bundle_schema_version": result["repair_bundle"].get("schema_version"),
+                        "repair_bundle_schema_version": (result.get("repair_bundle") or {}).get("schema_version"),
                         "shot_count": result.get("shot_count"),
                     },
                 )
@@ -865,7 +865,7 @@ async def run_render(
                 "motion_diagnostics": plan.get("motion_diagnostics", []),
             }
             contact_sheet = Path(motion_qa["contact_sheet_path"]) if motion_qa.get("contact_sheet_path") else None
-            if contact_sheet and contact_sheet.is_file():
+            if contact_sheet and contact_sheet.is_file() and visual_reviewer.enabled:
                 try:
                     qa_object = await storage.upload_file_private(
                         contact_sheet, "image/png",
