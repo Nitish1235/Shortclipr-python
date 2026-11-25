@@ -273,7 +273,7 @@ try {
                 const b = Number(shot[1]) || a;
                 const span = Math.max(0, b - a);
                 const sName = String(shot[2] ?? `Shot ${sIdx}`);
-                for (const frac of [0.02, 0.5, 0.92]) {
+                for (const frac of [0.02, 0.5, 0.97]) {
                     sampleList.push({ t: a + span * frac, shotIndex: sIdx, shotName: sName });
                 }
             }

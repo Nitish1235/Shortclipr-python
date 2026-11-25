@@ -229,17 +229,24 @@ def validate_visual_bible(value: Any) -> dict[str, Any]:
         raise ValueError("Visual bible exceeds entity limits")
     seen: set[str] = set()
     for group_name, group in (("character", characters), ("prop", props), ("environment", environments)):
-        for item in group:
+        for idx, item in enumerate(group):
             if not isinstance(item, dict):
                 raise ValueError(f"Visual bible {group_name} entries must be objects")
             entity_id = item.get("id")
             if not isinstance(entity_id, str) or not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_-]{1,63}", entity_id):
-                raise ValueError(f"Invalid {group_name} ID")
+                sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", str(entity_id or ""))[:48].strip("_")
+                if not sanitized or not sanitized[0].isalpha():
+                    sanitized = f"{group_name}_{idx}_{sanitized}"[:60].rstrip("_")
+                entity_id = sanitized if len(sanitized) >= 2 else f"{group_name}_{idx}"
+                while entity_id in seen:
+                    entity_id = f"{entity_id}_{idx}"
+                item["id"] = entity_id
             if entity_id in seen:
-                raise ValueError(f"Duplicate visual bible ID: {entity_id}")
+                entity_id = f"{entity_id}_{idx}"
+                item["id"] = entity_id
             seen.add(entity_id)
             if not isinstance(item.get("design", item.get("appearance", "")), (str, dict)):
-                raise ValueError(f"{group_name} design must be text or an object")
+                item["design"] = str(item.get("design", item.get("appearance", "")) or "")
     # Additive VisualBible v2 fields. Legacy persisted plans receive safe defaults.
     for environment in environments:
         environment.setdefault("spatial_layout", "clear foreground, midground and background")
@@ -250,7 +257,7 @@ def validate_visual_bible(value: Any) -> dict[str, Any]:
         environment.setdefault("atmosphere", "")
         for key in ("spatial_layout", "foreground", "midground", "background", "scale_reference", "atmosphere"):
             if not isinstance(environment[key], str):
-                raise ValueError(f"Environment {key} must be text")
+                environment[key] = str(environment[key] or "")
     for prop in props:
         prop.setdefault("material", "")
         prop.setdefault("relative_scale", "")
@@ -259,14 +266,16 @@ def validate_visual_bible(value: Any) -> dict[str, Any]:
         prop.setdefault("moving_parts", [])
         for key in ("material", "relative_scale"):
             if not isinstance(prop[key], str):
-                raise ValueError(f"Prop {key} must be text")
+                prop[key] = str(prop[key] or "")
         for key in ("components", "anchors", "moving_parts"):
-            if not isinstance(prop[key], list) or not all(isinstance(x, str) for x in prop[key]):
-                raise ValueError(f"Prop {key} must be an array of text")
+            if not isinstance(prop[key], list):
+                prop[key] = []
+            else:
+                prop[key] = [str(x) for x in prop[key] if x is not None]
     for character in characters:
         character.setdefault("scale_reference", "")
         if not isinstance(character["scale_reference"], str):
-            raise ValueError("Character scale_reference must be text")
+            character["scale_reference"] = str(character["scale_reference"] or "")
     value["schema_version"] = max(2, int(value.get("schema_version", 1)))
     value["style_id"] = style
     value["characters"] = characters
