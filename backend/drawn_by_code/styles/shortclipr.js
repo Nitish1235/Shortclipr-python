@@ -1106,8 +1106,6 @@ function isoBox(g, x, y, z, w, d, h, scale = 1, colors = {}) {
     g.fillStyle = cObj.top || '#a9c1c1';
     g.beginPath(); g.moveTo(at.x, at.y); g.lineTo(bt.x, bt.y); g.lineTo(ct.x, ct.y); g.lineTo(et.x, et.y); g.closePath(); g.fill(); g.stroke();
     g.restore();
-    return { a, b, c, e, at, bt, ct, et };
-}
     return { top: [at, bt, ct, et], left: [e, c, ct, et], right: [c, b, bt, ct] };
 }
 
