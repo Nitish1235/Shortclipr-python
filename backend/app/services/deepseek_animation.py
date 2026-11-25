@@ -85,7 +85,7 @@ AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
    - badge(g, x, y, text, { bg, color, border, fontSize, align }) -> auto-clamped pill label (AVOID unless 1 tiny 1–2 word label is truly needed; NEVER draw top title banners!)
    - flowPath(g, [[x0,y0],[x1,y1],...], t, { color, width, progress, dashed, speed, glow, arrow, arrowSize }) -> animated directional force/flow arrow
    - particles(g, seed, count, t, { x, y, w, h }, { mode: 'drift'|'rise'|'sparkle'|'stream', color, speed, minR, maxR, alpha })
-   - cameraRig(g, env, { cx, cy, zoom, rotation, shake, t }) -> smooth 2D camera inside g.save()/g.restore()
+   - cameraRig(g, env, { cx, cy, zoom, rotation, shake, t }) -> smooth 2D camera inside g.save()/g.restore() (IMPORTANT: cx defaults to env.W/2, cy defaults to env.H/2 — NEVER pass cx:0, cy:0 unless you mean the top-left corner; to center, pass cx: env.W/2 + panX, cy: env.H/2 + panY and zoom >= 1.05!)
    - editorialShape(g, points, { fill, depth, shadow, stroke, lineWidth }), editorialLight(g, x, y, r, color)
    - isoProject(x, y, z, scale, origin), isoBox(g, x, y, z, w, d, h, scale, { top, left, right, edge }), isoLine(g, a, b, color, width) -> STRICTLY for architecture/machines ONLY (NEVER use isoBox for rocks, terrain, water, or nature!)
    - paperLayer(g, drawFn, { fill, edge, blur, offsetY }), paperPolygon(g, points, opts), paperEllipse(g, x, y, rx, ry, opts), paperParallax(g, offset, layers)
@@ -698,24 +698,25 @@ VISUAL CLARITY, SIMPLICITY & CINEMATOGRAPHY RULES
      varying camera framing and action rather than inventing disconnected abstract diagrams.
    - NO floating top pill banners (`THE CHALLENGE...`), NO subtitles, and NO scattered callout badges.
      Show forces and direction with bold animated `flowPath` arrows and clear physical motion.
-2. Active Cinema Camera & Dynamic Angles (NEVER a dead static tripod!):
-   - Honor the storyboard's `camera_angle`:
-     * `low_angle`: place horizon low (`y = 72%–82%`) so the hero subject rises boldly upward.
-     * `overhead`: true top-down bird's-eye layout filling 100% of the canvas edge-to-edge.
-     * `macro_closeup`: zoom in tightly (`1.5x–2.4x`) onto the moving contact point, feet, mechanism, or key detail.
-     * `dutch_tilt`: subtle canted angle (`rotation: ±0.05 to ±0.09 rad` in `cameraRig`/`parallaxLayers`) ONLY on high-energy beats.
-     * `high_angle` / `eye_level`: clear grounded viewpoint with rich foreground, midground, and background depth.
-   - ALWAYS animate the camera smoothly with `parallaxLayers` or `cameraRig` (gentle push-in `zoom: 1.0 -> 1.12`,
-     tracking pan, or `rackFocus` pull) so every shot has living depth.
+2. Clean, Natural 2D Camera (NEVER break the frame or force odd poses!):
+   - ALWAYS keep `zoom >= 1.0` and center camera around `(env.W / 2 + panX, env.H / 2 + panY)` in
+     `cameraRig` / `parallaxLayers` — NEVER pass `cx: 0, cy: 0` (that shifts the scene off-screen!).
+   - Keep angles clean and 2D-natural (`eye_level` side/3-4 view, gentle `low_angle` or `high_angle`,
+     smooth push-in `zoom: 1.0 -> 1.12` or horizontal pan).
+   - NEVER rotate a side-view character 90° to fake an "overhead" view, and NEVER draw weird disembodied
+     giant legs/feet — always show a clean, properly proportioned, recognizable scene.
 3. Energy-Gated Action Polish (ONLY when motivated by `scene.energy` — NEVER gratuitous!):
    - If `energy` is `"action"` or `"climax"`: punctuate the key breakthrough/impact beat with
      `ShortcliprStyles.dustBurst(...)`, `ShortcliprStyles.impactFlash(...)` + `impactShake(...)`,
      and brief `ShortcliprStyles.speedLines(...)` during fast rushes or launches.
    - If `energy` is `"calm"` or `"building"`: keep motion smooth, clean, and poised — DO NOT add shaking or speed lines.
-4. Characters & Physical Realism:
-   - Whenever the shot shows a human action, stage the character LARGE (30%–50% of canvas height)
-     using `ShortcliprStyles.drawCharacterRig(...)` or the shared character helper — NEVER draw
-     stick figures or replace a person with a glowing dot!
+4. Characters & Physical Realism (CRITICAL):
+   - Whenever a character is IN water (river, lake, ocean), draw them **physically submerged** using
+     strict 3-layer occlusion: (1) background water -> (2) character wading or swimming -> (3) **foreground
+     translucent water surface band + white splash/wake ripples overlapping their lower legs/waist**!
+     NEVER draw a character standing or walking dry on top of the water surface!
+   - Stage characters at clean hero scale (28%–45% of canvas height) using `ShortcliprStyles.drawCharacterRig(...)`
+     or the shared character helper — NEVER draw stick figures or glowing-dot stand-ins.
    - Rolling/spinning objects (wheels, logs, gears, planets) MUST draw visible radial spokes/markings
      that visibly rotate (`angle = distance / radius`) — never slide a static circle!
 5. Structure Local Time `t` into a Smooth 4-Phase Choreography (NEVER pop everything in at `t = 0`):

@@ -174,14 +174,21 @@ function halftone(g, x, y, w, h, spacing = 12, color = 'rgba(20,20,20,.18)') {
 
 function camera(g, env, o = {}) {
     if (!isCtx(g) || !env) return;
-    const cx = Number.isFinite(o.cx) ? o.cx : env.W / 2;
-    const cy = Number.isFinite(o.cy) ? o.cy : env.H / 2;
+    const W = Math.max(1, Number(env.W) || 900);
+    const H = Math.max(1, Number(env.H) || 1600);
     const rotation = Number(o.rotation) || 0;
     const absRot = Math.abs(rotation);
-    const aspectMax = Math.max(env.W / Math.max(1, env.H), env.H / Math.max(1, env.W));
+    const aspectMax = Math.max(W / H, H / W);
     const minRotZoom = absRot > 0.001 ? (Math.cos(absRot) + Math.sin(absRot) * aspectMax) * 1.03 : 1;
-    const zoom = clamp(Math.max(Number(o.zoom) || 1, minRotZoom), 0.25, 4);
-    g.translate(env.W / 2, env.H / 2);
+    // Never zoom below 1.0 (or minRotZoom when rotated) so black edges can never appear.
+    const zoom = clamp(Math.max(1, Number(o.zoom) || 1, minRotZoom), 1, 4);
+    const maxPanX = Math.max(0, (W / 2) * (1 - minRotZoom / zoom));
+    const maxPanY = Math.max(0, (H / 2) * (1 - minRotZoom / zoom));
+    const rawCx = Number.isFinite(o.cx) ? o.cx : W / 2;
+    const rawCy = Number.isFinite(o.cy) ? o.cy : H / 2;
+    const cx = clamp(rawCx, W / 2 - maxPanX, W / 2 + maxPanX);
+    const cy = clamp(rawCy, H / 2 - maxPanY, H / 2 + maxPanY);
+    g.translate(W / 2, H / 2);
     g.rotate(rotation);
     g.scale(zoom, zoom);
     g.translate(-cx, -cy);
@@ -198,13 +205,15 @@ function cameraRig(g, env, o = {}) {
 /* True multi-plane parallax camera with depth-scaled movement & optional depth-of-field blur. */
 function parallaxLayers(g, env, camState = {}, layers = []) {
     if (!isCtx(g) || !env || !Array.isArray(layers)) return;
-    const cx = Number.isFinite(camState.cx) ? camState.cx : env.W / 2;
-    const cy = Number.isFinite(camState.cy) ? camState.cy : env.H / 2;
-    const zoom = clamp(Number(camState.zoom) || 1, 0.35, 3.5);
+    const W = Math.max(1, Number(env.W) || 900);
+    const H = Math.max(1, Number(env.H) || 1600);
+    const cx = Number.isFinite(camState.cx) ? camState.cx : W / 2;
+    const cy = Number.isFinite(camState.cy) ? camState.cy : H / 2;
+    const zoom = clamp(Math.max(1, Number(camState.zoom) || 1), 1, 3.5);
     const rot = Number(camState.rotation) || 0;
-    const dx = cx - env.W / 2;
-    const dy = cy - env.H / 2;
-    const aspectMax = Math.max(env.W / Math.max(1, env.H), env.H / Math.max(1, env.W));
+    const dx = cx - W / 2;
+    const dy = cy - H / 2;
+    const aspectMax = Math.max(W / H, H / W);
 
     for (let i = 0; i < layers.length; i++) {
         const layer = layers[i];
@@ -213,9 +222,11 @@ function parallaxLayers(g, env, camState = {}, layers = []) {
         const layerRot = rot * depth;
         const absRot = Math.abs(layerRot);
         const minRotZoom = absRot > 0.001 ? (Math.cos(absRot) + Math.sin(absRot) * aspectMax) * 1.03 : 1;
-        const layerZoom = Math.max(1 + (zoom - 1) * depth, minRotZoom);
-        const lx = env.W / 2 + dx * depth;
-        const ly = env.H / 2 + dy * depth;
+        const layerZoom = Math.max(1, 1 + (zoom - 1) * depth, minRotZoom);
+        const maxPanX = Math.max(0, (W / 2) * (1 - minRotZoom / layerZoom));
+        const maxPanY = Math.max(0, (H / 2) * (1 - minRotZoom / layerZoom));
+        const lx = clamp(W / 2 + dx * depth, W / 2 - maxPanX, W / 2 + maxPanX);
+        const ly = clamp(H / 2 + dy * depth, H / 2 - maxPanY, H / 2 + maxPanY);
         g.save();
         if (layer.blur && layer.blur > 0) {
             g.filter = `blur(${Number(layer.blur)}px)`;
@@ -223,7 +234,7 @@ function parallaxLayers(g, env, camState = {}, layers = []) {
         if (Number.isFinite(layer.alpha)) {
             g.globalAlpha *= clamp(layer.alpha, 0, 1);
         }
-        g.translate(env.W / 2, env.H / 2);
+        g.translate(W / 2, H / 2);
         g.rotate(layerRot);
         g.scale(layerZoom, layerZoom);
         g.translate(-lx, -ly);
