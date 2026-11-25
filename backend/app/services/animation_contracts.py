@@ -999,11 +999,12 @@ def validate_draw_helper_dependency_graph(specifications: list[dict[str, Any]]) 
 def validate_generated_fragment(source: Any, label: str, max_chars: int) -> str:
     if not isinstance(source, str) or not 20 <= len(source) <= max_chars:
         raise ValueError(f"{label} source length is outside allowed bounds")
+    masked = _mask_js_comments_and_strings(source)
     for pattern in _BLOCKED_PATTERNS:
-        match = re.search(pattern, source)
+        match = re.search(pattern, masked)
         if match:
             line_no = source.count("\n", 0, match.start()) + 1
-            snippet = match.group(0).strip()
+            snippet = source[match.start():match.end()].strip()
             raise ValueError(
                 f"{label} contains a disallowed runtime capability '{snippet}' at line {line_no}"
             )

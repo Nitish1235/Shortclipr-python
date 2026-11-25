@@ -463,7 +463,7 @@ class DeepSeekAnimationCompiler:
         # so the debugger sees both the throwing helper line and the shot call-site line.
         snippet_blocks: list[str] = []
         seen_lines: set[int] = set()
-        for m in re.finditer(r"scene\.js:(\d+)", error_report):
+        for m in re.finditer(r"(?:scene\.js:|line\s+)(\d+)", error_report):
             ln = int(m.group(1))
             if ln in seen_lines or not (1 <= ln <= len(lines)):
                 continue
