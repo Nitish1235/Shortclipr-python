@@ -107,11 +107,11 @@ function backdrop(g, id, env, t = 0, mood = null) {
     if (!isCtx(g) || !env) return p;
     const activeMood = mood || customMood || '';
     g.save();
-    const grad = g.createLinearGradient(0, 0, 0, env.H);
+    const grad = g.createLinearGradient(0, -env.H * 0.25, 0, env.H * 1.25);
     grad.addColorStop(0, p.bg);
     grad.addColorStop(1, p.bg2 || p.bg);
     g.fillStyle = grad;
-    g.fillRect(0, 0, env.W, env.H);
+    g.fillRect(-env.W * 0.5, -env.H * 0.5, env.W * 2, env.H * 2);
 
     // Subtle moving atmospheric light pool
     const lx = env.W * (0.5 + Math.sin(t * 0.25) * 0.08);
@@ -129,7 +129,7 @@ function backdrop(g, id, env, t = 0, mood = null) {
     }
     glowGrad.addColorStop(1, 'rgba(255,255,255,0)');
     g.fillStyle = glowGrad;
-    g.fillRect(0, 0, env.W, env.H);
+    g.fillRect(-env.W * 0.5, -env.H * 0.5, env.W * 2, env.H * 2);
 
     if (id === 'blueprint' || activeMood === 'technical_clean') {
         g.strokeStyle = isDark ? 'rgba(210,235,245,.09)' : 'rgba(30,55,75,.06)';

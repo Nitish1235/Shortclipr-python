@@ -110,12 +110,17 @@ VISUAL SIMPLICITY, RECOGNIZABILITY & COHESIVE ART DIRECTION (CRITICAL):
 - SIMPLE > COMPLEX: Draw 3–5 large, unmistakable, cleanly shaded shapes per shot — NEVER clutter
   the screen with abstract wireframes, tiny glowing dots, floating CAD boxes, or giant translucent
   bubbles/rectangles over the subject.
-- SILHOUETTE & VALUE SEPARATION LAW (CRITICAL FOR NIGHT & UNDERWATER SCENES):
-  * Every hero object MUST have >= 30% luminance contrast against its background (use crisp rim
-    highlights `#7dd3fc` / warm lit windows `#ffd166` / distinct midtone fills).
-  * Underwater or night scenes MUST NEVER be pure black-on-black! Use rich deep-teal/cerulean
-    gradients (`#0f3554` -> `#071e36`), overhead surface `lightBeam` shafts, a visible sandy/rocky
-    seabed at the bottom, and illuminated subject details so everything is 100% legible.
+- SILHOUETTE & 3-VALUE SHADING ("DETAIL BIBLE" — CRITICAL FOR STUDIO QUALITY):
+  * NEVER leave hero shapes as flat 1-color fills! Give every hero object: (1) a directional gradient
+    midtone, (2) a consistent shadow side (aligned to one light source per shot, e.g. top-left or
+    focal fire/sun), and (3) a crisp rim highlight + 2–3 subtle material detail strokes (bark grain,
+    stone facets, metallic specular, cloth folds, water ripples).
+  * VALUE GROUPING & 20% LAYER SEPARATION: Adjacent depth layers (background / midground / hero)
+    must differ by >= 20% luminance so silhouettes pop cleanly. Keep 25–35% clean negative space
+    around the focal subject (never clutter).
+  * Every hero object MUST have >= 30% luminance contrast against its background (especially in night,
+    space, or underwater scenes — use rich deep-teal/indigo gradients `#0f3554` -> `#071e36`,
+    overhead `lightBeam` shafts, visible ground/seabed, and warm lit accents `#ffd166` / `#7dd3fc`).
 - SILHOUETTE-FIRST CUTAWAYS: When showing an internal cross-section (e.g., ship compartments,
   engine, building), ALWAYS draw the unmistakable outer silhouette (tapered bow/stern hull,
   smokestacks, deck) and `g.clip()` the interior inside it — NEVER draw a plain square box!
@@ -268,13 +273,15 @@ class DeepSeekAnimationCompiler:
             raise RuntimeError(f"DeepSeek returned empty JavaScript for {label}")
         if finish_reason == "length":
             raise RuntimeError(f"DeepSeek truncated JavaScript for {label}")
-        # Cleanly unwrap markdown code fences if present.
+        # Cleanly unwrap markdown code fences and any stray XML wrapper tags (e.g. </function>).
         fenced = re.search(r"```(?:javascript|js)?\s*\n([\s\S]*?)\n```", raw, re.IGNORECASE)
         if fenced:
             raw = fenced.group(1).strip()
         elif raw.startswith("```"):
             raw = re.sub(r"^```(?:javascript|js)?\s*", "", raw, flags=re.IGNORECASE)
             raw = re.sub(r"\s*```$", "", raw).strip()
+        raw = re.sub(r"^\s*</?(?:function|script|code|tool_call)[^>]*>\s*", "", raw, flags=re.IGNORECASE)
+        raw = re.sub(r"\s*</?(?:function|script|code|tool_call)[^>]*>\s*$", "", raw, flags=re.IGNORECASE).strip()
         return raw
 
     async def _run_local_js_validation(self, source: str) -> str | None:
@@ -615,6 +622,11 @@ DESIGN & QUALITY STANDARDS
   origin (e.g. `// Draws hero explorer at ground contact (x, y), scale=1, pose='walk'|'idle', walkPhase=0`).
 - Use default parameter values where helpful (e.g. `scale = 1, pose = 'idle'`).
 - If any helper accepts a draw callback `fn`, ALWAYS pass the Canvas context into it (`fn(g)`), never bare `fn()`.
+- For human characters, ALWAYS delegate to `ShortcliprStyles.drawCharacterRig(g, x, y, { scale, facing, pose, t, lean, skin, coat, pants, hair, accent })`
+  so characters have expressive 3/4 profiles, blinking eyes, and 2-bone IK limbs (NEVER draw stiff
+  front-facing cylinder characters with 2 dot eyes!).
+- NEVER draw dark semi-transparent `fillRect` boxes over trees, props, or characters for shading —
+  use tapered organic polygons (`shadedShape` / `organicPath`) and directional gradients instead.
 - Use the film's custom palette (`ShortcliprStyles.palette('{style_id}')` or the hex colors from
   `visual_direction.palette`), `ShortcliprStyles.shadedShape`, linear/radial gradients,
   `ShortcliprStyles.glow`, `ShortcliprStyles.solveIK` (for articulated character limbs),
