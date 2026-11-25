@@ -139,22 +139,35 @@ RULES
     * `camera_style`: one of `multiplane_parallax`, `crisp_orthographic`, `dynamic_action_cuts`,
       `slow_cinematic_dolly`.
     * `motion_feel`: one of `snappy_spring`, `smooth_fluid`, `posterized_12fps`, `mechanical_precise`.
-- SUBJECT & CHARACTER RULE (CRITICAL):
+- SUBJECT, CHARACTER & VISUAL BIBLE CONCRETENESS (CRITICAL):
   - If the topic involves a HUMAN body, posture, or physical action (crossing a river, swimming,
     running, lifting, sports, survival, cooking, daily life, stories), you MUST include 1 clear
     stylized hero character (`characters: [{{...}}]`) performing the actual action — NEVER replace
     a person with a glowing dot, circle, or abstract icon!
   - Only set `characters: []` when the topic is genuinely non-human (planets, black holes, engines,
     molecules, economics, history maps).
+  - For every character, explicitly define in `design`:
+    * `silhouette`: distinctive outer contour & gear (e.g. "broad shoulders, fur-trimmed hood, travel cloak")
+    * `clothing`: layered materials (e.g. "matte woven tunic, dark trousers, sturdy boots, belt")
+    * `face`: expressive style (e.g. "determined brow, bright eyes, expressive mouth")
+    * `palette`: 5 hex colors `[skin, coat, pants, hair, accent]`
+  - For every prop and environment, explicitly define:
+    * 3–5 dominant recognizable forms + surface material notes (wood grain, faceted rock, metallic hull, layered foliage)
+    * consistent light source direction and atmospheric depth method (gradient haze, multiplane parallax, volumetric beams)
   - Define only the essential recurring entities (0–2 characters, 2–4 props, 1 main continuous
     environment). Use concise stable IDs matching [a-zA-Z][a-zA-Z0-9_-]{{1,63}}.
   - Set `mechanisms` to `[]` (express moving parts directly via `props`, `action`, and `visual_change`).
-- FULL-BLEED CONTINUOUS WORLD & SIMPLE STORYBOARD:
+- FULL-BLEED CONTINUOUS WORLD & CONCRETE STORYBOARD SHOTS:
   - Produce exactly {target_shots} distinct shots covering frame 0 through {total_frames} at 30 FPS
     (contiguous, non-overlapping integers; end_frame is exclusive).
   - Every shot must stay in the SAME recognizable continuous world (full-bleed edge-to-edge scenery
-    filling 100% of the canvas — NEVER floating slabs in empty space) and focus on ONE simple,
-    unmistakable visual idea with 3–5 bold elements max.
+    filling 100% of the canvas — NEVER floating slabs in empty space) and focus on ONE clear,
+    unmistakable visual beat with 3–6 rich, layered elements.
+  - Every shot description MUST specify concrete visual direction (never vague like "character moves"):
+    * exact camera framing & hero scale (e.g. "medium 3/4 shot, eye-level, hero 42% of frame height")
+    * one concrete physical action + prop interaction (e.g. "hunter leans forward lighting torch in right hand from crackling flames")
+    * explicit lighting note (e.g. "warm amber key light from fire at lower-right + cool moonlight rim")
+    * continuous secondary motion that stays alive until the last frame of the shot (flames flickering, embers rising, water rippling, cloak swaying)
   - PAUSED-FRAME POSTER TEST & HIGH-CONTRAST VISIBILITY (CRITICAL — ESPECIALLY FOR THE ENDING!):
     * Every frame from 0s to {duration}s (including the FINAL shot!) must look like a clean,
       readable poster if paused: NEVER let the hero disappear into a pitch-black screen or sink

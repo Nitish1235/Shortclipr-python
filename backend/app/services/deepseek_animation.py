@@ -72,8 +72,8 @@ AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
    - parallaxLayers(g, env, { cx, cy, zoom, rotation }, [{ depth: 0.25, blur: 2, draw: (ctx)=>{...} }, { depth: 1.0, draw: ... }, { depth: 1.35, draw: ... }])
      (true multi-plane 2.5D parallax camera with depth-scaled movement & optional depth-of-field blur)
    - solveIK(x0, y0, tx, ty, L1, L2, bendDir=1) -> analytical 2-bone Law-of-Cosines IK solver returning { jx, jy, ex, ey, a1, a2 } for natural knees/elbows/limbs
-   - drawCharacterRig(g, x, y, { scale, facing: 1|-1, pose: 'idle'|'walk'|'run'|'push'|'pull'|'point'|'celebrate', t, lean, skin, coat, pants, hair, accent })
-     (studio-grade 3/4-profile articulated character rig grounded at (x, y), ~260px tall at scale=1 — NEVER draw thin stick figures!)
+   - drawCharacterRig(g, x, y, { scale, facing: 1|-1, pose: 'idle'|'walk'|'run'|'wade'|'push'|'pull'|'point'|'reach'|'hold'|'crouch'|'celebrate', expression: 'determined'|'focused'|'happy'|'surprised', t, lean, skin, coat, pants, hair, accent, boot })
+     (studio-grade 3/4-profile articulated IK character rig grounded at (x, y), ~260px tall at scale=1; RETURNS world-space anchors `{ head, rightHand, leftHand, shoulder, hip, ground, facing, scale }` so you can attach hats/hoods to `rig.head` and held props/tools/torches directly to `rig.rightHand` — NEVER let held props float detached in mid-air!)
    - squash(g, x, y, amount) -> volume-preserving squash & stretch transform around contact point (x, y)
    - spring(t, start, stiffness=180, damping=14) -> snappy damped harmonic 0->1 curve
    - stagger(t, index, step=0.09, start=0, duration=0.45, easeFn) -> staggered 0..1 entrance progress for item `index` (prevents simultaneous t=0 pop-ins)
@@ -103,36 +103,32 @@ AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
 """.strip()
 
 _CRAFT_REFERENCE_SNIPPET = """
-VISUAL SIMPLICITY, RECOGNIZABILITY & COHESIVE ART DIRECTION (CRITICAL):
-- MUTED-AUDIO & PAUSED-FRAME POSTER TEST: Every frame (including the very last frame!) must look
-  like a clean, iconic Kurzgesagt / Vox flat-vector poster that a viewer understands in 1 second with
-  the sound OFF. NEVER leave a shot mostly pitch-black, empty, or with the hero sunk off-screen!
-- SIMPLE > COMPLEX: Draw 3–5 large, unmistakable, cleanly shaded shapes per shot — NEVER clutter
-  the screen with abstract wireframes, tiny glowing dots, floating CAD boxes, or giant translucent
-  bubbles/rectangles over the subject.
-- SILHOUETTE & 3-VALUE SHADING ("DETAIL BIBLE" — CRITICAL FOR STUDIO QUALITY):
-  * NEVER leave hero shapes as flat 1-color fills! Give every hero object: (1) a directional gradient
-    midtone, (2) a consistent shadow side (aligned to one light source per shot, e.g. top-left or
-    focal fire/sun), and (3) a crisp rim highlight + 2–3 subtle material detail strokes (bark grain,
-    stone facets, metallic specular, cloth folds, water ripples).
-  * VALUE GROUPING & 20% LAYER SEPARATION: Adjacent depth layers (background / midground / hero)
-    must differ by >= 20% luminance so silhouettes pop cleanly. Keep 25–35% clean negative space
-    around the focal subject (never clutter).
-  * Every hero object MUST have >= 30% luminance contrast against its background (especially in night,
-    space, or underwater scenes — use rich deep-teal/indigo gradients `#0f3554` -> `#071e36`,
-    overhead `lightBeam` shafts, visible ground/seabed, and warm lit accents `#ffd166` / `#7dd3fc`).
-- SILHOUETTE-FIRST CUTAWAYS: When showing an internal cross-section (e.g., ship compartments,
-  engine, building), ALWAYS draw the unmistakable outer silhouette (tapered bow/stern hull,
-  smokestacks, deck) and `g.clip()` the interior inside it — NEVER draw a plain square box!
-- FULL-BLEED WORLDS ONLY: Environments MUST extend all the way to all 4 edges of the canvas
-  (`0..env.W`, `0..env.H`). NEVER float a disconnected rectangular slab in an empty dark void!
-- RECOGNIZABLE REAL-WORLD SHAPES:
-  * Water/rivers/oceans: full-bleed layered blue bands with smooth curved banks/horizon and animated
-    white foam/wake ribbons (never a tilted flat rectangle or gray `isoBox` cubes).
-  * People/human actions: draw a clear, large stylized human (`ShortcliprStyles.drawCharacterRig` or
-    a clean articulated custom character) — never a glowing dot or stick figure.
-  * Visual arrows: use bold, clean `flowPath` arrows right next to the action.
-- NO TEXT CLUTTER: Do NOT draw top pill title banners or multiple callout badges.
+VISUAL QUALITY & ART DIRECTION (NON-NEGOTIABLE):
+1. MUTED-AUDIO & PAUSED-FRAME POSTER TEST:
+   Every single frame (from 0s through the final frame!) must read as a rich, high-contrast editorial
+   illustration (Kurzgesagt / Vox quality) in under 1 second with sound OFF. Never leave a frame
+   overly minimal/empty, pitch-black, or with the hero sunk off-screen.
+2. CHARACTER & HERO OBJECT STANDARD (CRITICAL):
+   - NEVER draw stick figures, front-facing marshmallow cylinders, thin line people, or glowing-dot stand-ins.
+   - For every human character, build a dedicated helper that calls `const rig = ShortcliprStyles.drawCharacterRig(g, x, y, { scale, facing, pose, expression, t, lean, skin, coat, pants, hair, accent })`
+     as its articulated 2-bone IK base, layers distinctive character details (hood, hat, cloak, badge, tool)
+     onto `rig.head` / `rig.shoulder`, and anchors any held prop directly to `rig.rightHand` / `rig.leftHand`!
+   - For non-human hero objects (ships, machines, planets, trees, buildings, organs), build multi-part
+     layered silhouettes with animated sub-components — NEVER draw a plain flat box.
+3. 3-VALUE SHADING & MATERIAL DETAIL ("DETAIL BIBLE"):
+   Every hero shape MUST have:
+   - Directional gradient fill (`light -> mid -> shadow`) aligned to a single consistent light source per shot
+   - Crisp rim highlight on the lit edge + soft ground contact shadow via `shadedShape()`
+   - 2–4 surface material detail strokes (bark grain, stone facets, metallic rivets/portholes, cloth folds, water ripples)
+   - Flat 1-color fills and dark semi-transparent `fillRect` overlays over objects are FORBIDDEN.
+4. COMPOSITION, DEPTH & SILHOUETTE-FIRST CUTAWAYS:
+   - 3–6 rich, well-crafted visual elements per shot with 25–35% clean negative space around the focal hero
+   - Full-bleed environment extending across `0..env.W` and `0..env.H` (never floating slabs in empty void)
+   - Background / midground / hero layers must differ by >= 20% luminance (>= 30% in night/underwater scenes using deep teal/indigo `#0f3554` -> `#071e36`, overhead `lightBeam` shafts, visible ground/seabed, and warm `#ffd166` / `#7dd3fc` rim accents)
+   - Internal cutaways (ship compartments, engines, buildings) MUST be `g.clip()`'d inside the unmistakable outer silhouette.
+5. LIVING MOTION FEEL:
+   Use snappy `spring` + `anticipation` on actions and keep continuous `t`-driven secondary motion
+   (flames, water ripples, drifting clouds/embers, breathing, coat sway) alive right through the final frame.
 """.strip()
 
 
@@ -340,6 +336,7 @@ class DeepSeekAnimationCompiler:
         return {
             "style_id": visual_bible["style_id"],
             "style_notes": visual_bible.get("style_notes", ""),
+            "visual_direction": visual_bible.get("visual_direction", {}),
             "characters": [
                 item for item in visual_bible.get("characters", [])
                 if item.get("id") in character_ids
@@ -522,6 +519,7 @@ CURRENT BROKEN BODY OF drawShot_{shot['index']}(g, t, env, absoluteTime):
 RULES:
 - Return ONLY the fixed JavaScript statements for the body of drawShot_{shot['index']} (no outer function wrapper).
 - Fix every syntax error, runtime TypeError/ReferenceError, undefined variable, or wrong helper argument order.
+- Preserve or upgrade visual quality (3-value shadedShape gradients, clear silhouette contrast, no flat/dark-on-dark shapes) while fixing the error.
 - If a helper function is missing, either call an existing shared function above or define it locally inside this body.
 - Never use bare mix(); use Ease.lerp(a, b, u). Never use Math.random(), Date, fetch, eval, window, or document.
 - Return raw JavaScript only (no JSON, no explanation).
@@ -558,6 +556,7 @@ CURRENT SHARED DRAWING LIBRARY:
 RULES:
 - Return ONLY the complete fixed shared JavaScript drawing library.
 - Fix every syntax error, runtime TypeError/ReferenceError, undefined variable, missing null/array guard, or missing helper function.
+- Preserve or upgrade visual quality (3-value shadedShape gradients, articulated drawCharacterRig, clear contrast) while fixing the error.
 - Keep all existing working function names and signatures intact so shots can still call them.
 - Never use bare mix(); use Ease.lerp(a, b, u). Never use Math.random(), Date, fetch, eval, window, or document.
 - Return raw JavaScript only (no JSON, no explanation).
@@ -622,11 +621,13 @@ DESIGN & QUALITY STANDARDS
   origin (e.g. `// Draws hero explorer at ground contact (x, y), scale=1, pose='walk'|'idle', walkPhase=0`).
 - Use default parameter values where helpful (e.g. `scale = 1, pose = 'idle'`).
 - If any helper accepts a draw callback `fn`, ALWAYS pass the Canvas context into it (`fn(g)`), never bare `fn()`.
-- For human characters, ALWAYS delegate to `ShortcliprStyles.drawCharacterRig(g, x, y, {{ scale, facing, pose, t, lean, skin, coat, pants, hair, accent }})`
-  so characters have expressive 3/4 profiles, blinking eyes, and 2-bone IK limbs (NEVER draw stiff
-  front-facing cylinder characters with 2 dot eyes!).
+- For human characters, ALWAYS create a dedicated character function that:
+  1. Calls `const rig = ShortcliprStyles.drawCharacterRig(g, x, y, {{ scale, facing, pose, expression, t, lean, skin, coat, pants, hair, accent }})` as the base
+  2. Layers character-specific clothing/gear (hood, hat, cloak, tool) using `rig.head` / `rig.shoulder` and attaches any held prop directly to `rig.rightHand` / `rig.leftHand` (never let held props float detached!)
+  3. Supports poses (`'idle'|'walk'|'run'|'wade'|'push'|'pull'|'point'|'hold'|'celebrate'`) and expressions (`'determined'|'focused'|'happy'|'surprised'`).
+- For environment functions, ALWAYS accept `(g, env, t, opts = {{}})` so backgrounds are full-bleed AND have continuous `t`-driven living motion (drifting clouds/mist, water ripples, swaying grass/foliage, flickering light pools).
 - NEVER draw dark semi-transparent `fillRect` boxes over trees, props, or characters for shading —
-  use tapered organic polygons (`shadedShape` / `organicPath`) and directional gradients instead.
+  use tapered organic polygons (`shadedShape` / `organicPath`) and 3-value directional gradients instead.
 - Use the film's custom palette (`ShortcliprStyles.palette('{style_id}')` or the hex colors from
   `visual_direction.palette`), `ShortcliprStyles.shadedShape`, linear/radial gradients,
   `ShortcliprStyles.glow`, `ShortcliprStyles.solveIK` (for articulated character limbs),

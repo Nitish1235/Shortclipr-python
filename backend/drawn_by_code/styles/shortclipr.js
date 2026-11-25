@@ -330,12 +330,22 @@ function solveIK(x0, y0, tx, ty, L1 = 60, L2 = 60, bendDir = 1) {
 }
 
 /* Stylized, non-stickman articulated 2D character rig (side/3-4 profile with 2-bone IK limbs).
-   Origin (x, y) is the ground contact point between the feet. At scale=1, height is ~260 logical px. */
+   Origin (x, y) is the ground contact point between the feet. At scale=1, height is ~260 logical px.
+   Returns world-space anchor points { head, rightHand, leftHand, shoulder, hip, ground, facing, scale }
+   so custom character helpers can attach hats/gear/held props directly to the hands or head. */
 function drawCharacterRig(g, x, y, opts = {}) {
-    if (!isCtx(g)) return;
     const scale = Number.isFinite(opts.scale) ? opts.scale : 1;
     const facing = opts.facing === -1 ? -1 : 1;
+    const toWorld = (lx, ly) => ({ x: (Number(x) || 0) + facing * scale * lx, y: (Number(y) || 0) + scale * ly });
+    if (!isCtx(g)) {
+        return {
+            head: toWorld(0, -196), rightHand: toWorld(48, -120), leftHand: toWorld(-32, -120),
+            shoulder: toWorld(0, -174), hip: toWorld(0, -98), ground: { x: Number(x) || 0, y: Number(y) || 0 },
+            facing, scale,
+        };
+    }
     const pose = String(opts.pose || 'idle');
+    const expression = String(opts.expression || 'determined');
     const t = Number(opts.t) || 0;
     const speed = Number(opts.speed) || 5.2;
     const skin = opts.skin || '#f2c6a0';
@@ -346,12 +356,22 @@ function drawCharacterRig(g, x, y, opts = {}) {
     const boot = opts.boot || '#1c1f24';
 
     const phase = t * speed;
-    const isMoving = pose === 'walk' || pose === 'run';
-    const stride = pose === 'run' ? 46 : pose === 'walk' ? 32 : 0;
-    const lift = pose === 'run' ? 28 : pose === 'walk' ? 18 : 0;
-    const bob = isMoving ? Math.abs(Math.sin(phase)) * (pose === 'run' ? 11 : 6) : Math.sin(t * 2.4) * 2.2;
-    const defaultLean = pose === 'push' ? 0.34 : pose === 'pull' ? -0.26 : pose === 'run' ? 0.22 : pose === 'walk' ? 0.08 : 0;
+    const isMoving = pose === 'walk' || pose === 'run' || pose === 'wade';
+    const stride = pose === 'run' ? 46 : pose === 'walk' ? 32 : pose === 'wade' ? 24 : 0;
+    const lift = pose === 'run' ? 28 : pose === 'walk' ? 18 : pose === 'wade' ? 22 : 0;
+    const crouchDrop = pose === 'crouch' ? 24 : 0;
+    const bob = isMoving ? Math.abs(Math.sin(phase)) * (pose === 'run' ? 11 : 6) : Math.sin(t * 2.4) * 2.5;
+    const defaultLean = (
+        pose === 'push' ? 0.34
+        : pose === 'pull' ? -0.26
+        : pose === 'run' ? 0.22
+        : pose === 'wade' ? 0.16
+        : pose === 'crouch' ? 0.24
+        : pose === 'walk' ? 0.08
+        : Math.sin(t * 1.8) * 0.025
+    );
     const lean = Number.isFinite(opts.lean) ? opts.lean : defaultLean;
+    const sway = Math.sin(t * 3.1) * 3.5;
 
     // Grounded foot targets in local space (y = 0 is floor)
     const lPhase = Math.sin(phase);
@@ -362,7 +382,7 @@ function drawCharacterRig(g, x, y, opts = {}) {
     const rfY = isMoving ? -Math.max(0, Math.cos(phase + Math.PI)) * lift : 0;
 
     const hipX = 0;
-    const hipY = -98 - bob;
+    const hipY = -98 - bob + crouchDrop;
     const shoulderX = hipX + Math.sin(lean) * 76;
     const shoulderY = hipY - Math.cos(lean) * 76;
 
@@ -374,14 +394,17 @@ function drawCharacterRig(g, x, y, opts = {}) {
     } else if (pose === 'pull') {
         lhX = shoulderX + 58; lhY = shoulderY + 18 + Math.sin(t * 4.5) * 3;
         rhX = shoulderX + 46; rhY = shoulderY + 24;
-    } else if (pose === 'point') {
+    } else if (pose === 'point' || pose === 'reach') {
         lhX = shoulderX - 18; lhY = shoulderY + 52;
-        rhX = shoulderX + 78; rhY = shoulderY - 12;
+        rhX = shoulderX + 78; rhY = shoulderY - 14 + Math.sin(t * 3) * 3;
+    } else if (pose === 'hold') {
+        lhX = shoulderX - 14; lhY = shoulderY + 48;
+        rhX = shoulderX + 56; rhY = shoulderY - 8 + Math.sin(t * 2.6) * 2.5;
     } else if (pose === 'celebrate') {
         lhX = shoulderX - 42; lhY = shoulderY - 62 + Math.sin(t * 6) * 6;
         rhX = shoulderX + 48; rhY = shoulderY - 66 + Math.cos(t * 6) * 6;
     } else {
-        const swing = isMoving ? lPhase * (pose === 'run' ? 42 : 26) : Math.sin(t * 2.1) * 4;
+        const swing = isMoving ? lPhase * (pose === 'run' ? 42 : 26) : Math.sin(t * 2.1) * 5;
         lhX = shoulderX - swing; lhY = shoulderY + 56 - Math.abs(swing) * 0.18;
         rhX = shoulderX + swing; rhY = shoulderY + 56 - Math.abs(swing) * 0.18;
     }
@@ -391,7 +414,7 @@ function drawCharacterRig(g, x, y, opts = {}) {
     const lArm = solveIK(shoulderX - 4, shoulderY + 8, lhX, lhY, 38, 36, -1);
     const rArm = solveIK(shoulderX + 6, shoulderY + 8, rhX, rhY, 38, 36, -1);
 
-    const drawLimb = (ctx, ax, ay, jx, jy, ex, ey, w1, w2, color, tipColor, tipR) => {
+    const drawLimb = (ctx, ax, ay, jx, jy, ex, ey, w1, w2, color, tipColor, tipR, isLeg = false) => {
         ctx.save();
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -402,7 +425,13 @@ function drawCharacterRig(g, x, y, opts = {}) {
         ctx.beginPath(); ctx.moveTo(jx, jy); ctx.lineTo(ex, ey); ctx.stroke();
         if (tipColor) {
             ctx.fillStyle = tipColor;
-            ctx.beginPath(); ctx.arc(ex, ey, tipR, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath();
+            if (isLeg) {
+                ctx.ellipse(ex + 4, ey + 2, tipR * 1.25, tipR * 0.78, 0, 0, Math.PI * 2);
+            } else {
+                ctx.arc(ex, ey, tipR, 0, Math.PI * 2);
+            }
+            ctx.fill();
         }
         ctx.restore();
     };
@@ -412,42 +441,50 @@ function drawCharacterRig(g, x, y, opts = {}) {
     g.scale(facing * scale, scale);
 
     // Ground contact shadow
-    g.fillStyle = 'rgba(15,20,28,0.24)';
-    g.beginPath(); g.ellipse(0, 4, 44, 10, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = 'rgba(15,20,28,0.26)';
+    g.beginPath(); g.ellipse(0, 4, 46, 11, 0, 0, Math.PI * 2); g.fill();
 
-    // Back arm & back leg (slightly darkened for depth)
-    g.save(); g.globalAlpha = 0.88;
-    drawLimb(g, shoulderX - 4, shoulderY + 8, lArm.jx, lArm.jy, lArm.ex, lArm.ey, 15, 12, coat, skin, 8);
-    drawLimb(g, hipX - 6, hipY, lLeg.jx, lLeg.jy, lLeg.ex, lLeg.ey, 19, 15, pants, boot, 9);
+    // Back arm & back leg (slightly darkened for depth separation)
+    g.save(); g.globalAlpha = 0.86;
+    drawLimb(g, shoulderX - 4, shoulderY + 8, lArm.jx, lArm.jy, lArm.ex, lArm.ey, 15, 12, coat, skin, 8, false);
+    drawLimb(g, hipX - 6, hipY, lLeg.jx, lLeg.jy, lLeg.ex, lLeg.ey, 19, 15, pants, boot, 9, true);
     g.restore();
 
     // Front leg
-    drawLimb(g, hipX + 6, hipY, rLeg.jx, rLeg.jy, rLeg.ex, rLeg.ey, 20, 16, pants, boot, 10);
+    drawLimb(g, hipX + 6, hipY, rLeg.jx, rLeg.jy, rLeg.ex, rLeg.ey, 20, 16, pants, boot, 10, true);
 
-    // Tapered stylized torso / tunic with directional shading
+    // Tapered stylized torso / coat with 3-value directional gradient & secondary hem sway
     g.save();
     g.translate(hipX, hipY);
     g.rotate(lean);
-    const torsoGrad = g.createLinearGradient(-26, -86, 28, 10);
+    const torsoGrad = g.createLinearGradient(-26, -86, 28, 12);
     torsoGrad.addColorStop(0, coat);
-    torsoGrad.addColorStop(1, 'rgba(0,0,0,0.22)');
+    torsoGrad.addColorStop(0.65, coat);
+    torsoGrad.addColorStop(1, '#1d222b');
     shadedShape(g, (ctx) => {
         ctx.beginPath();
-        ctx.moveTo(-22, 6);
-        ctx.quadraticCurveTo(-28, -40, -21, -80);
+        ctx.moveTo(-23 + sway * 0.35, 8);
+        ctx.quadraticCurveTo(-29, -40, -21, -80);
         ctx.quadraticCurveTo(0, -90, 22, -78);
-        ctx.quadraticCurveTo(28, -36, 24, 6);
+        ctx.quadraticCurveTo(29, -36, 25 + sway * 0.45, 8);
         ctx.closePath();
-    }, { fill: coat, shadowBlur: 12, shadowY: 5, highlight: 'rgba(255,255,255,0.28)', highlightWidth: 3 });
-    // Belt / collar accent
+    }, { fill: torsoGrad, shadowBlur: 12, shadowY: 5, highlight: 'rgba(255,255,255,0.30)', highlightWidth: 3 });
+    // Belt + collar scarf/lapel accent with secondary motion
     g.fillStyle = accent;
     g.beginPath();
-    if (g.roundRect) g.roundRect(-24, -10, 48, 10, 4);
-    else g.rect(-24, -10, 48, 10);
+    if (g.roundRect) g.roundRect(-24, -9, 48, 9, 4);
+    else g.rect(-24, -9, 48, 9);
+    g.fill();
+    g.beginPath();
+    g.moveTo(-16, -77);
+    g.quadraticCurveTo(2, -68, 18, -76);
+    g.lineTo(14, -66);
+    g.quadraticCurveTo(0, -61, -18 - sway * 0.6, -68);
+    g.closePath();
     g.fill();
     g.restore();
 
-    // Head (3/4 profile, expressive eye + hair volume)
+    // Head (3/4 profile, expressive brow + eye specular + mouth + layered hair silhouette)
     const headX = shoulderX + Math.sin(lean) * 28;
     const headY = shoulderY - Math.cos(lean) * 28 - 6;
     g.save();
@@ -455,29 +492,68 @@ function drawCharacterRig(g, x, y, opts = {}) {
     g.rotate(lean * 0.45);
     shadedShape(g, (ctx) => {
         ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2);
-    }, { fill: skin, shadowBlur: 10, shadowY: 4, highlight: 'rgba(255,255,255,0.32)' });
-    // Stylized hair cap
+    }, { fill: skin, shadowBlur: 10, shadowY: 4, highlight: 'rgba(255,255,255,0.34)' });
+    // Stylized hair cap with volume tuft
     g.fillStyle = hair;
     g.beginPath();
-    g.arc(-3, -5, 25, Math.PI * 0.72, Math.PI * 2.08);
-    g.quadraticCurveTo(10, -14, -14, -4);
+    g.arc(-3, -5, 25.5, Math.PI * 0.68, Math.PI * 2.10);
+    g.quadraticCurveTo(16, -18, 6, -9);
+    g.quadraticCurveTo(-4, -14, -15, -3);
     g.closePath();
     g.fill();
-    // Expressive eye (with periodic deterministic blink)
+    // Expressive eye (with periodic deterministic blink + white specular dot)
     const blinkCycle = (t % 3.4);
     const blinking = blinkCycle > 3.24 && blinkCycle < 3.36;
     g.fillStyle = '#1b1d21';
     if (blinking) {
         g.fillRect(8, -2, 8, 2.5);
     } else {
-        g.beginPath(); g.ellipse(12, -2, 3.2, 4.4, 0, 0, Math.PI * 2); g.fill();
+        g.beginPath(); g.ellipse(12, -2, 3.4, 4.6, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#ffffff';
+        g.beginPath(); g.arc(13.2, -3.5, 1.3, 0, Math.PI * 2); g.fill();
     }
+    // Expressive eyebrow & mouth
+    g.strokeStyle = hair;
+    g.lineWidth = 2.4;
+    g.lineCap = 'round';
+    g.beginPath();
+    if (expression === 'surprised') {
+        g.moveTo(7, -10); g.quadraticCurveTo(12, -13, 17, -9);
+    } else if (expression === 'happy' || pose === 'celebrate') {
+        g.moveTo(7, -9); g.quadraticCurveTo(12, -11, 17, -8);
+    } else {
+        g.moveTo(7, -9); g.lineTo(17, -7);
+    }
+    g.stroke();
+
+    g.strokeStyle = '#5c3828';
+    g.lineWidth = 2.0;
+    g.beginPath();
+    if (expression === 'surprised') {
+        g.arc(13, 10, 3.2, 0, Math.PI * 2);
+    } else if (expression === 'happy' || pose === 'celebrate') {
+        g.arc(11, 8, 5, 0.1 * Math.PI, 0.85 * Math.PI);
+    } else {
+        g.moveTo(8, 10); g.quadraticCurveTo(12, 9, 16, 10.5);
+    }
+    g.stroke();
     g.restore();
 
     // Front arm
-    drawLimb(g, shoulderX + 6, shoulderY + 8, rArm.jx, rArm.jy, rArm.ex, rArm.ey, 16, 13, coat, skin, 8.5);
+    drawLimb(g, shoulderX + 6, shoulderY + 8, rArm.jx, rArm.jy, rArm.ex, rArm.ey, 16, 13, coat, skin, 8.5, false);
 
     g.restore();
+
+    return {
+        head: toWorld(headX, headY),
+        rightHand: toWorld(rArm.ex, rArm.ey),
+        leftHand: toWorld(lArm.ex, lArm.ey),
+        shoulder: toWorld(shoulderX, shoulderY),
+        hip: toWorld(hipX, hipY),
+        ground: { x: Number(x) || 0, y: Number(y) || 0 },
+        facing,
+        scale,
+    };
 }
 
 /* Smoothly trace/reveal any polyline path from 0 -> 1 (SVG stroke-dashoffset equivalent). */
