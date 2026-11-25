@@ -268,13 +268,15 @@ class DeepSeekAnimationCompiler:
             raise RuntimeError(f"DeepSeek returned empty JavaScript for {label}")
         if finish_reason == "length":
             raise RuntimeError(f"DeepSeek truncated JavaScript for {label}")
-        # Cleanly unwrap markdown code fences if present.
+        # Cleanly unwrap markdown code fences and any stray XML wrapper tags (e.g. </function>).
         fenced = re.search(r"```(?:javascript|js)?\s*\n([\s\S]*?)\n```", raw, re.IGNORECASE)
         if fenced:
             raw = fenced.group(1).strip()
         elif raw.startswith("```"):
             raw = re.sub(r"^```(?:javascript|js)?\s*", "", raw, flags=re.IGNORECASE)
             raw = re.sub(r"\s*```$", "", raw).strip()
+        raw = re.sub(r"^\s*</?(?:function|script|code|tool_call)[^>]*>\s*", "", raw, flags=re.IGNORECASE)
+        raw = re.sub(r"\s*</?(?:function|script|code|tool_call)[^>]*>\s*$", "", raw, flags=re.IGNORECASE).strip()
         return raw
 
     async def _run_local_js_validation(self, source: str) -> str | None:
