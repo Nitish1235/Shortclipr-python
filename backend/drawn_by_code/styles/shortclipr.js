@@ -768,7 +768,6 @@ function glow(g, x, y, r, color = '#ffdd99', alpha = 0.35) {
     g.globalAlpha *= clamp(alpha, 0, 1);
     const grad = g.createRadialGradient(x, y, 0, x, y, r);
     grad.addColorStop(0, color);
-    grad.addColorStop(0.45, color);
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = grad;
     g.beginPath();

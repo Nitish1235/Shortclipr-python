@@ -104,22 +104,30 @@ AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
 
 _CRAFT_REFERENCE_SNIPPET = """
 VISUAL SIMPLICITY, RECOGNIZABILITY & COHESIVE ART DIRECTION (CRITICAL):
-- MUTED-AUDIO TEST: Every frame must look like a clean, iconic Kurzgesagt / Vox flat-vector
-  illustration that a viewer understands in 1 second with the sound OFF.
+- MUTED-AUDIO & PAUSED-FRAME POSTER TEST: Every frame (including the very last frame!) must look
+  like a clean, iconic Kurzgesagt / Vox flat-vector poster that a viewer understands in 1 second with
+  the sound OFF. NEVER leave a shot mostly pitch-black, empty, or with the hero sunk off-screen!
 - SIMPLE > COMPLEX: Draw 3–5 large, unmistakable, cleanly shaded shapes per shot — NEVER clutter
-  the screen with abstract wireframes, tiny glowing dots, floating CAD boxes, or scattered lines.
-- FULL-BLEED WORLDS ONLY: Environments (river + curved organic banks, sky + hills, room walls + floor,
-  space + planet) MUST extend all the way to all 4 edges of the canvas (`0..env.W`, `0..env.H`).
-  NEVER float a disconnected rectangular slab or island in an empty dark void!
+  the screen with abstract wireframes, tiny glowing dots, floating CAD boxes, or giant translucent
+  bubbles/rectangles over the subject.
+- SILHOUETTE & VALUE SEPARATION LAW (CRITICAL FOR NIGHT & UNDERWATER SCENES):
+  * Every hero object MUST have >= 30% luminance contrast against its background (use crisp rim
+    highlights `#7dd3fc` / warm lit windows `#ffd166` / distinct midtone fills).
+  * Underwater or night scenes MUST NEVER be pure black-on-black! Use rich deep-teal/cerulean
+    gradients (`#0f3554` -> `#071e36`), overhead surface `lightBeam` shafts, a visible sandy/rocky
+    seabed at the bottom, and illuminated subject details so everything is 100% legible.
+- SILHOUETTE-FIRST CUTAWAYS: When showing an internal cross-section (e.g., ship compartments,
+  engine, building), ALWAYS draw the unmistakable outer silhouette (tapered bow/stern hull,
+  smokestacks, deck) and `g.clip()` the interior inside it — NEVER draw a plain square box!
+- FULL-BLEED WORLDS ONLY: Environments MUST extend all the way to all 4 edges of the canvas
+  (`0..env.W`, `0..env.H`). NEVER float a disconnected rectangular slab in an empty dark void!
 - RECOGNIZABLE REAL-WORLD SHAPES:
-  * Water/rivers: full-bleed layered blue bands with smooth curved banks, animated white foam/current
-    ribbons, and rounded organic stones (NEVER a tilted flat cyan rectangle or gray `isoBox` cubes!).
+  * Water/rivers/oceans: full-bleed layered blue bands with smooth curved banks/horizon and animated
+    white foam/wake ribbons (never a tilted flat rectangle or gray `isoBox` cubes).
   * People/human actions: draw a clear, large stylized human (`ShortcliprStyles.drawCharacterRig` or
-    a clean articulated custom character with head, torso, arms, legs, boots) — NEVER represent a
-    person as a glowing orange dot or stick!
-  * Visual arrows: use bold, clean `flowPath` arrows to show direction/force right next to the action.
-- NO TEXT CLUTTER: Do NOT draw top pill title banners (`THE CHALLENGE...`) or multiple callout badges.
-  Let the clear illustration and motion tell the story.
+    a clean articulated custom character) — never a glowing dot or stick figure.
+  * Visual arrows: use bold, clean `flowPath` arrows right next to the action.
+- NO TEXT CLUTTER: Do NOT draw top pill title banners or multiple callout badges.
 """.strip()
 
 

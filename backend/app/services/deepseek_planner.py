@@ -154,6 +154,16 @@ RULES
   - Every shot must stay in the SAME recognizable continuous world (full-bleed edge-to-edge scenery
     filling 100% of the canvas — NEVER floating slabs in empty space) and focus on ONE simple,
     unmistakable visual idea with 3–5 bold elements max.
+  - PAUSED-FRAME POSTER TEST & HIGH-CONTRAST VISIBILITY (CRITICAL — ESPECIALLY FOR THE ENDING!):
+    * Every frame from 0s to {duration}s (including the FINAL shot!) must look like a clean,
+      readable poster if paused: NEVER let the hero disappear into a pitch-black screen or sink
+      off-screen into empty darkness!
+    * For night or underwater shots: NEVER plan black-on-black. Specify rich deep-teal/indigo
+      water (`#0f3554` -> `#071e36`), volumetric light rays streaming from the surface above,
+      a visible seabed/terrain floor, and warm lit windows/rim highlights so the subject stays
+      100% crisp and readable until the very last frame.
+    * For internal cutaways/cross-sections (e.g., ship compartments, engines, organs): ALWAYS keep
+      the unmistakable outer silhouette (tapered hull, smokestacks, deck) — NEVER a plain box!
   - NO title cards, NO top pill banners, NO cluttered callout labels — let clear visual storytelling
     and bold directional arrows do the explaining.
 - CINEMATOGRAPHY & 2D-FRIENDLY FRAMING (NEVER FORCE AWKWARD OR IMPOSSIBLE 2D ANGLES!):
