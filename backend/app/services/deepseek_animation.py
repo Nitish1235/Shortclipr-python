@@ -617,6 +617,11 @@ DESIGN & QUALITY STANDARDS
   origin (e.g. `// Draws hero explorer at ground contact (x, y), scale=1, pose='walk'|'idle', walkPhase=0`).
 - Use default parameter values where helpful (e.g. `scale = 1, pose = 'idle'`).
 - If any helper accepts a draw callback `fn`, ALWAYS pass the Canvas context into it (`fn(g)`), never bare `fn()`.
+- For human characters, ALWAYS delegate to `ShortcliprStyles.drawCharacterRig(g, x, y, { scale, facing, pose, t, lean, skin, coat, pants, hair, accent })`
+  so characters have expressive 3/4 profiles, blinking eyes, and 2-bone IK limbs (NEVER draw stiff
+  front-facing cylinder characters with 2 dot eyes!).
+- NEVER draw dark semi-transparent `fillRect` boxes over trees, props, or characters for shading —
+  use tapered organic polygons (`shadedShape` / `organicPath`) and directional gradients instead.
 - Use the film's custom palette (`ShortcliprStyles.palette('{style_id}')` or the hex colors from
   `visual_direction.palette`), `ShortcliprStyles.shadedShape`, linear/radial gradients,
   `ShortcliprStyles.glow`, `ShortcliprStyles.solveIK` (for articulated character limbs),

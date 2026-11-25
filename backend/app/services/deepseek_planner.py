@@ -27,8 +27,8 @@ class DeepSeekStoryPlanner:
         total_frames = duration * 30
         target_shots = max(3, min(8, round(duration / 5)))
         minimum_scenes = max(3, min(target_shots, duration // 4 if duration >= 12 else 3))
-        min_words = max(16, int(duration * 1.65))
-        max_words = max(22, int(duration * 2.15))
+        min_words = max(20, int(duration * 2.25))
+        max_words = max(26, int(duration * 2.55))
         styles = sorted(STYLE_IDS)
         requested_style = resolve_visual_style(project.get("visual_style", "AI Auto"))
         style_instruction = (
@@ -112,9 +112,10 @@ PROJECT:
 RULES
 - Keep every JSON string concise and concrete (1–2 sentences max per field; never write essays).
 - Narration: write in the requested language (`{project.get("language", "en")}`). For English/European
-  languages, strictly target {min_words}–{max_words} words so spoken audio finishes cleanly inside
-  {duration} seconds without getting cut off. Strong opening hook, clear progression, satisfying payoff.
-  Never invent dates, quotes, statistics, or unsupported factual claims.
+  languages, strictly write {min_words}–{max_words} words (do NOT under-write! Spoken TTS runs
+  at ~2.5 words/sec, so {min_words}–{max_words} words ensures continuous narration throughout the
+  entire {duration}-second film with zero long silent gaps at the end). Strong opening hook, clear
+  progression, satisfying payoff. Never invent dates, quotes, statistics, or unsupported factual claims.
 - VISUAL CLARITY & SIMPLICITY FIRST (MUTED-AUDIO TEST — CRITICAL):
   - Imagine the viewer watches with SOUND MUTED: within 1 second of every shot, they must instantly
     recognize the real-world place, subject, and physical action (think Kurzgesagt / clean flat-vector
@@ -169,13 +170,16 @@ RULES
 - CINEMATOGRAPHY & 2D-FRIENDLY FRAMING (NEVER FORCE AWKWARD OR IMPOSSIBLE 2D ANGLES!):
   - Assign each shot an explicit `camera_angle` (`eye_level`, `high_angle`, `low_angle`, `overhead`,
     `macro_closeup`, `dutch_tilt`, `isometric`) and `energy` (`calm`, `building`, `action`, `climax`).
-  - Keep every shot **natural, grounded, and easy to draw cleanly in 2D**:
-    * Prefer clean `eye_level` (side/3-4 view) and gentle `high_angle` / `low_angle` shots with smooth
-      scale changes (`wide` -> `medium` -> `closeup` -> `wide`).
+  - Keep every shot **natural, grounded, and easy to draw cleanly in 2D**, while varying `shot_scale`
+    (`wide` -> `medium` -> `close_up` -> `wide`) so consecutive shots NEVER look like the same
+    static camera setup:
+    * Use `low_angle` for monumental scale (trees, ships, rockets, mountains), `eye_level` for
+      character action, `close_up` for dramatic hand/object/face moments (e.g., lighting a torch,
+      turning a key, impact), and `high_angle` for group/environment reveals.
     * NEVER use `overhead` for human characters (a top-down 2D person looks broken/sideways!) — reserve
-      `overhead` strictly for maps, rivers/paths without a close-up person, or diagrams.
-    * NEVER design disembodied macro body-part shots (like giant floating legs/feet alone). Keep the
-      whole recognizable scene or clean waist-up / full-body framing in view.
+      `overhead` strictly for maps, paths without a close-up person, or diagrams.
+    * NEVER design disembodied macro body-part shots (like giant floating legs/feet alone). Keep
+      clean waist-up, hand+prop, or full-body framing in view.
     * Avoid `dutch_tilt` unless there is a true high-energy action moment.
   - PHYSICAL REALISM:
     * If a person is in water (river, ocean, pool), describe them as **wading waist/knee-deep IN the
