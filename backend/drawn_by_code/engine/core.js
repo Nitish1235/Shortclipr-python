@@ -83,10 +83,21 @@ const Motion = (() => {
 
     // --- camera --------------------------------------------------------------------
     function cam(g, env, cx, cy, zoom = 1, rot = 0) {
-        g.translate(env.W / 2, env.H / 2);
-        g.rotate(rot);
-        g.scale(zoom, zoom);
-        g.translate(-cx, -cy);
+        const W = Math.max(1, Number(env?.W) || 900);
+        const H = Math.max(1, Number(env?.H) || 1600);
+        const r = Number(rot) || 0;
+        const absR = Math.abs(r);
+        const aspectMax = Math.max(W / H, H / W);
+        const minZ = absR > 0.001 ? (Math.cos(absR) + Math.sin(absR) * aspectMax) * 1.03 : 1;
+        const z = Math.max(1, Number(zoom) || 1, minZ);
+        const maxPanX = Math.max(0, (W / 2) * (1 - minZ / z));
+        const maxPanY = Math.max(0, (H / 2) * (1 - minZ / z));
+        const safeCx = Ease.clamp(Number.isFinite(cx) ? cx : W / 2, W / 2 - maxPanX, W / 2 + maxPanX);
+        const safeCy = Ease.clamp(Number.isFinite(cy) ? cy : H / 2, H / 2 - maxPanY, H / 2 + maxPanY);
+        g.translate(W / 2, H / 2);
+        g.rotate(r);
+        g.scale(z, z);
+        g.translate(-safeCx, -safeCy);
     }
     // deterministic shake (depends only on t)
     function shake(g, amt, t) {

@@ -156,13 +156,21 @@ RULES
     unmistakable visual idea with 3–5 bold elements max.
   - NO title cards, NO top pill banners, NO cluttered callout labels — let clear visual storytelling
     and bold directional arrows do the explaining.
-- CINEMATOGRAPHY & PACING:
-  - Assign each shot an explicit `camera_angle` (`low_angle`, `eye_level`, `high_angle`, `overhead`,
-    `dutch_tilt`, `macro_closeup`, `isometric`) and `energy` (`calm`, `building`, `action`, `climax`).
-  - Vary `camera_angle` and `shot_scale` naturally across shots (e.g., wide `overhead` establishing
-    the full river -> medium `eye_level` / `high_angle` showing the hiker turning upstream ->
-    `macro_closeup` on planted boots splitting the water -> wide `low_angle` reaching the far bank).
-    Only use `dutch_tilt` on brief high-energy moments, never on calm explanation shots.
+- CINEMATOGRAPHY & 2D-FRIENDLY FRAMING (NEVER FORCE AWKWARD OR IMPOSSIBLE 2D ANGLES!):
+  - Assign each shot an explicit `camera_angle` (`eye_level`, `high_angle`, `low_angle`, `overhead`,
+    `macro_closeup`, `dutch_tilt`, `isometric`) and `energy` (`calm`, `building`, `action`, `climax`).
+  - Keep every shot **natural, grounded, and easy to draw cleanly in 2D**:
+    * Prefer clean `eye_level` (side/3-4 view) and gentle `high_angle` / `low_angle` shots with smooth
+      scale changes (`wide` -> `medium` -> `closeup` -> `wide`).
+    * NEVER use `overhead` for human characters (a top-down 2D person looks broken/sideways!) — reserve
+      `overhead` strictly for maps, rivers/paths without a close-up person, or diagrams.
+    * NEVER design disembodied macro body-part shots (like giant floating legs/feet alone). Keep the
+      whole recognizable scene or clean waist-up / full-body framing in view.
+    * Avoid `dutch_tilt` unless there is a true high-energy action moment.
+  - PHYSICAL REALISM:
+    * If a person is in water (river, ocean, pool), describe them as **wading waist/knee-deep IN the
+      water** (water overlapping their lower legs/torso with splashes) or **swimming/floating IN the
+      water** — NEVER standing or walking dry on top of the water surface!
   - Motivated action ONLY: use `action` / `climax` energy ONLY on genuine breakthroughs, impacts,
     or dramatic peaks — keep explanatory beats `calm` / `building`.
 - Vary `transition_out` (cut, fade, wipe, iris, paper, zoom, whip). Avoid title cards and subtitles.
