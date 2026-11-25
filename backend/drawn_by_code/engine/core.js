@@ -47,6 +47,7 @@ const Motion = (() => {
     // --- sprite cache: expensive things are painted once at output resolution -----
     const cache = new Map();
     function sprite(key, box, scale, drawFn) {
+        if (!box || typeof drawFn !== 'function') return { canvas: null, box, draw: () => {} };
         const sc = Number.isFinite(scale) && scale > 0 ? scale : 1;
         const k = key + '@' + sc.toFixed(4);
         if (!cache.has(k)) {
@@ -67,6 +68,9 @@ const Motion = (() => {
     // shots: [[start, end, name, fn?], ...] in seconds. Returns the active shot
     // and the local time inside it.
     function shotAt(shots, t) {
+        if (!Array.isArray(shots) || !shots.length) {
+            return { shot: [0, 1, ''], name: '', t0: 0, t1: 1, local: Math.max(0, Number(t) || 0), u: 0 };
+        }
         const s = shots.find(([a, b]) => t >= a && t < b) ?? shots[shots.length - 1];
         return { shot: s, name: s[2], t0: s[0], t1: s[1], local: t - s[0], u: Ease.seg(t, s[0], s[1]) };
     }
@@ -150,6 +154,7 @@ const Motion = (() => {
     // coordinates; src: a canvas/image; box: the source rect (defaults to the whole image).
     // o.bend(u, v) → [dx, dy] optional displacement to curl the surface (u, v in 0..1).
     function quad(g, src, q, n = 8, box = null, o = {}) {
+        if (!g || !src || !Array.isArray(q) || q.length < 4 || !src.width || !src.height) return;
         const sw = box ? box.w : src.width, sh = box ? box.h : src.height, sx0 = box ? box.x : 0, sy0 = box ? box.y : 0;
         const at = (u, v) => {
             const top = [q[0][0] + (q[1][0] - q[0][0]) * u, q[0][1] + (q[1][1] - q[0][1]) * u];
@@ -227,7 +232,7 @@ const Ease = {
     // appears with a bounce at `at`
     pop: (t, at, dur = 0.35) => (t < at ? 0 : Ease.back(Ease.seg(t, at, at + dur))),
     lerp: (a, b, t) => (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(t) ? (Number.isFinite(a) ? a : 0) : a + (b - a) * t),
-    lerpPt: (p, q, t) => [Ease.lerp(p[0], q[0], t), Ease.lerp(p[1], q[1], t)],
+    lerpPt: (p, q, t) => [Ease.lerp(p?.[0] ?? 0, q?.[0] ?? 0, t), Ease.lerp(p?.[1] ?? 0, q?.[1] ?? 0, t)],
 };
 
 // Defensive Canvas 2D hardening so generated scenes never crash on non-finite

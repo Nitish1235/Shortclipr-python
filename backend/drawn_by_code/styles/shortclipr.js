@@ -151,10 +151,11 @@ function paperBackground(g, id, env) {
 }
 
 function paperShadow(g, x, y, blur = 12, color = 'rgba(30,20,10,.18)') {
+    if (!isCtx(g)) return;
     g.shadowColor = color;
-    g.shadowBlur = blur;
+    g.shadowBlur = Number.isFinite(blur) ? Math.max(0, blur) : 12;
     g.shadowOffsetX = Number.isFinite(x) ? x * 0.0 : 0;
-    g.shadowOffsetY = blur * 0.45;
+    g.shadowOffsetY = (Number.isFinite(blur) ? Math.max(0, blur) : 12) * 0.45;
 }
 
 function halftone(g, x, y, w, h, spacing = 12, color = 'rgba(20,20,20,.18)') {
@@ -991,7 +992,7 @@ function postProcess(ctx, t, env, styleId) {
 /* Studio transitions including 'zoom' (zoom-through match cut) and 'whip' (fast whip-pan). */
 function transition(g, env, nextCanvas, progress, type = 'wipe') {
     if (!isCtx(g) || !env || !nextCanvas) return;
-    const p = ease(progress);
+    const p = clamp(ease(progress), 0, 1);
     g.save();
     if (type === 'zoom') {
         // Incoming shot scales from 0.68 -> 1.0 with smooth cross-dissolve
@@ -1083,24 +1084,26 @@ function editorialLight(g, x, y, r, color = 'rgba(255,236,190,.24)') {
 }
 
 function isoProject(x, y, z = 0, scale = 1, origin = { x: 0, y: 0 }) {
-    const u = (Number(x) - Number(y)) * 0.8660254037844386 * scale;
-    const v = (Number(x) + Number(y)) * 0.5 * scale - Number(z) * scale;
-    return { x: Number(origin.x || 0) + u, y: Number(origin.y || 0) + v };
+    const s = Number.isFinite(Number(scale)) ? Number(scale) : 1;
+    const u = ((Number(x) || 0) - (Number(y) || 0)) * 0.8660254037844386 * s;
+    const v = ((Number(x) || 0) + (Number(y) || 0)) * 0.5 * s - (Number(z) || 0) * s;
+    return { x: Number(origin?.x || 0) + u, y: Number(origin?.y || 0) + v };
 }
 
 function isoBox(g, x, y, z, w, d, h, scale = 1, colors = {}) {
     if (!isCtx(g)) return null;
+    const cObj = colors && typeof colors === 'object' ? colors : {};
     const a = isoProject(x, y, z, scale), b = isoProject(x + w, y, z, scale), c = isoProject(x + w, y + d, z, scale), e = isoProject(x, y + d, z, scale);
     const at = isoProject(x, y, z + h, scale), bt = isoProject(x + w, y, z + h, scale), ct = isoProject(x + w, y + d, z + h, scale), et = isoProject(x, y + d, z + h, scale);
     g.save();
     g.lineJoin = 'round';
-    g.lineWidth = Math.max(1, scale * 0.035);
-    g.strokeStyle = colors.edge || '#263746';
-    g.fillStyle = colors.left || '#66818a';
+    g.lineWidth = Math.max(1, (Number(scale) || 1) * 0.035);
+    g.strokeStyle = cObj.edge || '#263746';
+    g.fillStyle = cObj.left || '#66818a';
     g.beginPath(); g.moveTo(e.x, e.y); g.lineTo(c.x, c.y); g.lineTo(ct.x, ct.y); g.lineTo(et.x, et.y); g.closePath(); g.fill(); g.stroke();
-    g.fillStyle = colors.right || '#3f6877';
+    g.fillStyle = cObj.right || '#3f6877';
     g.beginPath(); g.moveTo(c.x, c.y); g.lineTo(b.x, b.y); g.lineTo(bt.x, bt.y); g.lineTo(ct.x, ct.y); g.closePath(); g.fill(); g.stroke();
-    g.fillStyle = colors.top || '#a9c1c1';
+    g.fillStyle = cObj.top || '#a9c1c1';
     g.beginPath(); g.moveTo(at.x, at.y); g.lineTo(bt.x, bt.y); g.lineTo(ct.x, ct.y); g.lineTo(et.x, et.y); g.closePath(); g.fill(); g.stroke();
     g.restore();
     return { top: [at, bt, ct, et], left: [e, c, ct, et], right: [c, b, bt, ct] };
@@ -1164,9 +1167,9 @@ function paperParallax(g, offset, drawLayers) {
 function mechanismPose(spec, progress) {
     if (!spec || typeof spec !== 'object') throw new TypeError('mechanism spec is required');
     const p = clamp(Number(progress) || 0), lerp = (a, b, t) => a + (b - a) * t;
-    const point = (v) => ({ x: Number(v.x), y: Number(v.y) });
+    const point = (v) => ({ x: Number(v?.x) || 0, y: Number(v?.y) || 0 });
     if (spec.type === 'pivot') {
-        const anchor = point(spec.anchor), angle = lerp(Number(spec.start_angle_deg), Number(spec.end_angle_deg), p) * Math.PI / 180;
+        const anchor = point(spec.anchor), angle = lerp(Number(spec.start_angle_deg) || 0, Number(spec.end_angle_deg) || 0, p) * Math.PI / 180;
         return { type: 'pivot', part: spec.part, anchor, angle_rad: angle };
     }
     if (spec.type === 'translation' || spec.type === 'slider') {
@@ -1174,22 +1177,26 @@ function mechanismPose(spec, progress) {
         return { type: spec.type, part: spec.part, position: { x: lerp(start.x, end.x, p), y: lerp(start.y, end.y, p) } };
     }
     if (spec.type === 'gear') {
-        const driverStart = Number(spec.driver_start_angle_deg || 0), driverEnd = Number(spec.driver_end_angle_deg);
+        const driverStart = Number(spec.driver_start_angle_deg || 0), driverEnd = Number(spec.driver_end_angle_deg) || 0;
         const driverAngle = lerp(driverStart, driverEnd, p);
-        const ratio = Number(spec.driver_radius) / Number(spec.driven_radius);
+        const drivenR = Number(spec.driven_radius) || 1;
+        const ratio = (Number(spec.driver_radius) || 1) / drivenR;
         const sign = spec.mesh === 'internal' ? 1 : -1;
         const drivenAngle = Number(spec.driven_start_angle_deg || 0) + (driverAngle - driverStart) * ratio * sign;
         return { type: 'gear', part: spec.part, driver_part: spec.driver_part, anchor: point(spec.anchor), driver_anchor: point(spec.driver_anchor), driver_angle_rad: driverAngle * Math.PI / 180, angle_rad: drivenAngle * Math.PI / 180, ratio };
     }
     if (spec.type === 'pulley') {
-        const start = Number(spec.start_angle_deg || 0), angle = lerp(start, Number(spec.end_angle_deg), p);
-        const delta = (angle - start) * Math.PI / 180 * Number(spec.direction || 1), travel = Number(spec.radius) * delta, axis = point(spec.axis), origin = point(spec.start_position);
+        const start = Number(spec.start_angle_deg || 0), angle = lerp(start, Number(spec.end_angle_deg) || 0, p);
+        const delta = (angle - start) * Math.PI / 180 * Number(spec.direction || 1), travel = (Number(spec.radius) || 0) * delta, axis = point(spec.axis), origin = point(spec.start_position);
         return { type: 'pulley', part: spec.part, pulley_part: spec.pulley_part, anchor: point(spec.anchor), pulley_angle_rad: angle * Math.PI / 180, position: { x: origin.x + axis.x * travel, y: origin.y + axis.y * travel }, length_travelled: travel };
     }
     if (spec.type === 'cable') {
+        const starts = Array.isArray(spec.points_start) ? spec.points_start : [];
+        const ends = Array.isArray(spec.points_end) ? spec.points_end : starts;
+        const count = Math.min(starts.length, ends.length);
         const points = [];
-        for (let i = 0; i < spec.points_start.length; i++) {
-            const a = point(spec.points_start[i]), b = point(spec.points_end[i]);
+        for (let i = 0; i < count; i++) {
+            const a = point(starts[i]), b = point(ends[i]);
             points.push({ x: lerp(a.x, b.x, p), y: lerp(a.y, b.y, p) });
         }
         return { type: 'cable', part: spec.part, points };

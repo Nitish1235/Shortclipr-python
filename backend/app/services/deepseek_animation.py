@@ -99,7 +99,7 @@ AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
 3. Ease (from core.js):
    - Ease.clamp(x, a, b), Ease.seg(t, a, b), Ease.lerp(a, b, u), Ease.lerpPt(p, q, u)
    - Ease.inOut(u), Ease.out(u), Ease.in(u), Ease.back(u), Ease.elastic(u), Ease.pop(t, at, dur), Ease.bump(t, a, dur)
-   (NEVER call bare mix() — always use Ease.lerp(a, b, u).)
+   (NEVER call bare mix() — always use Ease.lerp(a, b, u). NEVER invent ShortcliprStyles.* method names that are not listed above!)
 """.strip()
 
 _CRAFT_REFERENCE_SNIPPET = """
@@ -463,7 +463,7 @@ class DeepSeekAnimationCompiler:
         # so the debugger sees both the throwing helper line and the shot call-site line.
         snippet_blocks: list[str] = []
         seen_lines: set[int] = set()
-        for m in re.finditer(r"scene\.js:(\d+)", error_report):
+        for m in re.finditer(r"(?:scene\.js:|line\s+)(\d+)", error_report):
             ln = int(m.group(1))
             if ln in seen_lines or not (1 <= ln <= len(lines)):
                 continue
