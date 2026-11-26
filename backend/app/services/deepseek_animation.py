@@ -82,7 +82,11 @@ AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
    - strokeReveal(g, [[x0,y0],[x1,y1],...], progress, { color, width, dashed, glow, arrow }) -> smoothly traces any path from 0 -> 1 (SVG stroke-dashoffset equivalent)
    - organicPath(g, [[x0,y0],...], seed, { roughness, closed, fill, stroke, lineWidth, shadow, highlight }) -> hand-crafted path with deterministic noise jitter
    - roundedCard(g, x, y, w, h, r, { fill, stroke, lineWidth, shadowBlur, highlight })
-   - badge(g, x, y, text, { bg, color, border, fontSize, align }) -> auto-clamped pill label (AVOID unless 1 tiny 1–2 word label is truly needed; NEVER draw top title banners!)
+   - badge(g, x, y, text, { bg, color, border, fontSize, align }) -> auto-clamped pill label (use sparingly for crisp 1–3 word diagram/comparison labels like 'STILL', 'FIDGETING', '+2.6%', 'SECOND HEART'; NEVER draw top title banners!)
+   - zoomLens(g, cx, cy, r, (lg, x, y, rad) => { ... }, { targetX, targetY, bg, borderColor, borderWidth }) -> circular magnifying inset with pointer line (ideal for anatomy, internal mechanisms, micro-details!)
+   - compareCard(g, x, y, w, h, title, { accent, border, bg, meter }) -> clean comparison card with semantic header pill and animated meter bar (`0..1`)
+   - graphGrid(g, env, { step, color, axes, axisColor }) -> subtle coordinate/lab-notebook grid (great for `clean_infographic`, `vox_editorial`, `math_3b1b`)
+   - kineticHighlight(g, x, y, text, progress, { bg, color, fontSize, align }) -> Vox-style expanding highlight block behind bold text
    - flowPath(g, [[x0,y0],[x1,y1],...], t, { color, width, progress, dashed, speed, glow, arrow, arrowSize }) -> animated directional force/flow arrow
    - particles(g, seed, count, t, { x, y, w, h }, { mode: 'drift'|'rise'|'sparkle'|'stream', color, speed, minR, maxR, alpha })
    - cameraRig(g, env, { cx, cy, zoom, rotation, shake, t }) -> smooth 2D camera inside g.save()/g.restore() (IMPORTANT: cx defaults to env.W/2, cy defaults to env.H/2 — NEVER pass cx:0, cy:0 unless you mean the top-left corner; to center, pass cx: env.W/2 + panX, cy: env.H/2 + panY and zoom >= 1.05!)
@@ -126,9 +130,14 @@ VISUAL QUALITY & ART DIRECTION (NON-NEGOTIABLE):
    - Full-bleed environment extending across `0..env.W` and `0..env.H` (never floating slabs in empty void)
    - Background / midground / hero layers must differ by >= 20% luminance (>= 30% in night/underwater scenes using deep teal/indigo `#0f3554` -> `#071e36`, overhead `lightBeam` shafts, visible ground/seabed, and warm `#ffd166` / `#7dd3fc` rim accents)
    - Internal cutaways (ship compartments, engines, buildings) MUST be `g.clip()`'d inside the unmistakable outer silhouette.
-5. LIVING MOTION FEEL:
+5. LIVING MOTION FEEL & GENRE EXECUTION PLAYBOOK:
    Use snappy `spring` + `anticipation` on actions and keep continuous `t`-driven secondary motion
-   (flames, water ripples, drifting clouds/embers, breathing, coat sway) alive right through the final frame.
+   (flames, water ripples, blood flow, drifting clouds/embers, breathing, coat sway) alive right through the final frame.
+   Adapt rendering technique to `visual_direction.visual_genre`:
+   - `clean_infographic`: bright pastel/graph-grid (`graphGrid`) backdrop, crisp `#111111` bold outlines (`lineWidth: 3.5`), `zoomLens` circular insets, `compareCard` A-vs-B meters, and semantic red/green/blue coding.
+   - `vox_editorial`: stark editorial contrast + 1 alert accent, `kineticHighlight` title wipes, clean data charts/maps (`strokeReveal`).
+   - `math_3b1b`: dark slate `graphGrid(axes: true)`, glowing cyan/gold `strokeReveal` curves, and `glow` tracking points.
+   - `kurzgesagt_cosmic` / `layered_papercraft` / `atmospheric_noir` / `comic_cel_action`: rich 3-value gradients, rim highlights, `lightBeam` shafts, and tactile shadows.
 """.strip()
 
 
@@ -1166,7 +1175,8 @@ RULES:
                 "backdrop", "palette", "shadedShape", "glow", "lightBeam", "bloomLayer",
                 "parallaxLayers", "solveIK", "drawCharacterRig", "squash", "spring",
                 "stagger", "anticipation", "posterize", "strokeReveal", "organicPath",
-                "roundedCard", "badge", "flowPath", "particles", "camera", "cameraRig",
+                "roundedCard", "badge", "zoomLens", "compareCard", "graphGrid", "kineticHighlight",
+                "flowPath", "particles", "camera", "cameraRig",
                 "speedLines", "dustBurst", "impactFlash", "impactShake", "rackFocus",
                 "editorialShape", "editorialLight", "isoProject", "isoBox", "isoLine",
                 "paperLayer", "paperPolygon", "paperEllipse", "paperParallax",

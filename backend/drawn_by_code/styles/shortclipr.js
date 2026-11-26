@@ -1037,9 +1037,10 @@ function particles(g, seed, count, t, bounds, opts = {}) {
     g.restore();
 }
 
-/* Subtle film-level finishing pass (soft vignette + cached fine grain). */
+/* Subtle film-level finishing pass (skipped for crisp graphic/infographic/pixel styles). */
 function postProcess(ctx, t, env, styleId) {
     if (!ctx || !env || !env.px) return;
+    if (customMood === 'bright_editorial' || customMood === 'technical_clean' || styleId === 'line' || styleId === 'comic') return;
     const [W, H] = env.px;
     ctx.save();
     const cx = W / 2;
@@ -1284,6 +1285,164 @@ function mechanismPose(spec, progress) {
     throw new TypeError('Unsupported kinematics type: ' + spec.type);
 }
 
+/* Circular magnifying inset callout with optional pointer line (great for anatomy/mechanisms). */
+function zoomLens(g, cx, cy, r, drawInsideFn, opts = {}) {
+    if (!isCtx(g) || !Number.isFinite(cx) || !Number.isFinite(cy) || !(Number(r) > 2)) return;
+    const rad = Number(r);
+    const borderColor = opts.borderColor || '#111111';
+    const borderWidth = Number.isFinite(opts.borderWidth) ? opts.borderWidth : 4;
+    const bg = opts.bg || '#f9a8a8';
+    g.save();
+    if (Number.isFinite(opts.targetX) && Number.isFinite(opts.targetY)) {
+        const ang = Math.atan2(opts.targetY - cy, opts.targetX - cx);
+        const sx = cx + Math.cos(ang) * rad;
+        const sy = cy + Math.sin(ang) * rad;
+        g.strokeStyle = opts.lineColor || borderColor;
+        g.lineWidth = Number.isFinite(opts.lineWidth) ? opts.lineWidth : 3;
+        g.beginPath();
+        g.moveTo(sx, sy);
+        g.lineTo(opts.targetX, opts.targetY);
+        g.stroke();
+        g.fillStyle = opts.dotColor || '#f2c94c';
+        g.beginPath();
+        g.arc(opts.targetX, opts.targetY, 6, 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
+    }
+    if (opts.shadow !== false) {
+        g.shadowColor = 'rgba(0,0,0,0.18)';
+        g.shadowBlur = 16;
+        g.shadowOffsetY = 6;
+    }
+    g.fillStyle = bg;
+    g.beginPath();
+    g.arc(cx, cy, rad, 0, Math.PI * 2);
+    g.fill();
+    g.shadowColor = 'transparent';
+    g.shadowBlur = 0;
+    g.shadowOffsetY = 0;
+
+    if (typeof drawInsideFn === 'function') {
+        g.save();
+        g.beginPath();
+        g.arc(cx, cy, rad - borderWidth * 0.4, 0, Math.PI * 2);
+        g.clip();
+        drawInsideFn(g, cx, cy, rad);
+        g.restore();
+    }
+    g.strokeStyle = borderColor;
+    g.lineWidth = borderWidth;
+    g.beginPath();
+    g.arc(cx, cy, rad, 0, Math.PI * 2);
+    g.stroke();
+    g.restore();
+}
+
+/* Crisp side-by-side comparison card with semantic header pill and optional progress meter. */
+function compareCard(g, x, y, w, h, title, opts = {}) {
+    if (!isCtx(g) || !(w > 10) || !(h > 10)) return;
+    const r = Number.isFinite(opts.radius) ? opts.radius : 22;
+    const accent = opts.accent || '#ef6c6c';
+    const border = opts.border || '#111111';
+    const bg = opts.bg || '#ffffff';
+    g.save();
+    roundedCard(g, x, y, w, h, r, {
+        fill: bg,
+        stroke: border,
+        lineWidth: Number.isFinite(opts.lineWidth) ? opts.lineWidth : 4,
+        shadowBlur: opts.shadow === false ? 0 : 14,
+        shadowY: opts.shadow === false ? 0 : 6,
+    });
+    if (title) {
+        badge(g, x + w - 24, y + 34, String(title), {
+            bg: accent,
+            color: opts.titleColor || '#111111',
+            border,
+            fontSize: Number(opts.fontSize) || 22,
+            padX: 16,
+            padY: 8,
+            align: 'right',
+        });
+    }
+    if (Number.isFinite(opts.meter)) {
+        const mw = w - 40;
+        const mh = 22;
+        const mx = x + 20;
+        const my = y + h - 42;
+        const pct = clamp(opts.meter, 0, 1);
+        g.fillStyle = '#f1f5f9';
+        g.strokeStyle = border;
+        g.lineWidth = 3;
+        g.beginPath();
+        if (g.roundRect) g.roundRect(mx, my, mw, mh, mh / 2);
+        else g.rect(mx, my, mw, mh);
+        g.fill();
+        if (pct > 0.01) {
+            g.fillStyle = accent;
+            g.beginPath();
+            if (g.roundRect) g.roundRect(mx, my, Math.max(mh, mw * pct), mh, mh / 2);
+            else g.rect(mx, my, Math.max(mh, mw * pct), mh);
+            g.fill();
+        }
+        g.stroke();
+    }
+    g.restore();
+}
+
+/* Subtle coordinate / lab-notebook graph grid for infographic & math explainers. */
+function graphGrid(g, env, opts = {}) {
+    if (!isCtx(g) || !env) return;
+    const step = Math.max(16, Number(opts.step) || 48);
+    const color = opts.color || 'rgba(15, 45, 40, 0.07)';
+    g.save();
+    g.strokeStyle = color;
+    g.lineWidth = Number(opts.lineWidth) || 1.5;
+    for (let x = -env.W * 0.25; x <= env.W * 1.25; x += step) {
+        g.beginPath(); g.moveTo(x, -env.H * 0.25); g.lineTo(x, env.H * 1.25); g.stroke();
+    }
+    for (let y = -env.H * 0.25; y <= env.H * 1.25; y += step) {
+        g.beginPath(); g.moveTo(-env.W * 0.25, y); g.lineTo(env.W * 1.25, y); g.stroke();
+    }
+    if (opts.axes) {
+        g.strokeStyle = opts.axisColor || 'rgba(255,255,255,0.28)';
+        g.lineWidth = 2.5;
+        g.beginPath();
+        g.moveTo(0, env.H / 2); g.lineTo(env.W, env.H / 2);
+        g.moveTo(env.W / 2, 0); g.lineTo(env.W / 2, env.H);
+        g.stroke();
+    }
+    g.restore();
+}
+
+/* Vox-style expanding highlight block behind bold kinetic typography. */
+function kineticHighlight(g, x, y, text, progress = 1, opts = {}) {
+    const str = String(text ?? '');
+    if (!isCtx(g) || !str) return;
+    const p = clamp(Number.isFinite(progress) ? progress : 1, 0, 1);
+    const fontSize = Number(opts.fontSize) || 44;
+    const padX = Number(opts.padX) || 20;
+    const padY = Number(opts.padY) || 12;
+    g.save();
+    g.font = `800 ${fontSize}px ${opts.font || '"Noto Sans", "Liberation Sans", sans-serif'}`;
+    const w = g.measureText(str).width + padX * 2;
+    const h = fontSize + padY * 2;
+    const bx = opts.align === 'left' ? x : opts.align === 'right' ? x - w : x - w / 2;
+    const by = y - h / 2;
+    const rw = w * (1 - Math.pow(1 - p, 3));
+    if (rw > 2) {
+        g.fillStyle = opts.bg || '#ff3366';
+        g.fillRect(bx, by, rw, h);
+    }
+    if (p > 0.25) {
+        g.globalAlpha *= clamp((p - 0.25) / 0.45, 0, 1);
+        g.fillStyle = opts.color || '#ffffff';
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillText(str, bx + w / 2, by + h / 2 + 1);
+    }
+    g.restore();
+}
+
 window.ShortcliprStyles = Object.freeze({
     mechanismPose,
     palette,
@@ -1316,6 +1475,10 @@ window.ShortcliprStyles = Object.freeze({
     glow,
     roundedCard,
     badge,
+    zoomLens,
+    compareCard,
+    graphGrid,
+    kineticHighlight,
     flowPath,
     particles,
     postProcess,

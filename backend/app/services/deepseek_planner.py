@@ -27,8 +27,8 @@ class DeepSeekStoryPlanner:
         total_frames = duration * 30
         target_shots = max(3, min(8, round(duration / 5)))
         minimum_scenes = max(3, min(target_shots, duration // 4 if duration >= 12 else 3))
-        min_words = max(20, int(duration * 2.25))
-        max_words = max(26, int(duration * 2.55))
+        min_words = max(20, int(duration * 2.35))
+        max_words = max(26, int(duration * 2.65))
         styles = sorted(STYLE_IDS)
         requested_style = resolve_visual_style(project.get("visual_style", "AI Auto"))
         style_instruction = (
@@ -128,10 +128,14 @@ RULES
     * For outdoor/nature/how-to/human topics, prefer bright, legible flat-vector styles
       (`paper-cutout`, `layered-paper`, `cinematic-editorial`, `comic`, `risograph`) with natural,
       vivid colors (e.g., sunlit sky/water/foliage — NOT a dark empty void).
-  - Also design `visual_direction` tailored specifically to THIS topic:
-    * `visual_genre`: one of `kurzgesagt_cosmic`, `vox_editorial`, `isometric_engineering`,
-      `atmospheric_noir`, `expressive_character`, `comic_cel_action`, `layered_papercraft`,
-      `retro_pixel_arcade`, `organic_storybook`.
+  - Also design `visual_direction` tailored specifically to THIS topic (pick the genre that best fits!):
+    * `visual_genre`: one of:
+      - `clean_infographic`: bright pastel/graph-grid background (`#CBE7FF` / `#E2F6F0`), bold black outlines, circular zoom callouts, comparison cards (best for health, human body, everyday science, how-to!).
+      - `kurzgesagt_cosmic`: rich deep space/nature gradients, chunky rounded vectors, glowing rim lights (space, biology, cosmos, physics).
+      - `vox_editorial`: high-contrast editorial off-white/charcoal + 1 alert accent, expanding highlight bars, maps/charts (history, economics, news, media).
+      - `math_3b1b`: dark slate `#161b24` coordinate grid, glowing cyan/gold curves & vectors (math, AI, algorithms, proofs).
+      - `isometric_engineering`: clean 3-axis isometric/exploded hardware views (machines, circuits, architecture ONLY).
+      - `layered_papercraft` / `organic_storybook` / `comic_cel_action` / `atmospheric_noir` / `retro_pixel_arcade`.
     * `palette`: 6 topic-specific hex colors (`bg`, `bg2`, `ink`, `primary`, `accent`, `secondary`)
       with high contrast and authentic real-world color fit for the subject.
     * `lighting_mood`: one of `dramatic_rim_glow`, `bright_editorial`, `warm_sunlit_shadows`,
