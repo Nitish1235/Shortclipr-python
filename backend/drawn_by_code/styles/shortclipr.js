@@ -1581,10 +1581,11 @@ function timelineTrack(g, x, y, len, milestones, progress = 1, opts = {}) {
             const tx = vertical ? mx + 20 : mx;
             g.fillText(title, tx, ty);
             if (sub) {
+                const prevAlpha = g.globalAlpha;
                 g.globalAlpha *= 0.78;
                 g.font = `500 ${Math.max(14, (Number(opts.fontSize) || 20) - 4)}px "Noto Sans", "Liberation Sans", sans-serif`;
                 g.fillText(sub, tx, vertical ? ty + 22 : (i % 2 === 0 ? ty - 22 : ty + 22));
-                g.globalAlpha = 1;
+                g.globalAlpha = prevAlpha;
             }
         }
     }
@@ -1629,10 +1630,11 @@ function morphPoly(g, ptsA, ptsB, u = 0, opts = {}) {
         const i0 = Math.floor(f) % pts.length;
         const i1 = (i0 + 1) % pts.length;
         const frac = f - Math.floor(f);
-        return [
-            pts[i0][0] + (pts[i1][0] - pts[i0][0]) * frac,
-            pts[i0][1] + (pts[i1][1] - pts[i0][1]) * frac,
-        ];
+        const x0 = Number(pts[i0]?.[0]) || 0;
+        const y0 = Number(pts[i0]?.[1]) || 0;
+        const x1 = Number(pts[i1]?.[0]) || 0;
+        const y1 = Number(pts[i1]?.[1]) || 0;
+        return [x0 + (x1 - x0) * frac, y0 + (y1 - y0) * frac];
     };
     const morphed = [];
     for (let i = 0; i < count; i++) {

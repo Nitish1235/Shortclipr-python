@@ -322,6 +322,9 @@ OUTPUT CONTRACT (return strict JSON only, no Markdown):
         scenes = plan.get("scenes")
         if not isinstance(scenes, list) or len(scenes) < minimum_scenes:
             raise RuntimeError(f"DeepSeek must return at least {minimum_scenes} shots")
+        if len(scenes) > 12:
+            scenes = scenes[:12]
+            plan["scenes"] = scenes
 
         weights = []
         for scene in scenes:
