@@ -87,6 +87,10 @@ AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
    - compareCard(g, x, y, w, h, title, { accent, border, bg, meter }) -> clean comparison card with semantic header pill and animated meter bar (`0..1`)
    - graphGrid(g, env, { step, color, axes, axisColor }) -> subtle coordinate/lab-notebook grid (great for `clean_infographic`, `vox_editorial`, `math_3b1b`)
    - kineticHighlight(g, x, y, text, progress, { bg, color, fontSize, align }) -> Vox-style expanding highlight block behind bold text
+   - animatedChart(g, x, y, w, h, [{ label, value, color }], progress, { type: 'bar'|'line', ink, accent, maxVal }) -> animated data chart
+   - timelineTrack(g, x, y, len, [{ label, sub }], progress, { vertical, accent, ink }) -> animated chronological timeline
+   - calloutBracket(g, x, y, w, h, label, progress, { color, textColor }) -> Manim/LEMMiNO highlight box + label
+   - morphPoly(g, ptsA, ptsB, u, { fill, stroke, lineWidth }) -> TED-Ed/Manim smooth polygon morph (`u` in `0..1`)
    - flowPath(g, [[x0,y0],[x1,y1],...], t, { color, width, progress, dashed, speed, glow, arrow, arrowSize }) -> animated directional force/flow arrow
    - particles(g, seed, count, t, { x, y, w, h }, { mode: 'drift'|'rise'|'sparkle'|'stream', color, speed, minR, maxR, alpha })
    - cameraRig(g, env, { cx, cy, zoom, rotation, shake, t }) -> smooth 2D camera inside g.save()/g.restore() (IMPORTANT: cx defaults to env.W/2, cy defaults to env.H/2 — NEVER pass cx:0, cy:0 unless you mean the top-left corner; to center, pass cx: env.W/2 + panX, cy: env.H/2 + panY and zoom >= 1.05!)
@@ -749,11 +753,12 @@ VISUAL CLARITY, SIMPLICITY & CINEMATOGRAPHY RULES
      or the shared character helper — NEVER draw stick figures or glowing-dot stand-ins.
    - Rolling/spinning objects (wheels, logs, gears, planets) MUST draw visible radial spokes/markings
      that visibly rotate (`angle = distance / radius`) — never slide a static circle!
-5. Structure Local Time `t` into a Smooth 4-Phase Choreography (NEVER pop everything in at `t = 0`):
-   - Phase A (0–15% of shot): Establish the full-bleed environment and camera motion.
+5. Structure Local Time `t` into a Smooth 4-Phase Choreography + 2-Second Micro-Beats:
+   - ZERO-FRAME MOTION (especially Shot 0): `t = 0` must ALREADY have active motion or a clear camera/subject move — never start on a dead static pause!
+   - Phase A (0–15% of shot): Establish the full-bleed environment and active camera motion.
    - Phase B (15–35% of shot): Staggered entrances using `ShortcliprStyles.stagger`, `spring`, or `anticipation`.
-   - Phase C (35–85% of shot): Core visual action / transformation (character motion, `flowPath` arrows, clear physical cause-and-effect).
-   - Phase D (85–100% of shot): Settle with continuous living secondary motion (water ripples, breathing, `particles`, camera glide) — ZERO frozen frames.
+   - Phase C (35–85% of shot): Core visual action / transformation — introduce a fresh micro-beat every 2–3s (camera punch-in, `zoomLens` inset, `animatedChart`/`timelineTrack`, `morphPoly`, `calloutBracket`, or `flowPath` surge).
+   - Phase D (85–100% of shot): Settle with continuous living secondary motion (water ripples, breathing, `particles`, camera glide) — ZERO frozen frames. Keep left/right spatial anchors consistent across shots!
 6. Reuse the shared visual library functions above for recurring characters, props, and environments.
    You MAY also define local helper functions inside this shot if helpful, and NEVER call a function
    name that isn't defined above or locally.
@@ -1176,6 +1181,7 @@ RULES:
                 "parallaxLayers", "solveIK", "drawCharacterRig", "squash", "spring",
                 "stagger", "anticipation", "posterize", "strokeReveal", "organicPath",
                 "roundedCard", "badge", "zoomLens", "compareCard", "graphGrid", "kineticHighlight",
+                "animatedChart", "timelineTrack", "calloutBracket", "morphPoly",
                 "flowPath", "particles", "camera", "cameraRig",
                 "speedLines", "dustBurst", "impactFlash", "impactShake", "rackFocus",
                 "editorialShape", "editorialLight", "isoProject", "isoBox", "isoLine",

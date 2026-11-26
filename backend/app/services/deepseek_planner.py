@@ -116,6 +116,14 @@ RULES
   at ~2.5 words/sec, so {min_words}–{max_words} words ensures continuous narration throughout the
   entire {duration}-second film with zero long silent gaps at the end). Strong opening hook, clear
   progression, satisfying payoff. Never invent dates, quotes, statistics, or unsupported factual claims.
+- EDUCATIONAL RETENTION & HOOK RULES (CRITICAL):
+  - FIRST-3-SECOND HOOK (Shot 0): Start Shot 0 ALREADY in motion at frame 0 (never a static pause!)
+    with an arresting visual metaphor or counter-intuitive physical demonstration matching the opening hook.
+  - VISUAL METAPHOR TRANSLATION: Never leave abstract concepts (encryption, compound growth, memory,
+    inflation, algorithms) as vague text — turn them into concrete physical objects/actions (e.g. locked
+    nested boxes, rolling snowball, leaking sieve, animated chart/timeline).
+  - SPATIAL CONSISTENCY (MENTAL MAP): Keep recurring concepts/sides consistent across shots (e.g. if
+    "Problem/Still" is left and "Solution/Active" is right, preserve that left-right anchor).
 - VISUAL CLARITY & SIMPLICITY FIRST (MUTED-AUDIO TEST — CRITICAL):
   - Imagine the viewer watches with SOUND MUTED: within 1 second of every shot, they must instantly
     recognize the real-world place, subject, and physical action (think Kurzgesagt / clean flat-vector
