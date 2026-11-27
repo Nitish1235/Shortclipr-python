@@ -143,6 +143,11 @@ RULES
       - `vox_editorial`: high-contrast editorial off-white/charcoal + 1 alert accent, expanding highlight bars, maps/charts (history, economics, news, media).
       - `math_3b1b`: dark slate `#161b24` coordinate grid, glowing cyan/gold curves & vectors (math, AI, algorithms, proofs).
       - `isometric_engineering`: clean 3-axis isometric/exploded hardware views (machines, circuits, architecture ONLY).
+      - `sketch_whiteboard`: whiteboard/chalkboard hand-drawn marker/chalk strokes with line-boil.
+      - `clay_tactile`: soft 3D-on-2D claymorphism shapes with rounded tactile lighting.
+      - `hud_synthwave`: sci-fi HUD reticles, frosted glass UI cards, or neon synthwave grids.
+      - `watercolor_storybook`: soft layered watercolor washes and organic storybook textures.
+      - `stickman_action`: expressive minimalist stickman comedy/action (ONLY when topic asks for stickman style).
       - `layered_papercraft` / `organic_storybook` / `comic_cel_action` / `atmospheric_noir` / `retro_pixel_arcade`.
     * `palette`: 6 topic-specific hex colors (`bg`, `bg2`, `ink`, `primary`, `accent`, `secondary`)
       with high contrast and authentic real-world color fit for the subject.
