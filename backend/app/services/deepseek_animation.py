@@ -73,7 +73,7 @@ AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
      (true multi-plane 2.5D parallax camera with depth-scaled movement & optional depth-of-field blur)
    - solveIK(x0, y0, tx, ty, L1, L2, bendDir=1) -> analytical 2-bone Law-of-Cosines IK solver returning { jx, jy, ex, ey, a1, a2 } for natural knees/elbows/limbs
    - drawCharacterRig(g, x, y, { scale, facing: 1|-1, pose: 'idle'|'sit'|'walk'|'run'|'wade'|'push'|'pull'|'point'|'reach'|'hold'|'crouch'|'celebrate', expression: 'determined'|'focused'|'happy'|'surprised', t, lean, skin, coat, pants, hair, accent, boot })
-     (studio-grade 3/4-profile articulated IK character rig grounded at (x, y); AT scale=1 it is ONLY 260px tall, so on 900x1600 ALWAYS pass scale = 1.6 to 2.4 so the character is 420–620px tall! RETURNS world-space anchors `{ head, rightHand, leftHand, shoulder, hip, ground, facing, scale }` so you can attach hats/hoods to `rig.head` and held props/tools directly to `rig.rightHand` — NEVER let held props float detached in mid-air!)
+     (OPTIONAL convenience rig for standard poses; ~260px tall at scale=1, so use scale = 1.6–2.4 on 900x1600. For any custom pose, mascot, sitting/swimming/action posture, or specific art style, draw your own expressive character directly with `solveIK` + Canvas 2D!)
    - squash(g, x, y, amount) -> volume-preserving squash & stretch transform around contact point (x, y)
    - spring(t, start, stiffness=180, damping=14) -> snappy damped harmonic 0->1 curve
    - stagger(t, index, step=0.09, start=0, duration=0.45, easeFn) -> staggered 0..1 entrance progress for item `index` (prevents simultaneous t=0 pop-ins)
@@ -117,10 +117,12 @@ VISUAL QUALITY & ART DIRECTION (NON-NEGOTIABLE):
    illustration (Kurzgesagt / Vox quality) in under 1 second with sound OFF. Never leave a frame
    overly minimal/empty, pitch-black, or with the hero sunk off-screen.
 2. CHARACTER & HERO OBJECT STANDARD (CRITICAL):
-   - NEVER draw stick figures, front-facing marshmallow cylinders, thin line people, or glowing-dot stand-ins.
-   - For every human character, build a dedicated helper that calls `const rig = ShortcliprStyles.drawCharacterRig(g, x, y, { scale, facing, pose, expression, t, lean, skin, coat, pants, hair, accent })`
-     as its articulated 2-bone IK base, layers distinctive character details (hood, hat, cloak, badge, tool)
-     onto `rig.head` / `rig.shoulder`, and anchors any held prop directly to `rig.rightHand` / `rig.leftHand`!
+   - NEVER draw thin stick figures, front-facing featureless cylinders, or glowing-dot stand-ins.
+   - For human characters, YOU design and draw the expressive body, face, clothing, and exact pose
+     for the scene (sitting, standing, walking, swimming, bending, mascot-style, etc.) using
+     `ShortcliprStyles.solveIK` for natural joints + `shadedShape` / bold outlines — or optionally use
+     `ShortcliprStyles.drawCharacterRig` when a standard rig fits (with `scale = 1.6–2.4` on 900x1600).
+   - Anchor held props directly to the character's hand coordinates (never floating in mid-air).
    - For non-human hero objects (ships, machines, planets, trees, buildings, organs), build multi-part
      layered silhouettes with animated sub-components — NEVER draw a plain flat box.
 3. 3-VALUE SHADING & MATERIAL DETAIL ("DETAIL BIBLE"):
@@ -634,10 +636,10 @@ DESIGN & QUALITY STANDARDS
   origin (e.g. `// Draws hero explorer at ground contact (x, y), scale=1, pose='walk'|'idle', walkPhase=0`).
 - Use default parameter values where helpful (e.g. `scale = 1, pose = 'idle'`).
 - If any helper accepts a draw callback `fn`, ALWAYS pass the Canvas context into it (`fn(g)`), never bare `fn()`.
-- For human characters, ALWAYS create a dedicated character function that:
-  1. Calls `const rig = ShortcliprStyles.drawCharacterRig(g, x, y, {{ scale, facing, pose, expression, t, lean, skin, coat, pants, hair, accent }})` as the base
-  2. Layers character-specific clothing/gear (hood, hat, cloak, tool) using `rig.head` / `rig.shoulder` and attaches any held prop directly to `rig.rightHand` / `rig.leftHand` (never let held props float detached!)
-  3. Supports poses (`'idle'|'walk'|'run'|'wade'|'push'|'pull'|'point'|'hold'|'celebrate'`) and expressions (`'determined'|'focused'|'happy'|'surprised'`).
+- For human characters, write a clean, reusable character function that matches the film's `visual_genre`
+  (expressive face, layered clothing, clear silhouette, and any pose needed: sitting, walking, bending,
+  swimming, reaching, etc.) using `ShortcliprStyles.solveIK` + `shadedShape` (or `ShortcliprStyles.drawCharacterRig`
+  at `scale = 1.6–2.4` if a standard pose fits). Anchor held props to the hand position.
 - For environment functions, ALWAYS accept `(g, env, t, opts = {{}})` so backgrounds are full-bleed AND have continuous `t`-driven living motion (drifting clouds/mist, water ripples, swaying grass/foliage, flickering light pools).
 - NEVER draw dark or translucent `fillRect` boxes over rooms, trees, props, or characters!
 - NEVER duplicate background props (e.g. two clocks) or draw two copies of the same hero character in one shot!
