@@ -356,17 +356,19 @@ function drawCharacterRig(g, x, y, opts = {}) {
     const boot = opts.boot || '#1c1f24';
 
     const phase = t * speed;
-    const isMoving = pose === 'walk' || pose === 'run' || pose === 'wade';
+    const isSeated = pose === 'sit';
+    const isMoving = !isSeated && (pose === 'walk' || pose === 'run' || pose === 'wade');
     const stride = pose === 'run' ? 46 : pose === 'walk' ? 32 : pose === 'wade' ? 24 : 0;
     const lift = pose === 'run' ? 28 : pose === 'walk' ? 18 : pose === 'wade' ? 22 : 0;
     const crouchDrop = pose === 'crouch' ? 24 : 0;
-    const bob = isMoving ? Math.abs(Math.sin(phase)) * (pose === 'run' ? 11 : 6) : Math.sin(t * 2.4) * 2.5;
+    const bob = isMoving ? Math.abs(Math.sin(phase)) * (pose === 'run' ? 11 : 6) : Math.sin(t * 2.4) * (isSeated ? 1.4 : 2.5);
     const defaultLean = (
         pose === 'push' ? 0.34
         : pose === 'pull' ? -0.26
         : pose === 'run' ? 0.22
         : pose === 'wade' ? 0.16
         : pose === 'crouch' ? 0.24
+        : pose === 'sit' ? 0.14
         : pose === 'walk' ? 0.08
         : Math.sin(t * 1.8) * 0.025
     );
@@ -376,19 +378,22 @@ function drawCharacterRig(g, x, y, opts = {}) {
     // Grounded foot targets in local space (y = 0 is floor)
     const lPhase = Math.sin(phase);
     const rPhase = Math.sin(phase + Math.PI);
-    const lfX = isMoving ? lPhase * stride : (pose === 'push' ? -24 : pose === 'pull' ? 22 : -13);
-    const lfY = isMoving ? -Math.max(0, Math.cos(phase)) * lift : 0;
-    const rfX = isMoving ? rPhase * stride : (pose === 'push' ? 20 : pose === 'pull' ? -20 : 14);
-    const rfY = isMoving ? -Math.max(0, Math.cos(phase + Math.PI)) * lift : 0;
+    const lfX = isSeated ? 40 : isMoving ? lPhase * stride : (pose === 'push' ? -24 : pose === 'pull' ? 22 : -13);
+    const lfY = isSeated ? -4 : isMoving ? -Math.max(0, Math.cos(phase)) * lift : 0;
+    const rfX = isSeated ? 54 : isMoving ? rPhase * stride : (pose === 'push' ? 20 : pose === 'pull' ? -20 : 14);
+    const rfY = isSeated ? -4 : isMoving ? -Math.max(0, Math.cos(phase + Math.PI)) * lift : 0;
 
-    const hipX = 0;
-    const hipY = -98 - bob + crouchDrop;
+    const hipX = isSeated ? -10 : 0;
+    const hipY = (isSeated ? -62 : -98) - bob + crouchDrop;
     const shoulderX = hipX + Math.sin(lean) * 76;
     const shoulderY = hipY - Math.cos(lean) * 76;
 
     // Hand targets by pose
     let lhX, lhY, rhX, rhY;
-    if (pose === 'push') {
+    if (isSeated) {
+        lhX = shoulderX + 54; lhY = shoulderY + 42 + Math.sin(t * 5) * 2;
+        rhX = shoulderX + 64; rhY = shoulderY + 46 + Math.cos(t * 5) * 2;
+    } else if (pose === 'push') {
         lhX = shoulderX + 68; lhY = shoulderY + 6 + Math.sin(t * 4) * 3;
         rhX = shoulderX + 76; rhY = shoulderY + 14 + Math.cos(t * 4) * 3;
     } else if (pose === 'pull') {

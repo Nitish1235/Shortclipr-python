@@ -72,8 +72,8 @@ AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
    - parallaxLayers(g, env, { cx, cy, zoom, rotation }, [{ depth: 0.25, blur: 2, draw: (ctx)=>{...} }, { depth: 1.0, draw: ... }, { depth: 1.35, draw: ... }])
      (true multi-plane 2.5D parallax camera with depth-scaled movement & optional depth-of-field blur)
    - solveIK(x0, y0, tx, ty, L1, L2, bendDir=1) -> analytical 2-bone Law-of-Cosines IK solver returning { jx, jy, ex, ey, a1, a2 } for natural knees/elbows/limbs
-   - drawCharacterRig(g, x, y, { scale, facing: 1|-1, pose: 'idle'|'walk'|'run'|'wade'|'push'|'pull'|'point'|'reach'|'hold'|'crouch'|'celebrate', expression: 'determined'|'focused'|'happy'|'surprised', t, lean, skin, coat, pants, hair, accent, boot })
-     (studio-grade 3/4-profile articulated IK character rig grounded at (x, y), ~260px tall at scale=1; RETURNS world-space anchors `{ head, rightHand, leftHand, shoulder, hip, ground, facing, scale }` so you can attach hats/hoods to `rig.head` and held props/tools/torches directly to `rig.rightHand` — NEVER let held props float detached in mid-air!)
+   - drawCharacterRig(g, x, y, { scale, facing: 1|-1, pose: 'idle'|'sit'|'walk'|'run'|'wade'|'push'|'pull'|'point'|'reach'|'hold'|'crouch'|'celebrate', expression: 'determined'|'focused'|'happy'|'surprised', t, lean, skin, coat, pants, hair, accent, boot })
+     (studio-grade 3/4-profile articulated IK character rig grounded at (x, y); AT scale=1 it is ONLY 260px tall, so on 900x1600 ALWAYS pass scale = 1.6 to 2.4 so the character is 420–620px tall! RETURNS world-space anchors `{ head, rightHand, leftHand, shoulder, hip, ground, facing, scale }` so you can attach hats/hoods to `rig.head` and held props/tools directly to `rig.rightHand` — NEVER let held props float detached in mid-air!)
    - squash(g, x, y, amount) -> volume-preserving squash & stretch transform around contact point (x, y)
    - spring(t, start, stiffness=180, damping=14) -> snappy damped harmonic 0->1 curve
    - stagger(t, index, step=0.09, start=0, duration=0.45, easeFn) -> staggered 0..1 entrance progress for item `index` (prevents simultaneous t=0 pop-ins)
@@ -639,8 +639,8 @@ DESIGN & QUALITY STANDARDS
   2. Layers character-specific clothing/gear (hood, hat, cloak, tool) using `rig.head` / `rig.shoulder` and attaches any held prop directly to `rig.rightHand` / `rig.leftHand` (never let held props float detached!)
   3. Supports poses (`'idle'|'walk'|'run'|'wade'|'push'|'pull'|'point'|'hold'|'celebrate'`) and expressions (`'determined'|'focused'|'happy'|'surprised'`).
 - For environment functions, ALWAYS accept `(g, env, t, opts = {{}})` so backgrounds are full-bleed AND have continuous `t`-driven living motion (drifting clouds/mist, water ripples, swaying grass/foliage, flickering light pools).
-- NEVER draw dark semi-transparent `fillRect` boxes over trees, props, or characters for shading —
-  use tapered organic polygons (`shadedShape` / `organicPath`) and 3-value directional gradients instead.
+- NEVER draw dark or translucent `fillRect` boxes over rooms, trees, props, or characters!
+- NEVER duplicate background props (e.g. two clocks) or draw two copies of the same hero character in one shot!
 - Use the film's custom palette (`ShortcliprStyles.palette('{style_id}')` or the hex colors from
   `visual_direction.palette`), `ShortcliprStyles.shadedShape`, linear/radial gradients,
   `ShortcliprStyles.glow`, `ShortcliprStyles.solveIK` (for articulated character limbs),
@@ -745,12 +745,18 @@ VISUAL CLARITY, SIMPLICITY & CINEMATOGRAPHY RULES
      and brief `ShortcliprStyles.speedLines(...)` during fast rushes or launches.
    - If `energy` is `"calm"` or `"building"`: keep motion smooth, clean, and poised — DO NOT add shaking or speed lines.
 4. Characters & Physical Realism (CRITICAL):
+   - HERO SCALE LAW (900x1600): `drawCharacterRig` is only 260px tall at `scale = 1`. ALWAYS use
+     `scale = 1.6–2.4` (420–620px tall, 30%–45% of screen height!) — NEVER draw a tiny `scale <= 1.0`
+     character tucked behind furniture while empty walls/bookshelves take 80% of the screen!
+   - GROUNDING & NO DUPLICATES: Stand/walk characters ONLY on the floor (`y = floorY`), NEVER on top
+     of a chair or desk! Use `pose: 'sit'` when seated on a chair, and NEVER draw two copies of the
+     same hero character in the same shot.
+   - CLOSE-UP & DATA SHOTS: In `close_up` or comparison/diagram shots, DO NOT draw the full wide room
+     wall/bookshelf behind it — switch to a clean `graphGrid` / studio backdrop and let `zoomLens`,
+     `compareCard`, or `animatedChart` fill 65–75% of the frame!
    - Whenever a character is IN water (river, lake, ocean), draw them **physically submerged** using
      strict 3-layer occlusion: (1) background water -> (2) character wading or swimming -> (3) **foreground
      translucent water surface band + white splash/wake ripples overlapping their lower legs/waist**!
-     NEVER draw a character standing or walking dry on top of the water surface!
-   - Stage characters at clean hero scale (28%–45% of canvas height) using `ShortcliprStyles.drawCharacterRig(...)`
-     or the shared character helper — NEVER draw stick figures or glowing-dot stand-ins.
    - Rolling/spinning objects (wheels, logs, gears, planets) MUST draw visible radial spokes/markings
      that visibly rotate (`angle = distance / radius`) — never slide a static circle!
 5. Structure Local Time `t` into a Smooth 4-Phase Choreography + 2-Second Micro-Beats:
