@@ -1166,10 +1166,12 @@ RULES:
         # already declared at top level in shared_js) so both `ShortcliprStyles.fn(...)`
         # and bare `fn(...)` calls resolve cleanly without wasting auto-repair cycles.
         shared_declared = {item["name"] for item in extract_shared_function_signatures(shared_js)}
+        # Only match column-0 top-level declarations; indented `const glow = ...` inside
+        # a helper function must NOT suppress the top-level ShortcliprStyles destructuring.
         shared_declared.update(
-            re.findall(r"(?m)^\s*(?:const|let|var|function|class)\s+([A-Za-z_$][A-Za-z0-9_$]*)\b", shared_js)
+            re.findall(r"(?m)^(?:const|let|var|function|class)\s+([A-Za-z_$][A-Za-z0-9_$]*)\b", shared_js)
         )
-        for destruct in re.findall(r"(?m)^\s*(?:const|let|var)\s*[\{\[]([^\}\]]+)[\}\]]", shared_js):
+        for destruct in re.findall(r"(?m)^(?:const|let|var)\s*[\{\[]([^\}\]]+)[\}\]]", shared_js):
             for part in destruct.split(","):
                 alias = part.split(":")[-1].split("=")[0].strip()
                 if re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$]*", alias):
