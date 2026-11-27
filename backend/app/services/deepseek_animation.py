@@ -749,6 +749,10 @@ VISUAL CLARITY, SIMPLICITY & CINEMATOGRAPHY RULES
      translucent water surface band + white splash/wake ripples overlapping their lower legs/waist**!
    - Rolling/spinning objects (wheels, logs, gears, planets) MUST draw visible radial spokes/markings
      that visibly rotate (`angle = distance / radius`) — never slide a static circle!
+   - WEIGHT, ANTICIPATION & FOLLOW-THROUGH (CUSTOM BODIES & OBJECTS): For any jump, throw, push,
+     or stride, wind back first (`anticipation`), lead with torso lean & hip bob, keep the planted
+     foot locked on `floorY` while the swing foot arcs (`-Math.max(0, Math.sin(phase)) * lift`),
+     apply `squash` on landing/impact, and let hair/coat/arms settle slightly after the body stops.
 5. Action-First Choreography & 2-Second Micro-Beats (NO slow dead intros!):
    - ZERO-FRAME MOTION (especially Shot 0): `t = 0` must ALREADY have active motion or a clear camera/subject move — never start on a blank screen or dead pause!
    - Fast Hook Entry (0.0s–0.4s): World is visible immediately at `t = 0`; hero & props snap in with crisp `0.25–0.40s` `spring`/`stagger` motion (never wait 1.5s before action begins).
