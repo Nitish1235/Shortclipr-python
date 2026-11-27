@@ -1812,6 +1812,262 @@ function renderCaptions(ctx, t, env, rawWords) {
     ctx.restore();
 }
 
+/* Damped harmonic wobble (for hit reactions, antennas, bells, jelly settle). */
+function oscillate(t, start = 0, freq = 14, amp = 1, decay = 4.5) {
+    const dt = (Number(t) || 0) - (Number(start) || 0);
+    if (dt < 0) return 0;
+    return (Number(amp) || 1) * Math.exp(-dt * Math.max(0.1, Number(decay) || 4.5)) * Math.sin(dt * (Number(freq) || 14));
+}
+
+/* Hit-stop time remapper: briefly freezes action for `freezeDur` at `at` for punchy impact. */
+function hitStop(t, at = 0, freezeDur = 0.08) {
+    const time = Number(t) || 0;
+    const hit = Number(at) || 0;
+    const dur = Math.max(0, Number(freezeDur) || 0.08);
+    if (time < hit) return time;
+    if (time < hit + dur) return hit;
+    return time - dur;
+}
+
+/* Ballistic parabolic arc from p0=[x0,y0] to p1=[x1,y1] with peak lift `arcHeight`. */
+function parabola(u, p0, p1, arcHeight = 140) {
+    const t = clamp(Number.isFinite(u) ? u : 0, 0, 1);
+    const x0 = Number(p0?.[0]) || 0, y0 = Number(p0?.[1]) || 0;
+    const x1 = Number(p1?.[0]) || 0, y1 = Number(p1?.[1]) || 0;
+    const arc = Math.sin(t * Math.PI) * (Number(arcHeight) || 0);
+    return [x0 + (x1 - x0) * t, y0 + (y1 - y0) * t - arc];
+}
+
+/* True gravity drop onto `groundY` with decaying physical bounces & squash factor. */
+function bounceDrop(t, start = 0, dropHeight = 400, groundY = 1100, restitution = 0.52, gravity = 2400) {
+    const dt = Math.max(0, (Number(t) || 0) - (Number(start) || 0));
+    const h0 = Math.max(1, Number(dropHeight) || 400);
+    const gy = Number(groundY) || 1100;
+    const gAcc = Math.max(100, Number(gravity) || 2400);
+    const e = clamp(Number(restitution) || 0.52, 0.1, 0.85);
+    const t0 = Math.sqrt((2 * h0) / gAcc);
+    if (dt <= t0) {
+        const y = (gy - h0) + 0.5 * gAcc * dt * dt;
+        return { y: Math.min(gy, y), squash: dt > t0 - 0.03 ? -0.18 : 0 };
+    }
+    let rem = dt - t0;
+    let v = Math.sqrt(2 * gAcc * h0) * e;
+    for (let b = 0; b < 6; b++) {
+        const tb = (2 * v) / gAcc;
+        if (rem <= tb) {
+            const y = gy - (v * rem - 0.5 * gAcc * rem * rem);
+            const nearImpact = rem < 0.06 || rem > tb - 0.06;
+            const sq = nearImpact ? 0.22 * Math.pow(e, b) : 0;
+            return { y: Math.min(gy, y), squash: sq };
+        }
+        rem -= tb;
+        v *= e;
+        if (v < 25) break;
+    }
+    return { y: gy, squash: 0 };
+}
+
+/* Zero-ice-skating grounded stride cycle returning foot offsets, hip bob, and lean. */
+function strideCycle(t, speed = 5.2, stride = 34, lift = 20) {
+    const phase = (Number(t) || 0) * (Number(speed) || 5.2);
+    const s = Number(stride) || 34;
+    const l = Number(lift) || 20;
+    return {
+        lx: Math.sin(phase) * s,
+        ly: -Math.max(0, Math.cos(phase)) * l,
+        rx: Math.sin(phase + Math.PI) * s,
+        ry: -Math.max(0, Math.cos(phase + Math.PI)) * l,
+        bob: Math.abs(Math.sin(phase)) * (l * 0.35),
+        lean: clamp(s / 180, 0, 0.32),
+    };
+}
+
+/* Hand-drawn / whiteboard / chalkboard sketch path with optional 8fps line boil & pen tip. */
+function sketchPath(g, points, seed = 'sketch', opts = {}) {
+    if (!isCtx(g) || !Array.isArray(points) || points.length < 2) return;
+    const progress = clamp(Number.isFinite(opts.progress) ? opts.progress : 1, 0, 1);
+    if (progress <= 0) return;
+    const boilStep = opts.boilFps ? Math.floor((Number(opts.t) || 0) * Math.max(1, Number(opts.boilFps))) : 0;
+    const rough = Number.isFinite(opts.roughness) ? opts.roughness : 2.8;
+    const noiseFn = typeof Motion !== 'undefined' && Motion.noise1 ? Motion.noise1 : (_s, x) => Math.sin(x * 3.7);
+    const totalSegs = points.length - 1;
+    const maxSeg = totalSegs * progress;
+
+    g.save();
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.strokeStyle = opts.color || '#1f2937';
+    g.lineWidth = Number(opts.width) || 4;
+    const passes = clamp(Math.round(Number(opts.passes) || 2), 1, 3);
+    let tip = points[0];
+    for (let pass = 0; pass < passes; pass++) {
+        g.globalAlpha = pass === 0 ? (opts.alpha ?? 0.95) : 0.42;
+        g.beginPath();
+        for (let i = 0; i < points.length; i++) {
+            if (i > maxSeg + 1) break;
+            let px = Number(points[i][0]) || 0;
+            let py = Number(points[i][1]) || 0;
+            if (i > maxSeg && i > 0) {
+                const f = maxSeg - Math.floor(maxSeg);
+                const x0 = Number(points[i - 1][0]) || 0, y0 = Number(points[i - 1][1]) || 0;
+                px = x0 + (px - x0) * f;
+                py = y0 + (py - y0) * f;
+            }
+            const jx = noiseFn(`${seed}_x_${pass}_${boilStep}`, i * 2.1) * rough;
+            const jy = noiseFn(`${seed}_y_${pass}_${boilStep}`, i * 2.1) * rough;
+            if (i === 0) g.moveTo(px + jx, py + jy);
+            else g.lineTo(px + jx, py + jy);
+            if (pass === 0) tip = [px + jx, py + jy];
+        }
+        if (opts.closed && progress >= 0.999) g.closePath();
+        g.stroke();
+    }
+    if (opts.penTip && progress > 0.02 && progress < 0.995) {
+        g.globalAlpha = 1;
+        g.fillStyle = opts.penColor || '#ef4444';
+        g.beginPath();
+        g.arc(tip[0], tip[1], (Number(opts.width) || 4) * 1.35, 0, Math.PI * 2);
+        g.fill();
+    }
+    g.restore();
+}
+
+/* Soft 3D-on-2D claymorphism shape (outer shadow + clipped inner shadow + top-left specular). */
+function clayShape(g, drawPath, opts = {}) {
+    if (!isCtx(g) || typeof drawPath !== 'function') return;
+    const fill = opts.fill || '#ff8a65';
+    shadedShape(g, drawPath, {
+        fill,
+        stroke: opts.stroke,
+        lineWidth: opts.lineWidth || 2,
+        shadowColor: opts.shadowColor || 'rgba(15,23,42,0.20)',
+        shadowBlur: Number.isFinite(opts.shadowBlur) ? opts.shadowBlur : 22,
+        shadowY: Number.isFinite(opts.shadowY) ? opts.shadowY : 12,
+        highlight: 'rgba(255,255,255,0.52)',
+        highlightWidth: 6,
+    });
+    g.save();
+    drawPath(g);
+    g.clip();
+    g.strokeStyle = 'rgba(15,23,42,0.18)';
+    g.lineWidth = 10;
+    g.translate(-2, -4);
+    drawPath(g);
+    g.stroke();
+    g.restore();
+}
+
+/* Frosted glassmorphism UI panel with crisp bright rim border. */
+function glassCard(g, x, y, w, h, r = 22, opts = {}) {
+    if (!isCtx(g) || !(w > 4) || !(h > 4)) return;
+    const radius = Math.max(0, Math.min(Number(r) || 0, w / 2, h / 2));
+    g.save();
+    g.shadowColor = 'rgba(0,0,0,0.24)';
+    g.shadowBlur = 24;
+    g.shadowOffsetY = 10;
+    g.fillStyle = opts.fill || 'rgba(255,255,255,0.14)';
+    g.beginPath();
+    if (g.roundRect) g.roundRect(x, y, w, h, radius);
+    else g.rect(x, y, w, h);
+    g.fill();
+    g.shadowColor = 'transparent';
+    g.shadowBlur = 0;
+    g.strokeStyle = opts.border || 'rgba(255,255,255,0.38)';
+    g.lineWidth = Number(opts.lineWidth) || 2;
+    g.stroke();
+    g.restore();
+}
+
+/* Sci-fi HUD concentric targeting reticle / radar sweep. */
+function hudReticle(g, cx, cy, r, t = 0, opts = {}) {
+    if (!isCtx(g) || !(Number(r) > 4)) return;
+    const rad = Number(r);
+    const color = opts.color || '#38bdf8';
+    g.save();
+    g.translate(cx, cy);
+    g.strokeStyle = color;
+    g.globalAlpha *= opts.alpha ?? 0.85;
+    g.lineWidth = 2.5;
+    g.save();
+    g.rotate(t * 0.7);
+    g.setLineDash([rad * 0.35, rad * 0.18]);
+    g.beginPath(); g.arc(0, 0, rad, 0, Math.PI * 2); g.stroke();
+    g.restore();
+    g.save();
+    g.rotate(-t * 1.1);
+    g.setLineDash([rad * 0.16, rad * 0.12]);
+    g.beginPath(); g.arc(0, 0, rad * 0.68, 0, Math.PI * 2); g.stroke();
+    g.restore();
+    if (opts.sweep !== false) {
+        g.setLineDash([]);
+        g.fillStyle = color;
+        g.globalAlpha *= 0.16;
+        g.beginPath();
+        g.moveTo(0, 0);
+        g.arc(0, 0, rad * 0.94, t * 2.2, t * 2.2 + 0.65);
+        g.closePath();
+        g.fill();
+    }
+    g.restore();
+}
+
+/* Synthwave perspective horizon grid scrolling smoothly with time `t`. */
+function neonGrid(g, env, horizonY, t = 0, opts = {}) {
+    if (!isCtx(g) || !env) return;
+    const hy = Number.isFinite(horizonY) ? horizonY : env.H * 0.56;
+    const color = opts.color || '#f472b6';
+    const speed = Number(opts.speed) || 1.2;
+    g.save();
+    g.strokeStyle = color;
+    g.lineWidth = 2;
+    const cx = env.W / 2;
+    const bottomY = env.H * 1.05;
+    const spanH = Math.max(20, bottomY - hy);
+    // Perspective vertical rays
+    for (let i = -8; i <= 8; i++) {
+        g.globalAlpha = (1 - Math.abs(i) / 10) * 0.55;
+        g.beginPath();
+        g.moveTo(cx + i * (env.W * 0.03), hy);
+        g.lineTo(cx + i * (env.W * 0.22), bottomY);
+        g.stroke();
+    }
+    // Scrolling horizontal depth lines
+    for (let j = 0; j < 10; j++) {
+        const u = ((j / 10) + ((Number(t) || 0) * speed * 0.35)) % 1;
+        const y = hy + Math.pow(u, 2.2) * spanH;
+        g.globalAlpha = clamp(u * 0.75, 0.08, 0.75);
+        g.beginPath();
+        g.moveTo(0, y);
+        g.lineTo(env.W, y);
+        g.stroke();
+    }
+    g.restore();
+}
+
+/* Layered organic watercolor pigment wash. */
+function watercolorBlob(g, cx, cy, r, seed = 'wc', color = '#38bdf8', alpha = 0.28) {
+    if (!isCtx(g) || !(Number(r) > 2)) return;
+    const rand = typeof Motion !== 'undefined' && Motion.rng ? Motion.rng(seed) : () => 0.5;
+    g.save();
+    g.fillStyle = color;
+    for (let layer = 0; layer < 3; layer++) {
+        g.globalAlpha = clamp(alpha * (0.55 + layer * 0.25), 0, 1);
+        g.beginPath();
+        const pts = 12;
+        for (let i = 0; i <= pts; i++) {
+            const a = (i / pts) * Math.PI * 2;
+            const rad = r * (0.78 + rand() * 0.34) * (1 - layer * 0.12);
+            const px = cx + Math.cos(a) * rad;
+            const py = cy + Math.sin(a) * rad;
+            if (i === 0) g.moveTo(px, py);
+            else g.lineTo(px, py);
+        }
+        g.closePath();
+        g.fill();
+    }
+    g.restore();
+}
+
 window.ShortcliprStyles = Object.freeze({
     mechanismPose,
     palette,
@@ -1827,6 +2083,11 @@ window.ShortcliprStyles = Object.freeze({
     spring,
     stagger,
     anticipation,
+    oscillate,
+    hitStop,
+    parabola,
+    bounceDrop,
+    strideCycle,
     posterize,
     squash,
     solveIK,
@@ -1834,6 +2095,12 @@ window.ShortcliprStyles = Object.freeze({
     drawCharacterRig,
     strokeReveal,
     organicPath,
+    sketchPath,
+    clayShape,
+    glassCard,
+    hudReticle,
+    neonGrid,
+    watercolorBlob,
     lightBeam,
     bloomLayer,
     impactShake,
