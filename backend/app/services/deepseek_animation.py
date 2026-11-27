@@ -726,11 +726,11 @@ VISUAL CLARITY, SIMPLICITY & CINEMATOGRAPHY RULES
      smooth push-in `zoom: 1.0 -> 1.12` or horizontal pan).
    - NEVER rotate a side-view character 90° to fake an "overhead" view, and NEVER draw weird disembodied
      giant legs/feet — always show a clean, properly proportioned, recognizable scene.
-3. Energy-Gated Action Polish (ONLY when motivated by `scene.energy` — NEVER gratuitous!):
-   - If `energy` is `"action"` or `"climax"`: punctuate the key breakthrough/impact beat with
-     `ShortcliprStyles.dustBurst(...)`, `ShortcliprStyles.impactFlash(...)` + `impactShake(...)`,
-     and brief `ShortcliprStyles.speedLines(...)` during fast rushes or launches.
-   - If `energy` is `"calm"` or `"building"`: keep motion smooth, clean, and poised — DO NOT add shaking or speed lines.
+3. Energy-Gated Action Polish (motivated by `scene.energy`):
+   - `dustBurst(...)` is welcome on any physical footstep, landing, splash, or contact beat (`building`/`action`/`climax`).
+   - If `energy` is `"action"` or `"climax"`: also punctuate the key breakthrough/impact beat with
+     `ShortcliprStyles.impactFlash(...)` + `impactShake(...)` and brief `ShortcliprStyles.speedLines(...)`.
+   - If `energy` is `"calm"` or `"building"`: keep camera smooth and poised — DO NOT add `impactShake` or `speedLines`.
 4. Characters & Physical Realism (CRITICAL):
    - HERO SCALE LAW (900x1600): `drawCharacterRig` is only 260px tall at `scale = 1`. ALWAYS use
      `scale = 1.6–2.4` (420–620px tall, 30%–45% of screen height!) — NEVER draw a tiny `scale <= 1.0`
@@ -749,12 +749,10 @@ VISUAL CLARITY, SIMPLICITY & CINEMATOGRAPHY RULES
      translucent water surface band + white splash/wake ripples overlapping their lower legs/waist**!
    - Rolling/spinning objects (wheels, logs, gears, planets) MUST draw visible radial spokes/markings
      that visibly rotate (`angle = distance / radius`) — never slide a static circle!
-5. Structure Local Time `t` into a Smooth 4-Phase Choreography + 2-Second Micro-Beats:
-   - ZERO-FRAME MOTION (especially Shot 0): `t = 0` must ALREADY have active motion or a clear camera/subject move — never start on a dead static pause!
-   - Phase A (0–15% of shot): Establish the full-bleed environment and active camera motion.
-   - Phase B (15–35% of shot): Staggered entrances using `ShortcliprStyles.stagger`, `spring`, or `anticipation`.
-   - Phase C (35–85% of shot): Core visual action / transformation — introduce a fresh micro-beat every 2–3s (camera punch-in, `zoomLens` inset, `animatedChart`/`timelineTrack`, `morphPoly`, `calloutBracket`, or `flowPath` surge).
-   - Phase D (85–100% of shot): Settle with continuous living secondary motion (water ripples, breathing, `particles`, camera glide) — ZERO frozen frames. Keep left/right spatial anchors consistent across shots!
+5. Action-First Choreography & 2-Second Micro-Beats (NO slow dead intros!):
+   - ZERO-FRAME MOTION (especially Shot 0): `t = 0` must ALREADY have active motion or a clear camera/subject move — never start on a blank screen or dead pause!
+   - Fast Hook Entry (0.0s–0.4s): World is visible immediately at `t = 0`; hero & props snap in with crisp `0.25–0.40s` `spring`/`stagger` motion (never wait 1.5s before action begins).
+   - Continuous Action + 2-Second Micro-Beats (0.4s–end): Introduce a fresh visual beat every 1.5–2.5s (camera punch-in, `zoomLens`, `animatedChart`/`timelineTrack`, `morphPoly`, `calloutBracket`, or `flowPath` surge) and keep living secondary motion (ripples, breathing, `particles`, camera glide) alive through the final frame. Keep left/right spatial anchors consistent!
 6. Reuse the shared visual library functions above for recurring characters, props, and environments.
    You MAY also define local helper functions inside this shot if helpful, and NEVER call a function
    name that isn't defined above or locally.
@@ -1148,7 +1146,7 @@ RULES:
                 next_index = shots[idx + 1]["index"]
                 block += (
                     f"if(local>{transition_start:.6f}){{const p=Ease.seg(local,{transition_start:.6f},{end-start:.6f});"
-                    f"const next=Motion.layer(env,'transition-{index}',(ng)=>drawShot_{next_index}(ng,0,env,{end:.6f}));"
+                    f"const next=Motion.layer(env,'transition-{index}',(ng)=>drawShot_{next_index}(ng,p*0.42,env,t));"
                     f"ShortcliprStyles.transition(g,env,next,p,'{transition}');}}"
                 )
             dispatch.append(block + "return; }")

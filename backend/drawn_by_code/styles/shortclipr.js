@@ -181,14 +181,18 @@ function camera(g, env, o = {}) {
     const absRot = Math.abs(rotation);
     const aspectMax = Math.max(W / H, H / W);
     const minRotZoom = absRot > 0.001 ? (Math.cos(absRot) + Math.sin(absRot) * aspectMax) * 1.03 : 1;
-    // Never zoom below 1.0 (or minRotZoom when rotated) so black edges can never appear.
-    const zoom = clamp(Math.max(1, Number(o.zoom) || 1, minRotZoom), 1, 4);
-    const maxPanX = Math.max(0, (W / 2) * (1 - minRotZoom / zoom));
-    const maxPanY = Math.max(0, (H / 2) * (1 - minRotZoom / zoom));
     const rawCx = Number.isFinite(o.cx) ? o.cx : W / 2;
     const rawCy = Number.isFinite(o.cy) ? o.cy : H / 2;
-    const cx = clamp(rawCx, W / 2 - maxPanX, W / 2 + maxPanX);
-    const cy = clamp(rawCy, H / 2 - maxPanY, H / 2 + maxPanY);
+    // Allow smooth camera pans up to ±18% of canvas size even if zoom=1 was passed,
+    // automatically scaling zoom slightly so 0..W backgrounds/floors never expose edges.
+    const panX = clamp(rawCx - W / 2, -W * 0.18, W * 0.18);
+    const panY = clamp(rawCy - H / 2, -H * 0.18, H * 0.18);
+    const minPanZoom = 1 / Math.max(0.55, 1 - 2 * Math.max(Math.abs(panX) / W, Math.abs(panY) / H));
+    const zoom = clamp(Math.max(1, Number(o.zoom) || 1, minRotZoom, minPanZoom), 1, 4);
+    const maxPanX = Math.max(0, (W / 2) * (1 - minRotZoom / zoom));
+    const maxPanY = Math.max(0, (H / 2) * (1 - minRotZoom / zoom));
+    const cx = clamp(W / 2 + panX, W / 2 - maxPanX, W / 2 + maxPanX);
+    const cy = clamp(H / 2 + panY, H / 2 - maxPanY, H / 2 + maxPanY);
     g.translate(W / 2, H / 2);
     g.rotate(rotation);
     g.scale(zoom, zoom);
@@ -223,11 +227,14 @@ function parallaxLayers(g, env, camState = {}, layers = []) {
         const layerRot = rot * depth;
         const absRot = Math.abs(layerRot);
         const minRotZoom = absRot > 0.001 ? (Math.cos(absRot) + Math.sin(absRot) * aspectMax) * 1.03 : 1;
-        const layerZoom = Math.max(1, 1 + (zoom - 1) * depth, minRotZoom);
+        const layerPanX = clamp(dx * depth, -W * 0.18, W * 0.18);
+        const layerPanY = clamp(dy * depth, -H * 0.18, H * 0.18);
+        const minPanZoom = 1 / Math.max(0.55, 1 - 2 * Math.max(Math.abs(layerPanX) / W, Math.abs(layerPanY) / H));
+        const layerZoom = Math.max(1, 1 + (zoom - 1) * depth, minRotZoom, minPanZoom);
         const maxPanX = Math.max(0, (W / 2) * (1 - minRotZoom / layerZoom));
         const maxPanY = Math.max(0, (H / 2) * (1 - minRotZoom / layerZoom));
-        const lx = clamp(W / 2 + dx * depth, W / 2 - maxPanX, W / 2 + maxPanX);
-        const ly = clamp(H / 2 + dy * depth, H / 2 - maxPanY, H / 2 + maxPanY);
+        const lx = clamp(W / 2 + layerPanX, W / 2 - maxPanX, W / 2 + maxPanX);
+        const ly = clamp(H / 2 + layerPanY, H / 2 - maxPanY, H / 2 + maxPanY);
         g.save();
         if (layer.blur && layer.blur > 0) {
             g.filter = `blur(${Number(layer.blur)}px)`;
