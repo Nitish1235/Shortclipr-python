@@ -336,6 +336,57 @@ function solveIK(x0, y0, tx, ty, L1 = 60, L2 = 60, bendDir = 1) {
     return { jx, jy, x1: jx, y1: jy, ex, ey, x2: ex, y2: ey, a1, a2 };
 }
 
+/* Smooth rounded-cap 2-bone IK limb (with optional dark outline & hand/boot tip).
+   Front-facing arms: screen-left arm uses bendDir=+1 (outward left), screen-right uses bendDir=-1 (outward right).
+   Side-profile (facing=1|-1): arms bend backward (bendDir=-facing), knees bend forward (bendDir=facing). */
+function drawLimb(g, x0, y0, tx, ty, L1 = 60, L2 = 60, opts = {}) {
+    const bendDir = opts.bendDir !== undefined ? (Number(opts.bendDir) >= 0 ? 1 : -1) : 1;
+    const ik = solveIK(x0, y0, tx, ty, L1, L2, bendDir);
+    if (!isCtx(g)) return ik;
+    const w1 = Math.max(2, Number(opts.w1) || 20);
+    const w2 = Math.max(2, Number(opts.w2) || w1 * 0.82);
+    const color = opts.color || '#3b82f6';
+    const sleeveColor = opts.sleeveColor || color;
+    const outline = opts.outline || null;
+    const ow = Number.isFinite(opts.outlineWidth) ? opts.outlineWidth : 4;
+
+    g.save();
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    if (outline) {
+        g.strokeStyle = outline;
+        g.lineWidth = w1 + ow * 2;
+        g.beginPath(); g.moveTo(x0, y0); g.lineTo(ik.jx, ik.jy); g.stroke();
+        g.lineWidth = w2 + ow * 2;
+        g.beginPath(); g.moveTo(ik.jx, ik.jy); g.lineTo(ik.ex, ik.ey); g.stroke();
+    }
+    g.strokeStyle = sleeveColor;
+    g.lineWidth = w1;
+    g.beginPath(); g.moveTo(x0, y0); g.lineTo(ik.jx, ik.jy); g.stroke();
+    g.strokeStyle = color;
+    g.lineWidth = w2;
+    g.beginPath(); g.moveTo(ik.jx, ik.jy); g.lineTo(ik.ex, ik.ey); g.stroke();
+
+    if (opts.tipColor) {
+        const r = Math.max(2, Number(opts.tipR) || w2 * 0.68);
+        g.fillStyle = opts.tipColor;
+        g.beginPath();
+        if (opts.isLeg) {
+            g.ellipse(ik.ex + (opts.facing === -1 ? -4 : 4), ik.ey + 2, r * 1.35, r * 0.82, 0, 0, Math.PI * 2);
+        } else {
+            g.arc(ik.ex, ik.ey, r, 0, Math.PI * 2);
+        }
+        g.fill();
+        if (outline) {
+            g.strokeStyle = outline;
+            g.lineWidth = Math.max(2, ow * 0.85);
+            g.stroke();
+        }
+    }
+    g.restore();
+    return ik;
+}
+
 /* Stylized, non-stickman articulated 2D character rig (side/3-4 profile with 2-bone IK limbs).
    Origin (x, y) is the ground contact point between the feet. At scale=1, height is ~260 logical px.
    Returns world-space anchor points { head, rightHand, leftHand, shoulder, hip, ground, facing, scale }
@@ -1779,6 +1830,7 @@ window.ShortcliprStyles = Object.freeze({
     posterize,
     squash,
     solveIK,
+    drawLimb,
     drawCharacterRig,
     strokeReveal,
     organicPath,
