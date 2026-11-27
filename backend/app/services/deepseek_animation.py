@@ -56,58 +56,40 @@ async def _gather_cancel_on_error(*coroutines):
 
 _TOOLKIT_REFERENCE = """
 AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
-1. ShortcliprStyles:
+1. ShortcliprStyles — CORE (useful in almost every film):
    - palette(styleId) -> { bg, bg2, ink, paper, primary, accent, secondary, shadow, highlight }
-     (pre-configured with this film's custom visual_direction palette!)
-   - backdrop(g, styleId, env, t, mood) -> paints multi-stop studio gradient + mood-aware ambient light pool + returns palette
+   - backdrop(g, styleId, env, t, mood) -> paints studio gradient + ambient light pool + returns palette
    - shadedShape(g, (ctx) => { ctx.beginPath(); ... }, { fill, stroke, lineWidth, shadowColor, shadowBlur, shadowY, highlight, highlightWidth })
-     (draws drop shadow + rich fill/gradient + directional rim highlight + optional crisp stroke)
-   - glow(g, x, y, r, color, alpha) -> additive ('screen') radial volumetric glow
-   - lightBeam(g, x0, y0, x1, y1, r0, r1, color, alpha) -> additive ('screen') volumetric light cone/shaft
-   - bloomLayer(g, env, name, blurPx, alpha, (bg) => { ... }) -> renders glowing elements with additive bloom
-   - speedLines(g, env, t, { mode: 'radial'|'linear', cx, cy, count, color, alpha, innerR, angle }) -> anime/action velocity streaks (use ONLY on `action`/`climax` energy beats!)
-   - dustBurst(g, x, y, t, start, { count, spread, color, duration, upward }) -> expanding dust/smoke burst on heavy contact, landing, or breakthrough
-   - impactFlash(g, env, t, at, { cx, cy, maxR, color, ringColor, duration }) & impactShake(t, at, strength, decay) -> concussive hit flash + shockwave ring + decaying camera shake (ONLY on `action`/`climax` beats!)
-   - rackFocus(g, env, camState, focusT, bgDraw, fgDraw, maxBlur) -> optical depth-of-field rack focus shifting blur between background and foreground
-   - parallaxLayers(g, env, { cx, cy, zoom, rotation }, [{ depth: 0.25, blur: 2, draw: (ctx)=>{...} }, { depth: 1.0, draw: ... }, { depth: 1.35, draw: ... }])
-     (true multi-plane 2.5D parallax camera with depth-scaled movement & optional depth-of-field blur)
-   - solveIK(x0, y0, tx, ty, L1, L2, bendDir=1) -> analytical 2-bone Law-of-Cosines IK solver returning { jx, jy, ex, ey, a1, a2 } for natural knees/elbows/limbs
-   - drawCharacterRig(g, x, y, { scale, facing: 1|-1, pose: 'idle'|'sit'|'walk'|'run'|'wade'|'push'|'pull'|'point'|'reach'|'hold'|'crouch'|'celebrate', expression: 'determined'|'focused'|'happy'|'surprised', t, lean, skin, coat, pants, hair, accent, boot })
-     (OPTIONAL convenience rig for standard poses; ~260px tall at scale=1, so use scale = 1.6–2.4 on 900x1600. For any custom pose, mascot, sitting/swimming/action posture, or specific art style, draw your own expressive character directly with `solveIK` + Canvas 2D!)
-   - squash(g, x, y, amount) -> volume-preserving squash & stretch transform around contact point (x, y)
-   - spring(t, start, stiffness=180, damping=14) -> snappy damped harmonic 0->1 curve
-   - stagger(t, index, step=0.09, start=0, duration=0.45, easeFn) -> staggered 0..1 entrance progress for item `index` (prevents simultaneous t=0 pop-ins)
-   - anticipation(t, start=0, duration=0.55, pull=0.14) -> Disney wind-back (-pull) before springing to 1.0
-   - posterize(t, fps=12) -> snaps time `t` to 12fps for tactile stop-motion / comic / paper feel while camera stays at 30fps
-   - strokeReveal(g, [[x0,y0],[x1,y1],...], progress, { color, width, dashed, glow, arrow }) -> smoothly traces any path from 0 -> 1 (SVG stroke-dashoffset equivalent)
-   - organicPath(g, [[x0,y0],...], seed, { roughness, closed, fill, stroke, lineWidth, shadow, highlight }) -> hand-crafted path with deterministic noise jitter
-   - roundedCard(g, x, y, w, h, r, { fill, stroke, lineWidth, shadowBlur, highlight })
-   - badge(g, x, y, text, { bg, color, border, fontSize, align }) -> auto-clamped pill label (use sparingly for crisp 1–3 word diagram/comparison labels like 'STILL', 'FIDGETING', '+2.6%', 'SECOND HEART'; NEVER draw top title banners!)
-   - zoomLens(g, cx, cy, r, (lg, x, y, rad) => { ... }, { targetX, targetY, bg, borderColor, borderWidth }) -> circular magnifying inset with pointer line (ideal for anatomy, internal mechanisms, micro-details!)
-   - compareCard(g, x, y, w, h, title, { accent, border, bg, meter }) -> clean comparison card with semantic header pill and animated meter bar (`0..1`)
-   - graphGrid(g, env, { step, color, axes, axisColor }) -> subtle coordinate/lab-notebook grid (great for `clean_infographic`, `vox_editorial`, `math_3b1b`)
-   - kineticHighlight(g, x, y, text, progress, { bg, color, fontSize, align }) -> Vox-style expanding highlight block behind bold text
-   - animatedChart(g, x, y, w, h, [{ label, value, color }], progress, { type: 'bar'|'line', ink, accent, maxVal }) -> animated data chart
-   - timelineTrack(g, x, y, len, [{ label, sub }], progress, { vertical, accent, ink }) -> animated chronological timeline
-   - calloutBracket(g, x, y, w, h, label, progress, { color, textColor }) -> Manim/LEMMiNO highlight box + label
-   - morphPoly(g, ptsA, ptsB, u, { fill, stroke, lineWidth }) -> TED-Ed/Manim smooth polygon morph (`u` in `0..1`)
-   - flowPath(g, [[x0,y0],[x1,y1],...], t, { color, width, progress, dashed, speed, glow, arrow, arrowSize }) -> animated directional force/flow arrow
+   - solveIK(x0, y0, tx, ty, L1, L2, bendDir=1) -> 2-bone IK solver returning { jx, jy, ex, ey, a1, a2 }
+   - drawCharacterRig(g, x, y, { scale, facing, pose, expression, t, lean, skin, coat, pants, hair, accent, boot })
+     (OPTIONAL convenience rig; at scale=1 it is ~260px tall, so use scale=1.6–2.4 on 900x1600. For custom poses/styles, draw directly with solveIK + Canvas 2D!)
+   - flowPath(g, [[x0,y0],[x1,y1],...], t, { color, width, progress, dashed, speed, glow, arrow, arrowSize })
    - particles(g, seed, count, t, { x, y, w, h }, { mode: 'drift'|'rise'|'sparkle'|'stream', color, speed, minR, maxR, alpha })
-   - cameraRig(g, env, { cx, cy, zoom, rotation, shake, t }) -> smooth 2D camera inside g.save()/g.restore() (IMPORTANT: cx defaults to env.W/2, cy defaults to env.H/2 — NEVER pass cx:0, cy:0 unless you mean the top-left corner; to center, pass cx: env.W/2 + panX, cy: env.H/2 + panY and zoom >= 1.05!)
-   - editorialShape(g, points, { fill, depth, shadow, stroke, lineWidth }), editorialLight(g, x, y, r, color)
-   - isoProject(x, y, z, scale, origin), isoBox(g, x, y, z, w, d, h, scale, { top, left, right, edge }), isoLine(g, a, b, color, width) -> STRICTLY for architecture/machines ONLY (NEVER use isoBox for rocks, terrain, water, or nature!)
-   - paperLayer(g, drawFn, { fill, edge, blur, offsetY }), paperPolygon(g, points, opts), paperEllipse(g, x, y, rx, ry, opts), paperParallax(g, offset, layers)
-   - halftone(g, x, y, w, h, spacing, color), pixelSnap(v, size), mechanismPose(spec, progress)
-2. Motion (from core.js):
-   - Motion.rng(seed) -> deterministic PRNG function returning [0, 1) (NEVER use Math.random)
-   - Motion.noise1(seed, x) -> smooth deterministic 1D noise in [-1, 1]
-   - Motion.keys([[t0, v0], [t1, v1], ...], t, Ease.inOut) -> smooth keyframe interpolation (numbers or arrays)
-   - Motion.sprite(key, { x, y, w, h }, env.k, (sg) => { ... }) -> cache expensive static art once
-   - Motion.shake(g, amt, t) -> deterministic camera shake
-3. Ease (from core.js):
-   - Ease.clamp(x, a, b), Ease.seg(t, a, b), Ease.lerp(a, b, u), Ease.lerpPt(p, q, u)
-   - Ease.inOut(u), Ease.out(u), Ease.in(u), Ease.back(u), Ease.elastic(u), Ease.pop(t, at, dur), Ease.bump(t, a, dur)
-   (NEVER call bare mix() — always use Ease.lerp(a, b, u). NEVER invent ShortcliprStyles.* method names that are not listed above!)
+   - cameraRig(g, env, { cx, cy, zoom, rotation, shake, t }) -> smooth 2D camera (cx defaults to env.W/2, cy to env.H/2 — NEVER pass cx:0, cy:0!)
+   - parallaxLayers(g, env, { cx, cy, zoom, rotation }, [{ depth: 0.25, blur: 2, draw: (ctx)=>{...} }, { depth: 1.0, draw: ... }])
+   - spring(t, start, stiffness=180, damping=14), stagger(t, index, step=0.09, start=0, duration=0.45), anticipation(t, start=0, duration=0.55, pull=0.14), squash(g, x, y, amount)
+
+2. ShortcliprStyles — EXPLAINER & DATA (use when showing anatomy, comparisons, charts, timelines, or callouts):
+   - zoomLens(g, cx, cy, r, (lg, x, y, rad) => { ... }, { targetX, targetY, bg, borderColor, borderWidth })
+   - compareCard(g, x, y, w, h, title, { accent, border, bg, meter })
+   - graphGrid(g, env, { step, color, axes, axisColor })
+   - animatedChart(g, x, y, w, h, [{ label, value, color }], progress, { type: 'bar'|'line', ink, accent, maxVal })
+   - timelineTrack(g, x, y, len, [{ label, sub }], progress, { vertical, accent, ink })
+   - kineticHighlight(g, x, y, text, progress, { bg, color, fontSize, align })
+   - calloutBracket(g, x, y, w, h, label, progress, { color, textColor }), morphPoly(g, ptsA, ptsB, u, { fill, stroke, lineWidth })
+   - roundedCard(g, x, y, w, h, r, opts), badge(g, x, y, text, opts) (sparingly for 1–3 word labels only!)
+
+3. ShortcliprStyles — ATMOSPHERE, ACTION & SPECIALIZED STYLES (use ONLY when motivated by genre/energy):
+   - glow(g, x, y, r, color, alpha), lightBeam(g, x0, y0, x1, y1, r0, r1, color, alpha), bloomLayer(g, env, name, blurPx, alpha, (bg) => { ... }), rackFocus(g, env, camState, focusT, bgDraw, fgDraw, maxBlur)
+   - speedLines(g, env, t, opts), dustBurst(g, x, y, t, start, opts), impactFlash(g, env, t, at, opts), impactShake(t, at, strength, decay) -> ONLY on `action`/`climax` energy beats!
+   - strokeReveal(g, pts, progress, opts), organicPath(g, pts, seed, opts), posterize(t, fps=12)
+   - isoProject(x, y, z, scale, origin), isoBox(g, x, y, z, w, d, h, scale, colors), isoLine(g, a, b, color, width) -> STRICTLY for machines/architecture ONLY!
+   - editorialShape, editorialLight, paperLayer, paperPolygon, paperEllipse, paperParallax, halftone, pixelSnap, mechanismPose
+
+4. Motion & Ease (from core.js):
+   - Motion.rng(seed), Motion.noise1(seed, x), Motion.keys(frames, t, Ease.inOut), Motion.sprite(key, box, env.k, fn), Motion.shake(g, amt, t)
+   - Ease.clamp(x, a, b), Ease.seg(t, a, b), Ease.lerp(a, b, u), Ease.lerpPt(p, q, u), Ease.inOut, Ease.out, Ease.in, Ease.back, Ease.elastic, Ease.pop, Ease.bump
+   (NEVER call bare mix() — always use Ease.lerp(a, b, u). NEVER invent ShortcliprStyles.* method names not listed above!)
 """.strip()
 
 _CRAFT_REFERENCE_SNIPPET = """
@@ -691,16 +673,17 @@ Write the complete, studio-quality shared JavaScript visual library now.
         # Keep the system prompt 100% identical across all shots so DeepSeek's
         # automatic prefix cache hits on shots 2..N (~80-90% input token savings).
         vertical_framing_rule = (
-            "VERTICAL 9:16 FULL-BLEED FRAMING LAW (CRITICAL):\n"
-            "- Fill 100% of the 900x1600 canvas edge-to-edge with continuous scenery (sky/hills/banks/water/ground).\n"
-            "- NEVER leave the top 50% as empty dark void and NEVER squish the scene into the bottom third!\n"
-            "- Place the main hero subject LARGE in the center band (y = 25%–75% of H, 45%–75% of canvas width)\n"
-            "  so every detail is crystal clear and unmistakable on a phone screen.\n"
-            "- Keep all visual elements and any rare label inside a 60px safe margin from all edges.\n"
+            "CANONICAL 9:16 STAGE ZONES (900x1600 — CRITICAL):\n"
+            "- Top Zone (y = 8%–18% / 128–288px): sky, ceiling, or optional crisp 2–3 word section header.\n"
+            "- Main Hero Stage (y = 22%–70% / 350–1120px, x = 10%–90%): place the primary hero/diagram LARGE\n"
+            "  (35%–55% of frame height, 50%–80% of width) — NEVER squish it into the bottom third!\n"
+            "- Ground / Floor Line (y = 68%–74% / 1088–1184px): anchor feet, chairs, and desks cleanly here.\n"
+            "- Caption Safe Zone (y = 74%–94%): foreground floor/water ONLY — keep faces & key labels above y = 72%!\n"
             if aspect == "9:16" else
             "FULL-BLEED FRAMING LAW:\n"
             "- Fill 100% of the canvas edge-to-edge with continuous scenery (no floating slabs in empty void).\n"
-            "- Place the main hero subject large and centered (45%–65% of the viewport) with clean focal hierarchy.\n"
+            "- Place the main hero subject large and centered (45%–65% of the viewport) with clean focal hierarchy,\n"
+            "  keeping key faces and labels above y = 72% so lower-third captions stay clear.\n"
         )
 
         shot_system_prompt = f"""

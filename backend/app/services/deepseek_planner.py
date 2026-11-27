@@ -166,12 +166,18 @@ RULES
   - For every prop and environment, explicitly define:
     * 3–5 dominant recognizable forms + surface material notes (wood grain, faceted rock, metallic hull, layered foliage)
     * consistent light source direction and atmospheric depth method (gradient haze, multiplane parallax, volumetric beams)
-  - Define only the essential recurring entities (0–2 characters, 2–4 props, 1 main continuous
-    environment). Use concise stable IDs matching [a-zA-Z][a-zA-Z0-9_-]{{1,63}}.
+  - Define only the essential recurring entities (0–2 characters, 2–4 props, 1–2 environments:
+    e.g. `env_main` for wide/medium shots and optionally `env_diagram` for clean close-up/data shots).
+    On `close_up`, `macro_closeup`, or comparison/chart shots, set `"environment": ""` (or `"env_diagram"`)
+    so the renderer does NOT copy-paste the wide room behind close-ups! Use concise stable IDs matching
+    [a-zA-Z][a-zA-Z0-9_-]{{1,63}}.
   - Set `mechanisms` to `[]` (express moving parts directly via `props`, `action`, and `visual_change`).
-- FULL-BLEED CONTINUOUS WORLD & CONCRETE STORYBOARD SHOTS:
+- FULL-BLEED CONTINUOUS WORLD & 3-ACT VISUAL STORYBOARD:
   - Produce exactly {target_shots} distinct shots covering frame 0 through {total_frames} at 30 FPS
     (contiguous, non-overlapping integers; end_frame is exclusive).
+  - Follow a clear 3-Act Visual Arc: Shot 0 = immediate visual hook in motion at t=0; Middle shots =
+    cause & mechanism (`zoomLens` / cutaway / `animatedChart` / `compareCard`); Final shot = clear
+    visual resolution/payoff where the hero or system visibly transforms (never abstract floating shapes).
   - Every shot must stay in the SAME recognizable continuous world (full-bleed edge-to-edge scenery
     filling 100% of the canvas — NEVER floating slabs in empty space) and focus on ONE clear,
     unmistakable visual beat with 3–6 rich, layered elements.
