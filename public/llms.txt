@@ -1,6 +1,6 @@
 # ShortClipr
 
-> ShortClipr is a web-based creative studio that turns a written idea or prompt into a finished animated short video.
+> ShortClipr is a web-based creative studio that turns a written idea or prompt into a finished 15- to 60-second animated short video with illustrated scenes, voiceover narration, and final assembly.
 
 ## Current product facts
 
@@ -9,20 +9,34 @@
 - Creators can choose supported voice, visual direction, duration, and aspect ratio before creating a video.
 - Paid plans support 15-, 30-, 45-, and 60-second shorts in 9:16, 1:1, and 16:9 formats.
 - The free plan includes one finished 15-second short each month.
-- Creators review and download the finished video; ShortClipr does not automatically publish to third-party social platforms.
+- Creators review and download the finished MP4; ShortClipr does not automatically publish to third-party social platforms.
 - ShortClipr is not a YouTube clipping, podcast repurposing, or long-video-to-shorts product.
 
-## Primary pages
+## Primary product pages
 
 - [AI animated video maker](https://shortclipr.com/story-machine/): the main product and creative workflow.
+- [AI animated video generator](https://shortclipr.com/ai-animated-video-generator/): complete 15–60s narrated animated shorts from a brief.
+- [Prompt to video](https://shortclipr.com/prompt-to-video/): turn structured text prompts into multi-scene animated videos.
 - [Text to animation](https://shortclipr.com/text-to-animation/): turn a written prompt into an animated video.
+- [AI short video generator](https://shortclipr.com/ai-short-video-generator/): original 15s–60s animated shorts for Shorts, TikTok, and Reels.
+- [AI cartoon video maker](https://shortclipr.com/ai-cartoon-video-maker/): stylized cartoon shorts and character fables from text.
+- [Animated map video maker](https://shortclipr.com/animated-map-video-maker/): historical trade routes, geography, and journey animations.
 - [Faceless video maker](https://shortclipr.com/faceless-video-maker/): create videos without appearing on camera.
+- [Faceless AI shorts generator](https://shortclipr.com/faceless-ai-shorts-generator/): prompt-led faceless shorts with human review.
 - [Animated explainer video maker](https://shortclipr.com/animated-explainer-video-maker/): explain a complex topic visually.
 - [Educational animated video maker](https://shortclipr.com/educational-video-maker/): teach a focused concept.
 - [AI quiz video maker](https://shortclipr.com/video-quiz-maker/): create question, pause, reveal, and explanation videos.
 - [Animated story video maker](https://shortclipr.com/animated-story-video-maker/): create a compact animated narrative.
+
+## Comparisons & category guides
+
+- [Independent tool comparisons](https://shortclipr.com/compare/): hub comparing ShortClipr with InVideo AI, Revid, Faceless.so, AutoShorts.ai, Canva, and StoryShort AI.
+- [Best AI animated video generators](https://shortclipr.com/guides/best-ai-animated-video-generators/): honest workflow comparison across four AI animation categories.
+- [Best faceless video generators](https://shortclipr.com/guides/best-faceless-video-generators/): comparing automated series pipelines, stock editors, and custom animated shorts.
+- [How to monetize faceless YouTube Shorts](https://shortclipr.com/guides/how-to-monetize-faceless-youtube-shorts/): policy, originality, and disclosure guide.
+- [AI animated video generators for teachers](https://shortclipr.com/guides/ai-video-generators-for-teachers-and-educators/): classroom formats and accuracy guide.
 - [Video ideas](https://shortclipr.com/video-ideas/): formats and creative directions.
-- [Creator guides](https://shortclipr.com/guides/): practical how-to resources.
+- [Creator guides](https://shortclipr.com/guides/): 36 practical how-to resources.
 
 ## Trust and contact
 
