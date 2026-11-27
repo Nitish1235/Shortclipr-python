@@ -273,8 +273,9 @@ class DeepSeekAnimationCompiler:
         elif raw.startswith("```"):
             raw = re.sub(r"^```(?:javascript|js)?\s*", "", raw, flags=re.IGNORECASE)
             raw = re.sub(r"\s*```$", "", raw).strip()
-        raw = re.sub(r"^\s*</?(?:function|script|code|tool_call)[^>]*>\s*", "", raw, flags=re.IGNORECASE)
-        raw = re.sub(r"\s*</?(?:function|script|code|tool_call)[^>]*>\s*$", "", raw, flags=re.IGNORECASE).strip()
+        raw = re.sub(r"^\s*</?[a-zA-Z_][a-zA-Z0-9_-]*[^>]*>\s*", "", raw)
+        raw = re.sub(r"\s*</?[a-zA-Z_][a-zA-Z0-9_-]*[^>]*>\s*$", "", raw)
+        raw = re.sub(r"(?m)^\s*</?[a-zA-Z_][a-zA-Z0-9_-]*[^>]*>\s*$", "", raw).strip()
         return raw
 
     async def _run_local_js_validation(self, source: str) -> str | None:
