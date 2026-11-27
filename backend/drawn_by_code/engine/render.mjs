@@ -37,7 +37,7 @@ const grab = async (i, type, phase = 'video_render') => {
     try {
         data = await page.evaluate(([i, type]) => {
             window.renderFrame(i);
-            return document.getElementById('c').toDataURL(type, 0.95).split(',')[1];
+            return document.getElementById('c').toDataURL(type, 0.90).split(',')[1];
         }, [i, type]);
     } catch (error) {
         const timeSeconds = i / fps;

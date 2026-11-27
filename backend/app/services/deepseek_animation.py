@@ -753,9 +753,12 @@ VISUAL CLARITY, SIMPLICITY & CINEMATOGRAPHY RULES
    - GROUNDING & NO DUPLICATES: Stand/walk characters ONLY on the floor (`y = floorY`), NEVER on top
      of a chair or desk! Use `pose: 'sit'` when seated on a chair, and NEVER draw two copies of the
      same hero character in the same shot.
-   - CLOSE-UP & DATA SHOTS: In `close_up` or comparison/diagram shots, DO NOT draw the full wide room
-     wall/bookshelf behind it — switch to a clean `graphGrid` / studio backdrop and let `zoomLens`,
-     `compareCard`, or `animatedChart` fill 65–75% of the frame!
+   - CLOSE-UP & DATA SHOTS: In `close_up` or comparison/diagram shots, DO NOT copy-paste the full wide
+     room/wall/bookshelf behind it — switch to a clean `graphGrid` / studio backdrop and let `zoomLens`,
+     `compareCard`, or `animatedChart` fill 65–75% of the frame! (Each shot should have ONE clear focal
+     subject, not 5 identical room shots in a row.)
+   - SAFE BOTTOM MARGIN FOR CAPTIONS: Keep key hero faces/diagrams in `y = 14%–70%` of canvas height
+     so burned-in lower-third kinetic captions (`y ~ 78%`) never cover the main action!
    - Whenever a character is IN water (river, lake, ocean), draw them **physically submerged** using
      strict 3-layer occlusion: (1) background water -> (2) character wading or swimming -> (3) **foreground
      translucent water surface band + white splash/wake ripples overlapping their lower legs/waist**!

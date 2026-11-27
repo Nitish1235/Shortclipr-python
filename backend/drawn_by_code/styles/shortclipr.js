@@ -1655,6 +1655,104 @@ function morphPoly(g, ptsA, ptsB, u = 0, opts = {}) {
     }, opts);
 }
 
+/* Kinetic word-highlighted Shorts captions rendered in the lower-third safe zone.
+   Accepts UnrealSpeech word timestamps: [{ word|text, start|start_time, end|end_time }, ...]. */
+function renderCaptions(ctx, t, env, rawWords) {
+    if (!isCtx(ctx) || !env || !Array.isArray(rawWords) || !rawWords.length) return;
+    // Normalize word items once and cache on the array object.
+    if (!rawWords._chunks) {
+        const words = [];
+        for (let i = 0; i < rawWords.length; i++) {
+            const w = rawWords[i];
+            if (!w || typeof w !== 'object') continue;
+            const text = String(w.word ?? w.text ?? '').trim();
+            const start = Number(w.start ?? w.start_time ?? w.startTime);
+            const end = Number(w.end ?? w.end_time ?? w.endTime);
+            if (!text || !Number.isFinite(start) || !Number.isFinite(end)) continue;
+            words.push({ text, start, end: Math.max(start + 0.05, end) });
+        }
+        // Group into punchy 2-3 word chunks (never exceeding 18 chars per chunk).
+        const chunks = [];
+        let cur = [];
+        let curLen = 0;
+        for (let i = 0; i < words.length; i++) {
+            const w = words[i];
+            const prev = cur.length ? cur[cur.length - 1] : null;
+            const gap = prev ? w.start - prev.end : 0;
+            const endsSentence = prev && /[.!?]$/.test(prev.text);
+            if (cur.length >= 3 || (cur.length >= 2 && curLen + w.text.length > 17) || gap > 0.45 || endsSentence) {
+                chunks.push({ words: cur, start: cur[0].start, end: cur[cur.length - 1].end });
+                cur = [];
+                curLen = 0;
+            }
+            cur.push(w);
+            curLen += w.text.length + 1;
+        }
+        if (cur.length) chunks.push({ words: cur, start: cur[0].start, end: cur[cur.length - 1].end });
+        rawWords._chunks = chunks;
+    }
+
+    const chunks = rawWords._chunks;
+    if (!chunks.length) return;
+    let active = null;
+    for (let i = 0; i < chunks.length; i++) {
+        const ch = chunks[i];
+        const nextStart = i + 1 < chunks.length ? chunks[i + 1].start : ch.end + 0.35;
+        const visEnd = Math.min(ch.end + 0.25, nextStart);
+        if (t >= ch.start && t <= visEnd) {
+            active = ch;
+            break;
+        }
+    }
+    if (!active) return;
+
+    const [W, H] = env.px || [env.W, env.H];
+    const fontSize = Math.round(clamp(W * 0.054, 30, 68));
+    const y = Math.round(H * 0.78);
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.font = `900 ${fontSize}px "Noto Sans", "Liberation Sans", sans-serif`;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+
+    const spaceW = ctx.measureText(' ').width * 0.85;
+    const items = active.words.map((w) => {
+        const label = w.text.toUpperCase();
+        const isCurrent = t >= w.start && t <= w.end + 0.04;
+        const pop = isCurrent ? 1 + 0.08 * Math.sin(clamp((t - w.start) / 0.14, 0, 1) * Math.PI) : 1;
+        const width = ctx.measureText(label).width;
+        return { label, isCurrent, pop, width };
+    });
+    const totalW = items.reduce((s, it) => s + it.width, 0) + spaceW * Math.max(0, items.length - 1);
+    let cursorX = (W - totalW) / 2;
+
+    for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const cx = cursorX + it.width / 2;
+        ctx.save();
+        ctx.translate(cx, y);
+        ctx.scale(it.pop, it.pop);
+        ctx.translate(-it.width / 2, 0);
+        ctx.shadowColor = 'rgba(0,0,0,0.45)';
+        ctx.shadowBlur = Math.round(fontSize * 0.18);
+        ctx.shadowOffsetY = Math.round(fontSize * 0.08);
+        ctx.strokeStyle = '#111111';
+        ctx.lineWidth = Math.max(6, Math.round(fontSize * 0.22));
+        ctx.strokeText(it.label, 0, 0);
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.fillStyle = it.isCurrent ? '#facc15' : '#ffffff';
+        ctx.fillText(it.label, 0, 0);
+        ctx.restore();
+        cursorX += it.width + spaceW;
+    }
+    ctx.restore();
+}
+
 window.ShortcliprStyles = Object.freeze({
     mechanismPose,
     palette,
@@ -1695,6 +1793,7 @@ window.ShortcliprStyles = Object.freeze({
     timelineTrack,
     calloutBracket,
     morphPoly,
+    renderCaptions,
     flowPath,
     particles,
     postProcess,

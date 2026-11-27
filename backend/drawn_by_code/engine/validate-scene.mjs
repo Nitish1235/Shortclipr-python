@@ -16,7 +16,9 @@ const eslintScope = require('eslint-scope');
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENGINE_ROOT = path.resolve(__dirname, '..');
 
-const [sourcePath] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const skipVm = args.includes('--skip-vm');
+const [sourcePath] = args.filter((a) => !a.startsWith('--'));
 if (!sourcePath) {
     console.error('Usage: node validate-scene.mjs <scene.js>');
     process.exit(2);
@@ -132,7 +134,7 @@ try {
     const corePath = path.join(ENGINE_ROOT, 'engine', 'core.js');
     const stylePath = path.join(ENGINE_ROOT, 'styles', 'shortclipr.js');
     let preflightFrames = 0;
-    if (fs.existsSync(corePath) && fs.existsSync(stylePath)) {
+    if (!skipVm && fs.existsSync(corePath) && fs.existsSync(stylePath)) {
         class MockCanvasGradient {
             addColorStop() {}
         }
