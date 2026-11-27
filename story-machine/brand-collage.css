@@ -5,7 +5,7 @@ body{background:var(--purple);color:white;background-image:radial-gradient(circl
 .reference-opening{background:transparent;color:white;position:relative}
 .reference-opening:before{content:"";position:absolute;inset:0 0 3.5%;pointer-events:none;opacity:.18;background-image:repeating-linear-gradient(127deg,transparent 0 28px,#fff 29px,transparent 31px),radial-gradient(ellipse at 15% 15%,#fff5,transparent 45%)}
 .reference-opening .nav{color:white;border:0}
-.reference-opening .brand{color:white;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:30px;letter-spacing:-.06em;background:#fff;color:#17131d;padding:7px 13px;transform:rotate(-2deg);box-shadow:4px 4px 0 var(--purple-deep)}
+.reference-opening .brand{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:30px;letter-spacing:.025em;background:#fff;color:#17131d;padding:8px 16px;transform:rotate(-1.2deg);box-shadow:4px 4px 0 var(--purple-deep)}
 .reference-opening .brand span{color:var(--purple)}
 .reference-opening .nav nav a,.reference-opening .login-link{color:white;font-weight:700}
 .reference-opening .nav nav a:hover,.reference-opening .login-link:hover{color:var(--lime)}

@@ -79,6 +79,7 @@ const loadScript = (src) => new Promise((ok, ko) => {
     const ctx = c.getContext('2d');
     const total = Math.round(def.duration * fps);
     const env = { W, H, k, fps, duration: def.duration, total, px: [c.width, c.height], sceneDir: scenePath.replace(/[^/]*$/, ''), state: {} };
+    await loadScript(root + env.sceneDir + 'captions.js?optional').catch(() => {});
     if (def.setup) env.state = (await def.setup(env)) ?? env.state;
 
     function renderFrame(i) {
@@ -100,6 +101,9 @@ const loadScript = (src) => new Promise((ok, ko) => {
         if (def.post) {
             ctx.setTransform(1, 0, 0, 1, 0, 0);
             def.post(ctx, t, env);
+        }
+        if (window.__SHORTCLIPR_CAPTIONS__ && window.ShortcliprStyles?.renderCaptions) {
+            window.ShortcliprStyles.renderCaptions(ctx, t, env, window.__SHORTCLIPR_CAPTIONS__);
         }
     }
     const shotName = (t) => (def.shots ? Motion.shotAt(def.shots, t).name : '');

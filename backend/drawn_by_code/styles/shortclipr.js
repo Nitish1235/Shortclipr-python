@@ -181,14 +181,18 @@ function camera(g, env, o = {}) {
     const absRot = Math.abs(rotation);
     const aspectMax = Math.max(W / H, H / W);
     const minRotZoom = absRot > 0.001 ? (Math.cos(absRot) + Math.sin(absRot) * aspectMax) * 1.03 : 1;
-    // Never zoom below 1.0 (or minRotZoom when rotated) so black edges can never appear.
-    const zoom = clamp(Math.max(1, Number(o.zoom) || 1, minRotZoom), 1, 4);
-    const maxPanX = Math.max(0, (W / 2) * (1 - minRotZoom / zoom));
-    const maxPanY = Math.max(0, (H / 2) * (1 - minRotZoom / zoom));
     const rawCx = Number.isFinite(o.cx) ? o.cx : W / 2;
     const rawCy = Number.isFinite(o.cy) ? o.cy : H / 2;
-    const cx = clamp(rawCx, W / 2 - maxPanX, W / 2 + maxPanX);
-    const cy = clamp(rawCy, H / 2 - maxPanY, H / 2 + maxPanY);
+    // Allow smooth camera pans up to ±18% of canvas size even if zoom=1 was passed,
+    // automatically scaling zoom slightly so 0..W backgrounds/floors never expose edges.
+    const panX = clamp(rawCx - W / 2, -W * 0.18, W * 0.18);
+    const panY = clamp(rawCy - H / 2, -H * 0.18, H * 0.18);
+    const minPanZoom = 1 / Math.max(0.55, 1 - 2 * Math.max(Math.abs(panX) / W, Math.abs(panY) / H));
+    const zoom = clamp(Math.max(1, Number(o.zoom) || 1, minRotZoom, minPanZoom), 1, 4);
+    const maxPanX = Math.max(0, (W / 2) * (1 - minRotZoom / zoom));
+    const maxPanY = Math.max(0, (H / 2) * (1 - minRotZoom / zoom));
+    const cx = clamp(W / 2 + panX, W / 2 - maxPanX, W / 2 + maxPanX);
+    const cy = clamp(H / 2 + panY, H / 2 - maxPanY, H / 2 + maxPanY);
     g.translate(W / 2, H / 2);
     g.rotate(rotation);
     g.scale(zoom, zoom);
@@ -223,11 +227,14 @@ function parallaxLayers(g, env, camState = {}, layers = []) {
         const layerRot = rot * depth;
         const absRot = Math.abs(layerRot);
         const minRotZoom = absRot > 0.001 ? (Math.cos(absRot) + Math.sin(absRot) * aspectMax) * 1.03 : 1;
-        const layerZoom = Math.max(1, 1 + (zoom - 1) * depth, minRotZoom);
+        const layerPanX = clamp(dx * depth, -W * 0.18, W * 0.18);
+        const layerPanY = clamp(dy * depth, -H * 0.18, H * 0.18);
+        const minPanZoom = 1 / Math.max(0.55, 1 - 2 * Math.max(Math.abs(layerPanX) / W, Math.abs(layerPanY) / H));
+        const layerZoom = Math.max(1, 1 + (zoom - 1) * depth, minRotZoom, minPanZoom);
         const maxPanX = Math.max(0, (W / 2) * (1 - minRotZoom / layerZoom));
         const maxPanY = Math.max(0, (H / 2) * (1 - minRotZoom / layerZoom));
-        const lx = clamp(W / 2 + dx * depth, W / 2 - maxPanX, W / 2 + maxPanX);
-        const ly = clamp(H / 2 + dy * depth, H / 2 - maxPanY, H / 2 + maxPanY);
+        const lx = clamp(W / 2 + layerPanX, W / 2 - maxPanX, W / 2 + maxPanX);
+        const ly = clamp(H / 2 + layerPanY, H / 2 - maxPanY, H / 2 + maxPanY);
         g.save();
         if (layer.blur && layer.blur > 0) {
             g.filter = `blur(${Number(layer.blur)}px)`;
@@ -356,17 +363,19 @@ function drawCharacterRig(g, x, y, opts = {}) {
     const boot = opts.boot || '#1c1f24';
 
     const phase = t * speed;
-    const isMoving = pose === 'walk' || pose === 'run' || pose === 'wade';
+    const isSeated = pose === 'sit';
+    const isMoving = !isSeated && (pose === 'walk' || pose === 'run' || pose === 'wade');
     const stride = pose === 'run' ? 46 : pose === 'walk' ? 32 : pose === 'wade' ? 24 : 0;
     const lift = pose === 'run' ? 28 : pose === 'walk' ? 18 : pose === 'wade' ? 22 : 0;
     const crouchDrop = pose === 'crouch' ? 24 : 0;
-    const bob = isMoving ? Math.abs(Math.sin(phase)) * (pose === 'run' ? 11 : 6) : Math.sin(t * 2.4) * 2.5;
+    const bob = isMoving ? Math.abs(Math.sin(phase)) * (pose === 'run' ? 11 : 6) : Math.sin(t * 2.4) * (isSeated ? 1.4 : 2.5);
     const defaultLean = (
         pose === 'push' ? 0.34
         : pose === 'pull' ? -0.26
         : pose === 'run' ? 0.22
         : pose === 'wade' ? 0.16
         : pose === 'crouch' ? 0.24
+        : pose === 'sit' ? 0.14
         : pose === 'walk' ? 0.08
         : Math.sin(t * 1.8) * 0.025
     );
@@ -376,19 +385,22 @@ function drawCharacterRig(g, x, y, opts = {}) {
     // Grounded foot targets in local space (y = 0 is floor)
     const lPhase = Math.sin(phase);
     const rPhase = Math.sin(phase + Math.PI);
-    const lfX = isMoving ? lPhase * stride : (pose === 'push' ? -24 : pose === 'pull' ? 22 : -13);
-    const lfY = isMoving ? -Math.max(0, Math.cos(phase)) * lift : 0;
-    const rfX = isMoving ? rPhase * stride : (pose === 'push' ? 20 : pose === 'pull' ? -20 : 14);
-    const rfY = isMoving ? -Math.max(0, Math.cos(phase + Math.PI)) * lift : 0;
+    const lfX = isSeated ? 40 : isMoving ? lPhase * stride : (pose === 'push' ? -24 : pose === 'pull' ? 22 : -13);
+    const lfY = isSeated ? -4 : isMoving ? -Math.max(0, Math.cos(phase)) * lift : 0;
+    const rfX = isSeated ? 54 : isMoving ? rPhase * stride : (pose === 'push' ? 20 : pose === 'pull' ? -20 : 14);
+    const rfY = isSeated ? -4 : isMoving ? -Math.max(0, Math.cos(phase + Math.PI)) * lift : 0;
 
-    const hipX = 0;
-    const hipY = -98 - bob + crouchDrop;
+    const hipX = isSeated ? -10 : 0;
+    const hipY = (isSeated ? -62 : -98) - bob + crouchDrop;
     const shoulderX = hipX + Math.sin(lean) * 76;
     const shoulderY = hipY - Math.cos(lean) * 76;
 
     // Hand targets by pose
     let lhX, lhY, rhX, rhY;
-    if (pose === 'push') {
+    if (isSeated) {
+        lhX = shoulderX + 54; lhY = shoulderY + 42 + Math.sin(t * 5) * 2;
+        rhX = shoulderX + 64; rhY = shoulderY + 46 + Math.cos(t * 5) * 2;
+    } else if (pose === 'push') {
         lhX = shoulderX + 68; lhY = shoulderY + 6 + Math.sin(t * 4) * 3;
         rhX = shoulderX + 76; rhY = shoulderY + 14 + Math.cos(t * 4) * 3;
     } else if (pose === 'pull') {
@@ -1650,6 +1662,105 @@ function morphPoly(g, ptsA, ptsB, u = 0, opts = {}) {
     }, opts);
 }
 
+/* Kinetic word-highlighted Shorts captions rendered in the lower-third safe zone.
+   Accepts UnrealSpeech word timestamps: [{ word|text, start|start_time, end|end_time }, ...]. */
+function renderCaptions(ctx, t, env, rawWords) {
+    if (!isCtx(ctx) || !env || !Array.isArray(rawWords) || !rawWords.length) return;
+    // Normalize word items once and cache on the array object.
+    if (!rawWords._chunks) {
+        const words = [];
+        for (let i = 0; i < rawWords.length; i++) {
+            const w = rawWords[i];
+            if (!w || typeof w !== 'object') continue;
+            const text = String(w.word ?? w.text ?? '').trim();
+            const start = Number(w.start ?? w.start_time ?? w.startTime);
+            const end = Number(w.end ?? w.end_time ?? w.endTime);
+            if (!text || !Number.isFinite(start) || !Number.isFinite(end)) continue;
+            words.push({ text, start, end: Math.max(start + 0.05, end) });
+        }
+        // Group into punchy 2-3 word chunks (never exceeding 18 chars per chunk).
+        const chunks = [];
+        let cur = [];
+        let curLen = 0;
+        for (let i = 0; i < words.length; i++) {
+            const w = words[i];
+            const prev = cur.length ? cur[cur.length - 1] : null;
+            const gap = prev ? w.start - prev.end : 0;
+            const endsSentence = prev && /[.!?]$/.test(prev.text);
+            if (cur.length >= 3 || (cur.length >= 2 && curLen + w.text.length > 17) || gap > 0.45 || endsSentence) {
+                chunks.push({ words: cur, start: cur[0].start, end: cur[cur.length - 1].end });
+                cur = [];
+                curLen = 0;
+            }
+            cur.push(w);
+            curLen += w.text.length + 1;
+        }
+        if (cur.length) chunks.push({ words: cur, start: cur[0].start, end: cur[cur.length - 1].end });
+        rawWords._chunks = chunks;
+    }
+
+    const chunks = rawWords._chunks;
+    if (!chunks.length) return;
+    let active = null;
+    for (let i = 0; i < chunks.length; i++) {
+        const ch = chunks[i];
+        const nextStart = i + 1 < chunks.length ? chunks[i + 1].start : ch.end + 0.35;
+        const visEnd = Math.min(ch.end + 0.25, nextStart);
+        if (t >= ch.start && t <= visEnd) {
+            active = ch;
+            break;
+        }
+    }
+    if (!active) return;
+
+    const [W, H] = env.px || [env.W, env.H];
+    const fontSize = Math.round(clamp(W * 0.054, 30, 68));
+    const y = Math.round(H * 0.78);
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.font = `900 ${fontSize}px "Noto Sans", "Liberation Sans", sans-serif`;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+
+    const spaceW = ctx.measureText(' ').width * 0.85;
+    const items = active.words.map((w) => {
+        const label = w.text.toUpperCase();
+        const isCurrent = t >= w.start && t <= w.end + 0.04;
+        const pop = isCurrent ? 1 + 0.08 * Math.sin(clamp((t - w.start) / 0.14, 0, 1) * Math.PI) : 1;
+        const width = ctx.measureText(label).width;
+        return { label, isCurrent, pop, width };
+    });
+    const totalW = items.reduce((s, it) => s + it.width, 0) + spaceW * Math.max(0, items.length - 1);
+    const fit = totalW > W * 0.86 ? (W * 0.86) / totalW : 1;
+    let cursorX = (W - totalW * fit) / 2;
+
+    for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const cx = cursorX + (it.width * fit) / 2;
+        ctx.save();
+        ctx.translate(cx, y);
+        ctx.scale(it.pop * fit, it.pop * fit);
+        ctx.translate(-it.width / 2, 0);
+        ctx.shadowColor = 'rgba(0,0,0,0.45)';
+        ctx.shadowBlur = Math.round(fontSize * 0.18);
+        ctx.shadowOffsetY = Math.round(fontSize * 0.08);
+        ctx.strokeStyle = '#111111';
+        ctx.lineWidth = Math.max(6, Math.round(fontSize * 0.22));
+        ctx.strokeText(it.label, 0, 0);
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.fillStyle = it.isCurrent ? '#facc15' : '#ffffff';
+        ctx.fillText(it.label, 0, 0);
+        ctx.restore();
+        cursorX += (it.width + spaceW) * fit;
+    }
+    ctx.restore();
+}
+
 window.ShortcliprStyles = Object.freeze({
     mechanismPose,
     palette,
@@ -1690,6 +1801,7 @@ window.ShortcliprStyles = Object.freeze({
     timelineTrack,
     calloutBracket,
     morphPoly,
+    renderCaptions,
     flowPath,
     particles,
     postProcess,

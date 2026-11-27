@@ -813,7 +813,25 @@ async def run_render(
             "repair_bundle": program.get("repair_bundle"),
         }
 
-        # ── Download narration locally for renderer ───────────────────────
+        # ── Download narration & optional word timestamps for captions ───
+        captions_data: list[dict[str, Any]] = []
+        if project.get("timestamps_object"):
+            ts_path = Path(tempfile.mkdtemp(prefix="shortclipr-ts-")) / "timestamps.json"
+            try:
+                await storage.download_private(project["timestamps_object"], ts_path)
+                parsed_ts = json.loads(ts_path.read_text(encoding="utf-8"))
+                if isinstance(parsed_ts, list):
+                    captions_data = parsed_ts
+                elif isinstance(parsed_ts, dict):
+                    raw_words = parsed_ts.get("words") or parsed_ts.get("timestamps")
+                    if isinstance(raw_words, list):
+                        captions_data = raw_words
+            except Exception as ts_err:
+                logger.warning("render.timestamps_load_failed", extra={"error": str(ts_err)[:300]})
+            finally:
+                shutil.rmtree(ts_path.parent, ignore_errors=True)
+        plan["captions"] = captions_data
+
         if project["audio_object"]:
             async with timed(logger, "render.download_audio") as ctx:
                 audio_path = Path(tempfile.mkdtemp(prefix="shortclipr-audio-")) / "narration.mp3"
@@ -845,6 +863,7 @@ async def run_render(
                 try:
                     _, motion_qa = await renderer.render(
                         plan, output_path, progress_callback=update_visual_progress,
+                        build_contact_sheet=bool(visual_reviewer.enabled),
                     )
                     ctx["runtime_repairs"] = runtime_attempt
                     break

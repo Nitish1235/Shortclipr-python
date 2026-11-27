@@ -157,6 +157,7 @@ class DrawnByCodeRenderer:
         plan: dict[str, Any],
         output_path: Path,
         progress_callback: Callable[[int], Awaitable[None]] | None = None,
+        build_contact_sheet: bool = True,
     ) -> tuple[Path, dict[str, Any] | None]:
         source = plan.get("scene_js")
         aspect = plan.get("aspectRatio")
@@ -200,6 +201,7 @@ class DrawnByCodeRenderer:
                 self.node,
                 str(self.root / "engine" / "validate-scene.mjs"),
                 str(scene_file),
+                "--skip-vm",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 start_new_session=(os.name == "posix"),
@@ -230,6 +232,12 @@ class DrawnByCodeRenderer:
             (scene_dir / "drawn-by-code.json").write_text(
                 json.dumps({"version": 1, "generator": "shortclipr"}), encoding="utf-8",
             )
+            captions = plan.get("captions")
+            if isinstance(captions, list) and captions:
+                (scene_dir / "captions.js").write_text(
+                    "window.__SHORTCLIPR_CAPTIONS__ = " + json.dumps(captions, ensure_ascii=False) + ";\n",
+                    encoding="utf-8",
+                )
             output_path.parent.mkdir(parents=True, exist_ok=True)
             env = os.environ.copy()
             env.update({"CHROME_PATH": self.chrome, "FFMPEG_PATH": self.ffmpeg, "NODE_ENV": "production"})
@@ -359,7 +367,7 @@ class DrawnByCodeRenderer:
                 )
 
             motion_qa = None
-            if motion_samples:
+            if motion_samples and build_contact_sheet:
                 contact_sheet_path = output_path.with_name(output_path.stem + ".motion-qa.png")
                 motion_qa = {
                     "status": "captured",
