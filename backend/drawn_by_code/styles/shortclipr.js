@@ -1037,9 +1037,10 @@ function particles(g, seed, count, t, bounds, opts = {}) {
     g.restore();
 }
 
-/* Subtle film-level finishing pass (soft vignette + cached fine grain). */
+/* Subtle film-level finishing pass (skipped for crisp graphic/infographic/pixel styles). */
 function postProcess(ctx, t, env, styleId) {
     if (!ctx || !env || !env.px) return;
+    if (customMood === 'bright_editorial' || customMood === 'technical_clean' || styleId === 'line' || styleId === 'comic') return;
     const [W, H] = env.px;
     ctx.save();
     const cx = W / 2;
@@ -1284,6 +1285,371 @@ function mechanismPose(spec, progress) {
     throw new TypeError('Unsupported kinematics type: ' + spec.type);
 }
 
+/* Circular magnifying inset callout with optional pointer line (great for anatomy/mechanisms). */
+function zoomLens(g, cx, cy, r, drawInsideFn, opts = {}) {
+    if (!isCtx(g) || !Number.isFinite(cx) || !Number.isFinite(cy) || !(Number(r) > 2)) return;
+    const rad = Number(r);
+    const borderColor = opts.borderColor || '#111111';
+    const borderWidth = Number.isFinite(opts.borderWidth) ? opts.borderWidth : 4;
+    const bg = opts.bg || '#f9a8a8';
+    g.save();
+    if (Number.isFinite(opts.targetX) && Number.isFinite(opts.targetY)) {
+        const ang = Math.atan2(opts.targetY - cy, opts.targetX - cx);
+        const sx = cx + Math.cos(ang) * rad;
+        const sy = cy + Math.sin(ang) * rad;
+        g.strokeStyle = opts.lineColor || borderColor;
+        g.lineWidth = Number.isFinite(opts.lineWidth) ? opts.lineWidth : 3;
+        g.beginPath();
+        g.moveTo(sx, sy);
+        g.lineTo(opts.targetX, opts.targetY);
+        g.stroke();
+        g.fillStyle = opts.dotColor || '#f2c94c';
+        g.beginPath();
+        g.arc(opts.targetX, opts.targetY, 6, 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
+    }
+    if (opts.shadow !== false) {
+        g.shadowColor = 'rgba(0,0,0,0.18)';
+        g.shadowBlur = 16;
+        g.shadowOffsetY = 6;
+    }
+    g.fillStyle = bg;
+    g.beginPath();
+    g.arc(cx, cy, rad, 0, Math.PI * 2);
+    g.fill();
+    g.shadowColor = 'transparent';
+    g.shadowBlur = 0;
+    g.shadowOffsetY = 0;
+
+    if (typeof drawInsideFn === 'function') {
+        g.save();
+        g.beginPath();
+        g.arc(cx, cy, rad - borderWidth * 0.4, 0, Math.PI * 2);
+        g.clip();
+        drawInsideFn(g, cx, cy, rad);
+        g.restore();
+    }
+    g.strokeStyle = borderColor;
+    g.lineWidth = borderWidth;
+    g.beginPath();
+    g.arc(cx, cy, rad, 0, Math.PI * 2);
+    g.stroke();
+    g.restore();
+}
+
+/* Crisp side-by-side comparison card with semantic header pill and optional progress meter. */
+function compareCard(g, x, y, w, h, title, opts = {}) {
+    if (!isCtx(g) || !(w > 10) || !(h > 10)) return;
+    const r = Number.isFinite(opts.radius) ? opts.radius : 22;
+    const accent = opts.accent || '#ef6c6c';
+    const border = opts.border || '#111111';
+    const bg = opts.bg || '#ffffff';
+    g.save();
+    roundedCard(g, x, y, w, h, r, {
+        fill: bg,
+        stroke: border,
+        lineWidth: Number.isFinite(opts.lineWidth) ? opts.lineWidth : 4,
+        shadowBlur: opts.shadow === false ? 0 : 14,
+        shadowY: opts.shadow === false ? 0 : 6,
+    });
+    if (title) {
+        badge(g, x + w - 24, y + 34, String(title), {
+            bg: accent,
+            color: opts.titleColor || '#111111',
+            border,
+            fontSize: Number(opts.fontSize) || 22,
+            padX: 16,
+            padY: 8,
+            align: 'right',
+        });
+    }
+    if (Number.isFinite(opts.meter)) {
+        const mw = w - 40;
+        const mh = 22;
+        const mx = x + 20;
+        const my = y + h - 42;
+        const pct = clamp(opts.meter, 0, 1);
+        g.fillStyle = '#f1f5f9';
+        g.strokeStyle = border;
+        g.lineWidth = 3;
+        g.beginPath();
+        if (g.roundRect) g.roundRect(mx, my, mw, mh, mh / 2);
+        else g.rect(mx, my, mw, mh);
+        g.fill();
+        if (pct > 0.01) {
+            g.fillStyle = accent;
+            g.beginPath();
+            if (g.roundRect) g.roundRect(mx, my, Math.max(mh, mw * pct), mh, mh / 2);
+            else g.rect(mx, my, Math.max(mh, mw * pct), mh);
+            g.fill();
+        }
+        g.stroke();
+    }
+    g.restore();
+}
+
+/* Subtle coordinate / lab-notebook graph grid for infographic & math explainers. */
+function graphGrid(g, env, opts = {}) {
+    if (!isCtx(g) || !env) return;
+    const step = Math.max(16, Number(opts.step) || 48);
+    const color = opts.color || 'rgba(15, 45, 40, 0.07)';
+    g.save();
+    g.strokeStyle = color;
+    g.lineWidth = Number(opts.lineWidth) || 1.5;
+    for (let x = -env.W * 0.25; x <= env.W * 1.25; x += step) {
+        g.beginPath(); g.moveTo(x, -env.H * 0.25); g.lineTo(x, env.H * 1.25); g.stroke();
+    }
+    for (let y = -env.H * 0.25; y <= env.H * 1.25; y += step) {
+        g.beginPath(); g.moveTo(-env.W * 0.25, y); g.lineTo(env.W * 1.25, y); g.stroke();
+    }
+    if (opts.axes) {
+        g.strokeStyle = opts.axisColor || 'rgba(255,255,255,0.28)';
+        g.lineWidth = 2.5;
+        g.beginPath();
+        g.moveTo(0, env.H / 2); g.lineTo(env.W, env.H / 2);
+        g.moveTo(env.W / 2, 0); g.lineTo(env.W / 2, env.H);
+        g.stroke();
+    }
+    g.restore();
+}
+
+/* Vox-style expanding highlight block behind bold kinetic typography. */
+function kineticHighlight(g, x, y, text, progress = 1, opts = {}) {
+    const str = String(text ?? '');
+    if (!isCtx(g) || !str) return;
+    const p = clamp(Number.isFinite(progress) ? progress : 1, 0, 1);
+    const fontSize = Number(opts.fontSize) || 44;
+    const padX = Number(opts.padX) || 20;
+    const padY = Number(opts.padY) || 12;
+    g.save();
+    g.font = `800 ${fontSize}px ${opts.font || '"Noto Sans", "Liberation Sans", sans-serif'}`;
+    const w = g.measureText(str).width + padX * 2;
+    const h = fontSize + padY * 2;
+    const bx = opts.align === 'left' ? x : opts.align === 'right' ? x - w : x - w / 2;
+    const by = y - h / 2;
+    const rw = w * (1 - Math.pow(1 - p, 3));
+    if (rw > 2) {
+        g.fillStyle = opts.bg || '#ff3366';
+        g.fillRect(bx, by, rw, h);
+    }
+    if (p > 0.25) {
+        g.globalAlpha *= clamp((p - 0.25) / 0.45, 0, 1);
+        g.fillStyle = opts.color || '#ffffff';
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillText(str, bx + w / 2, by + h / 2 + 1);
+    }
+    g.restore();
+}
+
+/* Animated bar or trend-line chart for Vox / LEMMiNO / data explainers. */
+function animatedChart(g, x, y, w, h, data, progress = 1, opts = {}) {
+    if (!isCtx(g) || !Array.isArray(data) || !data.length || !(w > 20) || !(h > 20)) return;
+    const p = clamp(Number.isFinite(progress) ? progress : 1, 0, 1);
+    const type = opts.type === 'line' ? 'line' : 'bar';
+    const ink = opts.ink || '#1e293b';
+    const accent = opts.accent || '#38bdf8';
+    const border = opts.border || ink;
+    const maxVal = Number(opts.maxVal) || Math.max(1, ...data.map((d) => Math.abs(Number(d?.value ?? d) || 0)));
+    const padL = 46, padB = 38, padT = 22, padR = 18;
+    const cw = Math.max(10, w - padL - padR);
+    const ch = Math.max(10, h - padT - padB);
+    const ox = x + padL;
+    const oy = y + padT + ch;
+
+    g.save();
+    // Subtle horizontal grid + axes
+    g.strokeStyle = opts.gridColor || 'rgba(100,116,139,0.22)';
+    g.lineWidth = 1.5;
+    for (let i = 1; i <= 4; i++) {
+        const gy = oy - (ch * i) / 4;
+        g.beginPath(); g.moveTo(ox, gy); g.lineTo(ox + cw, gy); g.stroke();
+    }
+    g.strokeStyle = border;
+    g.lineWidth = 3;
+    g.beginPath();
+    g.moveTo(ox, y + padT); g.lineTo(ox, oy); g.lineTo(ox + cw, oy);
+    g.stroke();
+
+    const n = data.length;
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+        const item = data[i];
+        const val = Number(typeof item === 'object' ? item?.value : item) || 0;
+        const label = typeof item === 'object' ? String(item?.label ?? '') : '';
+        const itemColor = (typeof item === 'object' && item?.color) ? item.color : accent;
+        const itemP = clamp((p * n - i * 0.55) / Math.max(0.45, n * 0.45), 0, 1);
+        const eased = 1 - Math.pow(1 - itemP, 3);
+        const bh = clamp(val / maxVal, 0, 1) * ch * eased;
+        const slotW = cw / n;
+        const bx = ox + i * slotW + slotW * 0.18;
+        const bw = Math.max(6, slotW * 0.64);
+        const cx = ox + (n === 1 ? cw / 2 : (i / (n - 1)) * cw);
+        const cy = oy - bh;
+        pts.push({ cx, cy, label, color: itemColor, itemP, bh });
+
+        if (type === 'bar' && bh > 1) {
+            g.fillStyle = itemColor;
+            g.beginPath();
+            if (g.roundRect) g.roundRect(bx, oy - bh, bw, bh, [8, 8, 0, 0]);
+            else g.rect(bx, oy - bh, bw, bh);
+            g.fill();
+            if (opts.outline !== false) {
+                g.strokeStyle = border;
+                g.lineWidth = 2.5;
+                g.stroke();
+            }
+        }
+        if (label) {
+            g.fillStyle = ink;
+            g.font = `700 ${Number(opts.fontSize) || 18}px "Noto Sans", "Liberation Sans", sans-serif`;
+            g.textAlign = 'center';
+            g.textBaseline = 'top';
+            g.fillText(label, type === 'bar' ? bx + bw / 2 : cx, oy + 10);
+        }
+    }
+
+    if (type === 'line' && pts.length >= 2) {
+        const linePts = pts.map((pt) => [pt.cx, pt.cy]);
+        flowPath(g, linePts, 0, { color: accent, width: Number(opts.lineWidth) || 5, progress: p, glow: opts.glow || 0 });
+        for (let i = 0; i < pts.length; i++) {
+            if (pts[i].itemP <= 0.05) continue;
+            g.fillStyle = pts[i].color;
+            g.strokeStyle = border;
+            g.lineWidth = 3;
+            g.beginPath();
+            g.arc(pts[i].cx, pts[i].cy, 7 * Math.min(1, pts[i].itemP * 1.5), 0, Math.PI * 2);
+            g.fill();
+            g.stroke();
+        }
+    }
+    g.restore();
+}
+
+/* Animated chronological timeline with progressive line & milestone nodes. */
+function timelineTrack(g, x, y, len, milestones, progress = 1, opts = {}) {
+    if (!isCtx(g) || !Array.isArray(milestones) || !milestones.length || !(len > 20)) return;
+    const p = clamp(Number.isFinite(progress) ? progress : 1, 0, 1);
+    const vertical = opts.vertical === true;
+    const accent = opts.accent || '#ff6b35';
+    const ink = opts.ink || '#f8fafc';
+    const trackColor = opts.trackColor || 'rgba(148,163,184,0.35)';
+    const n = milestones.length;
+
+    g.save();
+    g.lineCap = 'round';
+    g.strokeStyle = trackColor;
+    g.lineWidth = 5;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(vertical ? x : x + len, vertical ? y + len : y);
+    g.stroke();
+
+    const activeLen = len * p;
+    g.strokeStyle = accent;
+    g.lineWidth = 6;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(vertical ? x : x + activeLen, vertical ? y + activeLen : y);
+    g.stroke();
+
+    for (let i = 0; i < n; i++) {
+        const frac = n === 1 ? 0.5 : i / (n - 1);
+        if (p + 0.02 < frac) continue;
+        const m = milestones[i];
+        const mx = vertical ? x : x + len * frac;
+        const my = vertical ? y + len * frac : y;
+        const pop = clamp((p - frac) / 0.16, 0, 1);
+        const r = (Number(opts.nodeR) || 10) * (1 - Math.pow(1 - pop, 3));
+        g.fillStyle = accent;
+        g.strokeStyle = opts.border || '#111111';
+        g.lineWidth = 3;
+        g.beginPath();
+        g.arc(mx, my, Math.max(2, r), 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
+
+        const title = typeof m === 'object' ? String(m?.label ?? '') : String(m ?? '');
+        const sub = typeof m === 'object' ? String(m?.sub ?? '') : '';
+        if (title) {
+            g.fillStyle = ink;
+            g.font = `700 ${Number(opts.fontSize) || 20}px "Noto Sans", "Liberation Sans", sans-serif`;
+            g.textAlign = vertical ? 'left' : 'center';
+            g.textBaseline = vertical ? 'middle' : (i % 2 === 0 ? 'bottom' : 'top');
+            const ty = vertical ? my : (i % 2 === 0 ? my - 18 : my + 18);
+            const tx = vertical ? mx + 20 : mx;
+            g.fillText(title, tx, ty);
+            if (sub) {
+                const prevAlpha = g.globalAlpha;
+                g.globalAlpha *= 0.78;
+                g.font = `500 ${Math.max(14, (Number(opts.fontSize) || 20) - 4)}px "Noto Sans", "Liberation Sans", sans-serif`;
+                g.fillText(sub, tx, vertical ? ty + 22 : (i % 2 === 0 ? ty - 22 : ty + 22));
+                g.globalAlpha = prevAlpha;
+            }
+        }
+    }
+    g.restore();
+}
+
+/* Manim/LEMMiNO-style callout bracket/pointer highlighting a specific target region. */
+function calloutBracket(g, x, y, w, h, label, progress = 1, opts = {}) {
+    if (!isCtx(g) || !(w > 4) || !(h > 4)) return;
+    const p = clamp(Number.isFinite(progress) ? progress : 1, 0, 1);
+    if (p <= 0.02) return;
+    const color = opts.color || '#facc15';
+    const r = Math.min(12, w / 4, h / 4);
+    g.save();
+    g.globalAlpha *= p;
+    g.strokeStyle = color;
+    g.lineWidth = Number(opts.lineWidth) || 4;
+    g.beginPath();
+    if (g.roundRect) g.roundRect(x, y, w, h, r);
+    else g.rect(x, y, w, h);
+    g.stroke();
+    if (label) {
+        badge(g, x + w / 2, y - 24, String(label), {
+            bg: color,
+            color: opts.textColor || '#111111',
+            border: opts.border || '#111111',
+            fontSize: Number(opts.fontSize) || 20,
+            padX: 14,
+            padY: 6,
+        });
+    }
+    g.restore();
+}
+
+/* TED-Ed / Manim style smooth polygon morph between ptsA and ptsB (u in 0..1). */
+function morphPoly(g, ptsA, ptsB, u = 0, opts = {}) {
+    if (!isCtx(g) || !Array.isArray(ptsA) || !Array.isArray(ptsB) || ptsA.length < 3 || ptsB.length < 3) return;
+    const t = clamp(Number.isFinite(u) ? u : 0, 0, 1);
+    const count = Math.max(ptsA.length, ptsB.length);
+    const sampleAt = (pts, idx) => {
+        const f = (idx / count) * pts.length;
+        const i0 = Math.floor(f) % pts.length;
+        const i1 = (i0 + 1) % pts.length;
+        const frac = f - Math.floor(f);
+        const x0 = Number(pts[i0]?.[0]) || 0;
+        const y0 = Number(pts[i0]?.[1]) || 0;
+        const x1 = Number(pts[i1]?.[0]) || 0;
+        const y1 = Number(pts[i1]?.[1]) || 0;
+        return [x0 + (x1 - x0) * frac, y0 + (y1 - y0) * frac];
+    };
+    const morphed = [];
+    for (let i = 0; i < count; i++) {
+        const a = sampleAt(ptsA, i);
+        const b = sampleAt(ptsB, i);
+        morphed.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+    }
+    shadedShape(g, (ctx) => {
+        ctx.beginPath();
+        ctx.moveTo(morphed[0][0], morphed[0][1]);
+        for (let i = 1; i < morphed.length; i++) ctx.lineTo(morphed[i][0], morphed[i][1]);
+        ctx.closePath();
+    }, opts);
+}
+
 window.ShortcliprStyles = Object.freeze({
     mechanismPose,
     palette,
@@ -1316,6 +1682,14 @@ window.ShortcliprStyles = Object.freeze({
     glow,
     roundedCard,
     badge,
+    zoomLens,
+    compareCard,
+    graphGrid,
+    kineticHighlight,
+    animatedChart,
+    timelineTrack,
+    calloutBracket,
+    morphPoly,
     flowPath,
     particles,
     postProcess,

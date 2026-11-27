@@ -5,6 +5,9 @@ User-agent: GPTBot
 Allow: /
 
 # Keep AI search and retrieval crawlers aligned with the public Google crawl policy.
+User-agent: PerplexityBot
+Allow: /
+
 User-agent: ClaudeBot
 Allow: /
 

@@ -27,8 +27,8 @@ class DeepSeekStoryPlanner:
         total_frames = duration * 30
         target_shots = max(3, min(8, round(duration / 5)))
         minimum_scenes = max(3, min(target_shots, duration // 4 if duration >= 12 else 3))
-        min_words = max(20, int(duration * 2.25))
-        max_words = max(26, int(duration * 2.55))
+        min_words = max(20, int(duration * 2.35))
+        max_words = max(26, int(duration * 2.65))
         styles = sorted(STYLE_IDS)
         requested_style = resolve_visual_style(project.get("visual_style", "AI Auto"))
         style_instruction = (
@@ -116,6 +116,14 @@ RULES
   at ~2.5 words/sec, so {min_words}–{max_words} words ensures continuous narration throughout the
   entire {duration}-second film with zero long silent gaps at the end). Strong opening hook, clear
   progression, satisfying payoff. Never invent dates, quotes, statistics, or unsupported factual claims.
+- EDUCATIONAL RETENTION & HOOK RULES (CRITICAL):
+  - FIRST-3-SECOND HOOK (Shot 0): Start Shot 0 ALREADY in motion at frame 0 (never a static pause!)
+    with an arresting visual metaphor or counter-intuitive physical demonstration matching the opening hook.
+  - VISUAL METAPHOR TRANSLATION: Never leave abstract concepts (encryption, compound growth, memory,
+    inflation, algorithms) as vague text — turn them into concrete physical objects/actions (e.g. locked
+    nested boxes, rolling snowball, leaking sieve, animated chart/timeline).
+  - SPATIAL CONSISTENCY (MENTAL MAP): Keep recurring concepts/sides consistent across shots (e.g. if
+    "Problem/Still" is left and "Solution/Active" is right, preserve that left-right anchor).
 - VISUAL CLARITY & SIMPLICITY FIRST (MUTED-AUDIO TEST — CRITICAL):
   - Imagine the viewer watches with SOUND MUTED: within 1 second of every shot, they must instantly
     recognize the real-world place, subject, and physical action (think Kurzgesagt / clean flat-vector
@@ -128,10 +136,14 @@ RULES
     * For outdoor/nature/how-to/human topics, prefer bright, legible flat-vector styles
       (`paper-cutout`, `layered-paper`, `cinematic-editorial`, `comic`, `risograph`) with natural,
       vivid colors (e.g., sunlit sky/water/foliage — NOT a dark empty void).
-  - Also design `visual_direction` tailored specifically to THIS topic:
-    * `visual_genre`: one of `kurzgesagt_cosmic`, `vox_editorial`, `isometric_engineering`,
-      `atmospheric_noir`, `expressive_character`, `comic_cel_action`, `layered_papercraft`,
-      `retro_pixel_arcade`, `organic_storybook`.
+  - Also design `visual_direction` tailored specifically to THIS topic (pick the genre that best fits!):
+    * `visual_genre`: one of:
+      - `clean_infographic`: bright pastel/graph-grid background (`#CBE7FF` / `#E2F6F0`), bold black outlines, circular zoom callouts, comparison cards (best for health, human body, everyday science, how-to!).
+      - `kurzgesagt_cosmic`: rich deep space/nature gradients, chunky rounded vectors, glowing rim lights (space, biology, cosmos, physics).
+      - `vox_editorial`: high-contrast editorial off-white/charcoal + 1 alert accent, expanding highlight bars, maps/charts (history, economics, news, media).
+      - `math_3b1b`: dark slate `#161b24` coordinate grid, glowing cyan/gold curves & vectors (math, AI, algorithms, proofs).
+      - `isometric_engineering`: clean 3-axis isometric/exploded hardware views (machines, circuits, architecture ONLY).
+      - `layered_papercraft` / `organic_storybook` / `comic_cel_action` / `atmospheric_noir` / `retro_pixel_arcade`.
     * `palette`: 6 topic-specific hex colors (`bg`, `bg2`, `ink`, `primary`, `accent`, `secondary`)
       with high contrast and authentic real-world color fit for the subject.
     * `lighting_mood`: one of `dramatic_rim_glow`, `bright_editorial`, `warm_sunlit_shadows`,
@@ -310,6 +322,9 @@ OUTPUT CONTRACT (return strict JSON only, no Markdown):
         scenes = plan.get("scenes")
         if not isinstance(scenes, list) or len(scenes) < minimum_scenes:
             raise RuntimeError(f"DeepSeek must return at least {minimum_scenes} shots")
+        if len(scenes) > 12:
+            scenes = scenes[:12]
+            plan["scenes"] = scenes
 
         weights = []
         for scene in scenes:
