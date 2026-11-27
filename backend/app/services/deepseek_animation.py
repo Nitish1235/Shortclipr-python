@@ -614,9 +614,11 @@ DESIGN & QUALITY STANDARDS
   environments, and visual motifs in the Visual Bible.
 - You MAY write internal helper functions (e.g., drawWheel, drawCloud, drawWindow) and call
   shared helpers from other shared helpers.
-- Put a concise 1-line `//` comment above each main function explaining its parameters and
-  origin (e.g. `// Draws hero explorer at ground contact (x, y), scale=1, pose='walk'|'idle', walkPhase=0`).
-- Use default parameter values where helpful (e.g. `scale = 1, pose = 'idle'`).
+- Put a concise 1-line `//` comment above each main function explaining its exact parameters and
+  origin (e.g. `// Draws hero at ground contact (x, y); opts = {{ scale=1.8, facing=1, pose='idle', t=0 }}`).
+- PARAMETER CONTRACT (CRITICAL — PREVENTS CALL-SITE BUGS): Accept an `opts = {{}}` object for
+  optional styling/animation flags (e.g. `function drawHero(g, x, y, opts = {{}}) {{ const {{ scale = 1.8, t = 0 }} = opts; ... }}`)
+  instead of 5+ positional arguments, and always guard optional array/object inputs with safe defaults.
 - If any helper accepts a draw callback `fn`, ALWAYS pass the Canvas context into it (`fn(g)`), never bare `fn()`.
 - For human characters, write a clean, reusable character function that matches the film's `visual_genre`
   (expressive face, layered clothing, clear silhouette, and any pose needed: sitting, walking, bending,
