@@ -6,7 +6,7 @@ body::before{display:none}[hidden]{display:none!important}
 .reference-opening::before,.reference-opening::after,.reference-workflow::after,.faceless-promise::after,.reference-reel::after,.types-section::after,.homepage-answer::after,.closing-section::after{display:none}
 .reference-opening .shell,.reference-workflow{width:min(1180px,calc(100% - 80px))}
 .reference-opening .nav{height:82px;min-height:82px;padding:0;border-bottom:1px solid var(--sc-line);gap:28px}
-.reference-opening .brand{font:800 25px/1 'DM Sans',sans-serif;letter-spacing:-1.5px;color:var(--sc-ink);background:none;padding:0;box-shadow:none;transform:none}
+.reference-opening .brand{font:800 25px/1 'DM Sans',sans-serif;letter-spacing:.01em;color:var(--sc-ink);background:none;padding:0;box-shadow:none;transform:none}
 .reference-opening .brand span{color:var(--sc-accent-deep)}
 .reference-opening .nav nav{display:flex;gap:clamp(15px,2.2vw,30px);font-size:13px;font-weight:600}
 .reference-opening .nav nav a,.reference-opening .login-link{color:#3c463f}
