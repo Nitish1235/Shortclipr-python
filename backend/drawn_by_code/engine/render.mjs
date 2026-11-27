@@ -148,7 +148,7 @@ try {
             const audio = opt.audio ?? (info.audio?.mix ? path.join(dir, info.audio.mix) : null);
             const args = ['-v', 'error', '-y', '-f', 'image2pipe', '-framerate', String(fps / step), '-c:v', 'mjpeg', '-i', '-'];
             if (audio && fs.existsSync(audio)) args.push('-ss', String(from / fps), '-i', audio, '-c:a', 'aac', '-b:a', '256k', '-shortest');
-            args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', String(opt.crf ?? 18), '-preset', 'medium', '-movflags', '+faststart', out);
+            args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', String(opt.crf ?? 18), '-preset', opt.preset ?? 'fast', '-movflags', '+faststart', out);
             const ff = spawn(ffmpeg, args, { stdio: ['pipe', 'inherit', 'inherit'] });
             const done = new Promise((ok, ko) => {
                 ff.once('error', ko);

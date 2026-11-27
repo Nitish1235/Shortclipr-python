@@ -157,6 +157,7 @@ class DrawnByCodeRenderer:
         plan: dict[str, Any],
         output_path: Path,
         progress_callback: Callable[[int], Awaitable[None]] | None = None,
+        build_contact_sheet: bool = True,
     ) -> tuple[Path, dict[str, Any] | None]:
         source = plan.get("scene_js")
         aspect = plan.get("aspectRatio")
@@ -366,7 +367,7 @@ class DrawnByCodeRenderer:
                 )
 
             motion_qa = None
-            if motion_samples:
+            if motion_samples and build_contact_sheet:
                 contact_sheet_path = output_path.with_name(output_path.stem + ".motion-qa.png")
                 motion_qa = {
                     "status": "captured",

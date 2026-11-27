@@ -822,6 +822,10 @@ async def run_render(
                 parsed_ts = json.loads(ts_path.read_text(encoding="utf-8"))
                 if isinstance(parsed_ts, list):
                     captions_data = parsed_ts
+                elif isinstance(parsed_ts, dict):
+                    raw_words = parsed_ts.get("words") or parsed_ts.get("timestamps")
+                    if isinstance(raw_words, list):
+                        captions_data = raw_words
             except Exception as ts_err:
                 logger.warning("render.timestamps_load_failed", extra={"error": str(ts_err)[:300]})
             finally:
@@ -859,6 +863,7 @@ async def run_render(
                 try:
                     _, motion_qa = await renderer.render(
                         plan, output_path, progress_callback=update_visual_progress,
+                        build_contact_sheet=bool(visual_reviewer.enabled),
                     )
                     ctx["runtime_repairs"] = runtime_attempt
                     break

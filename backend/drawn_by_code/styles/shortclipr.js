@@ -1727,14 +1727,15 @@ function renderCaptions(ctx, t, env, rawWords) {
         return { label, isCurrent, pop, width };
     });
     const totalW = items.reduce((s, it) => s + it.width, 0) + spaceW * Math.max(0, items.length - 1);
-    let cursorX = (W - totalW) / 2;
+    const fit = totalW > W * 0.86 ? (W * 0.86) / totalW : 1;
+    let cursorX = (W - totalW * fit) / 2;
 
     for (let i = 0; i < items.length; i++) {
         const it = items[i];
-        const cx = cursorX + it.width / 2;
+        const cx = cursorX + (it.width * fit) / 2;
         ctx.save();
         ctx.translate(cx, y);
-        ctx.scale(it.pop, it.pop);
+        ctx.scale(it.pop * fit, it.pop * fit);
         ctx.translate(-it.width / 2, 0);
         ctx.shadowColor = 'rgba(0,0,0,0.45)';
         ctx.shadowBlur = Math.round(fontSize * 0.18);
@@ -1748,7 +1749,7 @@ function renderCaptions(ctx, t, env, rawWords) {
         ctx.fillStyle = it.isCurrent ? '#facc15' : '#ffffff';
         ctx.fillText(it.label, 0, 0);
         ctx.restore();
-        cursorX += it.width + spaceW;
+        cursorX += (it.width + spaceW) * fit;
     }
     ctx.restore();
 }
