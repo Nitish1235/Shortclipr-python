@@ -61,6 +61,8 @@ AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
    - backdrop(g, styleId, env, t, mood) -> paints studio gradient + ambient light pool + returns palette
    - shadedShape(g, (ctx) => { ctx.beginPath(); ... }, { fill, stroke, lineWidth, shadowColor, shadowBlur, shadowY, highlight, highlightWidth })
    - solveIK(x0, y0, tx, ty, L1, L2, bendDir=1) -> 2-bone IK solver returning { jx, jy, ex, ey, a1, a2 }
+   - drawLimb(g, x0, y0, tx, ty, L1, L2, { bendDir, w1, w2, sleeveColor, color, outline, tipColor, tipR, isLeg })
+     (draws smooth rounded-cap 2-bone IK limbs with optional dark outline & hand/shoe tip — ALWAYS use this or rounded strokes instead of rotated sharp `fillRect` boxes!)
    - drawCharacterRig(g, x, y, { scale, facing, pose, expression, t, lean, skin, coat, pants, hair, accent, boot })
      (OPTIONAL convenience rig; at scale=1 it is ~260px tall, so use scale=1.6–2.4 on 900x1600. For custom poses/styles, draw directly with solveIK + Canvas 2D!)
    - flowPath(g, [[x0,y0],[x1,y1],...], t, { color, width, progress, dashed, speed, glow, arrow, arrowSize })
@@ -750,6 +752,11 @@ VISUAL CLARITY, SIMPLICITY & CINEMATOGRAPHY RULES
      translucent water surface band + white splash/wake ripples overlapping their lower legs/waist**!
    - Rolling/spinning objects (wheels, logs, gears, planets) MUST draw visible radial spokes/markings
      that visibly rotate (`angle = distance / radius`) — never slide a static circle!
+   - ANATOMICAL IK & HAND/ELBOW GEOMETRY (CRITICAL — NEVER CROSS ARMS IN AN 'X' ACROSS CHEST!):
+     * Prefer `ShortcliprStyles.drawLimb(...)` (or `lineCap='round'` strokes, NEVER rotated sharp `fillRect` boxes!).
+     * Front-facing arms: screen-left arm (`x0 < centerX`) uses `bendDir = +1` (elbow bends OUTWARD left) and `handX <= x0`; screen-right arm (`x0 > centerX`) uses `bendDir = -1` (elbow bends OUTWARD right) and `handX >= x0`.
+     * Side/3-4 profile (`facing = 1|-1`): elbows bend backward (`bendDir = -facing`), knees bend forward (`bendDir = facing`).
+   - MEASUREMENTS & RULERS: Height rulers/scales count UP from `0` at the floor (`y = floorY`) to max at the top!
    - WEIGHT, ANTICIPATION & FOLLOW-THROUGH (CUSTOM BODIES & OBJECTS): For any jump, throw, push,
      or stride, wind back first (`anticipation`), lead with torso lean & hip bob, keep the planted
      foot locked on `floorY` while the swing foot arcs (`-Math.max(0, Math.sin(phase)) * lift`),
@@ -1179,7 +1186,7 @@ RULES:
         style_exports = [
             name for name in (
                 "backdrop", "palette", "shadedShape", "glow", "lightBeam", "bloomLayer",
-                "parallaxLayers", "solveIK", "drawCharacterRig", "squash", "spring",
+                "parallaxLayers", "solveIK", "drawLimb", "drawCharacterRig", "squash", "spring",
                 "stagger", "anticipation", "posterize", "strokeReveal", "organicPath",
                 "roundedCard", "badge", "zoomLens", "compareCard", "graphGrid", "kineticHighlight",
                 "animatedChart", "timelineTrack", "calloutBracket", "morphPoly",
