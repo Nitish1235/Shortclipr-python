@@ -340,8 +340,15 @@ function solveIK(x0, y0, tx, ty, L1 = 60, L2 = 60, bendDir = 1) {
    Front-facing arms: screen-left arm uses bendDir=+1 (outward left), screen-right uses bendDir=-1 (outward right).
    Side-profile (facing=1|-1): arms bend backward (bendDir=-facing), knees bend forward (bendDir=facing). */
 function drawLimb(g, x0, y0, tx, ty, L1 = 60, L2 = 60, opts = {}) {
-    const bendDir = opts.bendDir !== undefined ? (Number(opts.bendDir) >= 0 ? 1 : -1) : 1;
-    const ik = solveIK(x0, y0, tx, ty, L1, L2, bendDir);
+    let targetX = tx;
+    let bendDir = opts.bendDir !== undefined ? (Number(opts.bendDir) >= 0 ? 1 : -1) : 1;
+    if (opts.view === 'front' && (opts.side === 'left' || opts.side === 'right')) {
+        if (opts.bendDir === undefined) bendDir = opts.side === 'left' ? 1 : -1;
+        if (!opts.allowCross) {
+            targetX = opts.side === 'left' ? Math.min(tx, x0 + 6) : Math.max(tx, x0 - 6);
+        }
+    }
+    const ik = solveIK(x0, y0, targetX, ty, L1, L2, bendDir);
     if (!isCtx(g)) return ik;
     const w1 = Math.max(2, Number(opts.w1) || 20);
     const w2 = Math.max(2, Number(opts.w2) || w1 * 0.82);
@@ -393,13 +400,14 @@ function drawLimb(g, x0, y0, tx, ty, L1 = 60, L2 = 60, opts = {}) {
    so custom character helpers can attach hats/gear/held props directly to the hands or head. */
 function drawCharacterRig(g, x, y, opts = {}) {
     const scale = Number.isFinite(opts.scale) ? opts.scale : 1;
-    const facing = opts.facing === -1 ? -1 : 1;
+    const view = opts.view === 'front' || opts.view === 'back' ? opts.view : 'side';
+    const facing = view === 'side' ? (opts.facing === -1 ? -1 : 1) : 1;
     const toWorld = (lx, ly) => ({ x: (Number(x) || 0) + facing * scale * lx, y: (Number(y) || 0) + scale * ly });
     if (!isCtx(g)) {
         return {
             head: toWorld(0, -196), rightHand: toWorld(48, -120), leftHand: toWorld(-32, -120),
             shoulder: toWorld(0, -174), hip: toWorld(0, -98), ground: { x: Number(x) || 0, y: Number(y) || 0 },
-            facing, scale,
+            facing, view, scale,
         };
     }
     const pose = String(opts.pose || 'idle');
@@ -420,35 +428,56 @@ function drawCharacterRig(g, x, y, opts = {}) {
     const lift = pose === 'run' ? 28 : pose === 'walk' ? 18 : pose === 'wade' ? 22 : 0;
     const crouchDrop = pose === 'crouch' ? 24 : 0;
     const bob = isMoving ? Math.abs(Math.sin(phase)) * (pose === 'run' ? 11 : 6) : Math.sin(t * 2.4) * (isSeated ? 1.4 : 2.5);
-    const defaultLean = (
-        pose === 'push' ? 0.34
-        : pose === 'pull' ? -0.26
-        : pose === 'run' ? 0.22
-        : pose === 'wade' ? 0.16
-        : pose === 'crouch' ? 0.24
-        : pose === 'sit' ? 0.14
-        : pose === 'walk' ? 0.08
-        : Math.sin(t * 1.8) * 0.025
-    );
+    const defaultLean = view !== 'side'
+        ? (isMoving ? Math.sin(phase) * 0.04 : Math.sin(t * 1.8) * 0.015)
+        : (
+            pose === 'push' ? 0.34
+            : pose === 'pull' ? -0.26
+            : pose === 'run' ? 0.22
+            : pose === 'wade' ? 0.16
+            : pose === 'crouch' ? 0.24
+            : pose === 'sit' ? 0.14
+            : pose === 'walk' ? 0.08
+            : Math.sin(t * 1.8) * 0.025
+        );
     const lean = Number.isFinite(opts.lean) ? opts.lean : defaultLean;
     const sway = Math.sin(t * 3.1) * 3.5;
 
-    // Grounded foot targets in local space (y = 0 is floor)
+    // Grounded foot targets in local space (y = 0 is floor).
+    // Front/back views NEVER apply horizontal stride offsets across the centerline (no scissor-crossing).
     const lPhase = Math.sin(phase);
     const rPhase = Math.sin(phase + Math.PI);
-    const lfX = isSeated ? 40 : isMoving ? lPhase * stride : (pose === 'push' ? -24 : pose === 'pull' ? 22 : -13);
+    const hipHalf = view === 'side' ? 6 : 16;
+    const lfX = view !== 'side'
+        ? -hipHalf - (isMoving ? Math.max(0, Math.cos(phase)) * 3 : 2)
+        : (isSeated ? 40 : isMoving ? lPhase * stride : (pose === 'push' ? -24 : pose === 'pull' ? 22 : -13));
     const lfY = isSeated ? -4 : isMoving ? -Math.max(0, Math.cos(phase)) * lift : 0;
-    const rfX = isSeated ? 54 : isMoving ? rPhase * stride : (pose === 'push' ? 20 : pose === 'pull' ? -20 : 14);
+    const rfX = view !== 'side'
+        ? hipHalf + (isMoving ? Math.max(0, Math.cos(phase + Math.PI)) * 3 : 2)
+        : (isSeated ? 54 : isMoving ? rPhase * stride : (pose === 'push' ? 20 : pose === 'pull' ? -20 : 14));
     const rfY = isSeated ? -4 : isMoving ? -Math.max(0, Math.cos(phase + Math.PI)) * lift : 0;
 
-    const hipX = isSeated ? -10 : 0;
+    const hipX = view === 'side' ? (isSeated ? -10 : 0) : (isMoving ? Math.sin(phase) * 3 : 0);
     const hipY = (isSeated ? -62 : -98) - bob + crouchDrop;
     const shoulderX = hipX + Math.sin(lean) * 76;
     const shoulderY = hipY - Math.cos(lean) * 76;
+    const shHalf = view === 'side' ? 5 : 27;
 
-    // Hand targets by pose
+    // Hand targets by pose & view (front/back keep arms on their own side unless pointing/celebrating)
     let lhX, lhY, rhX, rhY;
-    if (isSeated) {
+    if (view !== 'side') {
+        const armSwingY = isMoving ? lPhase * (pose === 'run' ? 22 : 13) : Math.sin(t * 2.1) * 4;
+        if (pose === 'celebrate') {
+            lhX = shoulderX - shHalf - 16; lhY = shoulderY - 62 + Math.sin(t * 6) * 5;
+            rhX = shoulderX + shHalf + 16; rhY = shoulderY - 62 + Math.cos(t * 6) * 5;
+        } else if (pose === 'point' || pose === 'reach') {
+            lhX = shoulderX - shHalf - 10; lhY = shoulderY + 52;
+            rhX = shoulderX + shHalf + 34; rhY = shoulderY - 18 + Math.sin(t * 3) * 3;
+        } else {
+            lhX = shoulderX - shHalf - 10 - Math.abs(armSwingY) * 0.25; lhY = shoulderY + 54 - armSwingY;
+            rhX = shoulderX + shHalf + 10 + Math.abs(armSwingY) * 0.25; rhY = shoulderY + 54 + armSwingY;
+        }
+    } else if (isSeated) {
         lhX = shoulderX + 54; lhY = shoulderY + 42 + Math.sin(t * 5) * 2;
         rhX = shoulderX + 64; rhY = shoulderY + 46 + Math.cos(t * 5) * 2;
     } else if (pose === 'push') {
@@ -472,12 +501,16 @@ function drawCharacterRig(g, x, y, opts = {}) {
         rhX = shoulderX + swing; rhY = shoulderY + 56 - Math.abs(swing) * 0.18;
     }
 
-    const lLeg = solveIK(hipX - 6, hipY, lfX, lfY - 6, 52, 52, 1);
-    const rLeg = solveIK(hipX + 6, hipY, rfX, rfY - 6, 52, 52, 1);
-    const lArm = solveIK(shoulderX - 4, shoulderY + 8, lhX, lhY, 38, 36, -1);
-    const rArm = solveIK(shoulderX + 6, shoulderY + 8, rhX, rhY, 38, 36, -1);
+    const lLegBend = view === 'side' ? 1 : 1;
+    const rLegBend = view === 'side' ? 1 : -1;
+    const lArmBend = view === 'side' ? -1 : 1;
+    const rArmBend = view === 'side' ? -1 : -1;
+    const lLeg = solveIK(hipX - hipHalf, hipY, lfX, lfY - 6, 52, 52, lLegBend);
+    const rLeg = solveIK(hipX + hipHalf, hipY, rfX, rfY - 6, 52, 52, rLegBend);
+    const lArm = solveIK(shoulderX - shHalf, shoulderY + 8, lhX, lhY, 38, 36, lArmBend);
+    const rArm = solveIK(shoulderX + shHalf, shoulderY + 8, rhX, rhY, 38, 36, rArmBend);
 
-    const drawLimb = (ctx, ax, ay, jx, jy, ex, ey, w1, w2, color, tipColor, tipR, isLeg = false) => {
+    const drawRigLimb = (ctx, ax, ay, jx, jy, ex, ey, w1, w2, color, tipColor, tipR, isLeg = false) => {
         ctx.save();
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -490,7 +523,8 @@ function drawCharacterRig(g, x, y, opts = {}) {
             ctx.fillStyle = tipColor;
             ctx.beginPath();
             if (isLeg) {
-                ctx.ellipse(ex + 4, ey + 2, tipR * 1.25, tipR * 0.78, 0, 0, Math.PI * 2);
+                const toeDx = view === 'side' ? 4 : 0;
+                ctx.ellipse(ex + toeDx, ey + 2, view === 'side' ? tipR * 1.25 : tipR * 1.05, tipR * 0.78, 0, 0, Math.PI * 2);
             } else {
                 ctx.arc(ex, ey, tipR, 0, Math.PI * 2);
             }
@@ -507,14 +541,34 @@ function drawCharacterRig(g, x, y, opts = {}) {
     g.fillStyle = 'rgba(15,20,28,0.26)';
     g.beginPath(); g.ellipse(0, 4, 46, 11, 0, 0, Math.PI * 2); g.fill();
 
-    // Back arm & back leg (slightly darkened for depth separation)
-    g.save(); g.globalAlpha = 0.86;
-    drawLimb(g, shoulderX - 4, shoulderY + 8, lArm.jx, lArm.jy, lArm.ex, lArm.ey, 15, 12, coat, skin, 8, false);
-    drawLimb(g, hipX - 6, hipY, lLeg.jx, lLeg.jy, lLeg.ex, lLeg.ey, 19, 15, pants, boot, 9, true);
-    g.restore();
+    // Back-layer limbs (side: far arm & leg; front/back: both legs behind torso)
+    if (view === 'side') {
+        g.save(); g.globalAlpha = 0.86;
+        drawRigLimb(g, shoulderX - shHalf, shoulderY + 8, lArm.jx, lArm.jy, lArm.ex, lArm.ey, 15, 12, coat, skin, 8, false);
+        drawRigLimb(g, hipX - hipHalf, hipY, lLeg.jx, lLeg.jy, lLeg.ex, lLeg.ey, 19, 15, pants, boot, 9, true);
+        g.restore();
+        drawRigLimb(g, hipX + hipHalf, hipY, rLeg.jx, rLeg.jy, rLeg.ex, rLeg.ey, 20, 16, pants, boot, 10, true);
+    } else {
+        drawRigLimb(g, hipX - hipHalf, hipY, lLeg.jx, lLeg.jy, lLeg.ex, lLeg.ey, 19, 15, pants, boot, 9, true);
+        drawRigLimb(g, hipX + hipHalf, hipY, rLeg.jx, rLeg.jy, rLeg.ex, rLeg.ey, 19, 15, pants, boot, 9, true);
+        if (view === 'back' && (pose === 'point' || pose === 'reach')) {
+            drawRigLimb(g, shoulderX + shHalf, shoulderY + 8, rArm.jx, rArm.jy, rArm.ex, rArm.ey, 15, 12, coat, skin, 8, false);
+        }
+    }
 
-    // Front leg
-    drawLimb(g, hipX + 6, hipY, rLeg.jx, rLeg.jy, rLeg.ex, rLeg.ey, 20, 16, pants, boot, 10, true);
+    const headX = shoulderX + Math.sin(lean) * 28;
+    const headY = shoulderY - Math.cos(lean) * 28 - 6;
+
+    // Connected neck overlapping both torso collar and head base (never a floating gap)
+    g.save();
+    g.strokeStyle = skin;
+    g.lineWidth = 14;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(shoulderX, shoulderY + 8);
+    g.lineTo(headX, headY + 14);
+    g.stroke();
+    g.restore();
 
     // Tapered stylized torso / coat with 3-value directional gradient & secondary hem sway
     g.save();
@@ -538,72 +592,135 @@ function drawCharacterRig(g, x, y, opts = {}) {
     if (g.roundRect) g.roundRect(-24, -9, 48, 9, 4);
     else g.rect(-24, -9, 48, 9);
     g.fill();
-    g.beginPath();
-    g.moveTo(-16, -77);
-    g.quadraticCurveTo(2, -68, 18, -76);
-    g.lineTo(14, -66);
-    g.quadraticCurveTo(0, -61, -18 - sway * 0.6, -68);
-    g.closePath();
-    g.fill();
+    if (view !== 'back') {
+        g.beginPath();
+        g.moveTo(-16, -77);
+        g.quadraticCurveTo(2, -68, 18, -76);
+        g.lineTo(14, -66);
+        g.quadraticCurveTo(0, -61, -18 - sway * 0.6, -68);
+        g.closePath();
+        g.fill();
+    }
     g.restore();
 
-    // Head (3/4 profile, expressive brow + eye specular + mouth + layered hair silhouette)
-    const headX = shoulderX + Math.sin(lean) * 28;
-    const headY = shoulderY - Math.cos(lean) * 28 - 6;
+    // Head (side 3/4, front 2-eye, or back-of-head full hair)
     g.save();
     g.translate(headX, headY);
     g.rotate(lean * 0.45);
-    shadedShape(g, (ctx) => {
-        ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2);
-    }, { fill: skin, shadowBlur: 10, shadowY: 4, highlight: 'rgba(255,255,255,0.34)' });
-    // Stylized hair cap with volume tuft
-    g.fillStyle = hair;
-    g.beginPath();
-    g.arc(-3, -5, 25.5, Math.PI * 0.68, Math.PI * 2.10);
-    g.quadraticCurveTo(16, -18, 6, -9);
-    g.quadraticCurveTo(-4, -14, -15, -3);
-    g.closePath();
-    g.fill();
-    // Expressive eye (with periodic deterministic blink + white specular dot)
-    const blinkCycle = (t % 3.4);
-    const blinking = blinkCycle > 3.24 && blinkCycle < 3.36;
-    g.fillStyle = '#1b1d21';
-    if (blinking) {
-        g.fillRect(8, -2, 8, 2.5);
+    if (view === 'back') {
+        // Side ears visible from behind
+        g.fillStyle = skin;
+        g.beginPath(); g.arc(-25, 2, 5.5, 0, Math.PI * 2); g.fill();
+        g.beginPath(); g.arc(25, 2, 5.5, 0, Math.PI * 2); g.fill();
+        shadedShape(g, (ctx) => {
+            ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2);
+        }, { fill: hair, shadowBlur: 10, shadowY: 4, highlight: 'rgba(255,255,255,0.18)' });
+        // Nape skin arc at bottom of head
+        g.fillStyle = skin;
+        g.beginPath();
+        g.arc(0, 4, 22, Math.PI * 0.18, Math.PI * 0.82);
+        g.fill();
+    } else if (view === 'front') {
+        g.fillStyle = skin;
+        g.beginPath(); g.arc(-25, 2, 5, 0, Math.PI * 2); g.fill();
+        g.beginPath(); g.arc(25, 2, 5, 0, Math.PI * 2); g.fill();
+        shadedShape(g, (ctx) => {
+            ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2);
+        }, { fill: skin, shadowBlur: 10, shadowY: 4, highlight: 'rgba(255,255,255,0.34)' });
+        g.fillStyle = hair;
+        g.beginPath();
+        g.arc(0, -4, 26, Math.PI * 0.92, Math.PI * 2.08);
+        g.quadraticCurveTo(8, -14, 0, -10);
+        g.quadraticCurveTo(-10, -14, -25, -4);
+        g.closePath();
+        g.fill();
+        const blinkCycle = (t % 3.4);
+        const blinking = blinkCycle > 3.24 && blinkCycle < 3.36;
+        g.fillStyle = '#1b1d21';
+        for (const ex of [-9, 9]) {
+            if (blinking) {
+                g.fillRect(ex - 4, -2, 8, 2.5);
+            } else {
+                g.beginPath(); g.ellipse(ex, -2, 3.2, 4.4, 0, 0, Math.PI * 2); g.fill();
+                g.fillStyle = '#ffffff';
+                g.beginPath(); g.arc(ex + 1.1, -3.4, 1.2, 0, Math.PI * 2); g.fill();
+                g.fillStyle = '#1b1d21';
+            }
+        }
+        g.strokeStyle = hair;
+        g.lineWidth = 2.2;
+        g.lineCap = 'round';
+        g.beginPath();
+        g.moveTo(-14, -9); g.lineTo(-4, -9);
+        g.moveTo(4, -9); g.lineTo(14, -9);
+        g.stroke();
+        g.strokeStyle = '#5c3828';
+        g.lineWidth = 2.0;
+        g.beginPath();
+        if (expression === 'surprised') {
+            g.arc(0, 10, 3.4, 0, Math.PI * 2);
+        } else if (expression === 'happy' || pose === 'celebrate') {
+            g.arc(0, 7, 6, 0.1 * Math.PI, 0.9 * Math.PI);
+        } else {
+            g.moveTo(-5, 10); g.quadraticCurveTo(0, 11, 5, 10);
+        }
+        g.stroke();
     } else {
-        g.beginPath(); g.ellipse(12, -2, 3.4, 4.6, 0, 0, Math.PI * 2); g.fill();
-        g.fillStyle = '#ffffff';
-        g.beginPath(); g.arc(13.2, -3.5, 1.3, 0, Math.PI * 2); g.fill();
+        shadedShape(g, (ctx) => {
+            ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2);
+        }, { fill: skin, shadowBlur: 10, shadowY: 4, highlight: 'rgba(255,255,255,0.34)' });
+        g.fillStyle = hair;
+        g.beginPath();
+        g.arc(-3, -5, 25.5, Math.PI * 0.68, Math.PI * 2.10);
+        g.quadraticCurveTo(16, -18, 6, -9);
+        g.quadraticCurveTo(-4, -14, -15, -3);
+        g.closePath();
+        g.fill();
+        const blinkCycle = (t % 3.4);
+        const blinking = blinkCycle > 3.24 && blinkCycle < 3.36;
+        g.fillStyle = '#1b1d21';
+        if (blinking) {
+            g.fillRect(8, -2, 8, 2.5);
+        } else {
+            g.beginPath(); g.ellipse(12, -2, 3.4, 4.6, 0, 0, Math.PI * 2); g.fill();
+            g.fillStyle = '#ffffff';
+            g.beginPath(); g.arc(13.2, -3.5, 1.3, 0, Math.PI * 2); g.fill();
+        }
+        g.strokeStyle = hair;
+        g.lineWidth = 2.4;
+        g.lineCap = 'round';
+        g.beginPath();
+        if (expression === 'surprised') {
+            g.moveTo(7, -10); g.quadraticCurveTo(12, -13, 17, -9);
+        } else if (expression === 'happy' || pose === 'celebrate') {
+            g.moveTo(7, -9); g.quadraticCurveTo(12, -11, 17, -8);
+        } else {
+            g.moveTo(7, -9); g.lineTo(17, -7);
+        }
+        g.stroke();
+        g.strokeStyle = '#5c3828';
+        g.lineWidth = 2.0;
+        g.beginPath();
+        if (expression === 'surprised') {
+            g.arc(13, 10, 3.2, 0, Math.PI * 2);
+        } else if (expression === 'happy' || pose === 'celebrate') {
+            g.arc(11, 8, 5, 0.1 * Math.PI, 0.85 * Math.PI);
+        } else {
+            g.moveTo(8, 10); g.quadraticCurveTo(12, 9, 16, 10.5);
+        }
+        g.stroke();
     }
-    // Expressive eyebrow & mouth
-    g.strokeStyle = hair;
-    g.lineWidth = 2.4;
-    g.lineCap = 'round';
-    g.beginPath();
-    if (expression === 'surprised') {
-        g.moveTo(7, -10); g.quadraticCurveTo(12, -13, 17, -9);
-    } else if (expression === 'happy' || pose === 'celebrate') {
-        g.moveTo(7, -9); g.quadraticCurveTo(12, -11, 17, -8);
-    } else {
-        g.moveTo(7, -9); g.lineTo(17, -7);
-    }
-    g.stroke();
-
-    g.strokeStyle = '#5c3828';
-    g.lineWidth = 2.0;
-    g.beginPath();
-    if (expression === 'surprised') {
-        g.arc(13, 10, 3.2, 0, Math.PI * 2);
-    } else if (expression === 'happy' || pose === 'celebrate') {
-        g.arc(11, 8, 5, 0.1 * Math.PI, 0.85 * Math.PI);
-    } else {
-        g.moveTo(8, 10); g.quadraticCurveTo(12, 9, 16, 10.5);
-    }
-    g.stroke();
     g.restore();
 
-    // Front arm
-    drawLimb(g, shoulderX + 6, shoulderY + 8, rArm.jx, rArm.jy, rArm.ex, rArm.ey, 16, 13, coat, skin, 8.5, false);
+    // Front-layer arms
+    if (view === 'side') {
+        drawRigLimb(g, shoulderX + shHalf, shoulderY + 8, rArm.jx, rArm.jy, rArm.ex, rArm.ey, 16, 13, coat, skin, 8.5, false);
+    } else {
+        drawRigLimb(g, shoulderX - shHalf, shoulderY + 8, lArm.jx, lArm.jy, lArm.ex, lArm.ey, 15, 12, coat, skin, 8, false);
+        if (!(view === 'back' && (pose === 'point' || pose === 'reach'))) {
+            drawRigLimb(g, shoulderX + shHalf, shoulderY + 8, rArm.jx, rArm.jy, rArm.ex, rArm.ey, 15, 12, coat, skin, 8, false);
+        }
+    }
 
     g.restore();
 
@@ -615,6 +732,7 @@ function drawCharacterRig(g, x, y, opts = {}) {
         hip: toWorld(hipX, hipY),
         ground: { x: Number(x) || 0, y: Number(y) || 0 },
         facing,
+        view,
         scale,
     };
 }
