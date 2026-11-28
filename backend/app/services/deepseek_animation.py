@@ -651,6 +651,7 @@ DESIGN & QUALITY STANDARDS
 - Keep all code 100% deterministic: use `Motion.rng(seed)` / `Motion.noise1(seed, x)`, NEVER
   `Math.random()`, `Date`, `performance`, DOM, `window`, `document`, `fetch`, `eval`, or timers.
 - Do NOT call `Motion.scene(...)` in this library.
+- Keep the shared library lean (~250–400 lines max): prefer `ShortcliprStyles` primitives over verbose boilerplate.
 - Return raw JavaScript only (no Markdown explanations, no JSON wrapper).
 
 {_TOOLKIT_REFERENCE}
@@ -672,7 +673,7 @@ Write the complete, studio-quality shared JavaScript visual library now.
         shared_js = await self._code_completion(
             "You are a lead Canvas 2D motion-graphics engineer. Return only clean, concise, executable JavaScript.",
             shared_prompt,
-            min(self.max_output_tokens, 8192),
+            min(self.max_output_tokens, 16384),
             label="Shared visual kit",
             enable_thinking=self.enable_thinking,
         )
