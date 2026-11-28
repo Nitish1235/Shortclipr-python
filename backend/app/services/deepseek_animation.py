@@ -61,16 +61,18 @@ AVAILABLE STUDIO RUNTIME API (pre-loaded globals — never redefine them):
    - backdrop(g, styleId, env, t, mood) -> paints studio gradient + ambient light pool + returns palette
    - shadedShape(g, (ctx) => { ctx.beginPath(); ... }, { fill, stroke, lineWidth, shadowColor, shadowBlur, shadowY, highlight, highlightWidth })
    - solveIK(x0, y0, tx, ty, L1, L2, bendDir=1) -> 2-bone IK solver returning { jx, jy, ex, ey, a1, a2 }
-   - drawLimb(g, x0, y0, tx, ty, L1, L2, { bendDir, w1, w2, sleeveColor, color, outline, tipColor, tipR, isLeg })
-     (draws smooth rounded-cap 2-bone IK limbs with optional dark outline & hand/shoe tip — ALWAYS use this or rounded strokes instead of rotated sharp `fillRect` boxes!)
-   - drawCharacterRig(g, x, y, { scale, facing, pose, expression, t, lean, skin, coat, pants, hair, accent, boot })
-     (OPTIONAL convenience rig; at scale=1 it is ~260px tall, so use scale=1.6–2.4 on 900x1600. For custom poses/styles, draw directly with solveIK + Canvas 2D!)
+   - drawLimb(g, x0, y0, tx, ty, L1, L2, { bendDir, view, side, w1, w2, sleeveColor, color, outline, tipColor, tipR, isLeg })
+     (draws smooth rounded-cap 2-bone IK limbs with optional dark outline & hand/shoe tip — ALWAYS use this or rounded strokes instead of rotated sharp `fillRect` boxes!
+      BEND SIGN RULE: For front-facing limbs, pass `view: 'front', side: 'left'` (bendDir=+1, bends outward left) or `side: 'right'` (bendDir=-1, bends outward right) — NEVER cross left/right limbs! For side-profile (`facing=1|-1`), arms use `bendDir=-facing` and knees use `bendDir=facing`.)
+   - drawCharacterRig(g, x, y, { scale, facing, view, pose, expression, t, lean, skin, coat, pants, hair, accent, boot })
+     (convenience rig supporting `view: 'side'|'front'|'back'`; at scale=1 it is ~260px tall, so use scale=1.6–2.4 on 900x1600. For custom poses/styles, draw directly with `drawLimb` + Canvas 2D!)
    - flowPath(g, [[x0,y0],[x1,y1],...], t, { color, width, progress, dashed, speed, glow, arrow, arrowSize })
    - particles(g, seed, count, t, { x, y, w, h }, { mode: 'drift'|'rise'|'sparkle'|'stream', color, speed, minR, maxR, alpha })
    - cameraRig(g, env, { cx, cy, zoom, rotation, shake, t }) -> smooth 2D camera (cx defaults to env.W/2, cy to env.H/2 — NEVER pass cx:0, cy:0!)
    - parallaxLayers(g, env, { cx, cy, zoom, rotation }, [{ depth: 0.25, blur: 2, draw: (ctx)=>{...} }, { depth: 1.0, draw: ... }])
    - spring(t, start, stiffness=180, damping=14), stagger(t, index, step=0.09, start=0, duration=0.45), anticipation(t, start=0, duration=0.55, pull=0.14), squash(g, x, y, amount)
    - oscillate(t, start, freq=14, amp=1, decay=4.5), hitStop(t, at, freezeDur=0.08), parabola(u, p0, p1, arcHeight), bounceDrop(t, start, dropHeight, groundY, restitution, gravity) -> { y, squash }, strideCycle(t, speed, stride, lift) -> { lx, ly, rx, ry, bob, lean }
+     (NOTE: `strideCycle` lx/rx horizontal offsets are for SIDE-PROFILE walking/running ONLY! On a front-facing character, use `ly`/`ry` vertical lift + `bob` ONLY — NEVER add `lx`/`rx` to front-facing foot X or the legs will scissor-cross!)
 
 2. ShortcliprStyles — EXPLAINER & DATA (use when showing anatomy, comparisons, charts, timelines, or callouts):
    - zoomLens(g, cx, cy, r, (lg, x, y, rad) => { ... }, { targetX, targetY, bg, borderColor, borderWidth })
@@ -108,6 +110,10 @@ VISUAL QUALITY & ART DIRECTION (NON-NEGOTIABLE):
      `ShortcliprStyles.solveIK` for natural joints + `shadedShape` / bold outlines — or optionally use
      `ShortcliprStyles.drawCharacterRig` when a standard rig fits (with `scale = 1.6–2.4` on 900x1600).
    - Anchor held props directly to the character's hand coordinates (never floating in mid-air).
+   - ANATOMY, CAMERA ANGLES & DEPTH LAYERING (CRITICAL):
+     * Choose angle by situation: `side` (`facing=1|-1`) for walking/running/pushing/pulling; `front` (`view:'front'`) for celebrating/presenting/facing camera; `back` (`view:'back'`) when looking away into a stadium/horizon/crowd or walking away.
+     * NEVER cross left/right legs or arms into an X on front/back characters! Left hip/shoulder MUST connect to screen-left foot/hand (`view: 'front', side: 'left', bendDir: 1`), right hip/shoulder MUST connect to screen-right foot/hand (`view: 'front', side: 'right', bendDir: -1`).
+     * Painter's-algorithm depth order: in `side` view, draw far arm & far leg (slightly darker) BEFORE torso/head, and near leg/arm AFTER; in `back` view, draw any forward-reaching limbs/props BEFORE torso/head, draw full back-of-head hair (NO eyes/mouth!), and keep arms/legs behind/beside the torso; always overlap the neck 10–14px into both torso and head.
    - For non-human hero objects (ships, machines, planets, trees, buildings, organs), build multi-part
      layered silhouettes with animated sub-components — NEVER draw a plain flat box.
 3. 3-VALUE SHADING & MATERIAL DETAIL ("DETAIL BIBLE"):
