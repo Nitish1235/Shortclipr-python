@@ -37,7 +37,7 @@ const grab = async (i, type, phase = 'video_render') => {
     try {
         data = await page.evaluate(([i, type]) => {
             window.renderFrame(i);
-            return document.getElementById('c').toDataURL(type, 0.90).split(',')[1];
+            return document.getElementById('c').toDataURL(type, 0.85).split(',')[1];
         }, [i, type]);
     } catch (error) {
         const timeSeconds = i / fps;
@@ -86,11 +86,20 @@ try {
             }));
         }
 
+        const qaStartedAt = Date.now();
+        let maxQaFrameMs = 0;
+        const maxAllowedQaFrameMs = Number(process.env.DRAWN_BY_CODE_MAX_QA_FRAME_MS || 15000);
         for (const [index, seconds] of times.entries()) {
             const frame = Math.min(total - 1, Math.max(0, Math.round(seconds * fps)));
             // Frame execution is the runtime preflight and is always fatal on error.
             // Only the optional PNG write is allowed to fail without aborting render.
+            const frameStartedAt = Date.now();
             const imageData = await grab(frame, 'image/png', 'runtime_preflight');
+            const frameMs = Date.now() - frameStartedAt;
+            if (frameMs > maxQaFrameMs) maxQaFrameMs = frameMs;
+            if (frameMs > maxAllowedQaFrameMs) {
+                throw new Error(`Slow frame detected during runtime_preflight at frame ${frame} (${(frame / fps).toFixed(2)}s): ${frameMs}ms > ${maxAllowedQaFrameMs}ms`);
+            }
             if (!canWriteFrames) continue;
             const file = path.join(out, `q_${String(index).padStart(3, '0')}.png`);
             try {
@@ -108,6 +117,8 @@ try {
             console.log(JSON.stringify({
                 event: 'drawn_by_code.motion_qa.captured',
                 frame_count: times.length,
+                max_frame_ms: maxQaFrameMs,
+                total_ms: Date.now() - qaStartedAt,
                 output: out,
             }));
         } else {
@@ -148,7 +159,7 @@ try {
             const audio = opt.audio ?? (info.audio?.mix ? path.join(dir, info.audio.mix) : null);
             const args = ['-v', 'error', '-y', '-f', 'image2pipe', '-framerate', String(fps / step), '-c:v', 'mjpeg', '-i', '-'];
             if (audio && fs.existsSync(audio)) args.push('-ss', String(from / fps), '-i', audio, '-c:a', 'aac', '-b:a', '256k', '-shortest');
-            args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', String(opt.crf ?? 18), '-preset', opt.preset ?? 'fast', '-movflags', '+faststart', out);
+            args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', String(opt.crf ?? 18), '-preset', opt.preset ?? 'veryfast', '-movflags', '+faststart', out);
             const ff = spawn(ffmpeg, args, { stdio: ['pipe', 'inherit', 'inherit'] });
             const done = new Promise((ok, ko) => {
                 ff.once('error', ko);
@@ -177,7 +188,7 @@ try {
                         if (inputError) onError(inputError);
                     });
                     renderedFrames += 1;
-                    if (renderedFrames === 1 || renderedFrames % (fps * 5) === 0) {
+                    if (renderedFrames === 1 || renderedFrames % (fps * 3) === 0) {
                         console.log(JSON.stringify({
                             event: 'drawn_by_code.progress',
                             rendered_frames: renderedFrames,
