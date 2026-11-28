@@ -134,6 +134,12 @@ VISUAL QUALITY & ART DIRECTION (NON-NEGOTIABLE):
    - `watercolor_storybook`: warm paper + `watercolorBlob` washes + `organicPath` ink contours.
    - `stickman_action`: expressive minimalist stickman action with `drawLimb` IK + `strideCycle` + `hitStop`.
    - `kurzgesagt_cosmic` / `layered_papercraft` / `atmospheric_noir` / `comic_cel_action`: rich 3-value gradients, rim highlights, `lightBeam` shafts, and tactile shadows.
+6. SOFTWARE-CANVAS2D PERFORMANCE (CRITICAL — CPU RENDERING):
+   Scenes render in CPU-only headless Chromium, so keep every frame fast (<50ms):
+   - NEVER use `g.filter` / `ctx.filter` (e.g. `blur(...)` or `drop-shadow(...)`).
+   - NEVER call `getImageData` or `putImageData` inside `draw()`.
+   - NEVER set `g.shadowBlur > 0` inside loops (particles, stars, grids, embers). For glows, nebulas, and explosions, use `ShortcliprStyles.glow()` or `g.globalCompositeOperation = 'lighter'` with 2–3 concentric translucent circles.
+   - Cap particle, starfield, and debris loops at `<= 80` items and avoid creating `createRadialGradient` inside large loops.
 """.strip()
 
 
@@ -664,9 +670,9 @@ Write the complete, studio-quality shared JavaScript visual library now.
 """.strip()
 
         shared_js = await self._code_completion(
-            "You are a lead Canvas 2D motion-graphics engineer. Return only clean, executable JavaScript.",
+            "You are a lead Canvas 2D motion-graphics engineer. Return only clean, concise, executable JavaScript.",
             shared_prompt,
-            min(self.max_output_tokens, 32000),
+            min(self.max_output_tokens, 8192),
             label="Shared visual kit",
             enable_thinking=self.enable_thinking,
         )

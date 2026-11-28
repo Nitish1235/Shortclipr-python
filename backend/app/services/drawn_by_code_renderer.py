@@ -286,7 +286,8 @@ class DrawnByCodeRenderer:
                         pass
 
                     logger.info(
-                        "drawn_by_code.output",
+                        "drawn_by_code.output %s",
+                        message[:240],
                         extra={"line": message[-700:], "progress": progress},
                     )
                     if progress is not None and progress_callback is not None:
