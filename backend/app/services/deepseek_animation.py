@@ -439,6 +439,31 @@ class DeepSeekAnimationCompiler:
             return match.group(1).strip()
         return stripped
 
+    async def _find_syntax_broken_shot(self, compiled_shots: list[dict[str, Any]]) -> int | None:
+        """Return the first shot position whose draw_body fails standalone JS syntax parsing."""
+        if not self.node or not shutil.which(self.node):
+            return None
+        payload = json.dumps([
+            f"function drawShot_{shot['index']}(g, t, env, absoluteTime) {{\n{shot['draw_body']}\n}}"
+            for shot in compiled_shots
+        ]).encode("utf-8")
+        proc = await asyncio.create_subprocess_exec(
+            self.node, "-e",
+            "const fs=require('fs'),vm=require('vm');"
+            "const arr=JSON.parse(fs.readFileSync(0,'utf8'));"
+            "for(let i=0;i<arr.length;i++){try{new vm.Script(arr[i]);}catch(e){console.log(i);process.exit(0);}}",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await proc.communicate(payload)
+        out = stdout.decode(errors="replace").strip()
+        if out.isdigit():
+            pos = int(out)
+            if 0 <= pos < len(compiled_shots):
+                return pos
+        return None
+
     async def _repair_assembled_error(
         self,
         shared_js: str,
@@ -482,6 +507,8 @@ class DeepSeekAnimationCompiler:
                         break
                     if lines[idx].startswith("Motion.scene("):
                         break
+            if target_shot_pos is None:
+                target_shot_pos = await self._find_syntax_broken_shot(compiled_shots)
 
         # Extract source-code context around every scene.js:<line> frame in the error
         # so the debugger sees both the throwing helper line and the shot call-site line.
